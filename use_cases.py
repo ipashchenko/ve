@@ -1,5 +1,12 @@
-#!/usr/bin python2
+#!/usr/bin python
 # -*- coding: utf-8 -*-
+
+
+import glob
+from gains import Absorber
+from model import Model
+from vlbi import Data
+from stat import Bootstrap
 
 
 if __name__ == '__main__':
@@ -18,7 +25,6 @@ if __name__ == '__main__':
     split_data.load('SPLIT.FITS')
     model.substitute(imodel)
     gained_model = gains * model
-    
+
     boots = Bootstrap(gained_model, split_data)
     boots.sample('BOOTSPLIT.FITS', n=200)
-

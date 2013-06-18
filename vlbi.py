@@ -1,9 +1,7 @@
 #!/usr/bin python2
 # -*- coding: utf-8 -*-
 
-import numpy as np
-from fits_formats import UV_FITS, IDI_FITS
-from utils import dhms_2_fractions
+from fits_formats import UV_FITS
 
 
 class Data(object):
@@ -24,7 +22,7 @@ class Data(object):
         """
         Load data from FITS-file.
         """
-        self._recarray = self._io.load(fname)
+        self._recarray = self._fits_format.load(fname)
 
     def save(self, fname):
         """
@@ -32,22 +30,16 @@ class Data(object):
         """
         #TODO: put data from self.records (recarray) to HDU data
         # if recarray is not a view of HDU.data
-        self._io.save(fname)
+        self._fits_format.save(fname)
 
-    def select_tb(self, baseline, time=None):
+    @property
+    def uvw(self):
         """
-        Select data for specified baselines and time.
+        Returns (u, v, w) for data.
         """
-        if time:
-            time1 = dhms_2_fractions(time[:3])
-            time2 = dhms_2_fractions(time[3:])
+        pass
 
-            result = self._recarray[np.where((time2 > self._records['DATE'] >
-                time1) & (self._records['BASELINE'] == baseline))]
-
-        return result
-
-    def uvplot(self, pa=None):
+    def uvplot(self, posangle=None):
         """
         Plot data vs. uv-plot distance.
         """
@@ -83,7 +75,7 @@ class Data(object):
         """
         Substitue data of self with visibilities of the model.
         """
-        uv_correlations = model.correlations(uvws=self._uvws)
+        uv_correlations = model.correlations(uvws=self.uvw)
         uv_correlations.broadcast(self._recarray)
         self._recarray = uv_correlations
 

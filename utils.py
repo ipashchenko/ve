@@ -101,8 +101,8 @@ def build_dtype_for_bintable_data(header):
         if name in names:
             name = name * 2
         names.append(name)
-        _format, _shape =\
-            aips_bintable_fortran_fields_to_dtype_conversion(header['TFORM' +\
+        _format, _shape = \
+            aips_bintable_fortran_fields_to_dtype_conversion(header['TFORM' + \
             str(i)])
 
         #building format & names for regular data matrix
@@ -122,12 +122,13 @@ def build_dtype_for_bintable_data(header):
     print names, formats, shapes, array_names
 
     dtype_builder = zip(names, formats, shapes)
-    dtype = [(name, format, shape) for (name, format, shape) in dtype_builder]
+    dtype = [(name, _format, shape) for (name, _format, shape) in
+            dtype_builder]
 
     return dtype, array_names
 
 
-def _baselines_2_ants(self, baselines):
+def baselines_2_ants(baselines):
     """Given list of baseline numbers (fits keyword) returns list of
     corresponding antennas.
     """
@@ -150,7 +151,7 @@ def _baselines_2_ants(self, baselines):
     return ants
 
 
-def _ants_2_baselines(ants):
+def ants_2_baselines(ants):
     """Given several antennas returns corresponding baselines.
     """
 
@@ -162,7 +163,7 @@ def _ants_2_baselines(ants):
     return baselines
 
 
-def _time_frac_to_dhms(self, fractime):
+def time_frac_to_dhms(fractime):
     """Converts time in fraction of the day format to time in d:h:m:s
     format."""
 
@@ -178,7 +179,7 @@ def _time_frac_to_dhms(self, fractime):
     return dhms
 
 
-def _time_dhms_to_frac(self, dhmses):
+def time_dhms_to_frac(dhmses):
     """Converts time in format d:h:m:s to time in parameters format =
     fraction of the day.
     """

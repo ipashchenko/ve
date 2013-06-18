@@ -1,8 +1,8 @@
-#!/usr/bin python2
+#!/usr/bin python
 # -*- coding: utf-8 -*-
 
+import math
 import numpy as np
-import pyfits as pf
 
 
 class Model(object):
@@ -13,28 +13,29 @@ class Model(object):
 
     def __init__(self):
 
-        self._uvws = np.array([], dtype=[('u', float64), ('v', float64), ('w', float64))
+        self._uvws = np.array([], dtype=[('u', float), ('v', float), ('w',
+                              float)])
         #TODO: should _stokes & _correlations be recarrays? Model could contain different number of components
         # in different stokes. But it's furier transform MUST contain equal
         # number of visibilities in each stokes. But sometimes not.
-        self._image_stokes = {'I': np.array([], dtype=[('flux', float64),
-            ('dx', float64), ('dy', float64), ('bmaj', float64), ('bmin',
-                float64), ('pa', float64)]),
-                              'Q': np.array([], dtype=[('flux', float64),
-            ('dx', float64), ('dy', float64), ('bmaj', float64), ('bmin',
-                float64), ('pa', float64)]),
-                              'U': np.array([], dtype=[('flux', float64),
-            ('dx', float64), ('dy', float64), ('bmaj', float64), ('bmin',
-                float64), ('pa', float64)]),
-                              'V': np.array([], dtype=[('flux', float64),
-            ('dx', float64), ('dy', float64), ('bmaj', float64), ('bmin',
-                float64), ('pa', float64)])}
+        self._image_stokes = {'I': np.array([], dtype=[('flux', float),
+            ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
+                float), ('pa', float)]),
+                              'Q': np.array([], dtype=[('flux', float),
+            ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
+                float), ('pa', float)]),
+                              'U': np.array([], dtype=[('flux', float),
+            ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
+                float), ('pa', float)]),
+                              'V': np.array([], dtype=[('flux', float),
+            ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
+                float), ('pa', float)])}
 
         self._updated = {'I': False, 'Q': False, 'U': False, 'V': False}
 
-        self._uv_corelations = {'RR': np.array([], dtype=complex64), 'LL':
-            np.array([], dtype=complex64), 'RL': np.array([], dtype=complex64),
-            'LR': np.array([], dtype=complex64)}
+        self._uv_corelations = {'RR': np.array([], dtype=complex), 'LL':
+            np.array([], dtype=complex), 'RL': np.array([], dtype=complex),
+            'LR': np.array([], dtype=complex)}
 
     def ft(self, stoke='I', uvws=None):
     #TODO: how to substitute data to model only on one baseline?
@@ -64,18 +65,21 @@ class Model(object):
         # uvw must already be properly scaled
         u = uvws.u
         v = uvws.v
-        w = uvws.w
+        #w = uvws.w
 
-        indxs_of_cc = np.where(flux != 0 && bmaj == 0 && bmin == 0 && bpa == 0)
-        indxs_of_gc = np.where(flux != 0 && bmaj != 0 && bmin != 0)
+        indxs_of_cc = np.where(flux != 0 & bmaj == 0 & bmin == 0 & bpa == 0)
+        #indxs_of_gc = np.where(flux != 0 & bmaj != 0 & bmin != 0)
 
-        visibilities_cc = (flux[indxs_of_cc] * np.exp(2.0 * math.pi * 1j *\
-        (u[:,newaxis] * dx[indxs_of_cc] + v[:,newaxis] * dy[indxs_of_cc]))).sum(axis=1)
+        visibilities_cc = (flux[indxs_of_cc] * np.exp(2.0 * math.pi * 1j *
+                        (u[:, np.newaxis] * dx[indxs_of_cc] + v[:, np.newaxis] *
+                        dy[indxs_of_cc]))).sum(axis=1)
 
         #TODO: implement it
         visibilities_gc = None
         visibilities_gc_cc = np.concatenate((visibilities_cc, visibilities_gc), axis=1)
         visibilities = np.sum(visibilities_gc_cc, axis=0)
+
+        return visibilities
 
     @property
     def uv_correlations(self):
@@ -84,35 +88,43 @@ class Model(object):
 
             if self._image_stokes['I'] and self._image_stokes['V']:
                 #RR = FT(I + V)
+                pass
             if not self._image_stokes['V'] and self._image_stokes['I']:
                 #RR = FT(I)
+                pass
             if not self._image_stokes['I'] and self._image_stokes['V']:
+                pass
                 #RR = FT(V)
             else:
                 raise Exception
 
         elif not len(self._uv_correlations['LL']) or self._updated['I'] or self._updated['V']:
 
-            if self._image_stokes['I'] and self._image_stokes['V']
+            if self._image_stokes['I'] and self._image_stokes['V']:
                 #LL = FT(I - V)
+                pass
             if not self._image_stokes['V'] and self._image_stokes['I']:
                 #LL = RR
+                pass
             if not self._image_stokes['I'] and self._image_stokes['V']:
                 #LL = RR
+                pass
             else:
                 raise Exception
 
         elif not len(self._uv_correlations['RL']) or self._updated['Q'] or self._updated['U']:
 
-            if self._image_stokes['Q'] and self._image_stokes['U']
+            if self._image_stokes['Q'] and self._image_stokes['U']:
                 #RL = FT(Q + j*U)
+                pass
             else:
                 raise Exception
 
         elif not len(self._uv_correlations['LR']) or self._updated['Q'] or self._updated['U']:
 
-            if self._image_stokes['Q'] and self._image_stokes['U']
+            if self._image_stokes['Q'] and self._image_stokes['U']:
                 #LR = FT(Q - j*U)
+                pass
             else:
                 raise Exception
 
@@ -150,5 +162,3 @@ class Model(object):
         Return visibilities at self._uvws for model with params.
         """
         pass
-
-

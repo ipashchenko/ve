@@ -1,4 +1,4 @@
-#!/usr/bin python2
+#!/usr/bin python
 # -*- coding: utf-8 -*-
 
 
@@ -11,6 +11,6 @@ class Bootstrap(object):
 
     def __init__(self, model, data, nonparametric=False, split_scans=False):
         pass
-        
+
     def sample(self, outname=None, n=100):
         pass

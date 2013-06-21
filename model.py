@@ -3,11 +3,12 @@
 
 import math
 import numpy as np
+from utils import EmptyImageFtException
 
 
 class Model(object):
     """
-    Class that represents models used to describe VLBI-data in both image
+    Class that represents models used to describe model VLBI-data in both image
     and uv-domain: clean components (delta functions), gaussians etc.
     """
 
@@ -20,7 +21,7 @@ class Model(object):
         # number of visibilities in each stokes. But sometimes not.
         self._image_stokes = {'I': np.array([], dtype=[('flux', float),
             ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
-                float), ('pa', float)]),
+                float), ('pa', float), ('vary', bool, (6,))]),
                               'Q': np.array([], dtype=[('flux', float),
             ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
                 float), ('pa', float)]),
@@ -36,6 +37,21 @@ class Model(object):
         self._uv_corelations = {'RR': np.array([], dtype=complex), 'LL':
             np.array([], dtype=complex), 'RL': np.array([], dtype=complex),
             'LR': np.array([], dtype=complex)}
+            
+        self._parameters = None
+        
+    @property
+    def parameters(self):
+        """
+        Shortcut for acscesing variable parameters.
+        """
+        
+        for stoke in ['I', 'Q', 'U', 'V']:
+            pass
+        
+    @parameters.setter
+    def parameters(self, p)
+        pass
 
     def ft(self, stoke='I', uvws=None):
     #TODO: how to substitute data to model only on one baseline?
@@ -96,7 +112,7 @@ class Model(object):
                 pass
                 #RR = FT(V)
             else:
-                raise Exception
+                raise EmptyImageFtException('Not enough data for RR visibility calculation')
 
         elif not len(self._uv_correlations['LL']) or self._updated['I'] or self._updated['V']:
 
@@ -110,7 +126,7 @@ class Model(object):
                 #LL = RR
                 pass
             else:
-                raise Exception
+                raise EmptyImageFtException('Not enough data for LL visibility calculation'
 
         elif not len(self._uv_correlations['RL']) or self._updated['Q'] or self._updated['U']:
 
@@ -118,7 +134,7 @@ class Model(object):
                 #RL = FT(Q + j*U)
                 pass
             else:
-                raise Exception
+                raise EmptyImageFtException('Not enough data for RL visibility calculatio'
 
         elif not len(self._uv_correlations['LR']) or self._updated['Q'] or self._updated['U']:
 
@@ -126,7 +142,7 @@ class Model(object):
                 #LR = FT(Q - j*U)
                 pass
             else:
-                raise Exception
+                raise UVCorrCalcException('Not enough data for LR visibility calculation'
 
         return self._uv_correlations
 
@@ -134,7 +150,7 @@ class Model(object):
         """
         Adds CC from image FITS-file.
         """
-        pass
+        self._updated[stoke] = True
 
     def add_from_txt(self, fname, stoke='I'):
         """
@@ -142,13 +158,14 @@ class Model(object):
         """
         adds = np.loadtxt(fname, unpack=True)
         self._image_stokes[stoke].append(adds, axis=1)
-        self._image_modified[stoke] = True
+        self._updated[stoke] = True
 
     def clear(self, stoke='I'):
         """
         Clear the model for stoke Stokes parameter.
         """
         self._stokes[stoke] = None
+        self._updated[stoke] = False
 
     def clear_all(self):
         """

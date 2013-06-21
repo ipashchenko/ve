@@ -8,11 +8,11 @@ from itertools import permutations
 from math import floor
 
 
-class AbsentHduExtension_Exception(Exception):
+class AbsentHduExtensionException(Exception):
     pass
 
 
-class AbsentVersionOfBinTable_Exception(Exception):
+class AbsentVersionOfBinTableException(Exception):
     pass
 
 

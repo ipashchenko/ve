@@ -19,21 +19,14 @@ class Gains(object):
         """
         Loads gains from AIPS SN binary table extension of FITS-file.
         """
-
-        self.hdu = self._fits_format.get_hdu(fname, 'AIPS SN', version=snver)
-
-        names = self.hdu.columns.names
-        list_of_columns = [self.hdu.data.field(column) for column in names]
-        recarray = np.rec.fromarrays(list_of_columns,
-                dtype=self.hdu.data.dtype)
-        #data = recarray['DATA'].squeeze()  #it is a view
-        self._recarray = recarray
+        
+        self._recarray = self._fits_format.load(fname, extname='AIPS SN', snver=snver)
 
     def save(self, fname, snver=None):
         """
         Saves gains to AIPS SN binary table extension of FITS-file.
         """
-        pass
+        self._fits_format.save(fname)
 
     def __multiply__(self, gains):
         """
@@ -49,7 +42,7 @@ class Absorber(object):
 
     def __init__(self, files):
 
-        self.absorbed_gains = Gains()
+        self._absorbed_gains = Gains()
         self.files = files
 
     def absorb_one(self, fname):
@@ -64,3 +57,7 @@ class Absorber(object):
             gain = Gains()
             gain.load(fname)
             self.absorbed_gains *= gain
+            
+    @property
+    def absorbed_gains(self):
+        return self._absorbed_gains

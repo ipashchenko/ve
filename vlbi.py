@@ -7,6 +7,7 @@ from fits_formats import UV_FITS
 class Data(object):
     """
     Represent VLBI observational data.
+    #FIXME Don't use u,v,w! Use records instead for iterations while ft
     """
 
     def __init__(self, fits_format=UV_FITS()):
@@ -35,23 +36,31 @@ class Data(object):
     @property
     def uvw(self):
         """
-        Returns (u, v, w) for data.
+        Returns recarray with (u, v, w) fileds.
         """
-        pass
+        return np.rec.fromarays(self._recarray.u, self._recarray.v, self._recarray.w)
+        #return self._recarray[:3]
+        
+    @property
+    def baselines(self):
+        """
+        Returns the list of baselines.
+        """
+        return sort(list(set(self._recarray['BASELINE'])))
 
     def uvplot(self, posangle=None):
         """
         Plot data vs. uv-plot distance.
         """
         pass
-
+     
     def vplot(self):
         """
         Plot data vs. time.
         """
         pass
 
-    def fit(self, imodel):
+    def fit(self, model):
         """
         Fit visibility data with image plane model.
         """
@@ -77,17 +86,43 @@ class Data(object):
         """
         uv_correlations = model.correlations(uvws=self.uvw)
         uv_correlations.broadcast(self._recarray)
-        self._recarray = uv_correlations
+        #self._recarray = uv_correlations
+        
+        return uv_correlations
 
-    def calculate_noise(self, split_scans=False):
+    def noise_calculate(self, split_scans=False):
         """
-        Calculate noise on all baselines.
+        Calculate noise on all baselines. Used also for specifying priors
+        on noise on each baseline.
         """
-        pass
+        for baseline in self.baselines:
+            baseline_data = self.get_data(baseline=baseline)
+            
 
-    def add_noise(self, stds, split_scans=False):
+    #TODO: implement the possibility to choose distribution for each baseline
+    # and scan
+    def noise_add(self, stds, split_scans=False):
         """
         Add gaussian noise to self using specified std for each baseline/
         scan.
+        
+        Inputs:
+        
+            stds - mapping from baseline number to std of noise or to
+                iterables of stds (if split_scans=True).
         """
         pass
+
+    def cv_score(self, model, stoke='I'):
+        """
+        Returns Cross-Validation score for self (as testing cv-sample) and model
+        (trained on training cv-sample).
+        """
+        
+        model_cmatrix = self.substitue(model, stoke=stoke)
+        uv_difference = self._recarray.cmatrix - model_cmatrix
+        
+        for baseline in self.baselines:
+            # square difference for each baseline, divide by baseline noise
+            # and then sum for current baseline
+            

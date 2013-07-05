@@ -37,7 +37,7 @@ class CrossValidation(object):
     def generate_samples(self, frac=0.2, n=100, outname=None):
         """
         Generate training and testing samples as FITS-files thats inherit FITS-structure of initial data.
-        Save training and testong samples to FITS-files.
+        Save training and testing samples to FITS-files.
         """
         pass
      

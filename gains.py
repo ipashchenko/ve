@@ -28,11 +28,17 @@ class Gains(object):
         """
         self._fits_format.save(fname)
 
-    def __multiply__(self, gains):
+    def __multiply__(self, obj):
         """
-        Multiply gains of self on gains of another instance of Gains class.
+        Multiply self on another instance of Gains or Data class.
         """
-        pass
+        
+        if isinstance(obj, Data):
+            obj.__multiply__(self)
+        elif isinstance(obj, Gains):
+            pass 
+        else:
+            raise Exception
 
 
 class Absorber(object):
@@ -40,24 +46,38 @@ class Absorber(object):
     Class that absorbs gains from series of FITS-files into one instance of Gains class.
     """
 
-    def __init__(self, files):
+    def __init__(self):
 
         self._absorbed_gains = Gains()
-        self.files = files
+        self.files = list()
 
     def absorb_one(self, fname):
 
         gain = Gains()
         gain.load(fname)
         self.absorbed_gains *= gain
+        self.fnames.append(fname)
 
-    def absorb(self):
+    def absorb(self, fnames):
 
-        for fname in self.files:
-            gain = Gains()
-            gain.load(fname)
-            self.absorbed_gains *= gain
+        for fname in fnames:
+            self.absorb_one(fname)
+            
+    def exclude_one(self, fname):
+        
+        if not fname in self.fnames:
+            raise Exception
+            
+        gain = Gains()
+        gain.load(fname)
+        self.absorbed_gains /= gain
+        self.fnames.delete(fname)
             
     @property
     def absorbed_gains(self):
         return self._absorbed_gains
+        
+    def __multiply__(self, data):
+        if not isinstance(data, Data):
+            raise Exception
+        data.__multiply__(self.absorbed_gains)

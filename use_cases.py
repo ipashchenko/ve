@@ -7,6 +7,7 @@ from gains import Absorber
 from model import Model
 from vlbi import Data
 from stat import Bootstrap
+from stat import CrossValidation
 
 
 if __name__ == '__main__':
@@ -33,4 +34,18 @@ if __name__ == '__main__':
     boots.sample('BOOTSPLIT.FITS', n=200)
     # generated 200 FITS-files for batch proccessing
     
-    # 2) Cross-validation analysis. To prepare 200 training samples (FITS-files)
+    # 2) Cross-validation analysis of model from difmap modelling.
+    # load the model to cross-validate
+    model = Model()
+    model.add_from_txt('my_difmap_model.txt')
+
+    # create training and testing samples from data which were used to get model
+    cv = CrossValidation('SC.FITS')
+    cv.generate_samples(frac=0.1, n=100, outname='CV')
+    # batch model train_i_CV.FITS files and get model_i.txt files
+    # cross-validate models on testing samples
+    for model_file, data_file in cv_samples:
+        test_data = Data()
+        test_data.load(
+        
+    

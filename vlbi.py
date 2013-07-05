@@ -24,6 +24,10 @@ class Data(object):
         Load data from FITS-file.
         """
         self._recarray = self._fits_format.load(fname)
+        # recarray should:
+        # 1) contain complex visibilities => load() and save() methods of fits_format
+        # must be able to transform the data to and from
+        # 2) 
 
     def save(self, fname):
         """
@@ -119,10 +123,24 @@ class Data(object):
         (trained on training cv-sample).
         """
         
-        model_cmatrix = self.substitue(model, stoke=stoke)
-        uv_difference = self._recarray.cmatrix - model_cmatrix
+        baselines_cv_scores = list()
+        
+        # calculate noise on each baseline
+        noise = self.noise_calculate()
+        
+        model_recarray = self.substitue(model, stoke=stoke)
+        uv_difference = self._recarray.cmatrix - model_recarray.cmatrix
+        diff_recarray = self._recarray.copy()
+        diff_recarray.cmatrix = uv_difference
         
         for baseline in self.baselines:
             # square difference for each baseline, divide by baseline noise
             # and then sum for current baseline
+            baseline_indxs = np.where(diff_recarray['BASELINE'] == baseline)
+            cmatrix_diff = diff_recaray[baseline_indxs].cmatrix / self.noise[baseline]
+            cdiff = cmatrix_diff.flatten()
+            cdiff *= cdiff
+            baseline_cv_scores.append(cdiff)
+            
+        return sum(baseline_cv_scores)
             

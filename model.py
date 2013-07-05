@@ -34,7 +34,7 @@ class Model(object):
 
         self._updated = {'I': False, 'Q': False, 'U': False, 'V': False}
 
-        self._uv_corelations = {'RR': np.array([], dtype=complex), 'LL':
+        self._uv_correlations = {'RR': np.array([], dtype=complex), 'LL':
             np.array([], dtype=complex), 'RL': np.array([], dtype=complex),
             'LR': np.array([], dtype=complex)}
             

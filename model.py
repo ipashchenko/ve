@@ -3,7 +3,7 @@
 
 import math
 import numpy as np
-from utils import EmptyImageFtException
+from utils import EmptyImageFtError
 
 
 class Model(object):
@@ -16,9 +16,10 @@ class Model(object):
 
         self._uvws = np.array([], dtype=[('u', float), ('v', float), ('w',
                               float)])
-        #TODO: should _stokes & _correlations be recarrays? Model could contain different number of components
-        # in different stokes. But it's furier transform MUST contain equal
-        # number of visibilities in each stokes. But sometimes not.
+        # TODO: should _stokes & _correlations be recarrays? Model could
+        # contain different number of components in different stokes. But it's
+        # furier transform MUST contain equal number of visibilities in each
+        # stokes. But sometimes not.
         self._image_stokes = {'I': np.array([], dtype=[('flux', float),
             ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
                 float), ('pa', float), ('vary', bool, (6,))]),
@@ -37,26 +38,30 @@ class Model(object):
         self._uv_correlations = {'RR': np.array([], dtype=complex), 'LL':
             np.array([], dtype=complex), 'RL': np.array([], dtype=complex),
             'LR': np.array([], dtype=complex)}
-            
+
         self._parameters = None
-        
+
     @property
     def parameters(self):
         """
         Shortcut for acscesing variable parameters.
         """
-        
+
         for stoke in ['I', 'Q', 'U', 'V']:
             pass
-        
+
     @parameters.setter
-    def parameters(self, p)
+    def parameters(self, p):
         pass
 
+    def get_uvws(self, data):
+        """
+        Sets ``_uvws`` attribute of self with values from Data class instance
+        ``data``.
+        """
+        self._uvws = data._uvws
+
     def ft(self, stoke='I', uvws=None):
-    #TODO: how to substitute data to model only on one baseline?
-    # uvws must be for that baseline => i need method in Data() to select
-    # view of subdata
         """Fourie transform model from image to uv-domain in specified
            points of uv-plane. If no uvw-points are specified, use _uvws
            attribute. If it is None, raise exception.
@@ -100,49 +105,31 @@ class Model(object):
     @property
     def uv_correlations(self):
 
-        if not len(self._uv_correlations['RR']) or self._updated['I'] or self._updated['V']:
+        if self._updated['I'] or self._updated['V']:
 
             if self._image_stokes['I'] and self._image_stokes['V']:
-                #RR = FT(I + V)
+                # RR = FT(I + V)
+                # LL = FT(I - V)
                 pass
             if not self._image_stokes['V'] and self._image_stokes['I']:
-                #RR = FT(I)
+                # RR = FT(I)
+                # LL = RR
                 pass
             if not self._image_stokes['I'] and self._image_stokes['V']:
                 pass
-                #RR = FT(V)
+                # RR = FT(V)
+                # LL = RR
             else:
-                raise EmptyImageFtException('Not enough data for RR visibility calculation')
+                raise EmptyImageFtError('Not enough data for RR&LL visibility calculation')
 
-        elif not len(self._uv_correlations['LL']) or self._updated['I'] or self._updated['V']:
-
-            if self._image_stokes['I'] and self._image_stokes['V']:
-                #LL = FT(I - V)
-                pass
-            if not self._image_stokes['V'] and self._image_stokes['I']:
-                #LL = RR
-                pass
-            if not self._image_stokes['I'] and self._image_stokes['V']:
-                #LL = RR
-                pass
-            else:
-                raise EmptyImageFtException('Not enough data for LL visibility calculation'
-
-        elif not len(self._uv_correlations['RL']) or self._updated['Q'] or self._updated['U']:
+        elif self._updated['Q'] or self._updated['U']:
 
             if self._image_stokes['Q'] and self._image_stokes['U']:
-                #RL = FT(Q + j*U)
+                # RL = FT(Q + j*U)
+                # LR = FT(Q - j*U)
                 pass
             else:
-                raise EmptyImageFtException('Not enough data for RL visibility calculatio'
-
-        elif not len(self._uv_correlations['LR']) or self._updated['Q'] or self._updated['U']:
-
-            if self._image_stokes['Q'] and self._image_stokes['U']:
-                #LR = FT(Q - j*U)
-                pass
-            else:
-                raise UVCorrCalcException('Not enough data for LR visibility calculation'
+                raise EmptyImageFtError('Not enough data for RL&LR visibility calculation')
 
         return self._uv_correlations
 

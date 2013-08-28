@@ -8,15 +8,15 @@ from itertools import permutations
 from math import floor
 
 
-class AbsentHduExtensionException(Exception):
+class AbsentHduExtensionError(Exception):
     pass
 
 
-class AbsentVersionOfBinTableException(Exception):
+class AbsentVersionOfBinTableError(Exception):
     pass
 
 
-class EmptyImageFtException(Exception):
+class EmptyImageFtError(Exception):
     pass
 
 

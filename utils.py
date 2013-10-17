@@ -19,6 +19,37 @@ class AbsentVersionOfBinTableError(Exception):
 class EmptyImageFtError(Exception):
     pass
 
+#TODO: convert utils to using arrays instead of lists
+
+
+def change_shape(_array, _dict1, _dict2):
+    """
+    dict1 - shape of array, that changes.
+    dict2 - dictionary of new shape. It can include more items then dict1.
+    """
+
+    dict1 = _dict1.copy()
+    dict2 = _dict2.copy()
+    array = _array.copy()
+
+    for key in dict1:
+        print "check " + str(key)
+        if not dict1[key] == dict2[key]:
+            print "positin of axis " + str(key) + " has changed"
+            print "from " + str(dict1[key]) + " to " + str(dict2[key])
+            array = np.swapaxes(array, dict1[key], dict2[key])
+            for item in dict1.items():
+                if item[1] == dict2[key]:
+                    dict1[item[0]] = dict1[key]
+                    dict1[key] = dict2[key]
+            print "Updated dict1 is :"
+            print dict1
+
+    # Assert that altered dict1 (it's part with shapes from dict2) coincide
+    # with dict2
+
+    return array
+
 
 def aips_bintable_fortran_fields_to_dtype_conversion(aips_type):
     """Given AIPS fortran format of binary table (BT) fields, returns

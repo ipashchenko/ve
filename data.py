@@ -26,6 +26,9 @@ class Data(object):
     def load(self, fname):
         """
         Load data from FITS-file.
+
+            self._data - numpy.ndarray (N, #if [, #chan], #hands, #complex)
+            self._uvw - numpy.ndarray (3, N)
         """
         self._data = self._fits_format.load(fname)
 
@@ -75,7 +78,7 @@ class Data(object):
         self._hands_to_data_recarray()
         self._fits_format.save(self._data, fname)
 
-    def cross_validation(self, frac=0.1, n=100, outname=None):
+    def cross_validation(self, n, k, outname=None):
         """
         Generate training and testing samples as FITS-files thats inherit
         FITS-structure of the initial data.  Save training and testing samples

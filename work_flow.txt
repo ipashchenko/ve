@@ -1,0 +1,107 @@
+hdu.data['DATE'] - hdu.header['PZERO4']
+hdu.data['UU---SIN']/hdu.header['PSCAL1']
+nch=1
+nif = 8
+nstokes= 4
+vec_int = np.vectorize(np.int)
+vec_complex = np.vectorize(np.complex)
+
+_data = np.zeros(hdu.header['GCOUNT'], dtype=[('uvw', '<f8', (3,)),('time', '<f8'), ('baseline', 'int'),
+			('hands', 'complex', (nstokes, nif,)),('weights', '<f8', (nstokes, nif,))])
+			
+u = hdu.data[hdu.header['PTYPE1']]/hdu.header['PSCAL1'] - hdu.header['PZERO1']
+v = hdu.data[hdu.header['PTYPE2']]/hdu.header['PSCAL2'] - hdu.header['PZERO2']
+w = hdu.data[hdu.header['PTYPE3']]/hdu.header['PSCAL3'] - hdu.header['PZERO3']
+t = hdu.data[hdu.header['PTYPE4']]/hdu.header['PSCAL4'] - hdu.header['PZERO4']
+_data['uvw'] = np.column_stack((u,v,w))
+_data['time'] = hdu.data[hdu.header['PTYPE4']]/hdu.header['PSCAL4'] - hdu.header['PZERO4']
+_data['baseline'] = vec_int(hdu.data[hdu.header['PTYPE6']]/hdu.header['PSCAL6'] - hdu.header['PZERO6'])
+_data['flux'] = vec_complex(swapaxes(hdu.data['DATA'].squeeze(), 1, 2)[...,0], swapaxes(hdu.data['DATA'].squeeze(), 1, 2)[...,1])
+
+In [159]: shape(vec_complex(swapaxes(hdu.data['DATA'].squeeze(), 1, 2)[...,0], swapaxes(hdu.data['DATA'].squeeze(), 1, 2)[...,1]))
+Out[159]: (20156, 4, 8)
+
+
+('hands', 'complex', (4, 8, 1))
+
+In [134]: shape(hdu.data['DATA'])
+Out[134]: (20156, 1, 1, 8, 1, 4, 3)
+temp = swapaxes(hdu.data['DATA'], 1, 5)
+#swap axis1 with axis of 'STOKES'
+#=>(20156, 4, 1, 8, 1, 1, 3)
+temp = swapaxes(temp, 2, 3)
+#swap axis 2 with axis of 'IF'
+#=>(20156, 4, 8, 1, 1, 1, 3)
+temp = temp.squeeze()
+#squeeze dimensions
+#=>(20156, 4, 8, 3)
+# last axis is 'COMPLEX'!
+
+BACK
+In [255]: shape(vstack((_data['hands'].real[np.newaxis, :], _data['hands'].imag[np.newaxis, :], _data['weights'][np.newaxis,:])))
+Out[255]: (3, 20156, 4, 8)
+data_of__data = {'COMPLEX': 0, 'GROUP': 1, 'STOKES': 2, 'IF': 3}
+data_of_data = {'COMPLEX': (6, 3), 'DEC': (1, 1), 'FREQ': (4, 1), 'GROUP': (0, 20156),
+'IF': (3, 8), 'RA': (2, 1), 'STOKES': (5, 4)}
+# To convert temp (3, 20156, 4, 8) to 'DATA' part of recarray  (20156, 1, 1, 8, 1, 4, 3)
+# we need:
+1) add dimensions
+for i in range(#of1dims):
+    temp = temp[:, np.newaxis]
+=>  temp (3, 20156, 4, 8, 1, 1, 1)
+2) change 'GCOUNT' on axis 0:
+swapaxis(temp, data_of__data['GROUP']=1, data_of_data['GROUP'][0]=0)
+=>  temp (20156, 3, 4, 8, 1, 1, 1)
+!!! change items of data_of__data (key that had value = 0 now has value = 1 and vice verse!!!)
+
+=====>
+temp(20156, 1, 1, 8, 1, 4, 3)
+imdata = temp
+# Don't change parameters!!! only data
+parnames = hdu.parnames
+pardata = list()
+for name in parnames:
+   pardata.append(hdu.data[name])
+   
+a = pf.GroupData(imdata, parnames=parnames, pardata=pardata, bitpix=-32)
+b = pf.GroupsHDU(a, self.hdu.header)
+self.hdulist[0] = b
+self.hdulist.writeto(fname)
+
+
+
+
+
+ndim of 'DATA' regular array: 'NAXIS'
+dim of 'CTYPEi': 'NAXISi' i=2:'NAXIS' 
+
+CTYPE2  = 'COMPLEX '           /1=real,2=imag,3=weight                          
+CRVAL2  =    1.00000000000E+00 /                                                
+CDELT2  =      1.000000000E+00 /                                                
+CRPIX2  =      1.000000000E+00 /                                                
+CROTA2  =      0.000000000E+00 /                                                
+CTYPE3  = 'STOKES  '           /-1=RR, -2=LL, -3=RL, -4=LR                      
+CRVAL3  =   -1.00000000000E+00 /                                                
+CDELT3  =     -1.000000000E+00 /                                                
+CRPIX3  =      1.000000000E+00 /                                                
+CROTA3  =      0.000000000E+00 /                                                
+CTYPE4  = 'FREQ    '           /Frequency in Hz.                                
+CRVAL4  =    1.53295212500E+10 /                                                
+CDELT4  =      8.000000000E+06 /                                                
+CRPIX4  =      1.000000000E+00 /                                                
+CROTA4  =      0.000000000E+00 /                                                
+CTYPE5  = 'IF      '           /Freq. group no. in CH table                     
+CRVAL5  =    1.00000000000E+00 /                                                
+CDELT5  =      1.000000000E+00 /                                                
+CRPIX5  =      1.000000000E+00 /                                                
+CROTA5  =      0.000000000E+00 /                                                
+CTYPE6  = 'RA      '           /Right Ascension in deg.                         
+CRVAL6  =    6.45886551500E+01 /                                                
+CDELT6  =      1.000000000E+00 /                                                
+CRPIX6  =      1.000000000E+00 /                                                
+CROTA6  =      0.000000000E+00 /                                                
+CTYPE7  = 'DEC     '           /Declination in deg.                             
+CRVAL7  =    3.80266111611E+01 /                                                
+CDELT7  =      1.000000000E+00 /                                                
+CRPIX7  =      1.000000000E+00 /                                                
+CROTA7  =      0.000000000E+00 /                                                

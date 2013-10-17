@@ -16,10 +16,10 @@ class Model(object):
 
         self._uvws = np.array([], dtype=[('u', float), ('v', float), ('w',
                               float)])
-        # TODO: should _stokes & _correlations be recarrays? Model could
-        # contain different number of components in different stokes. But it's
-        # furier transform MUST contain equal number of visibilities in each
-        # stokes. But sometimes not.
+        # TODO: should _stokes & _correlations be structured arrays? Model
+        # could contain different number of components in different stokes. But
+        # it's furier transform MUST contain equal number of visibilities in
+        # each stokes. But sometimes not.
         self._image_stokes = {'I': np.array([], dtype=[('flux', float),
             ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
                 float), ('pa', float), ('vary', bool, (6,))]),
@@ -62,9 +62,10 @@ class Model(object):
         self._uvws = data._uvws
 
     def ft(self, stoke='I', uvws=None):
-        """Fourie transform model from image to uv-domain in specified
-           points of uv-plane. If no uvw-points are specified, use _uvws
-           attribute. If it is None, raise exception.
+        """
+        Fourie transform model from image to uv-domain in specified points of
+        uv-plane. If no uvw-points are specified, use _uvws attribute. If it is
+        None, raise exception.
         """
 
         if not uvws:

@@ -8,7 +8,20 @@ from utils import build_dtype_for_bintable_data
 
 
 # TODO: methods to convert recarray (data part of HDU & header) to instances of
-# Groups/BintableHDU classes. Supermethod in IO and extensions in Groups & BinTable. Also method that updates info in header if data was truncated.
+# Groups/BintableHDU classes. Supermethod in IO and extensions in Groups &
+# BinTable.
+
+
+class IO(object):
+    """Abstract class for I/O of different formats of interferometric data.
+    """
+
+    def load(self):
+        raise NotImplementedError("Method must be implemented in subclasses")
+
+    def save(self):
+        raise NotImplementedError("Method must be implemented in subclasses")
+
 
 class PyFitsIO(object):
 
@@ -39,25 +52,25 @@ class PyFitsIO(object):
         raise NotImplementedError("Method must be implemented in subclasses")
 
     def save(self, data, fname):
-        hdu = self._recarray_data_to_HDU(data, header)
+        hdu = self._data_to_HDU(data, header)
         self.hdu = hdu
         self.hdulist.writeto(fname)
 
-    def _recarray_data_to_HDU(self, data, header):
+    def _data_to_HDU(self, data, header):
         """
-        Converts recarray of data part of HDU and header to Groups/BinTableHDU
+        Converts y of data part of HDU and header to Groups/BinTableHDU
         instances.
         """
-        
+
         raise NotImplementedError('method must be implemented in subclasses')
-        
+
     def _update_header(self, data):
         """
         Method that updates header info using data recarray.
         """
-        
+
         raise NotImplementedError('method must be implemented in subclasses')
-         
+
     def cross_validation(self, frac):
 
         learn_brecarrays = list()
@@ -80,15 +93,13 @@ class PyFitsIO(object):
 
         learn_brecarrays = np.concatenate(learn_brecarrays)
         test_brecarrays = np.concatenate(test_brecarray)
-        
-        # TODO: Exclude transforming to recarrays (FITS_record is recarray).
-        
-
-        # TODO: Save recarrays to HDUs (BinTable/GroupsHDU). Then save HDUs to
-        # copies of HDU_Lists. Then write HDU_Lists to
 
 
-class Groups(IO):
+        # TODO: Save structured array to recarrays HDUs (BinTable/GroupsHDU).
+        # Then save HDUs to copies of HDU_Lists. Then write HDU_Lists to
+
+
+class Groups(PyFitsIO):
     """
     Class that represents input/output of uv-data in UV-FITS format (\"random
     groups\").
@@ -111,12 +122,12 @@ class Groups(IO):
 
         return recarray['DATA']
         # TODO: do i really need to transform record object to recarray?
-        
+
     def save(self, data, fname):
         """
         Using modified 'DATA' part of hdu.data.
         """
-        
+
         self.hdu.data['DATA'] = data
         self.hdulist.writeto(fname)
 
@@ -139,7 +150,7 @@ class Groups(IO):
 #        self.hdulist.writeto(fname)
 
 
-class BinTable(IO):
+class BinTable(PyFitsIO):
     """
     Class that represents input/outpur of uv-data in FITS-IDI format.
     """
@@ -159,3 +170,5 @@ class BinTable(IO):
         columns = [hdu.data.field(col) for col in names]
         recarray = np.rec.fromarrays(columns, dtype=dt)
         self.recarray = recarray
+
+    def save(self, data, fname)

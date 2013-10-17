@@ -97,6 +97,7 @@ class Groups(PyFitsIO):
         Load data from FITS-file.
         """
 
+        self.hdulist = pf.open(fname)
         hdu = self.get_hdu(fname)
         self.hdu = hdu
 
@@ -110,7 +111,7 @@ class Groups(PyFitsIO):
         # Describe shape and dimensions of original data recarray
         self.data_of_data = data_of_data
         # Describe shape and dimensions of structured array
-        self.data_of__data = {'COMPLEX': 0, 'GROUP': 1, 'STOKES': 2, 'IF': 3}
+        self.data_of__data = {'COMPLEX': 3, 'GROUP': 0, 'STOKES': 2, 'IF': 1}
         # Number of axis with dimension=1. 3 corresponds to 'STOKES', 'IF' &
         # 'COMPLEX'
         self.ndim_ones = hdu.header['NAXIS'] - 1 - 3
@@ -119,13 +120,13 @@ class Groups(PyFitsIO):
                                                       ('time', '<f8'),
                                                       ('baseline', 'int'),
                                                       ('hands', 'complex',
-                                                          (nstokes, nif,)),
+                                                          (nif, nstokes)),
                                                       ('weights', '<f8',
-                                                          (nstokes, nif,))])
+                                                          (nif, nstokes,))])
 
-        # Swap axis and squeeze array to get complex array (nstokes, nif,)
-        temp = np.swapaxes(hdu.data['DATA'], 1, data_of_data['STOKES'][0])
-        temp = np.swapaxes(temp, 2, data_of_data['IF'][0])
+        # Swap axis and squeeze array to get complex array (nif, nstokes,)
+        temp = np.swapaxes(hdu.data['DATA'], 1, data_of_data['IF'][0])
+        temp = np.swapaxes(temp, 2, data_of_data['STOKES'][0])
         temp = temp.squeeze()
         hands = vec_complex(temp[..., 0], temp[..., 1])
         weights = temp[..., 2]
@@ -162,26 +163,20 @@ class Groups(PyFitsIO):
         temp = np.vstack((_data['hands'].real[np.newaxis, :],
                           _data['hands'].imag[np.newaxis, :],
                           _data['weights'][np.newaxis, :]))
-        # Now convert temp (3, 20156, 4, 8) to 'DATA' part of recarray
-        # (20156, 1, 1, 8, 1, 4, 3)
+        # Now roll axis 0 to 3rd position (3, 20156, 8, 4) => (20156, 8, 4, 3)
+        temp = np.rollaxis(temp, 0, 4)
 
         # First, add dimensions:
         for i in range(self.ndim_ones):
-            temp = temp[:, np.newaxis]
-        # Now temp has shape (3, 20156, 4, 8, 1, 1, 1)
+            temp = np.expand_dims(temp, axis=4)
+        # Now temp has shape (20156, 8, 4, 3, 1, 1, 1)
 
         # TODO: make function that takes ndarray and 2 dictionaries with
         # array's shape and permuted shape returnes array with shape of the
         # permuted array
-        temp = change_shape(temp, self.data_of__data, self.data_of_data)
-
-       # # Now swap axis and change data_of__data until we have the right shape
-       # # Change 'GGOUP' on axis 0
-       # np.swapaxes(temp, data_of__data['GROUP'], data_of_data['GROUP'][0])
-       # # and change data_of__data dictionary accordingly
-       # for item in data_of__data.items():
-       #     if item[1] == data_of_data['GROUP'][0]:
-       #         data_of__data[item[0]] = data_of__data['GROUP']
+        temp = change_shape(temp, self.data_of__data, {key:
+               self.data_of_data[key][0] for key in self.data_of_data.keys()})
+        # => (20156, 1, 1, 8, 1, 4, 3) as 'DATA' part of recarray
 
         # TODO: should i convert ``temp`` to record array?
         imdata = temp
@@ -192,7 +187,8 @@ class Groups(PyFitsIO):
 
         a = pf.GroupData(imdata, parnames=parnames, pardata=pardata,
                          bitpix=-32)
-        b = pf.GroupsHDU(a, self.hdu.header)
+        b = pf.GroupsHDU(a)
+        b.header = self.hdu.header
 
         self.hdulist[0] = b
         self.hdulist.writeto(fname)

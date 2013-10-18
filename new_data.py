@@ -21,8 +21,8 @@ class Data(object):
             _data - container of uv-data. It is numpy atructured array with
                 dtype=[('uvw', '<f8', (3,)),
                       ('time', '<f8'), ('baseline', 'int'),
-                      ('hands', 'complex', (nstokes, nif,)),
-                      ('weights', '<f8', (nstokes, nif,))]
+                      ('hands', 'complex', (nif, nstokes,)),
+                      ('weights', '<f8', (nif, nstokes,))]
         """
 
         self._io = io
@@ -34,9 +34,11 @@ class Data(object):
 
         Input:
 
-            data - instance of Data class.
+            data - instance of Data class. Must have ``_data`` attribute -
+            structured numpy.ndarray with the same shape as self.
         """
-        pass
+        # TODO: assert equal dtype and len
+        self._data += data._data
 
     def __multiply__(self, gains):
         """
@@ -57,6 +59,13 @@ class Data(object):
             fname - file name.
         """
         self._data = self._io.load(fname)
+        self.nif = np.shape(self._data['hands'])[1]
+        self.nstokes = np.shape(self._data['hands'])[2]
+
+    @property
+    def baselines(self):
+
+        return set(self._data['baseline'])
 
     def save(self, fname):
         """
@@ -70,16 +79,49 @@ class Data(object):
         # if recarray is not a view of HDU.data
         self._io.save(fname)
 
-    def noise(self, split_scans=False):
+    def noise(self, split_scans=False, use_V=True):
         """
         Calculate noise for each baseline. If ``split_scans`` is True then
-        calculate noise for each scan too.
+        calculate noise for each scan too. If ``use_V`` is True then use stokes
+        V data (`RR`` - ``LL``) for computation. Else use succescive
+        differences approach (Brigg's dissertation).
 
-        Inputs:
+        Input:
 
             split_scans [bool]
+            use_V [bool]
+
+        Output:
+
+            dictionary with keys - baseline numbers, values -
         """
-        pass
+
+        baseline_noises = dict()
+        if use_V:
+            # Calculate dictionary {baseline: noise} (if split_scans is False)
+            # or {baseline: [noises]} if split_scans is True.
+            if not split_scans:
+                for baseline in self.baselines:
+                    baseline_data = self._data[np.where(self._data['baseline']
+                        == baseline)]
+                    baseline_noises[baseline] =\
+                    np.std(((baseline_data['hands'][..., 0] -
+                        baseline_data['hands'][..., 1])).real, axis=0)
+            else:
+                # Use each scan
+                pass
+
+        else:
+            for baseline in self.baselines:
+                baseline_data = self._data[np.where(self._data['baseline']
+                    == baseline)]
+                differences = baseline_data['hands'][:-1, ...] -\
+                              baseline_data['hands'][1:, ...]
+                baseline_noises[baseline] =\
+                    np.asarray([np.std((differences).real[..., i], axis=0)
+                        for i in range(self.nstokes)])
+
+        return baseline_noises
 
     #TODO: implement the possibility to choose distribution for each baseline
     # and scan

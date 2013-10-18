@@ -42,7 +42,7 @@ class Data(object):
 
     def __multiply__(self, gains):
         """
-        Applies complex antenna gains  to the visibilities of self.
+        Applies complex antenna gains to the visibilities of self.
 
         Input:
 
@@ -109,38 +109,60 @@ class Data(object):
                         baseline_data['hands'][..., 1])).real, axis=0)
             else:
                 # Use each scan
-                pass
+                raise NotImplementedError("Implement with split_scans = True")
 
         else:
-            for baseline in self.baselines:
-                baseline_data = self._data[np.where(self._data['baseline']
-                    == baseline)]
-                differences = baseline_data['hands'][:-1, ...] -\
-                              baseline_data['hands'][1:, ...]
-                baseline_noises[baseline] =\
-                    np.asarray([np.std((differences).real[..., i], axis=0)
-                        for i in range(self.nstokes)])
+            if not split_scans:
+                for baseline in self.baselines:
+                    baseline_data = self._data[np.where(self._data['baseline']
+                        == baseline)]
+                    differences = baseline_data['hands'][:-1, ...] -\
+                                baseline_data['hands'][1:, ...]
+                    baseline_noises[baseline] =\
+                        np.asarray([np.std((differences).real[..., i], axis=0)
+                            for i in range(self.nstokes)])
+            else:
+                raise NotImplementedError("Implement with split_scans = True")
 
         return baseline_noises
 
     #TODO: implement the possibility to choose distribution for each baseline
     # and scan
-    def noise_add(self, stds=None, df=None, split_scans=False):
+    def noise_add(self, noise=None, df=None, split_scans=False):
         """
-        Add standard gaussian noise with ``stds`` - mapping from baseline
-        number to std of noise or to iterables of stds (if ``split_scans`` is True).
-        If df is not None, then use t-distribtion with ``df`` d.o.f.
+        Add standard gaussian noise with ``noise`` - mapping from baseline
+        number to std of noise or to iterables of stds (if ``split_scans`` is
+        True).  If df is not None, then use t-distribtion with ``df`` d.o.f.
 
         Inputs:
 
-            stds - mapping from baseline number to std of noise or to
+            noise - mapping from baseline number to std of noise or to
                 iterables of stds (if ``split_scans``  is set to True).
 
             df - # of d.o.f. for standard Student t-distribution.
 
             split_scans [bool]
         """
-        pass
+
+        if not df:
+            if not split_scans:
+                for baseline, std in noise.items():
+                    baseline_data = self._data[np.where(self._data['baseline']
+                        == baseline)]
+                    n = np.prod(np.shape(baseline_data['hands']))
+                    noise_to_add = np.random.normal(scale=std, size=n)
+                    # FIXME: add to Re and Im!
+                    noise_to_add = np.reshape(noise_to_add,
+                            np.shape(baseline_data['hands']))
+                    baseline_data = baseline_data['hands'] + noise_to_add
+                    self._data[np.where(self._data['baseline'] == baseline)] =\
+                                                                    baseline_data
+
+            else:
+                raise NotImplementedError("Implement with split_scans = True")
+
+        else:
+            raise NotImplementedError("Implement with df not None")
 
     def cv(self, q):
         """

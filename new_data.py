@@ -4,6 +4,8 @@
 
 import numpy as np
 
+vec_complex = np.vectorize(np.complex)
+
 
 class Data(object):
     """
@@ -150,13 +152,15 @@ class Data(object):
                     baseline_data = self._data[np.where(self._data['baseline']
                         == baseline)]
                     n = np.prod(np.shape(baseline_data['hands']))
-                    noise_to_add = np.random.normal(scale=std, size=n)
+                    noise_to_add = vec_complex(np.random.normal(scale=std, size=n),
+                            np.random.normal(scale=std, size=n))
                     # FIXME: add to Re and Im!
                     noise_to_add = np.reshape(noise_to_add,
                             np.shape(baseline_data['hands']))
-                    baseline_data = baseline_data['hands'] + noise_to_add
+                    baseline_data['hands'] = baseline_data['hands'] +\
+                                             noise_to_add
                     self._data[np.where(self._data['baseline'] == baseline)] =\
-                                                                    baseline_data
+                        baseline_data
 
             else:
                 raise NotImplementedError("Implement with split_scans = True")

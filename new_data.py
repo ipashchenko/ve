@@ -3,6 +3,7 @@
 
 
 import numpy as np
+from utils import baselines_2_ants
 
 vec_complex = np.vectorize(np.complex)
 
@@ -40,7 +41,7 @@ class Data(object):
             structured numpy.ndarray with the same shape as self.
         """
         # TODO: assert equal dtype and len
-        self._data += data._data
+        self._data['hands'] = self._data['hands'] + data._data['hands']
 
     def __multiply__(self, gains):
         """
@@ -68,6 +69,31 @@ class Data(object):
     def baselines(self):
 
         return set(self._data['baseline'])
+
+    @property
+    def antennas(self):
+        """
+        Returns list of antenna numbers.
+        """
+
+        return baselines_2_ants(self.baselines)
+
+    @property
+    def uvw(self):
+        """
+        Shortcut for unique (u,v,w)-elements.
+
+        Output:
+
+            structured numpy.ndarry with fields ``u``, ``v`` & ``w``.
+        """
+
+        x = self._data['uvw']
+        dt = np.dtype([('u', x.dtype), ('v', x.dtype), ('w', x.dtype)])
+        result, idx, inv = np.unique(x.ravel().view(dt), return_index=True,
+                return_inverse=True)
+
+        return result
 
     def save(self, fname):
         """
@@ -124,12 +150,11 @@ class Data(object):
                         np.asarray([np.std((differences).real[..., i], axis=0)
                             for i in range(self.nstokes)])
             else:
+                # Use each scan
                 raise NotImplementedError("Implement with split_scans = True")
 
         return baseline_noises
 
-    #TODO: implement the possibility to choose distribution for each baseline
-    # and scan
     def noise_add(self, noise=None, df=None, split_scans=False):
         """
         Add standard gaussian noise with ``noise`` - mapping from baseline
@@ -154,7 +179,6 @@ class Data(object):
                     n = np.prod(np.shape(baseline_data['hands']))
                     noise_to_add = vec_complex(np.random.normal(scale=std, size=n),
                             np.random.normal(scale=std, size=n))
-                    # FIXME: add to Re and Im!
                     noise_to_add = np.reshape(noise_to_add,
                             np.shape(baseline_data['hands']))
                     baseline_data['hands'] = baseline_data['hands'] +\
@@ -163,12 +187,14 @@ class Data(object):
                         baseline_data
 
             else:
+                # Use each scan
                 raise NotImplementedError("Implement with split_scans = True")
 
         else:
+            # Use t-distribution
             raise NotImplementedError("Implement with df not None")
 
-    def cv(self, q):
+    def cv(self, q, fname):
         """
         Method that prepares training and testing samples for q-fold
         cross-validation.
@@ -176,8 +202,45 @@ class Data(object):
         Inputs:
 
             q [int] - number of folds.
+
+            fname - base name for output the results.
         """
-        pass
+
+        #learn_brecarrays = list()
+        #test_brecarrays = list()
+        # List of lists of ``q`` blocks for each baseline
+        baselines_chunks = list()
+
+        # split data of each baseline to ``q`` blocks
+        for baseline in set(self.baselines):
+            baseline_data = self._data[np.where(self._data['baseline']
+                == baseline)]
+            blen = len(baseline_data)
+            indxs = np.arange(blen)
+            # Shuffle indexes
+            shuffled_indxs = np.random.shuffle(indxs)
+            # indexes of ``q`` nearly equal chunks
+            q_indxs = np.array_split(shuffled_indxs, q)
+            # ``q`` blocks for current baseline
+            baseline_chunks = [baseline_data[indx] for indx in q_indxs]
+            baselines_chunks.append(baseline_chunks)
+
+        # Combine ``q`` chunks to ``q`` pairs of training & testing datasets.
+        for i in range(q):
+            # List of i-th chunk for testing dataset for each baseline
+            testing_data = [baseline_chunks[i] for baseline_chunks in
+                            baselines_chunks]
+            # List of "all - i-th" chunk as training dataset for each baseline
+            training_data = [baseline_chunks[:i] + baseline_chunks[i + 1:] for
+                             baseline_chunks in baselines_chunks]
+
+            # Combain testing & training samples of each baseline in one
+            training_data = np.hstack(training_data)
+            testing_data = np.hstack(testing_data)
+            # Save each pair of datasets to files
+            # FIXME: NAXIS changed!!! fix it in save()
+            self.save(training_data, 'train' + '_' + str(i) + 'of' + str(q))
+            self.save(testing_data, 'test' + '_' + str(i) + 'of' + str(q))
 
     def cv_score(self, model, stokes='I'):
         """

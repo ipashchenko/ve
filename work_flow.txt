@@ -49,7 +49,7 @@ data_of_data = {'COMPLEX': (6, 3), 'DEC': (1, 1), 'FREQ': (4, 1), 'GROUP': (0, 2
 for i in range(#of1dims):
     temp = temp[:, np.newaxis]
 =>  temp (3, 20156, 4, 8, 1, 1, 1)
-2) change 'GCOUNT' on axis 0:
+2) change 'GGOUP' on axis 0:
 swapaxis(temp, data_of__data['GROUP']=1, data_of_data['GROUP'][0]=0)
 =>  temp (20156, 3, 4, 8, 1, 1, 1)
 !!! change items of data_of__data (key that had value = 0 now has value = 1 and vice verse!!!)

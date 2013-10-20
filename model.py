@@ -22,16 +22,16 @@ class Model(object):
         # each stokes. But sometimes not.
         self._image_stokes = {'I': np.array([], dtype=[('flux', float),
             ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
-                float), ('pa', float), ('vary', bool, (6,))]),
+                float), ('bpa', float)]),
                               'Q': np.array([], dtype=[('flux', float),
             ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
-                float), ('pa', float)]),
+                float), ('bpa', float)]),
                               'U': np.array([], dtype=[('flux', float),
             ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
-                float), ('pa', float)]),
+                float), ('bpa', float)]),
                               'V': np.array([], dtype=[('flux', float),
             ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
-                float), ('pa', float)])}
+                float), ('bpa', float)])}
 
         self._updated = {'I': False, 'Q': False, 'U': False, 'V': False}
 
@@ -39,27 +39,12 @@ class Model(object):
             np.array([], dtype=complex), 'RL': np.array([], dtype=complex),
             'LR': np.array([], dtype=complex)}
 
-        self._parameters = None
-
-    @property
-    def parameters(self):
-        """
-        Shortcut for acscesing variable parameters.
-        """
-
-        for stoke in ['I', 'Q', 'U', 'V']:
-            pass
-
-    @parameters.setter
-    def parameters(self, p):
-        pass
-
     def get_uvws(self, data):
         """
         Sets ``_uvws`` attribute of self with values from Data class instance
         ``data``.
         """
-        self._uvws = data._uvws
+        self._uvws = data.uvw
 
     def ft(self, stoke='I', uvws=None):
         """
@@ -70,6 +55,8 @@ class Model(object):
 
         if not uvws:
             uvws = self._uvws
+            if not uvws.size:
+                raise Exception()
 
         components = self._image_stokes[stoke]
 
@@ -77,29 +64,33 @@ class Model(object):
         # raise EmptyImageFtException exception
 
         #flux, dx, dy, maja, mina, pa, ctype = component
-        flux = components.flux
-        dx = components.dx
-        dy = components.dy
-        bmaj = components.bmaj
-        bmin = components.bmin
-        bpa = components.bpa
+        flux = components['flux']
+        dx = components['dx']
+        dy = components['dy']
+        bmaj = components['bmaj']
+        bmin = components['bmin']
+        bpa = components['bpa']
 
-        # uvw must already be properly scaled
-        u = uvws.u
-        v = uvws.v
-        #w = uvws.w
+        # FIXME: Should i use ``w``?
+        # u, v, w must already be properly scaled
+        u = uvws['u']
+        v = uvws['v']
+        #w = uvws['w']
 
-        indxs_of_cc = np.where(flux != 0 & bmaj == 0 & bmin == 0 & bpa == 0)
-        #indxs_of_gc = np.where(flux != 0 & bmaj != 0 & bmin != 0)
+        indxs_of_cc = np.where((flux != 0) & (bmaj == 0) & (bmin == 0) & (bpa
+                      == 0))[0]
+        indxs_of_gc = np.where((flux != 0) & (bmaj != 0) & (bmin != 0))[0]
 
         visibilities_cc = (flux[indxs_of_cc] * np.exp(2.0 * math.pi * 1j *
-                        (u[:, np.newaxis] * dx[indxs_of_cc] + v[:, np.newaxis] *
-                        dy[indxs_of_cc]))).sum(axis=1)
+            (u[:, np.newaxis] * dx[indxs_of_cc] + v[:, np.newaxis] *
+                dy[indxs_of_cc]))).sum(axis=1)
 
-        #TODO: implement it
-        visibilities_gc = None
-        visibilities_gc_cc = np.concatenate((visibilities_cc, visibilities_gc), axis=1)
-        visibilities = np.sum(visibilities_gc_cc, axis=0)
+        # TODO: just calculate visibilities_gc with indxs_of_gc. If indxs_of_gc
+        # is empty then visibilities_gc will be zeros. So add it!
+        if indxs_of_gc.size:
+            raise NotImplementedError('Implement FT of gaussians in ft()')
+        else:
+            visibilities = visibilities_cc
 
         return visibilities
 
@@ -108,29 +99,35 @@ class Model(object):
 
         if self._updated['I'] or self._updated['V']:
 
-            if self._image_stokes['I'] and self._image_stokes['V']:
-                # RR = FT(I + V)
-                # LL = FT(I - V)
-                pass
-            if not self._image_stokes['V'] and self._image_stokes['I']:
-                # RR = FT(I)
-                # LL = RR
-                pass
-            if not self._image_stokes['I'] and self._image_stokes['V']:
-                pass
-                # RR = FT(V)
-                # LL = RR
+            if self._image_stokes['I'].size and self._image_stokes['V'].size:
+                RR = self.ft(stoke='I') + self.ft(stoke='V')
+                LL = self.ft(stoke='I') - self.ft(stoke='V')
+            elif not self._image_stokes['V'].size and\
+                                            self._image_stokes['I'].size:
+                RR = self.ft(stoke='I')
+                LL = RR
+            elif not self._image_stokes['I'].size and\
+                                            self._image_stokes['V'].size:
+                RR = self.ft(stoke='V')
+                LL = RR
             else:
-                raise EmptyImageFtError('Not enough data for RR&LL visibility calculation')
+                raise EmptyImageFtError('Not enough data for RR&LL visibility\
+                        calculation')
+            self._uv_correlations['RR'] = RR
+            self._uv_correlations['LL'] = LL
 
         elif self._updated['Q'] or self._updated['U']:
 
-            if self._image_stokes['Q'] and self._image_stokes['U']:
+            if self._image_stokes['Q'].size and self._image_stokes['U'].size:
+                RL = self.ft(stoke='Q') + 1j * self.ft(stoke='U')
+                LR = self.ft(stoke='Q') - 1j * self.ft(stoke='U')
                 # RL = FT(Q + j*U)
                 # LR = FT(Q - j*U)
-                pass
             else:
-                raise EmptyImageFtError('Not enough data for RL&LR visibility calculation')
+                raise EmptyImageFtError('Not enough data for RL&LR visibility\
+                        calculation')
+            self._uv_correlations['RL'] = RL
+            self._uv_correlations['LR'] = LR
 
         return self._uv_correlations
 
@@ -138,32 +135,41 @@ class Model(object):
         """
         Adds CC from image FITS-file.
         """
+        raise NotImplementedError('Implement loading of CC-table of FITS-file')
         self._updated[stoke] = True
 
     def add_from_txt(self, fname, stoke='I'):
         """
         Adds components of Stokes type ``stoke`` to model from txt-file.
         """
-        adds = np.loadtxt(fname, unpack=True)
-        self._image_stokes[stoke].append(adds, axis=1)
+        adds = np.loadtxt(fname)
+        dt = self._image_stokes[stoke].dtype
+        self._image_stokes[stoke] = adds.ravel().view(dt)
         self._updated[stoke] = True
 
-    def clear(self, stoke='I'):
+    def clear_im(self, stoke='I'):
         """
         Clear the model for stoke Stokes parameter.
         """
-        self._stokes[stoke] = None
+        self._image_stokes[stoke] = np.array([], dtype=[('flux', float),
+                        ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
+                         float), ('bpa', float)])
         self._updated[stoke] = False
 
-    def clear_all(self):
+    def clear_all_im(self):
         """
         Clear model for all Stokes parameters.
         """
-        for stoke in self._stokes.keys():
+        for stoke in self._image_stokes.keys():
             self.clear(stoke=stoke)
 
-    def __call__(self, params):
+    def clear_uv(self, hand=None):
         """
-        Return visibilities at self._uvws for model with params.
+        Clear uv-correlations.
         """
-        pass
+
+        if not hand:
+            for hand in self._uv_correlations.keys():
+                self._uv_correlations[hand] = np.array([], dtype=complex)
+        else:
+            self._uv_correlations[hand] = np.array([], dtype=complex)

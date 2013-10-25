@@ -282,6 +282,17 @@ class Data(object):
         """
 
         indxs = np.where(self._data['BASELINE'] == baseline)
+        n = len(indxs)
         uvws = self._data[indxs]['uvw']
+        model._uvws = uvws
 
-        self._data['hands'] = model.ft(uvws).broadcast(self._data['hands'])
+        #self._data['hands'][indxs] =\
+        for i, stoke in enumerate(['RR', 'LL', 'RL', 'LR']):
+            try:
+                self._data['hands'][indxs][..., i] =\
+        model.uv_correlations[stoke].repeat(self.nif).reshape((n, self.nif))
+            # If model doesn't have some hands => pass it
+            except ValueError:
+                pass
+        #model.uv_correlations returns dictionary of hands. Need extend this array
+        #to match the shape of self._data['hands'] (N, #if, #stokes)

@@ -154,9 +154,8 @@ class Groups(PyFitsIO):
     def save(self, _data, fname):
         """
         Save modified structured array to GroupData, then saves GroupData to
-        GroupsHDU.
-        # TODO: Save structured array to recarrays HDUs (BinTable/GroupsHDU).
-        # Then save HDUs to copies of HDU_Lists. Then write HDU_Lists to
+        GroupsHDU. As array could be truncated, update "NAXIS" keyword of the
+        header of HDU.
         """
 
         # constructing array (3, 20156, 4, 8,)
@@ -171,14 +170,10 @@ class Groups(PyFitsIO):
             temp = np.expand_dims(temp, axis=4)
         # Now temp has shape (20156, 8, 4, 3, 1, 1, 1)
 
-        # TODO: make function that takes ndarray and 2 dictionaries with
-        # array's shape and permuted shape returnes array with shape of the
-        # permuted array
         temp = change_shape(temp, self.data_of__data, {key:
                self.data_of_data[key][0] for key in self.data_of_data.keys()})
         # => (20156, 1, 1, 8, 1, 4, 3) as 'DATA' part of recarray
 
-        # TODO: should i convert ``temp`` to record array?
         imdata = temp
         parnames = self.hdu.parnames
         pardata = list()
@@ -189,6 +184,15 @@ class Groups(PyFitsIO):
                          bitpix=-32)
         b = pf.GroupsHDU(a)
         b.header = self.hdu.header
+        b.header['NAXIS'] = len(imdata)
 
         self.hdulist[0] = b
-        self.hdulist.writeto(fname)
+        self.hdulist.writeto(fname + '.FITS')
+
+
+class IDI(PyFitsIO):
+    """
+    Class that represents input/output of uv-data in IDI-FITS format.
+    """
+
+    pass

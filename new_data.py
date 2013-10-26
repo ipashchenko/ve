@@ -3,9 +3,31 @@
 
 
 import numpy as np
+from data_io import Groups, IDI
 from utils import baselines_2_ants
 
 vec_complex = np.vectorize(np.complex)
+
+# TODO: add possibility to input/output in different FITS-formats (and other
+# formats too).
+
+
+def open_fits(fname, structure='UV'):
+    """
+    Helper function for instantiating and loading FITS-files.
+
+    Inputs:
+
+        fname [str] - FTIS-file name,
+
+        structure [str] ['UV','IDI'] - structure of FITS-file.
+    """
+
+    structures = {'UV': Groups(), 'IDI': IDI()}
+    data = Data(io=structures[structure])
+    data.load(fname)
+
+    return data
 
 
 class Data(object):
@@ -21,7 +43,7 @@ class Data(object):
 
         Initializes:
 
-            _data - container of uv-data. It is numpy atructured array with
+            _data - container of uv-data. It is numpy structured array with
                 dtype=[('uvw', '<f8', (3,)),
                       ('time', '<f8'), ('baseline', 'int'),
                       ('hands', 'complex', (nif, nstokes,)),
@@ -95,6 +117,7 @@ class Data(object):
 
         return result
 
+    # TODO: add possibility to save in format that is different from current.
     def save(self, fname):
         """
         Save data to FITS-file.
@@ -103,16 +126,15 @@ class Data(object):
 
             fname - file name.
         """
-        #TODO: put data from self.records (recarray) to HDU data
-        # if recarray is not a view of HDU.data
+
         self._io.save(fname)
 
     def noise(self, split_scans=False, use_V=True):
         """
         Calculate noise for each baseline. If ``split_scans`` is True then
         calculate noise for each scan too. If ``use_V`` is True then use stokes
-        V data (`RR`` - ``LL``) for computation. Else use succescive
-        differences approach (Brigg's dissertation).
+        V data (`RR`` - ``LL``) for computation assuming no signal in V. Else
+        use succescive differences approach (Brigg's dissertation).
 
         Input:
 
@@ -121,7 +143,10 @@ class Data(object):
 
         Output:
 
-            dictionary with keys - baseline numbers, values -
+            dictionary with keys - baseline numbers, values - array of noise
+                std for each IF (if ``use_V``==True), or array with shape
+                (4, #if) with noise std values for each if for each hand
+                (RR, LL, ...).
         """
 
         baseline_noises = dict()
@@ -177,8 +202,8 @@ class Data(object):
                     baseline_data = self._data[np.where(self._data['baseline']
                         == baseline)]
                     n = np.prod(np.shape(baseline_data['hands']))
-                    noise_to_add = vec_complex(np.random.normal(scale=std, size=n),
-                            np.random.normal(scale=std, size=n))
+                    noise_to_add = vec_complex(np.random.normal(scale=std,
+                        size=n), np.random.normal(scale=std, size=n))
                     noise_to_add = np.reshape(noise_to_add,
                             np.shape(baseline_data['hands']))
                     baseline_data['hands'] = baseline_data['hands'] +\
@@ -204,15 +229,19 @@ class Data(object):
             q [int] - number of folds.
 
             fname - base name for output the results.
+
+        Outputs:
+            ``q`` pairs of files (format that of ``io``) with training and
+            testing samples prepaired such that 1/``q``- part of visibilities
+            from each baseline falls in testing sample and other part falls in
+            training sample.
         """
 
-        #learn_brecarrays = list()
-        #test_brecarrays = list()
-        # List of lists of ``q`` blocks for each baseline
+        # List of lists of ``q`` blocks of each baseline
         baselines_chunks = list()
 
         # split data of each baseline to ``q`` blocks
-        for baseline in set(self.baselines):
+        for baseline in self.baselines:
             baseline_data = self._data[np.where(self._data['baseline']
                 == baseline)]
             blen = len(baseline_data)
@@ -238,7 +267,7 @@ class Data(object):
             training_data = np.hstack(training_data)
             testing_data = np.hstack(testing_data)
             # Save each pair of datasets to files
-            # FIXME: NAXIS changed!!! fix it in save()
+            # NAXIS changed!!!
             self.save(training_data, 'train' + '_' + str(i) + 'of' + str(q))
             self.save(testing_data, 'test' + '_' + str(i) + 'of' + str(q))
 
@@ -275,7 +304,6 @@ class Data(object):
 
         return sum(baselines_cv_scores)
 
-    #TODO: how to substitute data to model only on one baseline?
     def substitute(self, model, baseline=None):
         """
         Substitue data of self with visibilities of the model.

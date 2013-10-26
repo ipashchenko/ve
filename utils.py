@@ -24,8 +24,13 @@ class EmptyImageFtError(Exception):
 
 def change_shape(_array, _dict1, _dict2):
     """
-    dict1 - shape of array, that changes.
-    dict2 - dictionary of new shape. It can include more items then dict1.
+    Function that takes ndarray and 2 dictionaries with array's shape and
+    permuted shape returnes array with shape of the permuted array.
+
+    Inputs:
+        _array [numpy.ndarray] - array to change,
+        dict1 - shape of array, that will be changed,
+        dict2 - dictionary of new shape. It can include more items then dict1.
     """
 
     dict1 = _dict1.copy()

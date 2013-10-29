@@ -3,7 +3,7 @@
 
 import numpy as np
 import pylab as plt
-from new_data import Data
+import new_data as newd
 from data_io import AN
 from utils import baselines_2_ants
 
@@ -59,7 +59,7 @@ class Gains(object):
         Multiply self on another instance of Gains or Data class.
         """
 
-        if isinstance(obj, Data):
+        if isinstance(obj, newd.Data):
             obj.__multiply__(self)
         elif isinstance(obj, Gains):
             pass
@@ -177,6 +177,6 @@ class Absorber(object):
         return self._absorbed_gains
 
     def __multiply__(self, data):
-        if not isinstance(data, Data):
+        if not isinstance(data, newd.Data):
             raise Exception
         data.__multiply__(self.absorbed_gains)

@@ -6,7 +6,7 @@ import numpy as np
 import pylab as plt
 from data_io import Groups, IDI
 from utils import baselines_2_ants
-from gains import Gains
+import gains as g
 
 vec_complex = np.vectorize(np.complex)
 
@@ -77,15 +77,17 @@ class Data(object):
 
             gains - instance of Gains class.
         """
-        if not isinstance(gains, Gains):
+        if not isinstance(gains, g.Gains):
             raise Exception('Instances of Data can be multiplied only on\
                     instances of Gains!')
 
         # TODO: Assert equal number of IFs
+        assert(self.nif == np.shape(gains._data['gains'])[1])
+        # TODO: Now we need this to calculating gain * gains*. But try to
+        # exclude this assertion
+        assert(self.nstokes == 4)
 
-        # loop through antennas of gains?
-        for antenna in gains.antennas:
-
+        pass
 
     def load(self, fname):
         """

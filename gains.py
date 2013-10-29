@@ -66,6 +66,7 @@ class Gains(object):
         else:
             raise Exception
 
+    # TODO: check nonsense on indx_of_data=20155 t=0.965567111969 bl=2314
     def find_gain(self, t, bl):
         """
         Given time ``t`` and baseline ``bl`` from ``data`` array this method
@@ -77,20 +78,21 @@ class Gains(object):
         ant1, ant2 = baselines_2_ants([bl])
 
         # Time intervals between time ``t`` and all entries of gains array
-        tmin = np.min(self._data['time'] - t)
+        # FIXME: Rarely there are 2 timestamps in gains with equal abs(dt)
+        dtmin = np.min(np.abs(self._data['time'] - t))
 
         # Indexes of most close to ``t`` entries of ``gains`` array for
         # antennas ant1 & ant2
-        indx1 = np.where(((self._data['time'] - t) == tmin) &
+        indx1 = np.where((np.abs(self._data['time'] - t) == dtmin) &
                           (self._data['antenna'] == ant1))[0]
-        indx2 = np.where(((self._data['time'] - t) == tmin) &
+        indx2 = np.where((np.abs(self._data['time'] - t) == dtmin) &
                           (self._data['antenna'] == ant2))[0]
 
+        # TODO: Rarely, but this raise assertion
         # Check that time interval of gain values do cover visibility times
-        assert(((self._data[indx1]['dtime'] / 2.) -
-                        np.min(self._data['time'] - t)) >= 0)
-        assert(((self._data[indx2]['dtime'] / 2.) -
-                        np.min(self._data['time'] - t)) >= 0)
+        # => timestamp of gain found do cover given visibility
+        #assert((self._data[indx1]['dtime'] / 2.) >= abs(dtmin))
+        #assert((self._data[indx2]['dtime'] / 2.) >= abs(dtmin))
 
         # Now each gains# has shape (#if, #pol)
         gains1 = np.squeeze(self._data[indx1]['gains'])

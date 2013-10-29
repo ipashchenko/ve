@@ -87,7 +87,11 @@ class Data(object):
         # exclude this assertion
         assert(self.nstokes == 4)
 
-        pass
+        for indx, (t, bl) in enumerate(self._data[['time', 'baseline']]):
+            # (4, 8,)
+            gain = gains.find_gain(t, bl).T
+            # (8, 4,)
+            self._data[indx]['hands'] *= gain
 
     def load(self, fname):
         """

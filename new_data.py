@@ -3,8 +3,10 @@
 
 
 import numpy as np
+import pylab as plt
 from data_io import Groups, IDI
 from utils import baselines_2_ants
+from gains import Gains
 
 vec_complex = np.vectorize(np.complex)
 
@@ -50,6 +52,7 @@ class Data(object):
                       ('weights', '<f8', (nif, nstokes,))]
         """
 
+        self._stokes_dict = {'RR': 0, 'LL': 1, 'RL': 2, 'LR': 3}
         self._io = io
         self._data = None
 
@@ -65,6 +68,7 @@ class Data(object):
         # TODO: assert equal dtype and len
         self._data['hands'] = self._data['hands'] + data._data['hands']
 
+    # TODO: Do i need the possibility of multiplying on any complex number?
     def __multiply__(self, gains):
         """
         Applies complex antenna gains to the visibilities of self.
@@ -73,7 +77,15 @@ class Data(object):
 
             gains - instance of Gains class.
         """
-        pass
+        if not isinstance(gains, Gains):
+            raise Exception('Instances of Data can be multiplied only on\
+                    instances of Gains!')
+
+        # TODO: Assert equal number of IFs
+
+        # loop through antennas of gains?
+        for antenna in gains.antennas:
+
 
     def load(self, fname):
         """
@@ -86,6 +98,113 @@ class Data(object):
         self._data = self._io.load(fname)
         self.nif = np.shape(self._data['hands'])[1]
         self.nstokes = np.shape(self._data['hands'])[2]
+
+    # TODO: add possibility to save in format that is different from current.
+    def save(self, fname):
+        """
+        Save data to FITS-file.
+
+        Inputs:
+
+            fname - file name.
+        """
+
+        self._io.save(fname)
+
+    # TODO: make possible to choose all IFs and stokes?
+    # TODO: should it return indxs?
+    # TODO: should it be a general method for choosing subsample of structured
+    # array using kwargs for parameters and kwargs with dictionary values for
+    # specifying dimensions of arrays in strutured array. I need it in Gains
+    # class too.
+    def _choose_data(self, baseline=None, IF=None, stokes=None):
+        """
+        Method that returns chosen data from _date structured array based on
+        user specified parameters.
+        """
+
+        baseline_data = self._data[np.where(self._data['baseline']
+                                   == baseline)]
+
+        if stokes == 'I':
+            # I = 0.5 * (RR + LL)
+            data = 0.5 * (baseline_data['hands'][:, IF - 1, 0] +
+                          baseline_data['hands'][:, IF - 1, 1])
+
+        elif stokes == 'V':
+            # V = 0.5 * (RR - LL)
+            data = 0.5 * (baseline_data['hands'][:, IF - 1, 0] -
+                          baseline_data['hands'][:, IF - 1, 1])
+
+        elif stokes == 'Q':
+            # V = 0.5 * (LR + RL)
+            data = 0.5 * (baseline_data['hands'][:, IF - 1, 3] +
+                          baseline_data['hands'][:, IF - 1, 2])
+
+        elif stokes == 'U':
+            # V = 0.5 * 1j * (LR - RL)
+            data = 0.5 * 1j * (baseline_data['hands'][:, IF - 1, 3] -
+                               baseline_data['hands'][:, IF - 1, 2])
+
+        elif stokes in self._stokes_dict.keys():
+            data = baseline_data['hands'][:, IF - 1, self._stokes_dict[stokes]]
+
+        else:
+            raise Exception('Allowed stokes parameters: I, Q, U, V, RR, LL, RL,\
+                    LR')
+
+        return data
+
+    # TODO: convert time to datetime format and use date2num for plotting
+    # TODO: make it plot range of baselines
+    def tplot(self, baseline=None, IF=None, stokes=None):
+        """
+        Method that plots uv-data for given baseline vs. time.
+        """
+
+        if not baseline:
+            raise Exception
+
+        if not IF:
+            raise Exception('Choose IF # to display: from ' + str(1) + ' to ' +
+                             str(self.nif))
+
+        if not stokes:
+            stokes = 'I'
+
+        data = self._choose_data(baseline=baseline, IF=IF, stokes=stokes)
+        # TODO: i need fnction choose parameters
+        times = self._data[np.where(self._data['baseline'] ==
+                                    baseline)]['time']
+        angles = np.angle(data)
+        amplitudes = np.real(np.sqrt(data * np.conj(data)))
+
+        plt.subplot(2, 1, 1)
+        plt.plot(times, amplitudes)
+        plt.subplot(2, 1, 2)
+        plt.plot(times, angles)
+        plt.show()
+
+    # TODO: make it plot range of baselines
+    def uvplot(self, baseline=None, IF=None, stokes=None):
+        """
+        Method that plots uv-data for given baseline vs. uv-radius.
+        """
+
+        data = self._choose_data(baseline=baseline, IF=IF, stokes=stokes)
+        # TODO: i need fnction choose parameters
+        uvw_data = self._data[np.where(self._data['baseline'] ==
+                                    baseline)]['uvw']
+        uv_radius = np.sqrt(uvw_data[:, 0] ** 2 + uvw_data[:, 1] ** 2)
+
+        angles = np.angle(data)
+        amplitudes = np.real(np.sqrt(data * np.conj(data)))
+
+        plt.subplot(2, 1, 1)
+        plt.plot(uv_radius, amplitudes, '.k')
+        plt.subplot(2, 1, 2)
+        plt.plot(uv_radius, angles, '.k')
+        plt.show()
 
     @property
     def baselines(self):
@@ -117,18 +236,6 @@ class Data(object):
 
         return result
 
-    # TODO: add possibility to save in format that is different from current.
-    def save(self, fname):
-        """
-        Save data to FITS-file.
-
-        Inputs:
-
-            fname - file name.
-        """
-
-        self._io.save(fname)
-
     def noise(self, split_scans=False, use_V=True):
         """
         Calculate noise for each baseline. If ``split_scans`` is True then
@@ -155,6 +262,7 @@ class Data(object):
             # or {baseline: [noises]} if split_scans is True.
             if not split_scans:
                 for baseline in self.baselines:
+                    # TODO: use extended ``choose_data`` method?
                     baseline_data = self._data[np.where(self._data['baseline']
                         == baseline)]
                     baseline_noises[baseline] =\
@@ -167,6 +275,7 @@ class Data(object):
         else:
             if not split_scans:
                 for baseline in self.baselines:
+                    # TODO: use extended ``choose_data`` method?
                     baseline_data = self._data[np.where(self._data['baseline']
                         == baseline)]
                     differences = baseline_data['hands'][:-1, ...] -\
@@ -199,6 +308,7 @@ class Data(object):
         if not df:
             if not split_scans:
                 for baseline, std in noise.items():
+                    # TODO: use extended ``choose_data`` method?
                     baseline_data = self._data[np.where(self._data['baseline']
                         == baseline)]
                     n = np.prod(np.shape(baseline_data['hands']))
@@ -219,6 +329,7 @@ class Data(object):
             # Use t-distribution
             raise NotImplementedError("Implement with df not None")
 
+    # TODO: TEST ME!!!
     def cv(self, q, fname):
         """
         Method that prepares training and testing samples for q-fold
@@ -271,6 +382,7 @@ class Data(object):
             self.save(training_data, 'train' + '_' + str(i) + 'of' + str(q))
             self.save(testing_data, 'test' + '_' + str(i) + 'of' + str(q))
 
+    # TODO: TEST ME!!!
     def cv_score(self, model, stokes='I'):
         """
         Returns Cross-Validation score for self (as testing cv-sample) and
@@ -304,6 +416,7 @@ class Data(object):
 
         return sum(baselines_cv_scores)
 
+    # TODO: TEST ME!!!
     def substitute(self, model, baseline=None):
         """
         Substitue data of self with visibilities of the model.

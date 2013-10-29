@@ -4,7 +4,7 @@
 import re
 import numpy as np
 import string
-from itertools import permutations
+#from itertools import permutations
 from math import floor
 
 
@@ -182,20 +182,49 @@ def baselines_2_ants(baselines):
             continue
         ants.append(ant1)
         ants.append(ant2)
-    ants = np.sort(list(set(ants)))
+    ants = list(set(ants))
+    ants.sort()
 
     return ants
 
 
-def ants_2_baselines(ants):
-    """Given several antennas returns corresponding baselines.
+#def ants_2_baselines(ants):
+#    """Given several antennas returns corresponding baselines.
+#    """
+#
+#    baselines = list()
+#    ants_by2 = list(permutations(ants, 2))
+#    for ant in ants_by2:
+#        baseline = 256 * ant[0] + ant[1]
+#        baselines.append(baseline)
+#    return baselines
+
+
+def ant_2_containing_baslines(ant, antennas):
+    """
+    Given antenna returns list of all baselines among given list with that
+    antenna.
     """
 
     baselines = list()
-    ants_by2 = list(permutations(ants, 2))
-    for ant in ants_by2:
-        baseline = 256 * ant[0] + ant[1]
-        baselines.append(baseline)
+    for antenna in antennas:
+        if antenna < ant:
+            baselines.append(256 * antenna + ant)
+        elif antenna > ant:
+            baselines.append(256 * ant + antenna)
+        else:
+            pass
+
+    return baselines
+
+
+def ants_2_baselines(ants):
+    baselines = list()
+    for ant in ants:
+        baselines.extend(ant_2_containing_baslines(ant, ants))
+    baselines = list(set(baselines))
+    baselines = baselines.sort()
+
     return baselines
 
 

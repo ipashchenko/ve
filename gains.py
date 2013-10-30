@@ -1,6 +1,7 @@
 #!/usr/bin python2
 # -*- coding: utf-8 -*-
 
+import copy
 import numpy as np
 import pylab as plt
 import new_data as newd
@@ -54,33 +55,39 @@ class Gains(object):
         """
         self._io.save(fname)
 
-    def __multiply__(self, obj):
+    def __mul__(self, other):
         """
-        Multiply self on another instance of Gains or Data class.
+        Multiply self on another instance of Gains.
         """
 
-        if isinstance(obj, newd.Data):
-            print "Multiplying self to Data instance"
-            obj.__multiply__(self)
-        elif isinstance(obj, Gains):
+        self_copy = copy.deepcopy(self)
+
+        if isinstance(other, Gains):
             print "Multiplying self to Gains instance"
             for t in set(0.5 * (self._data['start'] + self._data['stop'])):
                 # Indexes of all entries of self._data array wich have ``t``
-                print "processing t = " + str(t)
                 indxs_self = np.where(0.5 * (self._data['start'] +
                                       self._data['stop']) == t)[0]
                 for ant in self._data[indxs_self]['antenna']:
-                    print "processing ant = " + str(ant)
                     # Indexes of self._data array wich have ``t`` and ``ant``
                     indx = np.where((0.5 * (self._data['start'] +
                                     self._data['stop']) == t) &
                                     (self._data['antenna'] == ant))[0]
-                    print "ant & t corresponds to indx = " + str(indx)
-                    self._data['gains'][indx] = self._data[indx]['gains'] *\
-                                             obj.find_gains_for_antenna(t, ant)
+                    self_copy._data['gains'][indx] =\
+                            self._data[indx]['gains'] *\
+                            other.find_gains_for_antenna(t, ant)
         else:
             raise Exception('Gains instances can be multiplied only on\
                     instances of Gains or Data classes!')
+
+        return self_copy
+
+    def __div__(self, other):
+        """
+        Divide self on another instance of Gains class.
+        """
+
+        pass
 
     def find_gains_for_antenna(self, t, ant):
         """
@@ -166,19 +173,20 @@ class Gains(object):
 
 class Absorber(object):
     """
-    Class that absorbs gains from series of FITS-files into one instance of Gains class.
+    Class that absorbs gains from series of FITS-files into one instance of
+    Gains class.
     """
 
     def __init__(self):
 
         self._absorbed_gains = Gains()
-        self.files = list()
+        self.fnames = list()
 
     def absorb_one(self, fname):
 
         gain = Gains()
         gain.load(fname)
-        self.absorbed_gains *= gain
+        self._absorbed_gains *= gain
         self.fnames.append(fname)
 
     def absorb(self, fnames):
@@ -200,7 +208,7 @@ class Absorber(object):
     def absorbed_gains(self):
         return self._absorbed_gains
 
-    def __multiply__(self, data):
+    def __mul__(self, data):
         if not isinstance(data, newd.Data):
             raise Exception
-        data.__multiply__(self.absorbed_gains)
+        data.__mul__(self.absorbed_gains)

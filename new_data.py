@@ -1,7 +1,7 @@
 #!/usr/bin python2
 # -*- coding: utf-8 -*-
 
-
+import copy
 import numpy as np
 import pylab as plt
 from data_io import Groups, IDI
@@ -56,20 +56,40 @@ class Data(object):
         self._io = io
         self._data = None
 
-    def __add__(self, data):
+    def __add__(self, other):
         """
-        Add data to self.
+        Add to self another instance of Data.
 
         Input:
 
             data - instance of Data class. Must have ``_data`` attribute -
             structured numpy.ndarray with the same shape as self.
         """
+
+        self_copy = copy.deepcopy(self)
         # TODO: assert equal dtype and len
-        self._data['hands'] = self._data['hands'] + data._data['hands']
+        self_copy._data['hands'] = self._data['hands'] + other._data['hands']
+
+        return self_copy
+
+    def __sub__(self, other):
+        """
+        Substruct from self another instance of Data.
+
+        Input:
+
+            data - instance of Data class. Must have ``_data`` attribute -
+            structured numpy.ndarray with the same shape as self.
+        """
+
+        self_copy = copy.deepcopy(self)
+        # TODO: assert equal dtype and len
+        self_copy._data['hands'] = self._data['hands'] - other._data['hands']
+
+        return self_copy
 
     # TODO: Do i need the possibility of multiplying on any complex number?
-    def __multiply__(self, gains):
+    def __mul__(self, gains):
         """
         Applies complex antenna gains to the visibilities of self.
 
@@ -77,6 +97,8 @@ class Data(object):
 
             gains - instance of Gains class.
         """
+
+        self_copy = copy.deepcopy(self)
 
         # FIXME: even if gains is instance of Gains the exception is raised
         #if not isinstance(gains, g.Gains):
@@ -100,7 +122,9 @@ class Data(object):
             for uv_indx in uv_indxs:
                 bl = self._data['baseline'][uv_indx]
                 gains12 = gains.find_gains_for_baseline(t, bl)
-                self._data[uv_indx]['hands'] *= gains12.T
+                self_copy._data[uv_indx]['hands'] *= gains12.T
+
+        return self_copy
 
     def load(self, fname):
         """

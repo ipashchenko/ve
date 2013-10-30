@@ -6,7 +6,7 @@ import numpy as np
 import pylab as plt
 from data_io import Groups, IDI
 from utils import baselines_2_ants
-import gains as g
+#import gains as g
 
 vec_complex = np.vectorize(np.complex)
 
@@ -77,9 +77,11 @@ class Data(object):
 
             gains - instance of Gains class.
         """
-        if not isinstance(gains, g.Gains):
-            raise Exception('Instances of Data can be multiplied only on\
-                    instances of Gains!')
+
+        # FIXME: even if gains is instance of Gains the exception is raised
+        #if not isinstance(gains, g.Gains):
+        #    raise Exception('Instances of Data can be multiplied only on\
+        #            instances of Gains!')
 
         # TODO: Assert equal number of IFs
         assert(self.nif == np.shape(gains._data['gains'])[1])
@@ -87,11 +89,18 @@ class Data(object):
         # exclude this assertion
         assert(self.nstokes == 4)
 
-        for indx, (t, bl) in enumerate(self._data[['time', 'baseline']]):
-            # (4, 8,)
-            gain = gains.find_gain(t, bl).T
-            # (8, 4,)
-            self._data[indx]['hands'] *= gain
+        for t in set(self._data['time']):
+
+            # Find all uv-data entries with time t:
+            uv_indxs = np.where(self._data['time'] == t)[0]
+
+            # Loop through uv_indxs (different baselines with the same ``t``)
+            # and multipy visibility with baseline to gain(ant1)*gain(ant2)^*
+            # for ant1 & ant2 derived for this baseline.
+            for uv_indx in uv_indxs:
+                bl = self._data['baseline'][uv_indx]
+                gains12 = gains.find_gains_for_baseline(t, bl)
+                self._data[uv_indx]['hands'] *= gains12.T
 
     def load(self, fname):
         """

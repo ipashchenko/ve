@@ -106,8 +106,8 @@ class AN(PyFitsIO):
 
         nif = hdu.data.dtype['REAL1'].shape[0]
         # set ``nif'' from dtype of hdu.data
-        _data = np.zeros(hdu.header['NAXIS2'], dtype=[('time', '<f8'),
-                                                        ('dtime', '<f8'),
+        _data = np.zeros(hdu.header['NAXIS2'], dtype=[('start', '<f8'),
+                                                        ('stop', '<f8'),
                                                         ('antenna', 'int'),
                                                         ('gains', 'complex',
                                                             (nif, npol,)),
@@ -139,8 +139,8 @@ class AN(PyFitsIO):
         # => (466, 8, 2)
 
         # Filling structured array by fileds
-        _data['time'] = time
-        _data['dtime'] = dtime
+        _data['start'] = time - 0.5 * dtime
+        _data['stop'] = time + 0.5 * dtime
         _data['antenna'] = antenna
         _data['gains'] = gains
         _data['weights'] = weights

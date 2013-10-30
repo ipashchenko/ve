@@ -60,39 +60,58 @@ class Gains(object):
         """
 
         if isinstance(obj, newd.Data):
+            print "Multiplying self to Data instance"
             obj.__multiply__(self)
         elif isinstance(obj, Gains):
-            pass
+            print "Multiplying self to Gains instance"
+            for t in set(0.5 * (self._data['start'] + self._data['stop'])):
+                # Indexes of all entries of self._data array wich have ``t``
+                indxs_self = np.where(0.5 * (self._data['start'] +
+                                      self._data['stop']) == t)[0]
+                for ant in self._data[indxs_self]['antenna']:
+                    # Indexes of self._data array wich have ``t`` and ``ant``
+                    import ipdb; ipdb.set_trace()
+                    indx = np.where((0.5 * (self._data['start'] +
+                                    self._data['stop']) == t) &
+                                    (self._data['antenna'] == ant))[0]
+                    self._data[indx]['gains'] *= obj.find_gains_for_antenna(t, ant)
         else:
-            raise Exception
+            raise Exception('Gains instances can be multiplied only on\
+                    instances of Gains or Data classes!')
 
-    # TODO: check nonsense on indx_of_data=20155 t=0.965567111969 bl=2314
-    def find_gain(self, t, bl):
+    def find_gains_for_antenna(self, t, ant):
         """
-        Given time ``t`` and baseline ``bl`` from ``data`` array this method
-        finds indxs of ``gains`` array for ``ant1``, ``t`` and ``ant2``, ``t``
-        and returns array of gains (gain1 * gain2^*) with shape (#stokes, #if),
-        where ant1 < ant2.
+        Given time ``t`` and antenna ``ant`` this method finds indxs of
+        ``gains`` array of ``_data`` structured array of ``self`` for ``ant`` &
+        containing ``t`` and returns array of gains for antenna ``ant`` for
+        time moment ``t`` with shape (#if, #pol).
+        """
+
+        # Find indx of gains entries containing ``t`` & ``ant1``
+        indx = np.where((t <= self._data['stop']) & (t >= self._data['start'])
+                & (self._data['antenna'] == ant))[0]
+
+        # Shape (#if, #pol)
+        gains = np.squeeze(self._data[indx]['gains'])
+
+        return gains
+
+    def find_gains_for_baseline(self, t, bl):
+        """
+        Given time ``t`` and baseline ``bl`` this method finds indxs of
+        ``gains`` array of ``_data`` structured array of ``self``for ``ant1``,
+        containing ``t`` and ``ant2``, containing ``t`` and returns array of
+        gains (gain1 * gain2^*) for baseline ``bl`` for time moment ``t`` with
+        shape (#stokes, #if), where ant1 < ant2.
         """
 
         ant1, ant2 = baselines_2_ants([bl])
 
-        # Time intervals between time ``t`` and all entries of gains array
-        # FIXME: Rarely there are 2 timestamps in gains with equal abs(dt)
-        dtmin = np.min(np.abs(self._data['time'] - t))
-
-        # Indexes of most close to ``t`` entries of ``gains`` array for
-        # antennas ant1 & ant2
-        indx1 = np.where((np.abs(self._data['time'] - t) == dtmin) &
-                          (self._data['antenna'] == ant1))[0]
-        indx2 = np.where((np.abs(self._data['time'] - t) == dtmin) &
-                          (self._data['antenna'] == ant2))[0]
-
-        # TODO: Rarely, but this raise assertion
-        # Check that time interval of gain values do cover visibility times
-        # => timestamp of gain found do cover given visibility
-        #assert((self._data[indx1]['dtime'] / 2.) >= abs(dtmin))
-        #assert((self._data[indx2]['dtime'] / 2.) >= abs(dtmin))
+        # Find indx of gains entries containing ``t`` with ant1 & ant2
+        indx1 = np.where((t <= self._data['stop']) & (t >= self._data['start'])
+                & (self._data['antenna'] == ant1))[0]
+        indx2 = np.where((t <= self._data['stop']) & (t >= self._data['start'])
+                & (self._data['antenna'] == ant2))[0]
 
         # Now each gains# has shape (#if, #pol)
         gains1 = np.squeeze(self._data[indx1]['gains'])

@@ -105,7 +105,7 @@ class Data(object):
         #    raise Exception('Instances of Data can be multiplied only on\
         #            instances of Gains!')
 
-        # TODO: Assert equal number of IFs
+        # Assert equal number of IFs
         assert(self.nif == np.shape(gains._data['gains'])[1])
         # TODO: Now we need this to calculating gain * gains*. But try to
         # exclude this assertion

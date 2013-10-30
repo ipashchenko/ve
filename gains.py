@@ -204,7 +204,13 @@ class Absorber(object):
 
         gain = Gains()
         gain.load(fname)
-        self._absorbed_gains *= gain
+
+        # if no any gains in
+        if self._absorbed_gains._data is None:
+            self._absorbed_gains = gain
+        else:
+            self._absorbed_gains = self._absorbed_gains * gain
+
         self.fnames.append(fname)
 
     def absorb(self, fnames):
@@ -225,6 +231,10 @@ class Absorber(object):
     @property
     def absorbed_gains(self):
         return self._absorbed_gains
+
+    @property
+    def _data(self):
+        return self._absorbed_gains._data
 
     def __mul__(self, data):
         if not isinstance(data, newd.Data):

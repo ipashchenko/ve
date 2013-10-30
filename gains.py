@@ -63,7 +63,6 @@ class Gains(object):
         self_copy = copy.deepcopy(self)
 
         if isinstance(other, Gains):
-            print "Multiplying self to Gains instance"
             for t in set(0.5 * (self._data['start'] + self._data['stop'])):
                 # Indexes of all entries of self._data array wich have ``t``
                 indxs_self = np.where(0.5 * (self._data['start'] +
@@ -78,7 +77,7 @@ class Gains(object):
                             other.find_gains_for_antenna(t, ant)
         else:
             raise Exception('Gains instances can be multiplied only on\
-                    instances of Gains or Data classes!')
+                    instances of Gains class!')
 
         return self_copy
 
@@ -87,7 +86,26 @@ class Gains(object):
         Divide self on another instance of Gains class.
         """
 
-        pass
+        self_copy = copy.deepcopy(self)
+
+        if isinstance(other, Gains):
+            for t in set(0.5 * (self._data['start'] + self._data['stop'])):
+                # Indexes of all entries of self._data array wich have ``t``
+                indxs_self = np.where(0.5 * (self._data['start'] +
+                                      self._data['stop']) == t)[0]
+                for ant in self._data[indxs_self]['antenna']:
+                    # Indexes of self._data array wich have ``t`` and ``ant``
+                    indx = np.where((0.5 * (self._data['start'] +
+                                    self._data['stop']) == t) &
+                                    (self._data['antenna'] == ant))[0]
+                    self_copy._data['gains'][indx] =\
+                            self._data[indx]['gains'] /\
+                            other.find_gains_for_antenna(t, ant)
+        else:
+            raise Exception('Gains instances can be divided only by\
+                    instances of Gains class!')
+
+        return self_copy
 
     def find_gains_for_antenna(self, t, ant):
         """

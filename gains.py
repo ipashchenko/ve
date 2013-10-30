@@ -66,15 +66,18 @@ class Gains(object):
             print "Multiplying self to Gains instance"
             for t in set(0.5 * (self._data['start'] + self._data['stop'])):
                 # Indexes of all entries of self._data array wich have ``t``
+                print "processing t = " + str(t)
                 indxs_self = np.where(0.5 * (self._data['start'] +
                                       self._data['stop']) == t)[0]
                 for ant in self._data[indxs_self]['antenna']:
+                    print "processing ant = " + str(ant)
                     # Indexes of self._data array wich have ``t`` and ``ant``
-                    import ipdb; ipdb.set_trace()
                     indx = np.where((0.5 * (self._data['start'] +
                                     self._data['stop']) == t) &
                                     (self._data['antenna'] == ant))[0]
-                    self._data[indx]['gains'] *= obj.find_gains_for_antenna(t, ant)
+                    print "ant & t corresponds to indx = " + str(indx)
+                    self._data['gains'][indx] = self._data[indx]['gains'] *\
+                                             obj.find_gains_for_antenna(t, ant)
         else:
             raise Exception('Gains instances can be multiplied only on\
                     instances of Gains or Data classes!')

@@ -220,7 +220,7 @@ class Data(object):
             stokes = 'I'
 
         data = self._choose_data(baseline=baseline, IF=IF, stokes=stokes)
-        # TODO: i need fnction choose parameters
+        # TODO: i need fuction to choose parameters
         times = self._data[np.where(self._data['baseline'] ==
                                     baseline)]['time']
         angles = np.angle(data)

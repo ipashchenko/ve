@@ -17,13 +17,25 @@ class IO(object):
     Contains load and save methods.
     """
 
+    def __init__(self, dtype):
+
+        self._dtype = dtype
+
     def load(self):
         """
-        Method that returns structured numpy array with
+        Method that returns structured numpy array with specified in __init__
+        dtype, where:
             dtype=[('uvw', '<f8', (3,)),
                   ('time', '<f8'), ('baseline', 'int'),
                   ('hands', 'complex', (nstokes, nif, nch)),
                   ('weights', '<f8', (nstokes, nif, nch))]
+                - for visibillity data,
+            dtype=[('start', '<f8'),
+                   ('stop', '<f8'),
+                   ('antenna', 'int'),
+                   ('gains', 'complex', (nif, npol,)),
+                   ('weights', '<f8', (nif, npol,))]
+                - for antenna gains data.
         """
 
         raise NotImplementedError("Method must be implemented in subclasses")
@@ -40,6 +52,8 @@ class IO(object):
 class PyFitsIO(IO):
 
     def __init__(self):
+        super(PyFitsIO, self).__init__()
+        # We need hdu in save()
         self.hdu = None
 
     def get_hdu(self, fname, extname=None, ver=1):

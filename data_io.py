@@ -17,9 +17,9 @@ class IO(object):
     Contains load and save methods.
     """
 
-    def __init__(self, dtype):
+    #def __init__(self, dtype=None):
 
-        self._dtype = dtype
+    #    self._dtype = dtype
 
     def load(self):
         """

@@ -82,9 +82,11 @@ class Data(object):
             structured numpy.ndarray with the same shape as self.
         """
 
+        print "substracting " + str(other) + " from " + str(self)
         self_copy = copy.deepcopy(self)
         # TODO: assert equal dtype and len
         self_copy._data['hands'] = self._data['hands'] - other._data['hands']
+        print self_copy._data['hands']
 
         return self_copy
 
@@ -126,13 +128,13 @@ class Data(object):
 
         return self_copy
 
-    # TODO: TEST ME!!!
     def zero_data(self):
         """
         Method that zeros all data.
         """
 
-        self = self.__sub__(self)
+        self._data['hands'] = np.zeros(np.shape(self._data['hands']),
+                              dtype=self._data['hands'].dtype)
 
     def load(self, fname):
         """
@@ -159,58 +161,68 @@ class Data(object):
         self._io.save(fname)
 
     # TODO: make possible to choose all IFs and stokes?
-    # TODO: should it return indxs?
+    # TODO: it should returns data & indxs?
     # TODO: should it be a general method for choosing subsample of structured
     # array using kwargs for parameters and kwargs with dictionary values for
     # specifying dimensions of arrays in strutured array. I need it in Gains
     # class too.
-    def _choose_data(self, baseline=None, IF=None, stokes=None):
+    def _choose_data(self, baselines=None, IF=None, stokes=None):
         """
         Method that returns chosen data from _date structured array based on
         user specified parameters.
         """
 
-        baseline_data = self._data[np.where(self._data['baseline']
-                                   == baseline)]
+        data = self._data
+
+        # TODO: create generl method for retrieving indxs of structured array
+        # where specified field equals to specified values
+        if baselines is None:
+            baselines = self.baselines
+            indxs = np.arange(len(data))
+        else:
+            indxs = list()
+            assert(set(baselines).issubset(self.baselines))
+            for baseline in baselines:
+                indx = np.where(data['baseline'] == baseline)[0]
+                indxs.extend(indx)
+            indxs = np.array(np.sort(indxs))
 
         if stokes == 'I':
             # I = 0.5 * (RR + LL)
-            data = 0.5 * (baseline_data['hands'][:, IF - 1, 0] +
-                          baseline_data['hands'][:, IF - 1, 1])
+            result = 0.5 * (data['hands'][indxs, IF - 1, 0] +
+                            data['hands'][indxs, IF - 1, 1])
 
         elif stokes == 'V':
             # V = 0.5 * (RR - LL)
-            data = 0.5 * (baseline_data['hands'][:, IF - 1, 0] -
-                          baseline_data['hands'][:, IF - 1, 1])
+            result = 0.5 * (data['hands'][indxs, IF - 1, 0] -
+                            data['hands'][indxs, IF - 1, 1])
 
         elif stokes == 'Q':
             # V = 0.5 * (LR + RL)
-            data = 0.5 * (baseline_data['hands'][:, IF - 1, 3] +
-                          baseline_data['hands'][:, IF - 1, 2])
+            result = 0.5 * (data['hands'][indxs, IF - 1, 3] +
+                            data['hands'][indxs, IF - 1, 2])
 
         elif stokes == 'U':
             # V = 0.5 * 1j * (LR - RL)
-            data = 0.5 * 1j * (baseline_data['hands'][:, IF - 1, 3] -
-                               baseline_data['hands'][:, IF - 1, 2])
+            result = 0.5 * 1j * (data['hands'][indxs, IF - 1, 3] -
+                                 data['hands'][indxs, IF - 1, 2])
 
         elif stokes in self._stokes_dict.keys():
-            data = baseline_data['hands'][:, IF - 1, self._stokes_dict[stokes]]
+            result = data['hands'][indxs, IF - 1, self._stokes_dict[stokes]]
 
         else:
             raise Exception('Allowed stokes parameters: I, Q, U, V, RR, LL, RL,\
                     LR')
 
-        return data
+        return result, indxs
 
     # TODO: convert time to datetime format and use date2num for plotting
     # TODO: make it plot range of baselines
-    def tplot(self, baseline=None, IF=None, stokes=None):
+    # TODO: make a kwarg argument - to plot in different symbols/colors
+    def tplot(self, baselines=None, IF=None, stokes=None):
         """
         Method that plots uv-data for given baseline vs. time.
         """
-
-        if not baseline:
-            raise Exception
 
         if not IF:
             raise Exception('Choose IF # to display: from ' + str(1) + ' to ' +
@@ -219,29 +231,32 @@ class Data(object):
         if not stokes:
             stokes = 'I'
 
-        data = self._choose_data(baseline=baseline, IF=IF, stokes=stokes)
+        data, indxs = self._choose_data(baselines=baselines, IF=IF,
+                                        stokes=stokes)
         # TODO: i need fuction to choose parameters
-        times = self._data[np.where(self._data['baseline'] ==
-                                    baseline)]['time']
+        times = self._data[indxs]['time']
         angles = np.angle(data)
         amplitudes = np.real(np.sqrt(data * np.conj(data)))
 
         plt.subplot(2, 1, 1)
-        plt.plot(times, amplitudes)
+        plt.plot(times, amplitudes, '.k')
         plt.subplot(2, 1, 2)
-        plt.plot(times, angles)
+        plt.plot(times, angles, '.k')
         plt.show()
 
     # TODO: make it plot range of baselines
-    def uvplot(self, baseline=None, IF=None, stokes=None):
+    def uvplot(self, baselines=None, IF=None, stokes=None):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
         """
 
-        data = self._choose_data(baseline=baseline, IF=IF, stokes=stokes)
+        if not stokes:
+            stokes = 'I'
+
+        data, indxs = self._choose_data(baselines=baselines, IF=IF,
+                                        stokes=stokes)
         # TODO: i need fnction choose parameters
-        uvw_data = self._data[np.where(self._data['baseline'] ==
-                                    baseline)]['uvw']
+        uvw_data = self._data[indxs]['uvw']
         uv_radius = np.sqrt(uvw_data[:, 0] ** 2 + uvw_data[:, 1] ** 2)
 
         angles = np.angle(data)
@@ -256,7 +271,7 @@ class Data(object):
     @property
     def baselines(self):
 
-        return set(self._data['baseline'])
+        return list(set(self._data['baseline']))
 
     @property
     def antennas(self):

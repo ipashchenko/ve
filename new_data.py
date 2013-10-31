@@ -126,6 +126,14 @@ class Data(object):
 
         return self_copy
 
+    # TODO: TEST ME!!!
+    def zero_data(self):
+        """
+        Method that zeros all data.
+        """
+
+        self = self.__sub__(self)
+
     def load(self, fname):
         """
         Method that loads data from FITS-file.

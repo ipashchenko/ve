@@ -99,6 +99,33 @@ class PyFitsIO(IO):
 
         raise NotImplementedError('method must be implemented in subclasses')
 
+    def _to_one_array(struct_array, *names):
+        """
+        Method that takes structured array and names of 2 (or more) fields and
+        returns numpy.ndarray with expanded shape.
+        """
+
+        # TODO: add assertion on equal shapes
+        # TODO: can i use struct_array[[name1, name2]] synthax?
+        arrays_to_dstack = list()
+        for name in names:
+            name_array = struct_array[name]
+            name_array = np.expand_dims(name_array, axis=name_array.dim)
+            arrays_to_dstack.append(name_array)
+
+        return np.dstack(arrays_to_dstack)
+
+    def _to_complex_array(struct_array, real_name, imag_name):
+        """
+        Method that takes structured array and names of 2 fields and returns
+        complex numpy.ndarray.
+        """
+
+        assert(np.shape(struct_array[real_name]) ==\
+                                             np.shape(struct_array[imag_name]))
+
+        return struct_array[real_name] + 1j * struct_array[imag_name]
+
 
 # TODO: subclass IO.PyFitsIO.IDI! SN table is a binary table (as all HDUs in IDI
 # format). So there must be general method to populate self._data structured
@@ -139,14 +166,6 @@ class AN(PyFitsIO):
         gains = np.dstack((rgains, lgains))
         # => (466, 8, 2)
 
-        # TODO: create general method ``_to_complex_array(name1, name2)`` to
-        # work inside  _HDU_to_data(). It should take names of 2 regular data
-        # array fields and return complex array treating this fields as real &
-        # imaginary parts.
-        # TODO: create general method ``_to_one_array(name1, name2, ...)`` to
-        # work inside  _HDU_to_data(). It should take names of 2 (or more)
-        # regular data array fields and return array with expanded shape (using
-        # numpy.dstack fucntion.
         # Constructing `weights` field
         rweights = hdu.data['WEIGHT 1']
         # => (466, 8)

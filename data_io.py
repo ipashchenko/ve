@@ -69,6 +69,7 @@ class PyFitsIO(IO):
                 raise AbsentHduExtensionError('Haven\'t  found ' + extname
                         + ' binary table in ' + fname)
 
+        # Get Primary HDU with UV-data in groups.
         else:
             hdu = self.hdulist[0]
 
@@ -76,12 +77,12 @@ class PyFitsIO(IO):
 
         return self.hdu
 
-    # TODO: Save structured array to recarrays HDUs (BinTable/GroupsHDU).
-    # Then save HDUs to copies of HDU_Lists. Then write HDU_Lists to
-   # def save(self, data, fname):
-   #     hdu = self._data_to_HDU(data, header)
-   #     self.hdu = hdu
-   #     self.hdulist.writeto(fname)
+    def _HDU_to_data(self, hdu):
+        """
+        Converts Groups/BinTableHDU instances to structured array.
+        """
+
+        raise NotImplementedError('method must be implemented in subclasses')
 
     def _data_to_HDU(self, data, header):
         """
@@ -98,14 +99,6 @@ class PyFitsIO(IO):
 
         raise NotImplementedError('method must be implemented in subclasses')
 
-
-# TODO: Are we suppose only to read in gains? We need them to find the
-# residuals bewteen data and self-calibrated model multiplied by gains. If so
-# then we don't need IO.PyFitsIO.AN class - just move this logic to Gains
-# class. In Gains class we use .get_hdu() method of any PyFitsIO subclass to
-# get HDU with Binary Table AN and proceed as there.
-# On other hand if we want to keep place for reading gains data in other then
-# FITS formats - it is ok to keep gains loading logic in IO subclasses.
 
 # TODO: subclass IO.PyFitsIO.IDI! SN table is a binary table (as all HDUs in IDI
 # format). So there must be general method to populate self._data structured
@@ -146,6 +139,14 @@ class AN(PyFitsIO):
         gains = np.dstack((rgains, lgains))
         # => (466, 8, 2)
 
+        # TODO: create general method ``_to_complex_array(name1, name2)`` to
+        # work inside  _HDU_to_data(). It should take names of 2 regular data
+        # array fields and return complex array treating this fields as real &
+        # imaginary parts.
+        # TODO: create general method ``_to_one_array(name1, name2, ...)`` to
+        # work inside  _HDU_to_data(). It should take names of 2 (or more)
+        # regular data array fields and return array with expanded shape (using
+        # numpy.dstack fucntion.
         # Constructing `weights` field
         rweights = hdu.data['WEIGHT 1']
         # => (466, 8)

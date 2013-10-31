@@ -106,6 +106,10 @@ class PyFitsIO(IO):
 # get HDU with Binary Table AN and proceed as there.
 # On other hand if we want to keep place for reading gains data in other then
 # FITS formats - it is ok to keep gains loading logic in IO subclasses.
+
+# TODO: subclass IO.PyFitsIO.IDI! SN table is a binary table (as all HDUs in IDI
+# format). So there must be general method to populate self._data structured
+# array using given dtype and some kwargs.
 class AN(PyFitsIO):
     """
     Class that represents input/output of antenna gains data in various FITS

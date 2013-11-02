@@ -253,6 +253,8 @@ class Groups(PyFitsIO):
 
         return _data
 
+    # TODO: This works only if # of records doesn't change. So i need not only
+    # Data._data attribute, but also parameter values for this data.
     def save(self, _data, fname):
         """
         Save modified structured array to GroupData, then saves GroupData to

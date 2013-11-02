@@ -150,16 +150,17 @@ class Data(object):
         self.nstokes = np.shape(self._data['hands'])[2]
 
     # TODO: add possibility to save in format that is different from current.
-    def save(self, fname):
+    # TODO: i need indexes of saving data in original data array!
+    def save(self, data, fname):
         """
-        Save data to FITS-file.
+        Save ``_data`` attribute of self to FITS-file.
 
         Inputs:
 
             fname - file name.
         """
 
-        self._io.save(fname)
+        self._io.save(data, fname)
 
     # TODO: make possible to choose all IFs and stokes?
     # TODO: should it be a general method for choosing subsample of structured
@@ -270,7 +271,6 @@ class Data(object):
         return result, indxs
 
     # TODO: convert time to datetime format and use date2num for plotting
-    # TODO: plot different IFsin different colors
     # TODO: make a kwarg argument - to plot in different symbols/colors
     def tplot(self, baselines=None, IF=None, stokes=None):
         """
@@ -317,7 +317,6 @@ class Data(object):
             plt.ylim([-math.pi, math.pi])
         plt.show()
 
-    # TODO: make it plot range of baselines
     def uvplot(self, baselines=None, IF=None, stokes=None):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
@@ -510,9 +509,9 @@ class Data(object):
             blen = len(baseline_data)
             indxs = np.arange(blen)
             # Shuffle indexes
-            shuffled_indxs = np.random.shuffle(indxs)
+            np.random.shuffle(indxs)
             # indexes of ``q`` nearly equal chunks
-            q_indxs = np.array_split(shuffled_indxs, q)
+            q_indxs = np.array_split(indxs, q)
             # ``q`` blocks for current baseline
             baseline_chunks = [baseline_data[indx] for indx in q_indxs]
             baselines_chunks.append(baseline_chunks)
@@ -527,8 +526,8 @@ class Data(object):
                              baseline_chunks in baselines_chunks]
 
             # Combain testing & training samples of each baseline in one
-            training_data = np.hstack(training_data)
             testing_data = np.hstack(testing_data)
+            training_data = np.hstack(sum(training_data, []))
             # Save each pair of datasets to files
             # NAXIS changed!!!
             self.save(training_data, 'train' + '_' + str(i) + 'of' + str(q))

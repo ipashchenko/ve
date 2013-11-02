@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import copy
+import math
 import numpy as np
 import pylab as plt
 from data_io import Groups, IDI
@@ -313,6 +314,7 @@ class Data(object):
         plt.subplot(2, 1, 2)
         for _if in range(n_if):
             plt.plot(times, angles[:, _if], syms[_if])
+            plt.ylim([-math.pi, math.pi])
         plt.show()
 
     # TODO: make it plot range of baselines
@@ -353,6 +355,7 @@ class Data(object):
         plt.subplot(2, 1, 2)
         for _if in range(n_if):
             plt.plot(uv_radius, angles[:, _if], syms[_if])
+            plt.ylim([-math.pi, math.pi])
         plt.show()
 
     @property

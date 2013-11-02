@@ -168,7 +168,8 @@ class Data(object):
     def _choose_data(self, baselines=None, IF=None, stokes=None):
         """
         Method that returns chosen data from _date structured array based on
-        user specified parameters.
+        user specified parameters. All checks on IF and stokes are made here
+        in one place. This method used by plotting methods.
 
         Inputs:
 
@@ -229,6 +230,9 @@ class Data(object):
                 IF_list.append(IF)
             IF = np.array(IF_list)
 
+        if not set(IF).issubset(np.arange(1, self.nif + 1)):
+            raise Exception('Choose IF numbers to display: from ' + str(1) +
+                    ' to ' + str(self.nif))
         IF -= 1
         print "IF : "
         print IF
@@ -262,34 +266,53 @@ class Data(object):
             raise Exception('Allowed stokes parameters: I, Q, U, V, RR, LL, RL,\
                     LR')
 
-        return np.squeeze(result), indxs
+        return result, indxs
 
     # TODO: convert time to datetime format and use date2num for plotting
-    # TODO: make it plot range of baselines
+    # TODO: plot different IFsin different colors
     # TODO: make a kwarg argument - to plot in different symbols/colors
     def tplot(self, baselines=None, IF=None, stokes=None):
         """
-        Method that plots uv-data for given baseline vs. time.
+        Method that plots uv-data for given baselines vs. time.
+
+        Inputs:
+
+            baselines - one or iterable of baselines numbers,
+
+            IF - one or iterable of IF numbers (1-#IF),
+
+            stokes - string - any of: I, Q, U, V, RR, LL, RL, LR.
         """
 
-        if not IF:
-            raise Exception('Choose IF # to display: from ' + str(1) + ' to ' +
-                             str(self.nif))
+        # All checks are in self._choose_data()
 
         if not stokes:
             stokes = 'I'
 
         data, indxs = self._choose_data(baselines=baselines, IF=IF,
                                         stokes=stokes)
+        # # of chosen IFs
+        n_if = np.shape(data)[1]
+
+        # TODO: define colors
+        try:
+            syms = self.__color_list[:n_if]
+        except AttributeError:
+            print "Define self.__color_list to show in different colors!"
+            syms = ['.k'] * n_if
+
         # TODO: i need fuction to choose parameters
         times = self._data[indxs]['time']
         angles = np.angle(data)
         amplitudes = np.real(np.sqrt(data * np.conj(data)))
 
         plt.subplot(2, 1, 1)
-        plt.plot(times, amplitudes, '.k')
+        for _if in range(n_if):
+            # TODO: plot in different colors and make a legend
+            plt.plot(times, amplitudes[:, _if], syms[_if])
         plt.subplot(2, 1, 2)
-        plt.plot(times, angles, '.k')
+        for _if in range(n_if):
+            plt.plot(times, angles[:, _if], syms[_if])
         plt.show()
 
     # TODO: make it plot range of baselines
@@ -298,11 +321,24 @@ class Data(object):
         Method that plots uv-data for given baseline vs. uv-radius.
         """
 
+        # All checks are in self._choose_data()
+
         if not stokes:
             stokes = 'I'
 
         data, indxs = self._choose_data(baselines=baselines, IF=IF,
                                         stokes=stokes)
+
+        # # of chosen IFs
+        n_if = np.shape(data)[1]
+
+        # TODO: define colors
+        try:
+            syms = self.__color_list[:n_if]
+        except AttributeError:
+            print "Define self.__color_list to show in different colors!"
+            syms = ['.k'] * n_if
+
         # TODO: i need fnction choose parameters
         uvw_data = self._data[indxs]['uvw']
         uv_radius = np.sqrt(uvw_data[:, 0] ** 2 + uvw_data[:, 1] ** 2)
@@ -311,9 +347,12 @@ class Data(object):
         amplitudes = np.real(np.sqrt(data * np.conj(data)))
 
         plt.subplot(2, 1, 1)
-        plt.plot(uv_radius, amplitudes, '.k')
+        for _if in range(n_if):
+            # TODO: plot in different colors and make a legend
+            plt.plot(uv_radius, amplitudes[:, _if], syms[_if])
         plt.subplot(2, 1, 2)
-        plt.plot(uv_radius, angles, '.k')
+        for _if in range(n_if):
+            plt.plot(uv_radius, angles[:, _if], syms[_if])
         plt.show()
 
     @property

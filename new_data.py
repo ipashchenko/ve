@@ -161,7 +161,6 @@ class Data(object):
         self._io.save(fname)
 
     # TODO: make possible to choose all IFs and stokes?
-    # TODO: it should returns data & indxs?
     # TODO: should it be a general method for choosing subsample of structured
     # array using kwargs for parameters and kwargs with dictionary values for
     # specifying dimensions of arrays in strutured array. I need it in Gains
@@ -170,6 +169,22 @@ class Data(object):
         """
         Method that returns chosen data from _date structured array based on
         user specified parameters.
+
+        Inputs:
+
+            baselines - one or iterable of baselines numbers,
+
+            IF - one or iterable of IF numbers (1-#IF),
+
+            stokes - string - any of: I, Q, U, V, RR, LL, RL, LR.
+
+        Outputs:
+
+            numpy.ndarray, numpy.ndarray
+
+                where first array is array of data with shape (#N, #IF,) and second
+                array is 1d-array of indexes of data in self._data structured
+                array.
         """
 
         data = self._data
@@ -181,40 +196,73 @@ class Data(object):
             indxs = np.arange(len(data))
         else:
             indxs = list()
-            assert(set(baselines).issubset(self.baselines))
-            for baseline in baselines:
+            baselines_list = list()
+            # If ``baselines`` is iterable
+            try:
+                baselines_list.extend(baselines)
+            # If ``baselines`` is not iterable (int)
+            except TypeError:
+                baselines_list.append(baselines)
+
+            # Check that given baseline numbers are among existing ones
+            assert(set(baselines_list).issubset(self.baselines))
+
+            # Find indexes of structured array (in zero dim) with given
+            # baselines
+            for baseline in baselines_list:
                 indx = np.where(data['baseline'] == baseline)[0]
                 indxs.extend(indx)
             indxs = np.array(np.sort(indxs))
 
+        print "INDXS : "
+        print indxs
+
+        if IF is None:
+            IF = np.arange(self.nif) + 1
+        else:
+            IF_list = list()
+            # If ``IF`` is iterable
+            try:
+                IF_list.extend(IF)
+            # If ``IF`` is not iterable (int)
+            except TypeError:
+                IF_list.append(IF)
+            IF = np.array(IF_list)
+
+        IF -= 1
+        print "IF : "
+        print IF
+
         if stokes == 'I':
             # I = 0.5 * (RR + LL)
-            result = 0.5 * (data['hands'][indxs, IF - 1, 0] +
-                            data['hands'][indxs, IF - 1, 1])
+            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 0]\
+                    + data['hands'][indxs[:, None, None], IF[:, None], 1])
 
         elif stokes == 'V':
             # V = 0.5 * (RR - LL)
-            result = 0.5 * (data['hands'][indxs, IF - 1, 0] -
-                            data['hands'][indxs, IF - 1, 1])
+            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 0]\
+                    - data['hands'][indxs[:, None, None], IF[:, None], 1])
 
         elif stokes == 'Q':
             # V = 0.5 * (LR + RL)
-            result = 0.5 * (data['hands'][indxs, IF - 1, 3] +
-                            data['hands'][indxs, IF - 1, 2])
+            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 3]\
+                    + data['hands'][indxs[:, None, None], IF[:, None], 2])
 
         elif stokes == 'U':
             # V = 0.5 * 1j * (LR - RL)
-            result = 0.5 * 1j * (data['hands'][indxs, IF - 1, 3] -
-                                 data['hands'][indxs, IF - 1, 2])
+            result = 0.5 * 1j * (data['hands'][indxs[:, None, None], IF[:,
+                None], 3] - data['hands'][indxs[:, None, None], IF[:, None],
+                    2])
 
         elif stokes in self._stokes_dict.keys():
-            result = data['hands'][indxs, IF - 1, self._stokes_dict[stokes]]
+            result = data['hands'][indxs[:, None, None], IF[:, None],
+                    self._stokes_dict[stokes]]
 
         else:
             raise Exception('Allowed stokes parameters: I, Q, U, V, RR, LL, RL,\
                     LR')
 
-        return result, indxs
+        return np.squeeze(result), indxs
 
     # TODO: convert time to datetime format and use date2num for plotting
     # TODO: make it plot range of baselines

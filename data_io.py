@@ -262,10 +262,25 @@ class Groups(PyFitsIO):
         header of HDU.
         """
 
-        # constructing array (3, 20156, 4, 8,)
+        # Constructing array (3, 20156, 4, 8,)
         temp = np.vstack((_data['hands'].real[np.newaxis, :],
                           _data['hands'].imag[np.newaxis, :],
                           _data['weights'][np.newaxis, :]))
+
+        # Construct corresponding arrays of parameter values
+        u, v, w = np.hsplit(_data['uvw'], 3)
+        u = u.T
+        v = v.T
+        w = w.T
+        u = (u + self.hdu.header['PZERO1']) * self.hdu.header['PSCAL1']
+        v = (v + self.hdu.header['PZERO2']) * self.hdu.header['PSCAL2']
+        w = (w + self.hdu.header['PZERO3']) * self.hdu.header['PSCAL3']
+        baseline = _data['baseline']
+        baseline = (baseline + self.hdu.header['PZERO6']) *\
+                    self.hdu.header['PSCAL6']
+        time = (_data['time'] + self.hdu.header['PZERO4']) *\
+                self.hdu.header['PSCAL4']
+
         # Now roll axis 0 to 3rd position (3, 20156, 8, 4) => (20156, 8, 4, 3)
         temp = np.rollaxis(temp, 0, 4)
 
@@ -278,11 +293,29 @@ class Groups(PyFitsIO):
                self.data_of_data[key][0] for key in self.data_of_data.keys()})
         # => (20156, 1, 1, 8, 1, 4, 3) as 'DATA' part of recarray
 
+        # Write regular array data (``temp``) and corresponding parameters to
+        # instances of pyfits.GroupsHDU
         imdata = temp
+        # Use parameter values of saving data to find indexes of this
+        # parameters in the original data entry of HDU
+        par_indxs = np.where((self.hdu.data['UU---SIN'] == u) &
+                (self.hdu.data['VV---SIN'] == v) & (self.hdu.data['WW---SIN']
+                    == w) & (self.hdu.data['DATE'] == time) &
+                (self.hdu.data['BASELINE'] == baseline))[0]
+
+        print "par_indxs"
+        print par_indxs
+
         parnames = self.hdu.parnames
         pardata = list()
         for name in parnames:
-            pardata.append(self.hdu.data[name])
+            pardata.append(self.hdu.data[name][par_indxs])
+        # If two parameters for one value (like ``DATE``)
+        if parnames.count(name) == 2:
+            indx_to_zero = parnames.index(name) + 1
+        # then zero array for second parameter with the same name
+        # TODO: use dtype from ``BITPIX`` keyword
+        pardata[indx_to_zero] = np.zeros(len(par_indxs), dtype=float)
 
         a = pf.GroupData(imdata, parnames=parnames, pardata=pardata,
                          bitpix=-32)

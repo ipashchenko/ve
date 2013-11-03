@@ -22,6 +22,17 @@ class EmptyImageFtError(Exception):
 #TODO: convert utils to using arrays instead of lists
 
 
+def index_of(ar1, ar2):
+    """
+    Find indexes of elements of ar1 in ar2.
+    """
+
+    ar2_sorted = np.argsort(ar2)
+    ar1_pos = np.searchsorted(ar2[ar2_sorted], ar1)
+
+    return ar2_sorted[ar1_pos]
+
+
 def change_shape(_array, _dict1, _dict2):
     """
     Function that takes ndarray and 2 dictionaries with array's shape and

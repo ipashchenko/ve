@@ -33,6 +33,47 @@ def index_of(ar1, ar2):
     return ar2_sorted[ar1_pos]
 
 
+def _to_complex_array(struct_array, real_name, imag_name):
+    """
+    Method that takes structured array and names of 2 fields and returns
+    complex numpy.ndarray.
+    """
+
+    assert(np.shape(struct_array[real_name]) ==\
+                                            np.shape(struct_array[imag_name]))
+
+    return struct_array[real_name] + 1j * struct_array[imag_name]
+
+
+def _to_one_array(struct_array, *names):
+    """
+    Method that takes structured array and names of 2 (or more) fields and
+    returns numpy.ndarray with expanded shape.
+    """
+
+    # TODO: add assertion on equal shapes
+    # TODO: can i use struct_array[[name1, name2]] synthax?
+    arrays_to_dstack = list()
+    print "Got stuct_array:"
+    print struct_array
+    print "names:"
+    print names
+    for name in names:
+        print "current name:"
+        print name
+        name_array = struct_array[name]
+        print "struct_array[name]:"
+        print name_array
+        print "it's shape"
+        print np.shape(name_array)
+        print "it's ndim"
+        print name_array.ndim
+        name_array = np.expand_dims(name_array, axis=name_array.ndim)
+        arrays_to_dstack.append(name_array)
+
+    return np.squeeze(np.dstack(arrays_to_dstack))
+
+
 def change_shape(_array, _dict1, _dict2):
     """
     Function that takes ndarray and 2 dictionaries with array's shape and

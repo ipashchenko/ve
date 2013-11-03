@@ -6,6 +6,10 @@ import pyfits as pf
 from utils import AbsentHduExtensionError
 from utils import build_dtype_for_bintable_data
 from utils import change_shape
+from utils import index_of
+from utils import _to_one_array
+from utils import _to_complex_array
+
 
 vec_int = np.vectorize(np.int)
 vec_complex = np.vectorize(np.complex)
@@ -98,33 +102,6 @@ class PyFitsIO(IO):
         """
 
         raise NotImplementedError('method must be implemented in subclasses')
-
-    def _to_one_array(struct_array, *names):
-        """
-        Method that takes structured array and names of 2 (or more) fields and
-        returns numpy.ndarray with expanded shape.
-        """
-
-        # TODO: add assertion on equal shapes
-        # TODO: can i use struct_array[[name1, name2]] synthax?
-        arrays_to_dstack = list()
-        for name in names:
-            name_array = struct_array[name]
-            name_array = np.expand_dims(name_array, axis=name_array.dim)
-            arrays_to_dstack.append(name_array)
-
-        return np.dstack(arrays_to_dstack)
-
-    def _to_complex_array(struct_array, real_name, imag_name):
-        """
-        Method that takes structured array and names of 2 fields and returns
-        complex numpy.ndarray.
-        """
-
-        assert(np.shape(struct_array[real_name]) ==\
-                                             np.shape(struct_array[imag_name]))
-
-        return struct_array[real_name] + 1j * struct_array[imag_name]
 
 
 # TODO: subclass IO.PyFitsIO.IDI! SN table is a binary table (as all HDUs in IDI
@@ -255,6 +232,12 @@ class Groups(PyFitsIO):
 
     # TODO: This works only if # of records doesn't change. So i need not only
     # Data._data attribute, but also parameter values for this data.
+    # TODO: Add if check for len(_data). If it less then hdu.header['GCOUNT'] => find
+    # what exactly indexes this _data in original hdu.data array does occupy.
+    # Using this indexes construct HDU and save it. If it equals to
+    # hdu.header['GCOUNT'] then just add use paramters from original hdu.data
+    # (but assert _data['uvw'] equals to hdu.data['u'] etc.) If it more =>
+    # raise exception.
     def save(self, _data, fname):
         """
         Save modified structured array to GroupData, then saves GroupData to
@@ -268,18 +251,17 @@ class Groups(PyFitsIO):
                           _data['weights'][np.newaxis, :]))
 
         # Construct corresponding arrays of parameter values
-        u, v, w = np.hsplit(_data['uvw'], 3)
-        u = u.T
-        v = v.T
-        w = w.T
-        u = (u + self.hdu.header['PZERO1']) * self.hdu.header['PSCAL1']
-        v = (v + self.hdu.header['PZERO2']) * self.hdu.header['PSCAL2']
-        w = (w + self.hdu.header['PZERO3']) * self.hdu.header['PSCAL3']
-        baseline = _data['baseline']
-        baseline = (baseline + self.hdu.header['PZERO6']) *\
-                    self.hdu.header['PSCAL6']
-        time = (_data['time'] + self.hdu.header['PZERO4']) *\
-                self.hdu.header['PSCAL4']
+        _data_copy = _data.copy()
+        _data_copy['uvw'][:, 0] = (_data_copy['uvw'][:, 0] +
+                self.hdu.header['PZERO1']) * self.hdu.header['PSCAL1']
+        _data_copy['uvw'][:, 1] = (_data_copy['uvw'][:, 1] +
+                self.hdu.header['PZERO2']) * self.hdu.header['PSCAL2']
+        _data_copy['uvw'][:, 2] = (_data_copy['uvw'][:, 2] +
+                self.hdu.header['PZERO3']) * self.hdu.header['PSCAL3']
+        _data_copy['time'] = (_data_copy['time'] +
+                self.hdu.header['PZERO4']) * self.hdu.header['PSCAL4']
+        _data_copy['baseline'] = (_data_copy['baseline'] +
+                self.hdu.header['PZERO6']) * self.hdu.header['PSCAL6']
 
         # Now roll axis 0 to 3rd position (3, 20156, 8, 4) => (20156, 8, 4, 3)
         temp = np.rollaxis(temp, 0, 4)
@@ -296,23 +278,41 @@ class Groups(PyFitsIO):
         # Write regular array data (``temp``) and corresponding parameters to
         # instances of pyfits.GroupsHDU
         imdata = temp
+
         # Use parameter values of saving data to find indexes of this
         # parameters in the original data entry of HDU
-        par_indxs = np.where((self.hdu.data['UU---SIN'] == u) &
-                (self.hdu.data['VV---SIN'] == v) & (self.hdu.data['WW---SIN']
-                    == w) & (self.hdu.data['DATE'] == time) &
-                (self.hdu.data['BASELINE'] == baseline))[0]
+        if len(_data) < len(self.hdu.data):
+            print "Saving cutted data"
+
+            # use utils.index_of()
+            original_data = _to_one_array(self.hdu.data, 'UU---SIN',
+                                    'VV---SIN', 'WW---SIN', 'DATE', 'BASELINE')
+            print "original_data done"
+            saving_data = np.dstack((np.array(np.hsplit(_data_copy['uvw'],
+                3)).T, _data_copy['time'], _data_copy['baseline']))
+            saving_data = np.squeeze(saving_data)
+            # TODO: this is funnest workaround:)
+            par_indxs = index_of(saving_data.sum(axis=1),
+                                 original_data.sum(axis=1))
+        elif len(_data) > len(self.hdu.data):
+            raise Exception('There must be equal or less visibilities to\
+                            save!')
+        else:
+            print "Saving data - number of groups haven't changed"
+            par_indxs = np.arange(len(self.hdu.data))
 
         print "par_indxs"
         print par_indxs
 
-        parnames = self.hdu.parnames
+        parnames = self.hdu.data.parnames
         pardata = list()
         for name in parnames:
             pardata.append(self.hdu.data[name][par_indxs])
         # If two parameters for one value (like ``DATE``)
-        if parnames.count(name) == 2:
-            indx_to_zero = parnames.index(name) + 1
+        for name in parnames:
+            if parnames.count(name) == 2:
+                indx_to_zero = parnames.index(name) + 1
+                break
         # then zero array for second parameter with the same name
         # TODO: use dtype from ``BITPIX`` keyword
         pardata[indx_to_zero] = np.zeros(len(par_indxs), dtype=float)

@@ -306,9 +306,16 @@ class Groups(PyFitsIO):
 
         parnames = self.hdu.data.parnames
         pardata = list()
+        par_dict = {'UU---SIN': 1, 'VV---SIN': 2, 'WW---SIN': 3, 'DATE': 4,
+                'BASELINE': 6, 'INTTIM': 7, 'GATEID': 8, 'CORR-ID': 9}
         for name in parnames:
-            pardata.append(self.hdu.data[name][par_indxs])
+            par = self.hdu.data[name][par_indxs]
+            par = (par - self.hdu.header['PZERO' + str(par_dict[name])]) /\
+            self.hdu.header['PSCAL' + str(par_dict[name])]
+            pardata.append(par)
         # If two parameters for one value (like ``DATE``)
+        print "pardata==========="
+        print pardata
         for name in parnames:
             if parnames.count(name) == 2:
                 indx_to_zero = parnames.index(name) + 1
@@ -324,6 +331,7 @@ class Groups(PyFitsIO):
         # TODO: use PyFitsIO.update_header() method to update header
         # accordingly to possibly modified structured array!
         b.header['NAXIS'] = len(imdata)
+        #b.header['PZERO4'] = 0
 
         self.hdulist[0] = b
         self.hdulist.writeto(fname + '.FITS')

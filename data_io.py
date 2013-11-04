@@ -191,6 +191,15 @@ class Groups(PyFitsIO):
         self.data_of_data = data_of_data
         # Describe shape and dimensions of structured array
         self.data_of__data = {'COMPLEX': 3, 'GROUP': 0, 'STOKES': 2, 'IF': 1}
+
+        # Dictionary with name and corresponding index of parameters in group
+        par_dict = dict()
+        for name in self.hdu.data.parnames:
+            # It is cool that if parameter name does appear twice it is index
+            # of the first appearence that are recorded in ``par_dict``
+            par_dict.update({name: self.hdu.data.parnames.index(name) + 1})
+        self.par_dict = par_dict
+
         # Number of axis with dimension=1. 3 corresponds to 'STOKES', 'IF' &
         # 'COMPLEX'
         self.ndim_ones = hdu.header['NAXIS'] - 1 - 3
@@ -230,14 +239,6 @@ class Groups(PyFitsIO):
 
         return _data
 
-    # TODO: This works only if # of records doesn't change. So i need not only
-    # Data._data attribute, but also parameter values for this data.
-    # TODO: Add if check for len(_data). If it less then hdu.header['GCOUNT'] => find
-    # what exactly indexes this _data in original hdu.data array does occupy.
-    # Using this indexes construct HDU and save it. If it equals to
-    # hdu.header['GCOUNT'] then just add use paramters from original hdu.data
-    # (but assert _data['uvw'] equals to hdu.data['u'] etc.) If it more =>
-    # raise exception.
     def save(self, _data, fname):
         """
         Save modified structured array to GroupData, then saves GroupData to
@@ -282,12 +283,9 @@ class Groups(PyFitsIO):
         # Use parameter values of saving data to find indexes of this
         # parameters in the original data entry of HDU
         if len(_data) < len(self.hdu.data):
-            print "Saving cutted data"
 
-            # use utils.index_of()
             original_data = _to_one_array(self.hdu.data, 'UU---SIN',
                                     'VV---SIN', 'WW---SIN', 'DATE', 'BASELINE')
-            print "original_data done"
             saving_data = np.dstack((np.array(np.hsplit(_data_copy['uvw'],
                 3)).T, _data_copy['time'], _data_copy['baseline']))
             saving_data = np.squeeze(saving_data)
@@ -301,21 +299,15 @@ class Groups(PyFitsIO):
             print "Saving data - number of groups haven't changed"
             par_indxs = np.arange(len(self.hdu.data))
 
-        print "par_indxs"
-        print par_indxs
-
         parnames = self.hdu.data.parnames
         pardata = list()
-        par_dict = {'UU---SIN': 1, 'VV---SIN': 2, 'WW---SIN': 3, 'DATE': 4,
-                'BASELINE': 6, 'INTTIM': 7, 'GATEID': 8, 'CORR-ID': 9}
         for name in parnames:
             par = self.hdu.data[name][par_indxs]
-            par = (par - self.hdu.header['PZERO' + str(par_dict[name])]) /\
-            self.hdu.header['PSCAL' + str(par_dict[name])]
+            par = (par - self.hdu.header['PZERO' + str(self.par_dict[name])]) /\
+            self.hdu.header['PSCAL' + str(self.par_dict[name])]
             pardata.append(par)
+
         # If two parameters for one value (like ``DATE``)
-        print "pardata==========="
-        print pardata
         for name in parnames:
             if parnames.count(name) == 2:
                 indx_to_zero = parnames.index(name) + 1
@@ -327,11 +319,8 @@ class Groups(PyFitsIO):
         a = pf.GroupData(imdata, parnames=parnames, pardata=pardata,
                          bitpix=-32)
         b = pf.GroupsHDU(a)
+        # PyFits updates header using given data (``GCOUNT``)
         b.header = self.hdu.header
-        # TODO: use PyFitsIO.update_header() method to update header
-        # accordingly to possibly modified structured array!
-        b.header['NAXIS'] = len(imdata)
-        #b.header['PZERO4'] = 0
 
         self.hdulist[0] = b
         self.hdulist.writeto(fname + '.FITS')

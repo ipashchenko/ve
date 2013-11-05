@@ -24,13 +24,21 @@ class EmptyImageFtError(Exception):
 
 def index_of(ar1, ar2):
     """
-    Find indexes of elements of ar1 in ar2.
+    Find indexes of elements of ar1 in ar2. It is assumed that each entry of
+    ar1 are met only one time in ar2.
     """
 
-    ar2_sorted = np.argsort(ar2)
-    ar1_pos = np.searchsorted(ar2[ar2_sorted], ar1)
+    indxs_ar2_sorted = np.argsort(ar2)
+    ar1_pos_left = np.searchsorted(ar2[indxs_ar2_sorted], ar1, side='left')
+    ar1_pos_right = np.searchsorted(ar2[indxs_ar2_sorted], ar1, side='right')
 
-    return ar2_sorted[ar1_pos]
+    indxs = list()
+    for i in range(len(ar1_pos_left)):
+        indxs.append(range(ar1_pos_left[i], ar1_pos_right[i]))
+
+    indxs = sum(indxs, [])
+
+    return indxs_ar2_sorted[indxs]
 
 
 def _to_complex_array(struct_array, real_name, imag_name):

@@ -73,8 +73,8 @@ class Model(object):
 
         # FIXME: Should i use ``w``?
         # u, v, w must already be properly scaled
-        u = uvws['u']
-        v = uvws['v']
+        u = uvws[:, 0]
+        v = uvws[:, 1]
         #w = uvws['w']
 
         indxs_of_cc = np.where((flux != 0) & (bmaj == 0) & (bmin == 0) & (bpa

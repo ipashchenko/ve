@@ -7,6 +7,7 @@ import numpy as np
 import pylab as plt
 from data_io import Groups, IDI
 from utils import baselines_2_ants
+from utils import index_of
 #import gains as g
 
 vec_complex = np.vectorize(np.complex)
@@ -125,6 +126,9 @@ class Data(object):
             for uv_indx in uv_indxs:
                 bl = self._data['baseline'][uv_indx]
                 gains12 = gains.find_gains_for_baseline(t, bl)
+                # FIXME: In substitute() ['hands'] then [indxs] does return
+                # view. This is numpy stuff [indx][field_name] to return view
+                # no copy?
                 self_copy._data[uv_indx]['hands'] *= gains12.T
 
         return self_copy
@@ -573,18 +577,17 @@ class Data(object):
         Substitue data of self with visibilities of the model.
         """
 
-        indxs = np.where(self._data['BASELINE'] == baseline)
+        if baseline is None:
+            baseline = self.baselines
+        indxs = index_of(baseline, self._data['baseline'])
         n = len(indxs)
         uvws = self._data[indxs]['uvw']
         model._uvws = uvws
 
-        #self._data['hands'][indxs] =\
         for i, stoke in enumerate(['RR', 'LL', 'RL', 'LR']):
             try:
-                self._data['hands'][indxs][..., i] =\
+                self._data['hands'][indxs, :, i] =\
         model.uv_correlations[stoke].repeat(self.nif).reshape((n, self.nif))
             # If model doesn't have some hands => pass it
             except ValueError:
                 pass
-        #model.uv_correlations returns dictionary of hands. Need extend this array
-        #to match the shape of self._data['hands'] (N, #if, #stokes)

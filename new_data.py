@@ -533,8 +533,10 @@ class Data(object):
             training_data = np.hstack(sum(training_data, []))
             # Save each pair of datasets to files
             # NAXIS changed!!!
-            self.save(training_data, 'train' + '_' + str(i) + 'of' + str(q))
-            self.save(testing_data, 'test' + '_' + str(i) + 'of' + str(q))
+            self.save(training_data, 'train' + '_' + str(i + 1).zfill(2) + 'of'
+                    + str(q))
+            self.save(testing_data, 'test' + '_' + str(i + 1).zfill(2) + 'of' +
+                    str(q))
 
     def cv_score(self, model, stokes='I'):
         """

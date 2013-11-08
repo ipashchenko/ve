@@ -35,7 +35,7 @@ class Bootstrap(object):
 # TODO: TEST ME!!!
 class CrossValidation(object):
     """
-    Class that implements cross-validation analysis of intensity models.
+    Class that implements cross-validation analysis of image-plane models.
     """
 
     def __init__(self, data):
@@ -63,18 +63,26 @@ class CrossValidation(object):
         modelfiles.sort()
         testfiles.sort()
 
+        print "modelfiles : " + str(modelfiles)
+        print "testfiles : " + str(testfiles)
+
         result = list()
 
         for modelfile in modelfiles:
+            print "using model " + str(modelfile)
             model = Model()
-            model.add_from_txt(modelfile, stokes=stokes)
+            model.add_from_txt(modelfile, stoke=stokes)
             cv_scores = list()
             for testfile in testfiles:
-                data = open_fits(testfiles)
-                cv_score = data.cv(model, stokes=stokes)
+                print "using test file " + str(testfile)
+                data = open_fits(testfile)
+                cv_score = data.cv_score(model, stokes=stokes)
+                print "cv_score for one testing sample is " + str(cv_score)
                 cv_scores.append(cv_score)
-                mean_cv_score = np.mean(cv_scores)
-                std_cv_score = np.std(cv_scores)
+
+            mean_cv_score = np.mean(cv_scores)
+            std_cv_score = np.std(cv_scores)
+            print mean_cv_score, std_cv_score
 
             result.append([modelfile, mean_cv_score, std_cv_score])
 

@@ -49,9 +49,9 @@ class CrossValidation(object):
 
             Inputs:
 
-                modelfiles - wildcard of file names,
+                modelfiles - wildcard of file names ~ 'model_0i_0jofN.txt',
 
-                testfiles - wildcard of file names.
+                testfiles - wildcard of file names ~ 'test_0jofN.FITS'.
 
             Output:
 
@@ -62,18 +62,24 @@ class CrossValidation(object):
         testfiles = glob.glob(testcard)
         modelfiles.sort()
         testfiles.sort()
+        ntest = len(testfiles)
+        nmodels = len(modelfiles) / ntest
+
+        assert(not len(modelfiles) % float(len(testfiles)))
 
         print "modelfiles : " + str(modelfiles)
         print "testfiles : " + str(testfiles)
 
         result = list()
 
-        for modelfile in modelfiles:
-            print "using model " + str(modelfile)
-            model = Model()
-            model.add_from_txt(modelfile, stoke=stokes)
+        for i in range(nmodels):
+            print "using models " + str(modelfiles[ntest * i: ntest * (i + 1)])\
+                   + " and testing sample " + str(testfiles)
+            models = modelfiles[ntest * i: ntest * (i + 1)]
             cv_scores = list()
-            for testfile in testfiles:
+            for j, testfile in enumerate(testfiles):
+                model = Model()
+                model.add_from_txt(models[j], stoke=stokes)
                 print "using test file " + str(testfile)
                 data = open_fits(testfile)
                 cv_score = data.cv_score(model, stokes=stokes)
@@ -84,7 +90,7 @@ class CrossValidation(object):
             std_cv_score = np.std(cv_scores)
             print mean_cv_score, std_cv_score
 
-            result.append([modelfile, mean_cv_score, std_cv_score])
+            result.append(["model#" + str(i + 1), mean_cv_score, std_cv_score])
 
         return result
 

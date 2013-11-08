@@ -127,8 +127,7 @@ class Data(object):
                 bl = self._data['baseline'][uv_indx]
                 gains12 = gains.find_gains_for_baseline(t, bl)
                 # FIXME: In substitute() ['hands'] then [indxs] does return
-                # view. This is numpy stuff [indx][field_name] to return view
-                # no copy?
+                # view.
                 self_copy._data[uv_indx]['hands'] *= gains12.T
 
         return self_copy
@@ -537,7 +536,6 @@ class Data(object):
             self.save(training_data, 'train' + '_' + str(i) + 'of' + str(q))
             self.save(testing_data, 'test' + '_' + str(i) + 'of' + str(q))
 
-    # TODO: TEST ME!!!
     def cv_score(self, model, stokes='I'):
         """
         Returns Cross-Validation score for self (as testing cv-sample) and
@@ -547,31 +545,51 @@ class Data(object):
 
             model [instance of Model class] - model to cross-validate.
 
-            stokes [str] - any Stokes parameter.
+            stokes [str] - string of any of stokes parameters - ['I', 'Q',
+                'U', 'V'], eg. 'I', 'QU'...
         """
 
         baselines_cv_scores = list()
 
-        # calculate noise on each baseline
+        # Calculate noise on each baseline
+        # ``noise`` is dictionary with keys - baseline numbers and values -
+        # numpy arrays of noise std for each IF
         noise = self.noise()
+        print "Calculating noise..."
+        print noise
 
-        model_data = self.substitue(model, stokes=stokes)
-        uv_difference = self._data['hands'] - model_data['hands']
-        diff_array = self._data.copy()
+        data_copied = copy.deepcopy(self)
+        data_copied.substitute(model)
+        # TODO: use __sub__() method of data
+        uv_difference = self._data['hands'] - data_copied._data['hands']
+        diff_array = copy.deepcopy(self._data)
         diff_array['hands'] = uv_difference
 
         for baseline in self.baselines:
             # square difference for each baseline, divide by baseline noise
             # and then sum for current baseline
-            baseline_indxs = np.where(diff_array['BASELINE'] == baseline)
-            hands_diff = diff_array[baseline_indxs]['hands'] / noise[baseline]
-            diff = hands_diff.flatten()
-            diff *= diff
-            baselines_cv_scores.append(diff)
+            baseline_indxs = np.where(diff_array['baseline'] == baseline)[0]
+            hands_diff = diff_array[baseline_indxs]['hands'] /\
+                         noise[baseline][None, :, None]
+            # Construct difference for all Stokes parameters
+            diffs = dict()
+            diffs.update({'I': 0.5 * (hands_diff[..., 0] + hands_diff[..., 1])})
+            diffs.update({'V': 0.5 * (hands_diff[..., 0] - hands_diff[..., 1])})
+            diffs.update({'Q': 0.5 * (hands_diff[..., 2] + hands_diff[..., 3])})
+            diffs.update({'U': 0.5 * 1j * (hands_diff[..., 3] - hands_diff[...,
+                2])})
+            for stoke in stokes:
+                if stoke not in 'IQUV':
+                    raise Exception('Stokes parameter must be in ``IQUV``!')
+                result = 0
+                diff = diffs[stoke].flatten()
+                diff = diff * np.conjugate(diff)
+                result += float(diff.sum())
+                print "cv score for stoke " + stoke + " is : " + str(result)
+            baselines_cv_scores.append(result)
 
         return sum(baselines_cv_scores)
 
-    # TODO: TEST ME!!!
     def substitute(self, model, baseline=None):
         """
         Substitue data of self with visibilities of the model.

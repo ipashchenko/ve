@@ -4,7 +4,7 @@
 import copy
 import numpy as np
 import pylab as plt
-import new_data as newd
+#import new_data as newd
 from data_io import AN
 from utils import baselines_2_ants
 
@@ -172,7 +172,7 @@ class Gains(object):
         antenna_data = self._data[np.where(self._data['antenna'] == antenna)]
         # TODO: i need function choose parameters
         #smth. like data = self._choose_data(antenna=antenna, IF=IF, pol=None)
-        times = antenna_data['time']
+        times = 0.5 * (antenna_data['start'] + antenna_data['stop'])
 
         if pol == 'R':
             data = antenna_data['gains'][:, IF, 0]
@@ -221,11 +221,11 @@ class Absorber(object):
     def exclude_one(self, fname):
 
         if not fname in self.fnames:
-            raise Exception
+            raise Exception('There is no gains absorbed yet!')
 
         gain = Gains()
         gain.load(fname)
-        self.absorbed_gains /= gain
+        self.absorbed_gains = self.absorbed_gains / gain
         self.fnames.delete(fname)
 
     @property
@@ -237,6 +237,9 @@ class Absorber(object):
         return self._absorbed_gains._data
 
     def __mul__(self, data):
-        if not isinstance(data, newd.Data):
-            raise Exception
-        data.__mul__(self.absorbed_gains)
+        """
+        Multiplicate ``data`` instance of ``Data`` class on absorbed gains.
+        """
+        #if not isinstance(data, newd.Data):
+        #    raise Exception
+        return data.__mul__(self.absorbed_gains)

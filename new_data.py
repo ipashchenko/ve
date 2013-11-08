@@ -125,7 +125,12 @@ class Data(object):
             # for ant1 & ant2 derived for this baseline.
             for uv_indx in uv_indxs:
                 bl = self._data['baseline'][uv_indx]
-                gains12 = gains.find_gains_for_baseline(t, bl)
+                try:
+                    gains12 = gains.find_gains_for_baseline(t, bl)
+                # If gains is the instance of ``Absorber`` class
+                except AttributeError:
+                    gains12 = gains.absorbed_gains.find_gains_for_baseline(t,
+                            bl)
                 # FIXME: In substitute() ['hands'] then [indxs] does return
                 # view.
                 self_copy._data[uv_indx]['hands'] *= gains12.T

@@ -424,9 +424,11 @@ class Data(object):
                     # TODO: use extended ``choose_data`` method?
                     baseline_data = self._data[np.where(self._data['baseline']
                         == baseline)]
-                    baseline_noises[baseline] =\
-                    np.std(((baseline_data['hands'][..., 0] -
-                        baseline_data['hands'][..., 1])).real, axis=0)
+                    v = (baseline_data['hands'][..., 0] -
+                            baseline_data['hands'][..., 1]).real
+                    mask = ~np.isnan(v)
+                    baseline_noises[baseline] = np.std(np.ma.array(v,
+                            mask=np.invert(mask)), axis=0).data
             else:
                 # Use each scan
                 raise NotImplementedError("Implement with split_scans = True")
@@ -437,11 +439,13 @@ class Data(object):
                     # TODO: use extended ``choose_data`` method?
                     baseline_data = self._data[np.where(self._data['baseline']
                         == baseline)]
-                    differences = baseline_data['hands'][:-1, ...] -\
-                                baseline_data['hands'][1:, ...]
+                    differences = (baseline_data['hands'][:-1, ...] -
+                                baseline_data['hands'][1:, ...])
+                    mask = ~np.isnan(differences)
                     baseline_noises[baseline] =\
-                        np.asarray([np.std((differences).real[..., i], axis=0)
-                            for i in range(self.nstokes)])
+                        np.asarray([np.std(np.ma.array(differences,
+                            mask=np.invert(mask)).real[..., i], axis=0) for i
+                            in range(self.nstokes)])
             else:
                 # Use each scan
                 raise NotImplementedError("Implement with split_scans = True")

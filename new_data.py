@@ -93,6 +93,9 @@ class Data(object):
         return self_copy
 
     # TODO: Do i need the possibility of multiplying on any complex number?
+    # FIXME: After absorbing gains and multiplying on Data instance some
+    # entries do contain NaN. Is that because of some data is flagged and no
+    # gains solution are available for that data?
     def __mul__(self, gains):
         """
         Applies complex antenna gains to the visibilities of self.
@@ -133,6 +136,8 @@ class Data(object):
                             bl)
                 # FIXME: In substitute() ['hands'] then [indxs] does return
                 # view.
+                print "gains12 :"
+                print gains12
                 self_copy._data[uv_indx]['hands'] *= gains12.T
 
         return self_copy
@@ -242,9 +247,9 @@ class Data(object):
 
         if not set(IF).issubset(np.arange(1, self.nif + 1)):
             raise Exception('Choose IF numbers to display: from ' + str(1) +
-                    ' to ' + str(self.nif))
+                            ' to ' + str(self.nif))
         IF -= 1
-        print "IF : "
+        print 'IF : '
         print IF
 
         if stokes == 'I':
@@ -280,7 +285,7 @@ class Data(object):
 
     # TODO: convert time to datetime format and use date2num for plotting
     # TODO: make a kwarg argument - to plot in different symbols/colors
-    def tplot(self, baselines=None, IF=None, stokes=None):
+    def tplot(self, baselines=None, if_=None, stokes=None):
         """
         Method that plots uv-data for given baselines vs. time.
 
@@ -298,7 +303,7 @@ class Data(object):
         if not stokes:
             stokes = 'I'
 
-        data, indxs = self._choose_data(baselines=baselines, IF=IF,
+        data, indxs = self._choose_data(baselines=baselines, IF=if_,
                                         stokes=stokes)
         # # of chosen IFs
         n_if = np.shape(data)[1]
@@ -310,7 +315,7 @@ class Data(object):
             print "Define self.__color_list to show in different colors!"
             syms = ['.k'] * n_if
 
-        # TODO: i need fuction to choose parameters
+        # TODO: i need function to choose parameters
         times = self._data[indxs]['time']
         angles = np.angle(data)
         amplitudes = np.real(np.sqrt(data * np.conj(data)))
@@ -400,7 +405,7 @@ class Data(object):
         Calculate noise for each baseline. If ``split_scans`` is True then
         calculate noise for each scan too. If ``use_V`` is True then use stokes
         V data (`RR`` - ``LL``) for computation assuming no signal in V. Else
-        use succescive differences approach (Brigg's dissertation).
+        use successive differences approach (Brigg's dissertation).
 
         Input:
 
@@ -425,10 +430,10 @@ class Data(object):
                     baseline_data = self._data[np.where(self._data['baseline']
                         == baseline)]
                     v = (baseline_data['hands'][..., 0] -
-                            baseline_data['hands'][..., 1]).real
+                         baseline_data['hands'][..., 1]).real
                     mask = ~np.isnan(v)
                     baseline_noises[baseline] = np.std(np.ma.array(v,
-                            mask=np.invert(mask)), axis=0).data
+                                                       mask=np.invert(mask)), axis=0).data
             else:
                 # Use each scan
                 raise NotImplementedError("Implement with split_scans = True")
@@ -613,10 +618,10 @@ class Data(object):
         uvws = self._data[indxs]['uvw']
         model._uvws = uvws
 
-        for i, stoke in enumerate(['RR', 'LL', 'RL', 'LR']):
+        for i, hand in enumerate(['RR', 'LL', 'RL', 'LR']):
             try:
-                self._data['hands'][indxs, :, i] =\
-        model.uv_correlations[stoke].repeat(self.nif).reshape((n, self.nif))
+                self._data['hands'][indxs, :, i] = \
+                model.uv_correlations[hand].repeat(self.nif).reshape((n, self.nif))
             # If model doesn't have some hands => pass it
             except ValueError:
                 pass

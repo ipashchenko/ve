@@ -156,7 +156,7 @@ class Gains(object):
     # TODO: convert time to datetime format and use date2num for plotting
     def tplot(self, antenna=None, IF=None, pol=None):
         """
-        Method that plots gains for given antenns vs. time.
+        Method that plots gains for given antennas vs. time.
         """
 
         if not antenna:
@@ -178,6 +178,8 @@ class Gains(object):
             data = antenna_data['gains'][:, IF, 0]
         elif pol == 'L':
             data = antenna_data['gains'][:, IF, 1]
+        else:
+            raise Exception('``pol`` parameter should be ``R`` or ``L``!')
 
         angles = np.angle(data)
         amplitudes = np.real(np.sqrt(data * np.conj(data)))
@@ -226,11 +228,15 @@ class Absorber(object):
         gain = Gains()
         gain.load(fname)
         self.absorbed_gains = self.absorbed_gains / gain
-        self.fnames.delete(fname)
+        self.fnames.remove(fname)
 
     @property
     def absorbed_gains(self):
         return self._absorbed_gains
+
+    @absorbed_gains.setter
+    def absorbed_gains(self, val):
+        self._absorbed_gains = val
 
     @property
     def _data(self):

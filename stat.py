@@ -12,7 +12,7 @@ import numpy as np
 class Bootstrap(object):
     """
     Sample with replacement (if nonparametric=True) from residuals or use
-    normal zeromean random variable with std estimated from the residuals
+    normal zero mean random variable with std estimated from the residuals
     for each baseline (or even scan).
 
     Inputs:
@@ -27,6 +27,8 @@ class Bootstrap(object):
 
     def __init__(self, model, uncal=None, calibs=None, nonparametric=False,
                  split_scans=False, use_V=True):
+        """
+        """
         self.model = model
         self.uncal = uncal
         self.calibs = calibs
@@ -44,8 +46,8 @@ class Bootstrap(object):
         self.model_uv = copy.deepcopy(residuals)
         self.model_uv.substitute(model)
 
-    def resample(self, outname=None, nonparametric=None, sigma=None,
-               split_scans=False, use_V=True):
+    def resample(self, outname=None, nonparametric=False, split_scans=False,
+                 use_V=True):
         """
         Sample from residuals with replacement or sample from normal random
         noise and adds samples to model to form n bootstrap samples.
@@ -81,7 +83,7 @@ class Bootstrap(object):
                     lnormvars.append(np.random.normal(std, size=len(indxs)))
                 anormvars = np.dstack(lnormvars).reshape((len(indxs), 8, 4,))
                 # Add normal random variables to data on current baseline
-                data_to_add_normvars._data['hands'] += anormvars
+                data_to_add_normvars['hands'] += anormvars
         else:
             # TODO: should i resample all stokes and IFs together? Yes
             # Bootstrap from self.residuals._data. For each baseline.
@@ -217,7 +219,9 @@ if __name__ == '__main__':
                           split_scans=False,
                           use_V=True)
 
-    print 'Done!'
+    bootstrap.resample(outname='BOOT', nonparametric=False, split_scans=False,
+                       use_V=True)
+
     #model = Model()
     #model.add_from_txt('cc.txt')
     #bootstrap = Bootstrap(model,

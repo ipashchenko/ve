@@ -4,11 +4,11 @@
 import numpy as np
 import pyfits as pf
 from utils import AbsentHduExtensionError
-from utils import build_dtype_for_bintable_data
+#from utils import build_dtype_for_bintable_data
 from utils import change_shape
 from utils import index_of
 from utils import _to_one_array
-from utils import _to_complex_array
+#from utils import _to_complex_array
 
 
 vec_int = np.vectorize(np.int)
@@ -47,14 +47,13 @@ class IO(object):
     def save(self):
         """
         Method that transforms structured array (_data attribute of Data
-        instance) to naitive format.
+        instance) to native format.
         """
 
         raise NotImplementedError("Method must be implemented in subclasses")
 
 
 class PyFitsIO(IO):
-
     def __init__(self):
         super(PyFitsIO, self).__init__()
         # We need hdu in save()
@@ -71,7 +70,7 @@ class PyFitsIO(IO):
                 hdu = self.hdulist[indx]
             except:
                 raise AbsentHduExtensionError('Haven\'t  found ' + extname
-                        + ' binary table in ' + fname)
+                                              + ' binary table in ' + fname)
 
         # Get Primary HDU with UV-data in groups.
         else:
@@ -114,7 +113,6 @@ class AN(PyFitsIO):
     """
 
     def load(self, fname, snver=1):
-
         # R & L
         npol = 2
         hdu = self.get_hdu(fname, extname='AIPS SN', ver=snver)
@@ -122,12 +120,12 @@ class AN(PyFitsIO):
         nif = hdu.data.dtype['REAL1'].shape[0]
         # set ``nif'' from dtype of hdu.data
         _data = np.zeros(hdu.header['NAXIS2'], dtype=[('start', '<f8'),
-                                                        ('stop', '<f8'),
-                                                        ('antenna', 'int'),
-                                                        ('gains', 'complex',
-                                                            (nif, npol,)),
-                                                        ('weights', '<f8',
-                                                            (nif, npol,))])
+                                                      ('stop', '<f8'),
+                                                      ('antenna', 'int'),
+                                                      ('gains', 'complex',
+                                                       (nif, npol,)),
+                                                      ('weights', '<f8',
+                                                       (nif, npol,))])
 
         time = hdu.data['TIME']
         dtime = hdu.data['TIME INTERVAL']
@@ -184,9 +182,11 @@ class Groups(PyFitsIO):
         data_of_data.update({'GROUP': (0, hdu.header['GCOUNT'])})
         for i in range(2, hdu.header['NAXIS'] + 1):
             data_of_data.update({hdu.header['CTYPE' + str(i)]:
-                (hdu.header['NAXIS'] - i + 1, hdu.header['NAXIS' + str(i)])})
+                                     (hdu.header['NAXIS'] - i + 1, hdu.header['NAXIS' + str(i)])})
         nstokes = data_of_data['STOKES'][1]
         nif = data_of_data['IF'][1]
+        self.nstokes = nstokes
+        self.nif = nif
         # Describe shape and dimensions of original data recarray
         self.data_of_data = data_of_data
         # Describe shape and dimensions of structured array
@@ -208,9 +208,9 @@ class Groups(PyFitsIO):
                                                       ('time', '<f8'),
                                                       ('baseline', 'int'),
                                                       ('hands', 'complex',
-                                                          (nif, nstokes)),
+                                                       (nif, nstokes)),
                                                       ('weights', '<f8',
-                                                          (nif, nstokes,))])
+                                                       (nif, nstokes,))])
 
         # Swap axis and squeeze array to get complex array (nif, nstokes,)
         temp = np.swapaxes(hdu.data['DATA'], 1, data_of_data['IF'][0])
@@ -219,21 +219,21 @@ class Groups(PyFitsIO):
         hands = vec_complex(temp[..., 0], temp[..., 1])
         weights = temp[..., 2]
 
-        u = hdu.data[hdu.header['PTYPE1']] / hdu.header['PSCAL1'] -\
+        u = hdu.data[hdu.header['PTYPE1']] / hdu.header['PSCAL1'] - \
             hdu.header['PZERO1']
-        v = hdu.data[hdu.header['PTYPE2']] / hdu.header['PSCAL2'] -\
+        v = hdu.data[hdu.header['PTYPE2']] / hdu.header['PSCAL2'] - \
             hdu.header['PZERO2']
-        w = hdu.data[hdu.header['PTYPE3']] / hdu.header['PSCAL3'] -\
+        w = hdu.data[hdu.header['PTYPE3']] / hdu.header['PSCAL3'] - \
             hdu.header['PZERO3']
-        time = hdu.data[hdu.header['PTYPE4']] / hdu.header['PSCAL4'] -\
-            hdu.header['PZERO4']
+        time = hdu.data[hdu.header['PTYPE4']] / hdu.header['PSCAL4'] - \
+               hdu.header['PZERO4']
 
         # Filling structured array by fileds
         _data['uvw'] = np.column_stack((u, v, w))
         _data['time'] = time
-        _data['baseline'] =\
-                vec_int(hdu.data[hdu.header['PTYPE6']] / hdu.header['PSCAL6']
-                        - hdu.header['PZERO6'])
+        _data['baseline'] = \
+            vec_int(hdu.data[hdu.header['PTYPE6']] / hdu.header['PSCAL6']
+                    - hdu.header['PZERO6'])
         _data['hands'] = hands
         _data['weights'] = weights
 
@@ -254,15 +254,15 @@ class Groups(PyFitsIO):
         # Construct corresponding arrays of parameter values
         _data_copy = _data.copy()
         _data_copy['uvw'][:, 0] = (_data_copy['uvw'][:, 0] +
-                self.hdu.header['PZERO1']) * self.hdu.header['PSCAL1']
+                                   self.hdu.header['PZERO1']) * self.hdu.header['PSCAL1']
         _data_copy['uvw'][:, 1] = (_data_copy['uvw'][:, 1] +
-                self.hdu.header['PZERO2']) * self.hdu.header['PSCAL2']
+                                   self.hdu.header['PZERO2']) * self.hdu.header['PSCAL2']
         _data_copy['uvw'][:, 2] = (_data_copy['uvw'][:, 2] +
-                self.hdu.header['PZERO3']) * self.hdu.header['PSCAL3']
+                                   self.hdu.header['PZERO3']) * self.hdu.header['PSCAL3']
         _data_copy['time'] = (_data_copy['time'] +
-                self.hdu.header['PZERO4']) * self.hdu.header['PSCAL4']
+                              self.hdu.header['PZERO4']) * self.hdu.header['PSCAL4']
         _data_copy['baseline'] = (_data_copy['baseline'] +
-                self.hdu.header['PZERO6']) * self.hdu.header['PSCAL6']
+                                  self.hdu.header['PZERO6']) * self.hdu.header['PSCAL6']
 
         # Now roll axis 0 to 3rd position (3, 20156, 8, 4) => (20156, 8, 4, 3)
         temp = np.rollaxis(temp, 0, 4)
@@ -270,10 +270,11 @@ class Groups(PyFitsIO):
         # First, add dimensions:
         for i in range(self.ndim_ones):
             temp = np.expand_dims(temp, axis=4)
-        # Now temp has shape (20156, 8, 4, 3, 1, 1, 1)
+            # Now temp has shape (20156, 8, 4, 3, 1, 1, 1)
 
         temp = change_shape(temp, self.data_of__data, {key:
-               self.data_of_data[key][0] for key in self.data_of_data.keys()})
+                                                           self.data_of_data[key][0] for key in
+                                                       self.data_of_data.keys()})
         # => (20156, 1, 1, 8, 1, 4, 3) as 'DATA' part of recarray
 
         # Write regular array data (``temp``) and corresponding parameters to
@@ -285,9 +286,9 @@ class Groups(PyFitsIO):
         if len(_data) < len(self.hdu.data):
 
             original_data = _to_one_array(self.hdu.data, 'UU---SIN',
-                                    'VV---SIN', 'WW---SIN', 'DATE', 'BASELINE')
+                                          'VV---SIN', 'WW---SIN', 'DATE', 'BASELINE')
             saving_data = np.dstack((np.array(np.hsplit(_data_copy['uvw'],
-                3)).T, _data_copy['time'], _data_copy['baseline']))
+                                                        3)).T, _data_copy['time'], _data_copy['baseline']))
             saving_data = np.squeeze(saving_data)
             # TODO: this is funnest workaround:)
             par_indxs = index_of(saving_data.sum(axis=1),
@@ -303,8 +304,8 @@ class Groups(PyFitsIO):
         pardata = list()
         for name in parnames:
             par = self.hdu.data[name][par_indxs]
-            par = (par - self.hdu.header['PZERO' + str(self.par_dict[name])]) /\
-            self.hdu.header['PSCAL' + str(self.par_dict[name])]
+            par = (par - self.hdu.header['PZERO' + str(self.par_dict[name])]) / \
+                  self.hdu.header['PSCAL' + str(self.par_dict[name])]
             pardata.append(par)
 
         # If two parameters for one value (like ``DATE``)
@@ -312,7 +313,7 @@ class Groups(PyFitsIO):
             if parnames.count(name) == 2:
                 indx_to_zero = parnames.index(name) + 1
                 break
-        # then zero array for second parameter with the same name
+            # then zero array for second parameter with the same name
         # TODO: use dtype from ``BITPIX`` keyword
         pardata[indx_to_zero] = np.zeros(len(par_indxs), dtype=float)
 

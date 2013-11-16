@@ -4,7 +4,7 @@
 import copy
 import math
 import numpy as np
-import pylab as plt
+from pylab import ylim, subplot, show, plot
 from data_io import Groups, IDI
 from utils import baselines_2_ants
 from utils import index_of
@@ -320,15 +320,15 @@ class Data(object):
         angles = np.angle(data)
         amplitudes = np.real(np.sqrt(data * np.conj(data)))
 
-        plt.subplot(2, 1, 1)
+        subplot(2, 1, 1)
         for _if in range(n_if):
             # TODO: plot in different colors and make a legend
-            plt.plot(times, amplitudes[:, _if], syms[_if])
-        plt.subplot(2, 1, 2)
+            plot(times, amplitudes[:, _if], syms[_if])
+        subplot(2, 1, 2)
         for _if in range(n_if):
-            plt.plot(times, angles[:, _if], syms[_if])
-            plt.ylim([-math.pi, math.pi])
-        plt.show()
+            plot(times, angles[:, _if], syms[_if])
+            ylim([-math.pi, math.pi])
+        show()
 
     def uvplot(self, baselines=None, IF=None, stokes=None):
         """
@@ -360,15 +360,15 @@ class Data(object):
         angles = np.angle(data)
         amplitudes = np.real(np.sqrt(data * np.conj(data)))
 
-        plt.subplot(2, 1, 1)
+        subplot(2, 1, 1)
         for _if in range(n_if):
             # TODO: plot in different colors and make a legend
-            plt.plot(uv_radius, amplitudes[:, _if], syms[_if])
-        plt.subplot(2, 1, 2)
+            plot(uv_radius, amplitudes[:, _if], syms[_if])
+        subplot(2, 1, 2)
         for _if in range(n_if):
-            plt.plot(uv_radius, angles[:, _if], syms[_if])
-            plt.ylim([-math.pi, math.pi])
-        plt.show()
+            plot(uv_radius, angles[:, _if], syms[_if])
+            ylim([-math.pi, math.pi])
+        show()
 
     @property
     def baselines(self):
@@ -499,7 +499,6 @@ class Data(object):
             # Use t-distribution
             raise NotImplementedError("Implement with df not None")
 
-    # TODO: TEST ME!!!
     def cv(self, q, fname):
         """
         Method that prepares training and testing samples for q-fold

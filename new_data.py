@@ -88,7 +88,7 @@ class Data(object):
         self_copy = copy.deepcopy(self)
         # TODO: assert equal dtype and len
         self_copy._data['hands'] = self._data['hands'] - other._data['hands']
-        print self_copy._data['hands']
+        #print self_copy._data['hands']
 
         return self_copy
 
@@ -136,8 +136,8 @@ class Data(object):
                             bl)
                 # FIXME: In substitute() ['hands'] then [indxs] does return
                 # view.
-                print "gains12 :"
-                print gains12
+                #print "gains12 :"
+                #print gains12
                 self_copy._data[uv_indx]['hands'] *= gains12.T
 
         return self_copy
@@ -159,8 +159,8 @@ class Data(object):
             fname - file name.
         """
         self._data = self._io.load(fname)
-        self.nif = np.shape(self._data['hands'])[1]
-        self.nstokes = np.shape(self._data['hands'])[2]
+        self.nif = self._io.nif
+        self.nstokes = self._io.nstokes
 
     # TODO: add possibility to save in format that is different from current.
     # TODO: i need indexes of saving data in original data array!
@@ -198,9 +198,9 @@ class Data(object):
 
             numpy.ndarray, numpy.ndarray
 
-                where first array is array of data with shape (#N, #IF,) and second
-                array is 1d-array of indexes of data in self._data structured
-                array.
+                where first array is array of data with shape (#N, #IF,) and
+                second array is 1d-array of indexes of data in self._data
+                structured array.
         """
 
         data = self._data
@@ -254,37 +254,37 @@ class Data(object):
 
         if stokes == 'I':
             # I = 0.5 * (RR + LL)
-            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 0]\
-                    + data['hands'][indxs[:, None, None], IF[:, None], 1])
+            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 0]
+                            + data['hands'][indxs[:, None, None], IF[:, None], 1])
 
         elif stokes == 'V':
             # V = 0.5 * (RR - LL)
-            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 0]\
-                    - data['hands'][indxs[:, None, None], IF[:, None], 1])
+            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 0]
+                            - data['hands'][indxs[:, None, None], IF[:, None], 1])
 
         elif stokes == 'Q':
             # V = 0.5 * (LR + RL)
-            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 3]\
-                    + data['hands'][indxs[:, None, None], IF[:, None], 2])
+            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 3]
+                            + data['hands'][indxs[:, None, None], IF[:, None], 2])
 
         elif stokes == 'U':
             # V = 0.5 * 1j * (LR - RL)
-            result = 0.5 * 1j * (data['hands'][indxs[:, None, None], IF[:,
-                None], 3] - data['hands'][indxs[:, None, None], IF[:, None],
-                    2])
+            result = 0.5 * 1j * (data['hands'][indxs[:, None, None], IF[:, None], 3]
+                                 - data['hands'][indxs[:, None, None], IF[:, None], 2])
 
         elif stokes in self._stokes_dict.keys():
             result = data['hands'][indxs[:, None, None], IF[:, None],
                     self._stokes_dict[stokes]]
 
         else:
-            raise Exception('Allowed stokes parameters: I, Q, U, V, RR, LL, RL,\
-                    LR')
+            raise Exception('Allowed stokes parameters: I, Q, U, V, RR, LL, RL,'
+                            'LR')
 
         return result, indxs
 
     # TODO: convert time to datetime format and use date2num for plotting
     # TODO: make a kwarg argument - to plot in different symbols/colors
+    # TODO: add possibility to plot real & imag part of visibilities
     def tplot(self, baselines=None, if_=None, stokes=None):
         """
         Method that plots uv-data for given baselines vs. time.
@@ -353,7 +353,7 @@ class Data(object):
             print "Define self.__color_list to show in different colors!"
             syms = ['.k'] * n_if
 
-        # TODO: i need fnction choose parameters
+        # TODO: i need function choose parameters
         uvw_data = self._data[indxs]['uvw']
         uv_radius = np.sqrt(uvw_data[:, 0] ** 2 + uvw_data[:, 1] ** 2)
 
@@ -400,6 +400,7 @@ class Data(object):
 
         return result
 
+    # TODO: should i fit gaussians?
     def noise(self, split_scans=False, use_V=True):
         """
         Calculate noise for each baseline. If ``split_scans`` is True then
@@ -433,7 +434,8 @@ class Data(object):
                          baseline_data['hands'][..., 1]).real
                     mask = ~np.isnan(v)
                     baseline_noises[baseline] = np.std(np.ma.array(v,
-                                                       mask=np.invert(mask)), axis=0).data
+                                                       mask=np.invert(mask)),
+                                                       axis=0).data
             else:
                 # Use each scan
                 raise NotImplementedError("Implement with split_scans = True")
@@ -450,7 +452,7 @@ class Data(object):
                     baseline_noises[baseline] =\
                         np.asarray([np.std(np.ma.array(differences,
                             mask=np.invert(mask)).real[..., i], axis=0) for i
-                            in range(self.nstokes)])
+                            in range(self.nstokes)]).T
             else:
                 # Use each scan
                 raise NotImplementedError("Implement with split_scans = True")
@@ -620,8 +622,8 @@ class Data(object):
 
         for i, hand in enumerate(['RR', 'LL', 'RL', 'LR']):
             try:
-                self._data['hands'][indxs, :, i] = \
-                model.uv_correlations[hand].repeat(self.nif).reshape((n, self.nif))
+                self._data['hands'][indxs, :, i] =\
+                    model.uv_correlations[hand].repeat(self.nif).reshape((n, self.nif))
             # If model doesn't have some hands => pass it
             except ValueError:
                 pass

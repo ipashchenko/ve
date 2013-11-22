@@ -285,7 +285,7 @@ class Data(object):
     # TODO: convert time to datetime format and use date2num for plotting
     # TODO: make a kwarg argument - to plot in different symbols/colors
     # TODO: add possibility to plot real & imag part of visibilities
-    def tplot(self, baselines=None, if_=None, stokes=None):
+    def tplot(self, baselines=None, IF=None, stokes=None, style='a&p'):
         """
         Method that plots uv-data for given baselines vs. time.
 
@@ -303,7 +303,7 @@ class Data(object):
         if not stokes:
             stokes = 'I'
 
-        data, indxs = self._choose_data(baselines=baselines, IF=if_,
+        data, indxs = self._choose_data(baselines=baselines, IF=IF,
                                         stokes=stokes)
         # # of chosen IFs
         n_if = np.shape(data)[1]
@@ -317,20 +317,31 @@ class Data(object):
 
         # TODO: i need function to choose parameters
         times = self._data[indxs]['time']
+
+        if style == 'a&p':
+            a1 = np.angle(data)
+            a2 = np.real(np.sqrt(data * np.conj(data)))
+        elif style == 're&im':
+            a1 = data.real
+            a2 = data.imag
+        else:
+            raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
+
         angles = np.angle(data)
         amplitudes = np.real(np.sqrt(data * np.conj(data)))
 
         subplot(2, 1, 1)
         for _if in range(n_if):
             # TODO: plot in different colors and make a legend
-            plot(times, amplitudes[:, _if], syms[_if])
+            plot(times, a1[:, _if], syms[_if])
         subplot(2, 1, 2)
         for _if in range(n_if):
-            plot(times, angles[:, _if], syms[_if])
-            ylim([-math.pi, math.pi])
+            plot(times, a2[:, _if], syms[_if])
+            if style == 'a&p':
+                ylim([-math.pi, math.pi])
         show()
 
-    def uvplot(self, baselines=None, IF=None, stokes=None):
+    def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p'):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
         """
@@ -357,17 +368,24 @@ class Data(object):
         uvw_data = self._data[indxs]['uvw']
         uv_radius = np.sqrt(uvw_data[:, 0] ** 2 + uvw_data[:, 1] ** 2)
 
-        angles = np.angle(data)
-        amplitudes = np.real(np.sqrt(data * np.conj(data)))
+        if style == 'a&p':
+            a1 = np.angle(data)
+            a2 = np.real(np.sqrt(data * np.conj(data)))
+        elif style == 're&im':
+            a1 = data.real
+            a2 = data.imag
+        else:
+            raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
 
         subplot(2, 1, 1)
         for _if in range(n_if):
             # TODO: plot in different colors and make a legend
-            plot(uv_radius, amplitudes[:, _if], syms[_if])
+            plot(uv_radius, a2[:, _if], syms[_if])
         subplot(2, 1, 2)
         for _if in range(n_if):
-            plot(uv_radius, angles[:, _if], syms[_if])
-            ylim([-math.pi, math.pi])
+            plot(uv_radius, a1[:, _if], syms[_if])
+            if style == 'a&p':
+                ylim([-math.pi, math.pi])
         show()
 
     @property

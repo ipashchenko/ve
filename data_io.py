@@ -182,7 +182,8 @@ class Groups(PyFitsIO):
         data_of_data.update({'GROUP': (0, hdu.header['GCOUNT'])})
         for i in range(2, hdu.header['NAXIS'] + 1):
             data_of_data.update({hdu.header['CTYPE' + str(i)]:
-                                     (hdu.header['NAXIS'] - i + 1, hdu.header['NAXIS' + str(i)])})
+                                     (hdu.header['NAXIS'] - i + 1,
+                                      hdu.header['NAXIS' + str(i)])})
         nstokes = data_of_data['STOKES'][1]
         nif = data_of_data['IF'][1]
         self.nstokes = nstokes
@@ -225,15 +226,20 @@ class Groups(PyFitsIO):
             hdu.header['PZERO2']
         w = hdu.data[hdu.header['PTYPE3']] / hdu.header['PSCAL3'] - \
             hdu.header['PZERO3']
-        time = hdu.data[hdu.header['PTYPE4']] / hdu.header['PSCAL4'] - \
-               hdu.header['PZERO4']
+        # ``DATE`` can have different number among parameters
+        indx_date = par_dict['DATE']
+        time = hdu.data[hdu.header['PTYPE' + str(indx_date)]] /\
+               hdu.header['PSCAL' + str(indx_date)] - hdu.header['PZERO' +
+                                                                 str(indx_date)]
 
         # Filling structured array by fileds
         _data['uvw'] = np.column_stack((u, v, w))
         _data['time'] = time
+        indx_bl = par_dict['BASELINE']
         _data['baseline'] = \
-            vec_int(hdu.data[hdu.header['PTYPE6']] / hdu.header['PSCAL6']
-                    - hdu.header['PZERO6'])
+            vec_int(hdu.data[hdu.header['PTYPE' + str(indx_bl)]] /
+                    hdu.header['PSCAL' + str(indx_bl)] -
+                    hdu.header['PZERO' + str(indx_bl)])
         _data['hands'] = hands
         _data['weights'] = weights
 

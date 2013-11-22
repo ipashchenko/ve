@@ -41,10 +41,13 @@ class Bootstrap(object):
         uncal = open_fits(uncal)
         last_calib = open_fits(calibs[-1])
         residuals = uncal - absorber * last_calib
-        self.last_calib = last_calib
         self.residuals = residuals
-        self.model_uv = copy.deepcopy(residuals)
-        self.model_uv.substitute(model)
+        model_uv = copy.deepcopy(residuals)
+        model_uv.substitute(model)
+        self.model_uv = model_uv
+        self.last_calib = last_calib
+        self.last_calib.save(residuals._data, 'BOOT_residuals')
+        self.last_calib.save(model_uv._data, 'BOOT_model_uv')
 
     def resample(self, outname=None, nonparametric=False, split_scans=False,
                  use_V=True):
@@ -89,26 +92,26 @@ class Bootstrap(object):
             # Bootstrap from self.residuals._data. For each baseline.
             for baseline in self.residuals.baselines:
                 # Find data from one baseline
-                indxs = np.where(self.residuals._data['baseline'] == baseline)[1]
+                indxs = np.where(self.residuals._data['baseline'] == baseline)[0]
                 data_to_resample = self.residuals._data[indxs]
                 # Resample it
                 resampled_data = np.random.choice(data_to_resample,
                                                   len(data_to_resample))
 
                 # Add to residuals.substitute(model)
-                self.model_uv[indxs] = self.model_uv[indxs] + resampled_data
+                self.model_uv._data['hands'][indxs] = self.model_uv._data['hands'][indxs] + resampled_data['hands']
 
-        self.model_uv.save(self.model_uv._data, outname)
+        self.last_calib.save(self.model_uv._data, outname)
 
     def run(self, outname='bootstrapped_data', n=100, nonparametric=True,
-            sigma=None, split_scans=False, use_V=True):
+            split_scans=False, use_V=True):
         """
         Generate ``n`` data sets.
         """
         for i in range(n):
-            outname = outname + '_' + str(i) + '.FITS'
-            self.resample(outname=outname, nonparametric=nonparametric,
-                        sigma=sigma, split_scans=split_scans, use_V=use_V)
+            outname_ = outname + '_' + str(i + 1) + '.FITS'
+            self.resample(outname=outname_, nonparametric=nonparametric,
+                          split_scans=split_scans, use_V=use_V)
 
 
 class CrossValidation(object):
@@ -219,9 +222,10 @@ if __name__ == '__main__':
                           split_scans=False,
                           use_V=True)
 
-    bootstrap.resample(outname='BOOT', nonparametric=False, split_scans=False,
-                       use_V=True)
+    #bootstrap.resample(outname='BOOT', nonparametric=False, split_scans=False,
+    #                   use_V=True)
 
+    bootstrap.run(outname='bootstrapped_data', n=100)
     #model = Model()
     #model.add_from_txt('cc.txt')
     #bootstrap = Bootstrap(model,

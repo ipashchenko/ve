@@ -323,8 +323,12 @@ class Groups(PyFitsIO):
         # PyFits updates header using given data (``GCOUNT``)
         b.header = self.hdu.header
 
-        self.hdulist[0] = b
-        self.hdulist.writeto(fname + '.FITS')
+        hdulist = pf.HDUList([b])
+        for hdu in self.hdulist[1:]:
+            hdulist.append(hdu)
+        hdulist.writeto(fname + '.FITS')
+        #self.hdulist[0] = b
+        #self.hdulist.writeto(fname + '.FITS')
 
 
 class IDI(PyFitsIO):

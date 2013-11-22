@@ -14,6 +14,7 @@ class Model(object):
 
     def __init__(self):
 
+        self.mas_to_rad = 4.8481368 * 1E-09
         self._uvws = np.array([], dtype=[('u', float), ('v', float), ('w',
                               float)])
         # TODO: should _stokes & _correlations be structured arrays? Model
@@ -138,12 +139,34 @@ class Model(object):
         raise NotImplementedError('Implement loading of CC-table of FITS-file')
         self._updated[stoke] = True
 
-    def add_from_txt(self, fname, stoke='I'):
+    def add_from_txt(self, fname, stoke='I', style='aips'):
         """
         Adds components of Stokes type ``stoke`` to model from txt-file.
         """
-        adds = np.loadtxt(fname)
         dt = self._image_stokes[stoke].dtype
+
+        if style == 'aips':
+            adds = np.loadtxt(fname)
+            if not adds.shape == 6:
+                raise Exception
+
+        elif style == 'difmap':
+            adds_ = np.loadtxt(fname, comments='!')
+            adds = adds_.copy()
+            adds[:, 1] = self.mas_to_rad * adds_[:, 1] * np.sin(adds_[:, 2] *
+                                                                np.pi / 180.)
+            adds[:, 2] = self.mas_to_rad * adds_[:, 1] * np.cos(adds_[:, 2] *
+                                                                np.pi / 180.)
+
+            # If components are CCs
+            if adds.shape[1] == 3:
+                adds = np.hstack((adds, np.zeros((len(adds), 3,)),))
+            elif adds.shape[1] == 6:
+                raise NotImplementedError('Implement difmap format of gaussian'
+                                          'components')
+            else:
+                raise Exception
+
         self._image_stokes[stoke] = adds.ravel().view(dt)
         self._updated[stoke] = True
 

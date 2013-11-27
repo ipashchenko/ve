@@ -391,7 +391,7 @@ class Data(object):
     @property
     def baselines(self):
 
-        return list(set(self._data['baseline']))
+        return sorted(list(set(self._data['baseline'])))
 
     @property
     def antennas(self):

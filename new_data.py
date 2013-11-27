@@ -404,17 +404,35 @@ class Data(object):
     @property
     def uvw(self):
         """
-        Shortcut for unique (u,v,w)-elements.
+        Shortcut for all (u, v, w)-elements of self.
 
         Output:
 
-            structured numpy.ndarry with fields ``u``, ``v`` & ``w``.
+            numpy.ndarry with shape (N, 3,).
         """
 
-        x = self._data['uvw']
-        dt = np.dtype([('u', x.dtype), ('v', x.dtype), ('w', x.dtype)])
-        result, idx, inv = np.unique(x.ravel().view(dt), return_index=True,
-                return_inverse=True)
+        return self._data['uvw']
+
+    @property
+    def data_freq_averaged(self):
+        """
+        Shortcut for data averaged in IFs.
+
+        Returns:
+
+            if #IF > 1:
+
+                 returns ``_data['hands']`` averaged in IFs,
+
+            if #IF == 1:
+
+                returns ``_data['hands']''.
+        """
+
+        if self.nif > 1:
+            result = np.mean(self._data['hands'], axis=1)
+        else:
+            result = self._data['hands']
 
         return result
 

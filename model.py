@@ -147,7 +147,7 @@ class Model(object):
 
         if style == 'aips':
             adds = np.loadtxt(fname)
-            if not adds.shape == 6:
+            if not adds.shape[1] == 6:
                 raise Exception
 
         elif style == 'difmap':

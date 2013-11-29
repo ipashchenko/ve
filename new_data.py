@@ -57,6 +57,7 @@ class Data(object):
         self._stokes_dict = {'RR': 0, 'LL': 1, 'RL': 2, 'LR': 3}
         self._io = io
         self._data = None
+        self._error = None
 
     def __add__(self, other):
         """
@@ -188,11 +189,11 @@ class Data(object):
 
         Inputs:
 
-            baselines - one or iterable of baselines numbers,
+            baselines - one or iterable of baselines numbers, default = all,
 
-            IF - one or iterable of IF numbers (1-#IF),
+            IF - one or iterable of IF numbers (1-#IF), default = all,
 
-            stokes - string - any of: I, Q, U, V, RR, LL, RL, LR.
+            stokes - string - any of: I, Q, U, V, RR, LL, RL, LR, default = all.
 
         Outputs:
 
@@ -205,8 +206,8 @@ class Data(object):
 
         data = self._data
 
-        # TODO: create generl method for retrieving indxs of structured array
-        # where specified field equals to specified values
+        # TODO: create general method for retrieving indexes of structured array
+        # where the specified fields are equal to specified values
         if baselines is None:
             baselines = self.baselines
             indxs = np.arange(len(data))
@@ -226,6 +227,7 @@ class Data(object):
             # Find indexes of structured array (in zero dim) with given
             # baselines
             for baseline in baselines_list:
+                # Vectorize that shit
                 indx = np.where(data['baseline'] == baseline)[0]
                 indxs.extend(indx)
             indxs = np.array(np.sort(indxs))
@@ -246,8 +248,8 @@ class Data(object):
             IF = np.array(IF_list)
 
         if not set(IF).issubset(np.arange(1, self.nif + 1)):
-            raise Exception('Choose IF numbers to display: from ' + str(1) +
-                            ' to ' + str(self.nif))
+            raise Exception('Choose IF numbers from ' + str(1) + ' to ' +
+                            str(self.nif))
         IF -= 1
         print 'IF : '
         print IF
@@ -274,11 +276,15 @@ class Data(object):
 
         elif stokes in self._stokes_dict.keys():
             result = data['hands'][indxs[:, None, None], IF[:, None],
-                    self._stokes_dict[stokes]]
+                                   self._stokes_dict[stokes]]
+
+        elif stokes is None:
+            result = data['hands'][indxs[:, None, None], IF[:, None],
+                                   np.arange(self.nif)]
 
         else:
             raise Exception('Allowed stokes parameters: I, Q, U, V, RR, LL, RL,'
-                            'LR')
+                            'LR or (default) all [RR, LL, RL, LR].')
 
         return result, indxs
 
@@ -436,7 +442,22 @@ class Data(object):
 
         return result
 
-    # TODO: should i fit gaussians?
+    @property
+    def error(self):
+        """
+        Shortcut for error associated with each visibility. It uses noise
+        calculations based on zero V stokes or successive differences
+        implemented in ``noise()`` method to infer sigma of gaussian noise.
+        Later it is supposed to add more functionality (see Issue #8).
+
+        Returns:
+
+            [numpy.ndarray] (#N, #IF, #stokes) - array that repeats the shape of
+            self._data['hands'] array.
+        """
+    # TODO: use qq = scipy.stats.probplot((v-mean(v))/std(v), fit=0) then
+    # plot(qq[0], qq[1]) - how to check normality
+    # TODO: should i fit gaussians? - np.std <=> scipy.stats.norm.fit()! NO FIT!
     def noise(self, split_scans=False, use_V=True):
         """
         Calculate noise for each baseline. If ``split_scans`` is True then
@@ -453,7 +474,7 @@ class Data(object):
 
             dictionary with keys - baseline numbers, values - array of noise
                 std for each IF (if ``use_V``==True), or array with shape
-                (4, #if) with noise std values for each if for each hand
+                (4, #if) with noise std values for each IF for each hand
                 (RR, LL, ...).
         """
 

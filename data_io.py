@@ -297,8 +297,8 @@ class Groups(PyFitsIO):
                                                         3)).T, _data_copy['time'], _data_copy['baseline']))
             saving_data = np.squeeze(saving_data)
             # TODO: this is funnest workaround:)
-            par_indxs = index_of(saving_data.sum(axis=1),
-                                 original_data.sum(axis=1))
+            par_indxs = np.hstack(index_of(saving_data.sum(axis=1),
+                                           original_data.sum(axis=1)))
         elif len(_data) > len(self.hdu.data):
             raise Exception('There must be equal or less visibilities to\
                             save!')

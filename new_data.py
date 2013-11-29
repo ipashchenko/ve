@@ -181,19 +181,23 @@ class Data(object):
     # array using kwargs for parameters and kwargs with dictionary values for
     # specifying dimensions of arrays in strutured array. I need it in Gains
     # class too.
-    def _choose_data(self, baselines=None, IF=None, stokes=None):
+    def _choose_data(self, times=None, baselines=None, IF=None, stokes=None):
         """
         Method that returns chosen data from _date structured array based on
         user specified parameters. All checks on IF and stokes are made here
-        in one place. This method used by plotting methods.
+        in one place. This method used by methods that retrieve data, plotting
+        methods.
 
         Inputs:
+
+            times - container with start & stop time, default = all,
 
             baselines - one or iterable of baselines numbers, default = all,
 
             IF - one or iterable of IF numbers (1-#IF), default = all,
 
-            stokes - string - any of: I, Q, U, V, RR, LL, RL, LR, default = all.
+            stokes - string - any of: I, Q, U, V, RR, LL, RL, LR, default = all
+                correlations [RR, LL, RL, LR].
 
         Outputs:
 
@@ -207,7 +211,9 @@ class Data(object):
         data = self._data
 
         # TODO: create general method for retrieving indexes of structured array
-        # where the specified fields are equal to specified values
+        # where the specified fields are equal to specified values. Also
+        # consider using different types of fields: interval values (time),
+        # equality to some values (baseline, IF), etc.
         if baselines is None:
             baselines = self.baselines
             indxs = np.arange(len(data))
@@ -671,7 +677,7 @@ class Data(object):
 
         if baseline is None:
             baseline = self.baselines
-        indxs = index_of(baseline, self._data['baseline'])
+        indxs = np.hstack(index_of(baseline, self._data['baseline']))
         n = len(indxs)
         uvws = self._data[indxs]['uvw']
         model._uvws = uvws

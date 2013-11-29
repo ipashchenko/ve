@@ -21,12 +21,24 @@ class EmptyImageFtError(Exception):
 
 #TODO: convert utils to using arrays instead of lists
 
+# TODO: extend to the case of each entry of ar1 can be in ar2 any times (now it
+# must be only one time for output to be clear.
+def index_of(ar1, ar2, issubset=True):
+    """
+    Find indexes of elements of 1d-numpy arrays ar1 in ar2. It is assumed that
+    each entry of ar1 are met only one time in ar2.
 
-def index_of(ar1, ar2):
+    Output:
+
+        list (len = len(ar1)) of arrays with indexes of elements in ar2
+        corresponding to current element of ar1.
+
+            output[i] = ar2[where(ar2 = ar1[i])[0]]
     """
-    Find indexes of elements of ar1 in ar2. It is assumed that each entry of
-    ar1 are met only one time in ar2.
-    """
+
+    if issubset:
+        # assert that all elements of ar1 are in ar2
+        assert np.all(np.intersect1d(ar2, ar1) == np.sort(ar1))
 
     indxs_ar2_sorted = np.argsort(ar2)
     ar1_pos_left = np.searchsorted(ar2[indxs_ar2_sorted], ar1, side='left')
@@ -36,10 +48,16 @@ def index_of(ar1, ar2):
     for i in range(len(ar1_pos_left)):
         indxs.append(range(ar1_pos_left[i], ar1_pos_right[i]))
 
-    indxs = sum(indxs, [])
+    #indxs = sum(indxs, [])
+    result = list()
+    for indx in indxs:
+        if indx:
+            result.append(indxs_ar2_sorted[indx])
+        else:
+            result.append(None)
 
-    return indxs_ar2_sorted[indxs]
-
+    #return indxs_ar2_sorted[indxs]
+    return result
 
 def _to_complex_array(struct_array, real_name, imag_name):
     """
@@ -60,7 +78,8 @@ def _to_one_array(struct_array, *names):
     """
 
     # TODO: add assertion on equal shapes
-    # TODO: can i use struct_array[[name1, name2]] synthax?
+    # TODO: can i use struct_array[[name1, name2]] synthax? Yes but you'll get
+    # structured array with this 2 fields.
     arrays_to_dstack = list()
     print "Got stuct_array:"
     print struct_array
@@ -85,7 +104,7 @@ def _to_one_array(struct_array, *names):
 def change_shape(_array, _dict1, _dict2):
     """
     Function that takes ndarray and 2 dictionaries with array's shape and
-    permuted shape returnes array with shape of the permuted array.
+    permuted shape and returns array with permuted shape.
 
     Inputs:
         _array [numpy.ndarray] - array to change,
@@ -114,6 +133,36 @@ def change_shape(_array, _dict1, _dict2):
     # with dict2
 
     return array
+
+
+# TODO: if ``min`` or ``max`` key is absent then only upper/lower bound does
+# exist.
+def get_indxs_from_struct_array(array, **kwargs):
+    """
+    Function that given structured array ``array`` and specified fields and
+    conditions in ``kwargs`` argument returns corresponding indexes.
+
+    Inputs:
+
+        array - numpy structured array,
+
+        kwargs - keyword arguments that specifies conditions:
+
+            {field: value}
+
+            If value is dictionary then use ``min`` & ``max`` keys to bound,
+            if value is iterable then use its content.
+
+    Output:
+
+        numpy.array of indexes of ``array``.
+
+    Example:
+        >>>get_indxs_from_struct_array(array, time={'min': None, 'max': 0.5},
+                                       baseline = [515, 517])
+    """
+
+    pass
 
 
 def aips_bintable_fortran_fields_to_dtype_conversion(aips_type):

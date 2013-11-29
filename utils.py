@@ -21,8 +21,7 @@ class EmptyImageFtError(Exception):
 
 #TODO: convert utils to using arrays instead of lists
 
-# TODO: extend to the case of each entry of ar1 can be in ar2 any times (now it
-# must be only one time for output to be clear.
+
 def index_of(ar1, ar2, issubset=True):
     """
     Find indexes of elements of 1d-numpy arrays ar1 in ar2. It is assumed that
@@ -71,34 +70,24 @@ def _to_complex_array(struct_array, real_name, imag_name):
     return struct_array[real_name] + 1j * struct_array[imag_name]
 
 
-def _to_one_array(struct_array, *names):
+def _to_one_ndarray(struct_array, *names):
     """
     Method that takes structured array and names of 2 (or more) fields and
-    returns numpy.ndarray with expanded shape.
+    returns numpy.ndarray with expanded shape. Field can be 2-dim array.
     """
 
-    # TODO: add assertion on equal shapes
     # TODO: can i use struct_array[[name1, name2]] synthax? Yes but you'll get
     # structured array with this 2 fields.
-    arrays_to_dstack = list()
-    print "Got stuct_array:"
-    print struct_array
-    print "names:"
-    print names
-    for name in names:
-        print "current name:"
-        print name
-        name_array = struct_array[name]
-        print "struct_array[name]:"
-        print name_array
-        print "it's shape"
-        print np.shape(name_array)
-        print "it's ndim"
-        print name_array.ndim
-        name_array = np.expand_dims(name_array, axis=name_array.ndim)
-        arrays_to_dstack.append(name_array)
 
-    return np.squeeze(np.dstack(arrays_to_dstack))
+    l = list()
+    for name in names:
+        if struct_array[name].ndim == 1:
+            l.append(struct_array[name][:, None])
+        elif struct_array[name].ndim == 2:
+            l.extend(np.hsplit(struct_array[name], struct_array[name].shape[1]))
+
+    return np.hstack(l)
+    #return np.vstack([struct_array[name] for name in names]).T
 
 
 def change_shape(_array, _dict1, _dict2):

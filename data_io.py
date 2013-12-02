@@ -201,9 +201,9 @@ class Groups(PyFitsIO):
             par_dict.update({name: self.hdu.data.parnames.index(name) + 1})
         self.par_dict = par_dict
 
-        # Number of axis with dimension=1. 3 corresponds to 'STOKES', 'IF' &
-        # 'COMPLEX'
-        self.ndim_ones = hdu.header['NAXIS'] - 1 - 3
+        # Number of axis with ndim=1.
+        self.ndim_ones = sum([value[1] for value in data_of_data.values() if
+                             value[1] == 1])
 
         _data = np.zeros(hdu.header['GCOUNT'], dtype=[('uvw', '<f8', (3,)),
                                                       ('time', '<f8'),
@@ -214,9 +214,16 @@ class Groups(PyFitsIO):
                                                        (nif, nstokes,))])
 
         # Swap axis and squeeze array to get complex array (nif, nstokes,)
+        # FIXME: refactor to (nstokes, nif,)? - bad idea? think about it later!
+        # Now IF is has index 1.
         temp = np.swapaxes(hdu.data['DATA'], 1, data_of_data['IF'][0])
+        # Now STOKES has index 2
         temp = np.swapaxes(temp, 2, data_of_data['STOKES'][0])
+        # FIXME: squeeze() does remove axis with IF if it's dim = 1!
         temp = temp.squeeze()
+        # Insert dimension for IF
+        if self.nif == 1:
+            temp = np.expand_dims(temp, axis=1)
         hands = vec_complex(temp[..., 0], temp[..., 1])
         weights = temp[..., 2]
 
@@ -248,8 +255,7 @@ class Groups(PyFitsIO):
     def save(self, _data, fname):
         """
         Save modified structured array to GroupData, then saves GroupData to
-        GroupsHDU. As array could be truncated, update "NAXIS" keyword of the
-        header of HDU.
+        GroupsHDU.
         """
 
         # Constructing array (3, 20156, 4, 8,)
@@ -334,8 +340,6 @@ class Groups(PyFitsIO):
         for hdu in self.hdulist[1:]:
             hdulist.append(hdu)
         hdulist.writeto(fname + '.FITS')
-        #self.hdulist[0] = b
-        #self.hdulist.writeto(fname + '.FITS')
 
 
 class IDI(PyFitsIO):

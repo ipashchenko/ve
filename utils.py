@@ -98,7 +98,11 @@ def change_shape(_array, _dict1, _dict2):
     Inputs:
         _array [numpy.ndarray] - array to change,
         dict1 - shape of array, that will be changed,
-        dict2 - dictionary of new shape. It can include more items then dict1.
+        dict2 - dictionary of new shape.
+        dict2 can contain more keys then dict1. Only keys in dict2 that are in
+            dict1 influence new shape. If dict1 contains some keys that are not
+            in dict2, then position of such axes will be changed by other axis
+            that contained in both dict1 and dict2.
     """
 
     dict1 = _dict1.copy()
@@ -107,19 +111,26 @@ def change_shape(_array, _dict1, _dict2):
 
     for key in dict1:
         print "check " + str(key)
-        if not dict1[key] == dict2[key]:
-            print "positin of axis " + str(key) + " has changed"
-            print "from " + str(dict1[key]) + " to " + str(dict2[key])
-            array = np.swapaxes(array, dict1[key], dict2[key])
-            for item in dict1.items():
-                if item[1] == dict2[key]:
-                    dict1[item[0]] = dict1[key]
-                    dict1[key] = dict2[key]
-            print "Updated dict1 is :"
-            print dict1
+        if not key in dict2:
+            # Don't alter position of this dimension directly (but it could
+            # change it's position because of other dimensions).
+            pass
+        else:
+            if not dict1[key] == dict2[key]:
+                print "positin of axis " + str(key) + " has changed"
+                print "from " + str(dict1[key]) + " to " + str(dict2[key])
+                array = np.swapaxes(array, dict1[key], dict2[key])
+                for item in dict1.items():
+                    if item[1] == dict2[key]:
+                        dict1[item[0]] = dict1[key]
+                        dict1[key] = dict2[key]
+                print "Updated dict1 is :"
+                print dict1
 
     # Assert that altered dict1 (it's part with shapes from dict2) coincide
     # with dict2
+    for key in dict2:
+        assert(dict1[key] == dict2[key])
 
     return array
 

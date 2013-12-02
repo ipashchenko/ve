@@ -7,7 +7,7 @@ from utils import AbsentHduExtensionError
 #from utils import build_dtype_for_bintable_data
 from utils import change_shape
 from utils import index_of
-from utils import _to_one_array
+from utils import _to_one_ndarray
 #from utils import _to_complex_array
 
 
@@ -291,8 +291,9 @@ class Groups(PyFitsIO):
         # parameters in the original data entry of HDU
         if len(_data) < len(self.hdu.data):
 
-            original_data = _to_one_array(self.hdu.data, 'UU---SIN',
-                                          'VV---SIN', 'WW---SIN', 'DATE', 'BASELINE')
+            original_data = _to_one_ndarray(self.hdu.data, 'UU---SIN',
+                                            'VV---SIN', 'WW---SIN', 'DATE',
+                                            'BASELINE')
             saving_data = np.dstack((np.array(np.hsplit(_data_copy['uvw'],
                                                         3)).T, _data_copy['time'], _data_copy['baseline']))
             saving_data = np.squeeze(saving_data)

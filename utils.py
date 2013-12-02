@@ -38,6 +38,7 @@ def index_of(ar1, ar2, issubset=True):
     if issubset:
         # assert that all elements of ar1 are in ar2
         assert np.all(np.intersect1d(ar2, ar1) == np.sort(ar1))
+        #assert np.all(np.in1d(ar1, ar2))
 
     indxs_ar2_sorted = np.argsort(ar2)
     ar1_pos_left = np.searchsorted(ar2[indxs_ar2_sorted], ar1, side='left')

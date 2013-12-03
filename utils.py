@@ -120,6 +120,8 @@ def change_shape(_array, _dict1, _dict2):
                 print "positin of axis " + str(key) + " has changed"
                 print "from " + str(dict1[key]) + " to " + str(dict2[key])
                 array = np.swapaxes(array, dict1[key], dict2[key])
+                # Updated values for 2 changed keys in dict1
+                dict1[key] = dict2[key]
                 for item in dict1.items():
                     if item[1] == dict2[key]:
                         dict1[item[0]] = dict1[key]
@@ -130,7 +132,8 @@ def change_shape(_array, _dict1, _dict2):
     # Assert that altered dict1 (it's part with shapes from dict2) coincide
     # with dict2
     for key in dict2:
-        assert(dict1[key] == dict2[key])
+        if key in dict1:
+            assert(dict1[key] == dict2[key])
 
     return array
 

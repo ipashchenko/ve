@@ -59,6 +59,7 @@ class Data(object):
         self._data = None
         self._error = None
 
+    # TODO: assert equal FITS-structures!
     def __add__(self, other):
         """
         Add to self another instance of Data.
@@ -71,7 +72,7 @@ class Data(object):
 
         self_copy = copy.deepcopy(self)
         # TODO: assert equal dtype and len
-        self_copy._data['hands'] = self._data['hands'] + other._data['hands']
+        self_copy.uvdata = self.uvdata + other.uvdata
 
         return self_copy
 
@@ -88,7 +89,7 @@ class Data(object):
         print "substracting " + str(other) + " from " + str(self)
         self_copy = copy.deepcopy(self)
         # TODO: assert equal dtype and len
-        self_copy._data['hands'] = self._data['hands'] - other._data['hands']
+        self_copy.uvdata = self.uvdata - other.uvdata
         #print self_copy._data['hands']
 
         return self_copy
@@ -119,16 +120,16 @@ class Data(object):
         # exclude this assertion
         assert(self.nstokes == 4)
 
-        for t in set(self._data['time']):
+        for t in set(self.data['time']):
 
             # Find all uv-data entries with time t:
-            uv_indxs = np.where(self._data['time'] == t)[0]
+            uv_indxs = np.where(self.data['time'] == t)[0]
 
             # Loop through uv_indxs (different baselines with the same ``t``)
             # and multipy visibility with baseline to gain(ant1)*gain(ant2)^*
             # for ant1 & ant2 derived for this baseline.
             for uv_indx in uv_indxs:
-                bl = self._data['baseline'][uv_indx]
+                bl = self.data['baseline'][uv_indx]
                 try:
                     gains12 = gains.find_gains_for_baseline(t, bl)
                 # If gains is the instance of ``Absorber`` class
@@ -139,7 +140,8 @@ class Data(object):
                 # view.
                 #print "gains12 :"
                 #print gains12
-                self_copy._data[uv_indx]['hands'] *= gains12.T
+                # Doesn't it change copying? Order of indexing [][] has changed
+                self_copy.uvdata[uv_indx] *= gains12.T
 
         return self_copy
 
@@ -148,8 +150,8 @@ class Data(object):
         Method that zeros all data.
         """
 
-        self._data['hands'] = np.zeros(np.shape(self._data['hands']),
-                              dtype=self._data['hands'].dtype)
+        self.uvdata = np.zeros(np.shape(self.uvdata),
+                               dtype=self.uvdata.dtype)
 
     def load(self, fname):
         """
@@ -159,6 +161,8 @@ class Data(object):
 
             fname - file name.
         """
+
+        # Don't use property ``data`` here cause self._data is ``None`` now.
         self._data = self._io.load(fname)
         self.nif = self._io.nif
         self.nstokes = self._io.nstokes
@@ -203,12 +207,13 @@ class Data(object):
 
             numpy.ndarray, numpy.ndarray
 
-                where first array is array of data with shape (#N, #IF,) and
-                second array is 1d-array of indexes of data in self._data
+                where first array is array of data with shape (#N, #IF, #STOKES)
+                and second array is 1d-array of indexes of data in ``self.data``
                 structured array.
         """
 
-        data = self._data
+        data = self.data
+        uvdata = self.uvdata
 
         # TODO: create general method for retrieving indexes of structured array
         # where the specified fields are equal to specified values. Also
@@ -262,31 +267,31 @@ class Data(object):
 
         if stokes == 'I':
             # I = 0.5 * (RR + LL)
-            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 0]
-                            + data['hands'][indxs[:, None, None], IF[:, None], 1])
+            result = 0.5 * (uvdata[indxs[:, None, None], IF[:, None], 0]
+                            + uvdata[indxs[:, None, None], IF[:, None], 1])
 
         elif stokes == 'V':
             # V = 0.5 * (RR - LL)
-            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 0]
-                            - data['hands'][indxs[:, None, None], IF[:, None], 1])
+            result = 0.5 * (uvdata[indxs[:, None, None], IF[:, None], 0]
+                            - uvdata[indxs[:, None, None], IF[:, None], 1])
 
         elif stokes == 'Q':
             # V = 0.5 * (LR + RL)
-            result = 0.5 * (data['hands'][indxs[:, None, None], IF[:, None], 3]
-                            + data['hands'][indxs[:, None, None], IF[:, None], 2])
+            result = 0.5 * (uvdata[indxs[:, None, None], IF[:, None], 3]
+                            + uvdata[indxs[:, None, None], IF[:, None], 2])
 
         elif stokes == 'U':
             # V = 0.5 * 1j * (LR - RL)
-            result = 0.5 * 1j * (data['hands'][indxs[:, None, None], IF[:, None], 3]
-                                 - data['hands'][indxs[:, None, None], IF[:, None], 2])
+            result = 0.5 * 1j * (uvdata[indxs[:, None, None], IF[:, None], 3]
+                                 - uvdata[indxs[:, None, None], IF[:, None], 2])
 
         elif stokes in self._stokes_dict.keys():
-            result = data['hands'][indxs[:, None, None], IF[:, None],
-                                   self._stokes_dict[stokes]]
+            result = uvdata[indxs[:, None, None], IF[:, None],
+                            self._stokes_dict[stokes]]
 
         elif stokes is None:
-            result = data['hands'][indxs[:, None, None], IF[:, None],
-                                   np.arange(self.nif)]
+            result = uvdata[indxs[:, None, None], IF[:, None],
+                            np.arange(self.nstokes)]
 
         else:
             raise Exception('Allowed stokes parameters: I, Q, U, V, RR, LL, RL,'
@@ -315,10 +320,10 @@ class Data(object):
         if not stokes:
             stokes = 'I'
 
-        data, indxs = self._choose_data(baselines=baselines, IF=IF,
-                                        stokes=stokes)
+        uvdata, indxs = self._choose_data(baselines=baselines, IF=IF,
+                                          stokes=stokes)
         # # of chosen IFs
-        n_if = np.shape(data)[1]
+        n_if = np.shape(uvdata)[1]
 
         # TODO: define colors
         try:
@@ -328,19 +333,19 @@ class Data(object):
             syms = ['.k'] * n_if
 
         # TODO: i need function to choose parameters
-        times = self._data[indxs]['time']
+        times = self.data[indxs]['time']
 
         if style == 'a&p':
-            a1 = np.angle(data)
-            a2 = np.real(np.sqrt(data * np.conj(data)))
+            a1 = np.angle(uvdata)
+            a2 = np.real(np.sqrt(uvdata * np.conj(uvdata)))
         elif style == 're&im':
-            a1 = data.real
-            a2 = data.imag
+            a1 = uvdata.real
+            a2 = uvdata.imag
         else:
             raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
 
-        angles = np.angle(data)
-        amplitudes = np.real(np.sqrt(data * np.conj(data)))
+        #angles = np.angle(data)
+        #amplitudes = np.real(np.sqrt(data * np.conj(data)))
 
         subplot(2, 1, 1)
         for _if in range(n_if):
@@ -363,11 +368,11 @@ class Data(object):
         if not stokes:
             stokes = 'I'
 
-        data, indxs = self._choose_data(baselines=baselines, IF=IF,
-                                        stokes=stokes)
+        uvdata, indxs = self._choose_data(baselines=baselines, IF=IF,
+                                          stokes=stokes)
 
         # # of chosen IFs
-        n_if = np.shape(data)[1]
+        n_if = np.shape(uvdata)[1]
 
         # TODO: define colors
         try:
@@ -377,15 +382,15 @@ class Data(object):
             syms = ['.k'] * n_if
 
         # TODO: i need function choose parameters
-        uvw_data = self._data[indxs]['uvw']
+        uvw_data = self.data[indxs]['uvw']
         uv_radius = np.sqrt(uvw_data[:, 0] ** 2 + uvw_data[:, 1] ** 2)
 
         if style == 'a&p':
-            a1 = np.angle(data)
-            a2 = np.real(np.sqrt(data * np.conj(data)))
+            a1 = np.angle(uvdata)
+            a2 = np.real(np.sqrt(uvdata * np.conj(uvdata)))
         elif style == 're&im':
-            a1 = data.real
-            a2 = data.imag
+            a1 = uvdata.real
+            a2 = uvdata.imag
         else:
             raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
 
@@ -403,7 +408,7 @@ class Data(object):
     @property
     def baselines(self):
 
-        return sorted(list(set(self._data['baseline'])))
+        return sorted(list(set(self.data['baseline'])))
 
     @property
     def antennas(self):
@@ -423,30 +428,57 @@ class Data(object):
             numpy.ndarry with shape (N, 3,).
         """
 
-        return self._data['uvw']
+        return self.data['uvw']
 
+    # TODO: should it raise Exception if data set with only 1 IF is used?
     @property
-    def data_freq_averaged(self):
+    def uvdata_freq_averaged(self):
         """
-        Shortcut for data averaged in IFs.
+        Shortcut for ``self._data['hands']`` averaged in IFs.
 
         Returns:
 
             if #IF > 1:
 
-                 returns ``_data['hands']`` averaged in IFs,
+                 returns ``self._data['hands']`` averaged in IFs,
 
             if #IF == 1:
 
-                returns ``_data['hands']''.
+                returns ``self._data['hands']''.
         """
 
         if self.nif > 1:
-            result = np.mean(self._data['hands'], axis=1)
+            result = np.mean(self.uvdata, axis=1)
         else:
-            result = self._data['hands']
+            result = self.uvdata
 
         return result
+
+    @property
+    def data(self):
+        """
+        Shortcut for ``self._data``.
+        """
+
+        return self._data
+
+    @data.setter
+    def data(self, data):
+
+        self._data = data
+
+    @property
+    def uvdata(self):
+        """
+        Shortcut for ``self._data['hands']``.
+        """
+
+        return self.data['hands']
+
+    @uvdata.setter
+    def uvdata(self, uvdata):
+
+        self.data['hands'] = uvdata
 
     @property
     def error(self):
@@ -461,10 +493,13 @@ class Data(object):
             [numpy.ndarray] (#N, #IF, #stokes) - array that repeats the shape of
             self._data['hands'] array.
         """
+
+        pass
+
     # TODO: use qq = scipy.stats.probplot((v-mean(v))/std(v), fit=0) then
     # plot(qq[0], qq[1]) - how to check normality
     # TODO: should i fit gaussians? - np.std <=> scipy.stats.norm.fit()! NO FIT!
-    def noise(self, split_scans=False, use_V=True):
+    def noise(self, split_scans=False, use_V=True, average_freq=False):
         """
         Calculate noise for each baseline. If ``split_scans`` is True then
         calculate noise for each scan too. If ``use_V`` is True then use stokes
@@ -484,6 +519,11 @@ class Data(object):
                 (RR, LL, ...).
         """
 
+        if average_freq:
+            uvdata = self.uvdata_freq_averaged
+        else:
+            uvdata = self.uvdata
+
         baseline_noises = dict()
         if use_V:
             # Calculate dictionary {baseline: noise} (if split_scans is False)
@@ -491,14 +531,13 @@ class Data(object):
             if not split_scans:
                 for baseline in self.baselines:
                     # TODO: use extended ``choose_data`` method?
-                    baseline_data = self._data[np.where(self._data['baseline']
-                        == baseline)]
-                    v = (baseline_data['hands'][..., 0] -
-                         baseline_data['hands'][..., 1]).real
+                    baseline_uvdata = uvdata[np.where(self.data['baseline'] ==
+                                                      baseline)]
+                    v = (baseline_uvdata[..., 0] - baseline_uvdata[..., 1]).real
                     mask = ~np.isnan(v)
-                    baseline_noises[baseline] = np.std(np.ma.array(v,
-                                                       mask=np.invert(mask)),
-                                                       axis=0).data
+                    baseline_noises[baseline] = np.asarray(np.std(np.ma.array(v,
+                                                       mask=np.invert(mask)).data,
+                                                       axis=0))
             else:
                 # Use each scan
                 raise NotImplementedError("Implement with split_scans = True")
@@ -507,10 +546,10 @@ class Data(object):
             if not split_scans:
                 for baseline in self.baselines:
                     # TODO: use extended ``choose_data`` method?
-                    baseline_data = self._data[np.where(self._data['baseline']
-                        == baseline)]
-                    differences = (baseline_data['hands'][:-1, ...] -
-                                baseline_data['hands'][1:, ...])
+                    baseline_uvdata = uvdata[np.where(self.data['baseline'] ==
+                                                      baseline)]
+                    differences = (baseline_uvdata[:-1, ...] -
+                                   baseline_uvdata[1:, ...])
                     mask = ~np.isnan(differences)
                     baseline_noises[baseline] =\
                         np.asarray([np.std(np.ma.array(differences,
@@ -542,17 +581,16 @@ class Data(object):
             if not split_scans:
                 for baseline, std in noise.items():
                     # TODO: use extended ``choose_data`` method?
-                    baseline_data = self._data[np.where(self._data['baseline']
-                        == baseline)]
-                    n = np.prod(np.shape(baseline_data['hands']))
+                    baseline_uvdata = self.uvdata[np.where(self.data['baseline']
+                                                           == baseline)]
+                    n = np.prod(np.shape(baseline_uvdata))
                     noise_to_add = vec_complex(np.random.normal(scale=std,
                         size=n), np.random.normal(scale=std, size=n))
                     noise_to_add = np.reshape(noise_to_add,
-                            np.shape(baseline_data['hands']))
-                    baseline_data['hands'] = baseline_data['hands'] +\
-                                             noise_to_add
-                    self._data[np.where(self._data['baseline'] == baseline)] =\
-                        baseline_data
+                                              np.shape(baseline_uvdata))
+                    baseline_uvdata += noise_to_add
+                    self.uvdata[np.where(self.data['baseline'] == baseline)] =\
+                        baseline_uvdata
 
             else:
                 # Use each scan
@@ -585,8 +623,8 @@ class Data(object):
 
         # split data of each baseline to ``q`` blocks
         for baseline in self.baselines:
-            baseline_data = self._data[np.where(self._data['baseline']
-                == baseline)]
+            baseline_data = self.data[np.where(self.data['baseline'] ==
+                                               baseline)]
             blen = len(baseline_data)
             indxs = np.arange(blen)
             # Shuffle indexes
@@ -616,7 +654,7 @@ class Data(object):
             self.save(testing_data, 'test' + '_' + str(i + 1).zfill(2) + 'of' +
                     str(q))
 
-    def cv_score(self, model, stokes='I'):
+    def cv_score(self, model, stokes='I', average_freq=True):
         """
         Returns Cross-Validation score for self (as testing cv-sample) and
         model (trained on training cv-sample).
@@ -634,23 +672,37 @@ class Data(object):
         # Calculate noise on each baseline
         # ``noise`` is dictionary with keys - baseline numbers and values -
         # numpy arrays of noise std for each IF
-        noise = self.noise()
+        noise = self.noise(average_freq=average_freq)
         print "Calculating noise..."
         print noise
 
         data_copied = copy.deepcopy(self)
         data_copied.substitute(model)
         # TODO: use __sub__() method of data
-        uv_difference = self._data['hands'] - data_copied._data['hands']
-        diff_array = copy.deepcopy(self._data)
-        diff_array['hands'] = uv_difference
+        #if average_freq:
+        #    uv_difference = self.uvdata_freq_averaged -\
+        #                    data_copied.uvdata_freq_averaged
+        #else:
+        #    uv_difference = self.uvdata - data_copied.uvdata
+        #diff_array = copy.deepcopy(self.data)
+        #diff_array['hands'] = uv_difference
+        data_copied.uvdata = self.uvdata - data_copied.uvdata
+
+        if average_freq:
+            uvdata = data_copied.uvdata_freq_averaged
+        else:
+            uvdata = data_copied.uvdata
 
         for baseline in self.baselines:
             # square difference for each baseline, divide by baseline noise
             # and then sum for current baseline
-            baseline_indxs = np.where(diff_array['baseline'] == baseline)[0]
-            hands_diff = diff_array[baseline_indxs]['hands'] /\
-                         noise[baseline][None, :, None]
+            baseline_indxs = np.where(data_copied.data['baseline'] ==
+                                      baseline)
+            if average_freq:
+                hands_diff = uvdata[baseline_indxs] / noise[baseline]
+            else:
+                hands_diff = uvdata[baseline_indxs] /\
+                             noise[baseline][None, :, None]
             # Construct difference for all Stokes parameters
             diffs = dict()
             diffs.update({'I': 0.5 * (hands_diff[..., 0] + hands_diff[..., 1])})
@@ -677,15 +729,21 @@ class Data(object):
 
         if baseline is None:
             baseline = self.baselines
-        indxs = np.hstack(index_of(baseline, self._data['baseline']))
+        indxs = np.hstack(index_of(baseline, self.data['baseline']))
         n = len(indxs)
-        uvws = self._data[indxs]['uvw']
+        uvws = self.data[indxs]['uvw']
         model._uvws = uvws
 
         for i, hand in enumerate(['RR', 'LL', 'RL', 'LR']):
             try:
-                self._data['hands'][indxs, :, i] =\
+                self.uvdata[indxs, :, i] =\
                     model.uv_correlations[hand].repeat(self.nif).reshape((n, self.nif))
             # If model doesn't have some hands => pass it
             except ValueError:
                 pass
+
+
+if __name__ == '__main__':
+
+    data = open_fits('PRELAST_CALIB.FITS')
+    data.save(data.data, 'test')

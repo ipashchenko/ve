@@ -24,15 +24,13 @@ class EmptyImageFtError(Exception):
 
 def index_of(ar1, ar2, issubset=True):
     """
-    Find indexes of elements of 1d-numpy arrays ar1 in ar2. It is assumed that
-    each entry of ar1 are met only one time in ar2.
+    Find indexes of elements of 1d-numpy arrays ar1 in ar2.
 
     Output:
 
         list (len = len(ar1)) of arrays with indexes of elements in ar2
-        corresponding to current element of ar1.
-
-            output[i] = ar2[where(ar2 = ar1[i])[0]]
+        corresponding to current (list[i] -> ar1[i]) element of ar1. If no
+        elements are found then i-th elementh of list is None.
     """
 
     if issubset:

@@ -225,7 +225,7 @@ if __name__ == '__main__':
     #bootstrap.resample(outname='BOOT', nonparametric=False, split_scans=False,
     #                   use_V=True)
 
-    bootstrap.run(outname='bootstrapped_data', n=100)
+    bootstrap.run(outname='bootstrapped_data', n=10)
     #model = Model()
     #model.add_from_txt('cc.txt')
     #bootstrap = Bootstrap(model,

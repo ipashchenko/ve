@@ -24,15 +24,13 @@ class EmptyImageFtError(Exception):
 
 def index_of(ar1, ar2, issubset=True):
     """
-    Find indexes of elements of 1d-numpy arrays ar1 in ar2. It is assumed that
-    each entry of ar1 are met only one time in ar2.
+    Find indexes of elements of 1d-numpy arrays ar1 in ar2.
 
     Output:
 
         list (len = len(ar1)) of arrays with indexes of elements in ar2
-        corresponding to current element of ar1.
-
-            output[i] = ar2[where(ar2 = ar1[i])[0]]
+        corresponding to current (list[i] -> ar1[i]) element of ar1. If no
+        elements are found then i-th elementh of list is None.
     """
 
     if issubset:
@@ -122,9 +120,10 @@ def change_shape(_array, _dict1, _dict2):
                 print "from " + str(dict1[key]) + " to " + str(dict2[key])
                 array = np.swapaxes(array, dict1[key], dict2[key])
                 # Updated values for 2 changed keys in dict1
-                dict1[key] = dict2[key]
                 for item in dict1.items():
-                    if item[1] == dict2[key]:
+                    # If found other key in dict1 with the same value
+                    if (item[1] == dict2[key]) and (item[0] != key):
+                        print "Found item : " + str(item)
                         dict1[item[0]] = dict1[key]
                         dict1[key] = dict2[key]
                 print "Updated dict1 is :"

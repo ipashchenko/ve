@@ -1,10 +1,10 @@
-asc
+vlbi_errors
 =====
 
-**Tools for automating post-correlation data processing at ASC**
+**Tools for acscesing uncertaintes of VLBI results**
 
-asc is collection of tools used for automating post-correlation Radioastron
-data processing at ASC LPI.
+vlbi_errors is collection of tools used for acscesing uncertaintes of VLBI
+observations - maps, models, ....
 
 Documentation
 -------------
@@ -16,5 +16,5 @@ License
 
 Copyright 2014 Ilya Pashchenko.
 
-asc is free software made available under the MIT License. For details see
-the LICENSE.txt file.
+vlbi_errors is free software made available under the MIT License. For details
+see the LICENSE.txt file.

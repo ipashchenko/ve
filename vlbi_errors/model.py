@@ -8,8 +8,10 @@ from utils import EmptyImageFtError
 
 class Model(object):
     """
-    Class that represents models used to describe model VLBI-data in both image
-    and uv-domain: clean components (delta functions), gaussians etc.
+    Class that represents models.
+
+    This class is used to describe model of VLBI-data in both image and
+    uv-domain: clean components (delta functions), gaussians etc.
     """
 
     def __init__(self):
@@ -17,10 +19,6 @@ class Model(object):
         self.mas_to_rad = 4.8481368 * 1E-09
         self._uvws = np.array([], dtype=[('u', float), ('v', float), ('w',
                               float)])
-        # TODO: should _stokes & _correlations be structured arrays? Model
-        # could contain different number of components in different stokes. But
-        # it's furier transform MUST contain equal number of visibilities in
-        # each stokes. But sometimes not.
         self._image_stokes = {'I': np.array([], dtype=[('flux', float),
             ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
                 float), ('bpa', float)]),
@@ -44,6 +42,10 @@ class Model(object):
         """
         Sets ``_uvws`` attribute of self with values from Data class instance
         ``data``.
+
+        :param data:
+            Instance of ``Data`` class. Model visibilities will be calculated
+            for (u,v)-points of this instance.
         """
         self._uvws = data.uvw
 
@@ -52,12 +54,25 @@ class Model(object):
         Fourie transform model from image to uv-domain in specified points of
         uv-plane. If no uvw-points are specified, use _uvws attribute. If it is
         None, raise exception.
-        """
 
+        :param stoke (optional):
+            Stokes parameter to calculate on set of (u,v)-points using current
+            model. (default: ``I``)
+
+        :param uvws (optional):
+            Set of (u,v,w)-points on which to calculate visibilities. If
+            ``None`` is specified then use ``_uvws`` attriubute. If it doesn't
+            contain any points then raise Exception. (default: ``None``)
+
+        :return:
+            Numpy array of visibilities of Stokes type ``stoke`` for set of
+            (u,v,w)-points ``uvws``.
+        """
         if not uvws:
             uvws = self._uvws
             if not uvws.size:
-                raise Exception()
+                raise Exception("Can't find uv-points on wich to calculate"
+                                "visibilities of model.")
 
         components = self._image_stokes[stoke]
 
@@ -97,7 +112,10 @@ class Model(object):
 
     @property
     def uv_correlations(self):
-
+        """
+        Property that updates and returns ``_uv_correlation`` attribute if
+        model is updated.
+        """
         if self._updated['I'] or self._updated['V']:
 
             if self._image_stokes['I'].size and self._image_stokes['V'].size:
@@ -134,14 +152,29 @@ class Model(object):
 
     def add_from_fits(self, fname, stoke='I'):
         """
-        Adds CC from image FITS-file.
+        Adds CC components of Stokes type ``stoke`` to model from FITS-file.
+
+        :param fname:
+            Path to FITS-file with model (Clean Components CC-table).
+
+        :param stoke (optional):
+            Stokes parameter of file ``fname``. (default: ``I``)
         """
-        raise NotImplementedError('Implement loading of CC-table of FITS-file')
+        raise NotImplementedError('Implement loading  CC-table of FITS-file')
         self._updated[stoke] = True
 
     def add_from_txt(self, fname, stoke='I', style='aips'):
         """
         Adds components of Stokes type ``stoke`` to model from txt-file.
+
+        :param fname:
+            Path to text file with model.
+
+        :param stoke (optional):
+            Stokes parameter of file ``fname``. (default: ``I``)
+
+        :param style (optional):
+            Type of model specifying format. (default: ``aips``)
         """
         dt = self._image_stokes[stoke].dtype
 
@@ -173,6 +206,9 @@ class Model(object):
     def clear_im(self, stoke='I'):
         """
         Clear the model for stoke Stokes parameter.
+
+        :param stoke (optional):
+            Stokes parameter to clear. (default: ``I``)
         """
         self._image_stokes[stoke] = np.array([], dtype=[('flux', float),
                         ('dx', float), ('dy', float), ('bmaj', float), ('bmin',

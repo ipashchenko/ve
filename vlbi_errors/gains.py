@@ -11,17 +11,18 @@ from utils import baselines_2_ants
 
 def open_gains(fname, snver=1):
     """
-    Helper function for instantiating and loading antenna gains from
+    Helper function for instantiating and loading complex antenna gains from
     FITS-files.
 
-    Inputs:
+    :param fname:
+        Path to FTIS-file.
 
-        fname [str] - FTIS-file name,
-        snver - version of AN-table.
+    :param snver (optional):
+        Version of SN-table with complex antenna gain information. (default:
+        ``1``)
 
-    Outputs:
-
-        instance of Gains class.
+    :return:
+        Instance of ``Gains`` class.
     """
 
     gains = Gains()
@@ -32,34 +33,73 @@ def open_gains(fname, snver=1):
 
 class Gains(object):
     """
-    Class that represents the set of complex antenna gains.
+    Class that represents complex antenna gains.
+
+    :param _io (optional):
+        Instance of ``IO`` subclass used for fetching antenna gains.
     """
 
     def __init__(self, _io=AN()):
-
         self._io = _io
         self._data = None
 
+    @property
+    def data(self):
+        """
+        Shortcut for ``self.data``.
+        """
+        return self._data
+
+    @data.setter
+    def data(self, data):
+        self._data = data
+
+    @property
+    def gains(self):
+        """
+        Shortcut for ``self.data['gains']``.
+        """
+        return self.data['gains']
+
+    @gains.setter
+    def gains(self, gains):
+        self.data['gains'] = gains
+
     def load(self, fname, snver=1):
         """
-        Loads gains from AIPS SN binary table extension of FITS-file.
-        Assumes:
-            Reference antena is the same
-        """
+        Method that loads complex antenna gains from ``AIPS SN`` binary table
+        extension of FITS-file.
 
+        ..  warning:: Current implementation assumes that reference antena is
+        the same
+        """
         self._data = self._io.load(fname, snver=snver)
 
     def save(self, fname, snver=None):
         """
-        Saves gains to AIPS SN binary table extension of FITS-file.
+        Method that saves complex antenna gains to ``AIPS SN`` binary table
+        extension of FITS-file.
+
+        :param fname:
+            Path to FITS-file.
+
+        :param snver:
+            Version of SN-table with complex antenna gain information.
         """
         self._io.save(fname)
 
     def __mul__(self, other):
         """
-        Multiply self on another instance of Gains.
-        """
+        Method that multiplies complex antenna gains of ``self`` on gains of
+        another instance of ``Gains`` class.
 
+        :param other:
+            Instance of ``Gains`` class.
+
+        :return:
+            Instance of ``Gains`` class. Contains product of two gain sets.
+
+        """
         self_copy = copy.deepcopy(self)
 
         if isinstance(other, Gains):
@@ -83,7 +123,14 @@ class Gains(object):
 
     def __div__(self, other):
         """
-        Divide self on another instance of Gains class.
+        Method that divides complex antenna gains of ``self`` to gains of
+        another instance of ``Gains`` class.
+
+        :param other:
+            Instance of ``Gains`` class.
+
+        :return:
+            Instance of ``Gains`` class. Contains division of two gain sets.
         """
 
         self_copy = copy.deepcopy(self)
@@ -109,10 +156,21 @@ class Gains(object):
 
     def find_gains_for_antenna(self, t, ant):
         """
+        Method that find complex antenna gains for given time and antenna.
+
         Given time ``t`` and antenna ``ant`` this method finds indxs of
-        ``gains`` array of ``_data`` structured array of ``self`` for ``ant`` &
-        containing ``t`` and returns array of gains for antenna ``ant`` for
-        time moment ``t`` with shape (#if, #pol).
+        ``gains`` array of ``_data`` structured numpy.ndarray of ``self`` for
+        ``ant`` & containing ``t`` and returns array of gains for antenna
+        ``ant`` for time moment ``t`` with shape (#if, #pol).
+
+        :param t:
+            Time for which fetch gains.
+
+        :param ant:
+            Antenna for which fetch gains.
+
+        :return:
+            Numpy.ndarray.
         """
 
         # Find indx of gains entries containing ``t`` & ``ant1``
@@ -126,11 +184,22 @@ class Gains(object):
 
     def find_gains_for_baseline(self, t, bl):
         """
+        Method that find complex antenna gains for given time and baseline.
+
         Given time ``t`` and baseline ``bl`` this method finds indxs of
         ``gains`` array of ``_data`` structured array of ``self``for ``ant1``,
         containing ``t`` and ``ant2``, containing ``t`` and returns array of
         gains (gain1 * gain2^*) for baseline ``bl`` for time moment ``t`` with
         shape (#stokes, #if), where ant1 < ant2.
+
+        :param t:
+            Time for which fetch gains.
+
+        :param bl:
+            Baseline for which fetch gains.
+
+        :return:
+            Numpy.ndarray.
         """
 
         ant1, ant2 = baselines_2_ants([bl])
@@ -156,7 +225,16 @@ class Gains(object):
     # TODO: convert time to datetime format and use date2num for plotting
     def tplot(self, antenna=None, IF=None, pol=None):
         """
-        Method that plots gains for given antennas vs. time.
+        Method that plots complex antenna gains for given antennas vs. time.
+
+        :param antenna:
+            Antenna/s for which plot gains.
+
+        :param IF:
+            IF number/s for which plot gains.
+
+        :param pol:
+            Polarization for which plot gains. ``R`` or ``L``.
         """
 
         if not antenna:
@@ -194,7 +272,7 @@ class Gains(object):
 class Absorber(object):
     """
     Class that absorbs gains from series of FITS-files into one instance of
-    Gains class.
+    ``Gains`` class.
     """
 
     def __init__(self):
@@ -203,6 +281,12 @@ class Absorber(object):
         self.fnames = list()
 
     def absorb_one(self, fname):
+        """
+        Method that absorbes complex antenna gains from specified FITS-file.
+
+        :param fname:
+            Path to FITS-file.
+        """
 
         gain = Gains()
         gain.load(fname)
@@ -216,11 +300,25 @@ class Absorber(object):
         self.fnames.append(fname)
 
     def absorb(self, fnames):
+        """
+        Method that absorbes complex antenna gains from specified set of
+        FITS-file.
+
+        :param fnames:
+            Iterable of paths to FITS-files.
+        """
 
         for fname in fnames:
             self.absorb_one(fname)
 
     def exclude_one(self, fname):
+        """
+        Method that excludes complex antenna gains of specified FITS-file from
+        absorbed gains.
+
+        :param fname:
+            Path to FITS-file.
+        """
 
         if not fname in self.fnames:
             raise Exception('There is no gains absorbed yet!')

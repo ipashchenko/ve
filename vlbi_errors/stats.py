@@ -11,30 +11,31 @@ import numpy as np
 
 class Bootstrap(object):
     """
-    Sample with replacement (if nonparametric=True) from residuals or use
-    normal zero mean random variable with std estimated from the residuals
-    for each baseline (or even scan).
+    Class that implements bootstrapping of uv-data.
 
-    Inputs:
+    Sample with replacement (if ``nonparametric=True``) from residuals between
+    model with gains and unself-calibrated uv-data or use normal zero mean
+    random variable with std estimated from that residuals for each baseline (or
+    even scan - but that is not implemented yet).
 
-        uncal - uncalibrated uv-data. FITS-file with data not yet
-            self-calibrated.
-        calibs - iterable of self-calibration sequence.
-        residuals - instance of Data class. Difference between
-        unself-calibrated data and self-calibrated data with gains added.
+    :param model:
+        Instance of ``Model`` class that represent model used for bootstrapping.
 
+    :param uncal:
+        Path to FITS-file with uv-data not yet self-calibrated.
+
+    :param calibs:
+        Iterable of paths to self-calibration sequence of FITS-files. That is
+        used for constructing gain curves for each antenna. AIPS keep antenna
+        gains solutions in each iteration of self-calibration cyrcle in
+        FITS-files that are calibrated. So in sequence of 1st, 2nd, ..., nth
+        files gain curve info lives in 2nd, ..., nth FITS-file.
     """
 
-    def __init__(self, model, uncal=None, calibs=None, nonparametric=False,
-                 split_scans=False, use_V=True):
-        """
-        """
+    def __init__(self, model, uncal=None, calibs=None):
         self.model = model
         self.uncal = uncal
         self.calibs = calibs
-        self.nonparametric = nonparametric
-        self.split_scans = split_scans
-        self.use_V = use_V
 
         absorber = Absorber()
         absorber.absorb(calibs)
@@ -54,6 +55,15 @@ class Bootstrap(object):
         """
         Sample from residuals with replacement or sample from normal random
         noise and adds samples to model to form n bootstrap samples.
+
+        :param nonparametric (optional):
+            If ``True`` then use actual residuals between model with gains and
+            unself-calibrated uv-data. If ``False`` then use gaussian noise fitted
+            to actual residuals for parametric bootstrapping. (default: ``False``)
+
+        : params split_scans (optional):
+
+        : param use_V (optional):
         """
 
         if split_scans:
@@ -63,6 +73,7 @@ class Bootstrap(object):
                                         use_V=use_V)
         if use_V:
             nstokes = self.residuals.nstokes
+            nif = self.residuals.nif
             for key, value in noise_residuals.items():
                 noise_residuals[key] = (value.repeat(nstokes).reshape((len(value),
                                                                        nstokes)))
@@ -84,7 +95,8 @@ class Bootstrap(object):
                 lnormvars = list()
                 for std in noise_residuals[baseline].flatten():
                     lnormvars.append(np.random.normal(std, size=len(indxs)))
-                anormvars = np.dstack(lnormvars).reshape((len(indxs), 8, 4,))
+                anormvars = np.dstack(lnormvars).reshape((len(indxs), nif,
+                                                          nstokes,))
                 # Add normal random variables to data on current baseline
                 data_to_add_normvars['hands'] += anormvars
         else:
@@ -99,11 +111,13 @@ class Bootstrap(object):
                                                   len(data_to_resample))
 
                 # Add to residuals.substitute(model)
-                self.model_uv._data['hands'][indxs] = self.model_uv._data['hands'][indxs] + resampled_data['hands']
+                self.model_uv._data['hands'][indxs] =\
+                    self.model_uv._data['hands'][indxs] +\
+                    resampled_data['hands']
 
         self.last_calib.save(self.model_uv._data, outname)
 
-    def run(self, outname='bootstrapped_data', n=100, nonparametric=True,
+    def run(self, outname='bootstrapped_data', n=10, nonparametric=True,
             split_scans=False, use_V=True):
         """
         Generate ``n`` data sets.

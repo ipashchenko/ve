@@ -4,11 +4,10 @@
 import numpy as np
 import pyfits as pf
 from utils import AbsentHduExtensionError
-#from utils import build_dtype_for_bintable_data
 from utils import change_shape
 from utils import index_of
 from utils import _to_one_ndarray
-#from utils import _to_complex_array
+#from utils import build_dtype_for_bintable_data
 
 
 vec_int = np.vectorize(np.int)
@@ -18,12 +17,7 @@ vec_complex = np.vectorize(np.complex)
 class IO(object):
     """
     Abstract class for I/O of different formats of interferometric data.
-    Contains load and save methods.
     """
-
-    #def __init__(self, dtype=None):
-
-    #    self._dtype = dtype
 
     def load(self):
         """
@@ -31,8 +25,8 @@ class IO(object):
         dtype, where:
             dtype=[('uvw', '<f8', (3,)),
                   ('time', '<f8'), ('baseline', 'int'),
-                  ('hands', 'complex', (nstokes, nif, nch)),
-                  ('weights', '<f8', (nstokes, nif, nch))]
+                  ('hands', 'complex', (nif, nstokes,)),
+                  ('weights', '<f8', (nif, nstokes,))]
                 - for visibillity data,
             dtype=[('start', '<f8'),
                    ('stop', '<f8'),
@@ -46,7 +40,7 @@ class IO(object):
 
     def save(self):
         """
-        Method that transforms structured array (_data attribute of Data
+        Method that transforms structured array (_data attribute of Data class
         instance) to native format.
         """
 
@@ -54,12 +48,30 @@ class IO(object):
 
 
 class PyFitsIO(IO):
+
     def __init__(self):
         super(PyFitsIO, self).__init__()
         # We need hdu in save()
         self.hdu = None
 
     def get_hdu(self, fname, extname=None, ver=1):
+        """
+        Method that returns instance of ``PyFits.HDU`` class with specified
+        extension and version from specified file.
+
+        :param fname:
+            Path to FITS-file.
+
+        :param extname (optional):
+            Header's extension. If ``None`` then return first from
+            ``PyFits.HDUList``. (default: ``None``)
+
+        :param ver (optional):
+            Version of ``HDU`` with specified extension.
+
+        :return:
+            Instance of ``PyFits.HDU`` class.
+        """
 
         hdulist = pf.open(fname)
         self.hdulist = hdulist
@@ -82,25 +94,28 @@ class PyFitsIO(IO):
 
     def _HDU_to_data(self, hdu):
         """
-        Converts Groups/BinTableHDU instances to structured array.
+        Method that converts ``PyFits.Groups/BinTableHDU`` instances to
+        structured numpy.ndarray.
         """
 
         raise NotImplementedError('method must be implemented in subclasses')
 
     def _data_to_HDU(self, data, header):
         """
-        Converts structured array of data part of HDU and header to
-        Groups/BinTableHDU instances.
+        Converts structured numpy.ndarray of data and instance of
+        ``PyFits.Header`` to instance of ``PyFits.GroupsHDU/BinTableHDU``
+        classes.
         """
 
         raise NotImplementedError('method must be implemented in subclasses')
 
-    def _update_header(self, data):
-        """
-        Method that updates header info using data recarray.
-        """
+    # PyFits does it using data (``GCOUNT`` keyword ex.)
+    #def _update_header(self, data):
+    #    """
+    #    Method that updates header info using data recarray.
+    #    """
 
-        raise NotImplementedError('method must be implemented in subclasses')
+    #    raise NotImplementedError('method must be implemented in subclasses')
 
 
 # TODO: subclass IO.PyFitsIO.IDI! SN table is a binary table (as all HDUs in IDI
@@ -112,12 +127,16 @@ class AN(PyFitsIO):
     format. AN table is Binary Table, so UV- and IDI- formats are the same.
     """
 
+    def _HDU_to_data(self, hdu):
+        pass
+
     def load(self, fname, snver=1):
         # R & L
         npol = 2
         hdu = self.get_hdu(fname, extname='AIPS SN', ver=snver)
 
         nif = hdu.data.dtype['REAL1'].shape[0]
+        self.nif = nif
         # set ``nif'' from dtype of hdu.data
         _data = np.zeros(hdu.header['NAXIS2'], dtype=[('start', '<f8'),
                                                       ('stop', '<f8'),
@@ -165,18 +184,25 @@ class AN(PyFitsIO):
 
 class Groups(PyFitsIO):
     """
-    Class that represents input/output of uv-data in UV-FITS format (\"random
-    groups\").
+    Class that represents input/output of uv-data in UV-FITS format (a.k.a.
+    \"random groups\").
     """
 
-    def load(self, fname):
+    def _HDU_to_data(self, hdu):
         """
-        Load data from FITS-file.
-        """
+        Method that converts instance of ``PyFits.GroupsHDU`` class to numpy
+        structured array with dtype = [('uvw', '<f8', (3,)),
+                                       ('time', '<f8'),
+                                       ('baseline', 'int'),
+                                       ('hands', 'complex', (nif, nstokes,)),
+                                       ('weights', '<f8', (nif, nstokes,))]
 
-        self.hdulist = pf.open(fname)
-        hdu = self.get_hdu(fname)
-        self.hdu = hdu
+        :param hdu:
+            Instance of ``PyFits.GroupsHDU`` class.
+
+        :return:
+            numpy.ndarray.
+        """
 
         data_of_data = dict()
         data_of_data.update({'GROUP': (0, hdu.header['GCOUNT'])})
@@ -197,13 +223,13 @@ class Groups(PyFitsIO):
         par_dict = dict()
         for name in self.hdu.data.parnames:
             # It is cool that if parameter name does appear twice it is index
-            # of the first appearence that are recorded in ``par_dict``
+            # of the first appearence that is recorded in ``par_dict``
             par_dict.update({name: self.hdu.data.parnames.index(name) + 1})
         self.par_dict = par_dict
 
-        # Number of axis with ndim=1.
+        # Number of axis with ndim = 1.
         self.ndim_ones = sum([value[1] for value in data_of_data.values() if
-                             value[1] == 1])
+                              value[1] == 1])
 
         _data = np.zeros(hdu.header['GCOUNT'], dtype=[('uvw', '<f8', (3,)),
                                                       ('time', '<f8'),
@@ -219,14 +245,14 @@ class Groups(PyFitsIO):
         temp = np.swapaxes(hdu.data['DATA'], 1, data_of_data['IF'][0])
         # Now STOKES has index 2
         temp = np.swapaxes(temp, 2, data_of_data['STOKES'][0])
-        # FIXME: squeeze() does remove axis with IF if it's dim = 1!
         temp = temp.squeeze()
-        # Insert dimension for IF
+        # Insert dimension for IF if 1 IF in data and it was squeezed
         if self.nif == 1:
             temp = np.expand_dims(temp, axis=1)
         hands = vec_complex(temp[..., 0], temp[..., 1])
         weights = temp[..., 2]
 
+        # TODO: Find out what PARAMETERS correspond to u, v, w
         u = hdu.data[hdu.header['PTYPE1']] / hdu.header['PSCAL1'] - \
             hdu.header['PZERO1']
         v = hdu.data[hdu.header['PTYPE2']] / hdu.header['PSCAL2'] - \
@@ -235,11 +261,11 @@ class Groups(PyFitsIO):
             hdu.header['PZERO3']
         # ``DATE`` can have different number among parameters
         indx_date = par_dict['DATE']
-        time = hdu.data[hdu.header['PTYPE' + str(indx_date)]] /\
+        time = hdu.data[hdu.header['PTYPE' + str(indx_date)]] / \
                hdu.header['PSCAL' + str(indx_date)] - hdu.header['PZERO' +
                                                                  str(indx_date)]
 
-        # Filling structured array by fileds
+        # Filling structured array by fields
         _data['uvw'] = np.column_stack((u, v, w))
         _data['time'] = time
         indx_bl = par_dict['BASELINE']
@@ -252,10 +278,23 @@ class Groups(PyFitsIO):
 
         return _data
 
-    def save(self, _data, fname):
+    def _data_to_HDU(self, _data, header):
         """
-        Save modified structured array to GroupData, then saves GroupData to
-        GroupsHDU.
+        Method that converts structured numpy.ndarray with data and instance of
+        ``PyFits.Header`` class to the instance of ``PyFits.GroupsHDU`` class.
+
+        :param _data:
+            Numpy.ndarray with dtype = [('uvw', '<f8', (3,)),
+                                       ('time', '<f8'),
+                                       ('baseline', 'int'),
+                                       ('hands', 'complex', (nif, nstokes,)),
+                                       ('weights', '<f8', (nif, nstokes,))]
+
+        :param header:
+            Instance of ``PyFits.Header`` class
+
+        :return:
+            Instance of ``PyFits.GroupsHDU`` class
         """
 
         # Constructing array (3, 20156, 4, 8,)
@@ -326,8 +365,8 @@ class Groups(PyFitsIO):
             if parnames.count(name) == 2:
                 indx_to_zero = parnames.index(name) + 1
                 break
-            # then zero array for second parameter with the same name
-        # TODO: use dtype from ``BITPIX`` keyword
+                # then zero array for second parameter with the same name
+            # TODO: use dtype from ``BITPIX`` keyword
         pardata[indx_to_zero] = np.zeros(len(par_indxs), dtype=float)
 
         a = pf.GroupData(imdata, parnames=parnames, pardata=pardata,
@@ -335,6 +374,33 @@ class Groups(PyFitsIO):
         b = pf.GroupsHDU(a)
         # PyFits updates header using given data (``GCOUNT``)
         b.header = self.hdu.header
+
+        return b
+
+    def load(self, fname):
+        """
+        Load data from FITS-file.
+
+        :param fname:
+            Path to FITS-file.
+
+        :return:
+            Numpy.ndarray.
+        """
+
+        self.hdulist = pf.open(fname)
+        hdu = self.get_hdu(fname)
+        self.hdu = hdu
+
+        return self._HDU_to_data(hdu)
+
+    def save(self, _data, fname):
+        """
+        Save modified structured array to GroupData, then saves GroupData to
+        GroupsHDU.
+        """
+
+        b = self._data_to_HDU(_data, self.header)
 
         hdulist = pf.HDUList([b])
         for hdu in self.hdulist[1:]:
@@ -347,4 +413,37 @@ class IDI(PyFitsIO):
     Class that represents input/output of uv-data in IDI-FITS format.
     """
 
-    pass
+#    def load(self, fname):
+#        """
+#        Load data from FITS-file.
+#        """
+#
+#        self.hdulist = pf.open(fname)
+#        hdu = self.get_hdu(fname, extname='UV_DATA')
+#        self.hdu = hdu
+#
+#        dtype, array_names = build_dtype_for_bintable_data(self.hdu.header)
+#
+#        # Change ``GCOUNT`` to IDIFITS-specific
+#        _data = np.zeros(hdu.header['GCOUNT'], dtype=[('uvw', '<f8', (3,)),
+#                                                      ('time', '<f8'),
+#                                                      ('baseline', 'int'),
+#                                                      ('hands', 'complex',
+#                                                       (nif, nstokes)),
+#                                                      ('weights', '<f8',
+#                                                       (nif, nstokes,))])
+#
+#        data_of_data = dict()
+#        data_of_data.update({'GROUP': (0, hdu.header['GCOUNT'])})
+#        for i in range(2, hdu.header['NAXIS'] + 1):
+#            data_of_data.update({hdu.header['CTYPE' + str(i)]:
+#                                     (hdu.header['NAXIS'] - i + 1,
+#                                      hdu.header['NAXIS' + str(i)])})
+#        nstokes = data_of_data['STOKES'][1]
+#        nif = data_of_data['IF'][1]
+#        self.nstokes = nstokes
+#        self.nif = nif
+#        # Describe shape and dimensions of original data recarray
+#        self.data_of_data = data_of_data
+#        # Describe shape and dimensions of structured array
+#        self.data_of__data = {'COMPLEX': 3, 'GROUP': 0, 'STOKES': 2, 'IF': 1}

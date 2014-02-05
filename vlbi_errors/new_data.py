@@ -18,14 +18,19 @@ vec_complex = np.vectorize(np.complex)
 
 def open_fits(fname, structure='UV'):
     """
-    Helper function for instantiating and loading FITS-files.
+    Helper function for loading FITS-files.
 
-    Inputs:
+        :param fname:
+            Path to FITS-file.
 
-        fname [str] - FTIS-file name,
+        :param structure (optional):
+            Structure of FITS-file. ``UV`` or ``IDI``. (default: ``UV``)
 
-        structure [str] ['UV','IDI'] - structure of FITS-file.
+        :return:
+            Instance of ``Data`` class for the specified FITS-file.
     """
+
+    assert(structure in ['UV', 'IDI'])
 
     structures = {'UV': Groups(), 'IDI': IDI()}
     data = Data(io=structures[structure])
@@ -36,42 +41,43 @@ def open_fits(fname, structure='UV'):
 
 class Data(object):
     """
-    Class that represents data in uv-domain.
+    Class that represents uv-data.
+
+    Internally data is stored in attribute ``_data`` that is numpy structured
+    array with dtype = [('uvw', '<f8', (3,)),
+                        ('time', '<f8'),
+                        ('baseline', 'int'),
+                        ('hands', 'complex', (nif, nstokes,)),
+                        ('weights', '<f8', (nif, nstokes,))]
+
+    :param io (optional):
+        Instance of ``IO`` subclass. (default: ``None``)
     """
 
     def __init__(self, io=None):
-        """
-        Parameters:
-
-            io - instance of IO subclass
-
-        Initializes:
-
-            _data - container of uv-data. It is numpy structured array with
-                dtype=[('uvw', '<f8', (3,)),
-                      ('time', '<f8'), ('baseline', 'int'),
-                      ('hands', 'complex', (nif, nstokes,)),
-                      ('weights', '<f8', (nif, nstokes,))]
-        """
-
         self._stokes_dict = {'RR': 0, 'LL': 1, 'RL': 2, 'LR': 3}
         self._io = io
         self._data = None
         self._error = None
 
-    # TODO: assert equal FITS-structures!
+    # TODO: should i use ``_data['hands']`` attribute instead of ``uvdata``?
     def __add__(self, other):
         """
         Add to self another instance of Data.
 
-        Input:
+        :param other:
+            Instance of ``Data`` class. Or object that has ``uvdata`` attribute
+            that is numpy structured array with the same ``dtype`` as ``self``.
 
-            data - instance of Data class. Must have ``_data`` attribute -
-            structured numpy.ndarray with the same shape as self.
+        :return:
+            Instance od ``Data`` class with uv-data in ``uvdata`` attribute
+            that is sum of ``self`` and other.
         """
 
+        assert(self.uvdata.dtype == other.uvdata.dtype)
+        assert(len(self.uvdata) == len(other.uvdata))
+
         self_copy = copy.deepcopy(self)
-        # TODO: assert equal dtype and len
         self_copy.uvdata = self.uvdata + other.uvdata
 
         return self_copy
@@ -80,17 +86,20 @@ class Data(object):
         """
         Substruct from self another instance of Data.
 
-        Input:
+        :param other:
+            Instance of ``Data`` class. Or object that has ``uvdata`` attribute
+            that is numpy structured array with the same ``dtype`` as ``self``.
 
-            data - instance of Data class. Must have ``_data`` attribute -
-            structured numpy.ndarray with the same shape as self.
+        :return:
+            Instance od ``Data`` class with uv-data in ``uvdata`` attribute
+            that is difference of ``self`` and other.
         """
 
-        print "substracting " + str(other) + " from " + str(self)
+        assert(self.uvdata.dtype == other.uvdata.dtype)
+        assert(len(self.uvdata) == len(other.uvdata))
+
         self_copy = copy.deepcopy(self)
-        # TODO: assert equal dtype and len
         self_copy.uvdata = self.uvdata - other.uvdata
-        #print self_copy._data['hands']
 
         return self_copy
 
@@ -100,22 +109,25 @@ class Data(object):
     # gains solution are available for that data?
     def __mul__(self, gains):
         """
-        Applies complex antenna gains to the visibilities of self.
+        Applies complex antenna gains to the visibilities of ``self``.
 
-        Input:
+        :param gains:
+            Instance of ``Gains`` class. Or object with ``data`` attribute
+            that is structured numpy array and has ``dtype``:
+            dtype=[('start', '<f8'),
+                   ('stop', '<f8'),
+                   ('antenna', 'int'),
+                   ('gains', 'complex', (nif, npol,)),
+                   ('weights', '<f8', (nif, npol,))]
 
-            gains - instance of Gains class.
+        :return:
+            Instance of ``Data`` class with visibilities multiplyied by complex
+            antenna gains.
         """
 
         self_copy = copy.deepcopy(self)
 
-        # FIXME: even if gains is instance of Gains the exception is raised
-        #if not isinstance(gains, g.Gains):
-        #    raise Exception('Instances of Data can be multiplied only on\
-        #            instances of Gains!')
-
-        # Assert equal number of IFs
-        assert(self.nif == np.shape(gains._data['gains'])[1])
+        assert(self.nif == np.shape(gains.nif))
         # TODO: Now we need this to calculating gain * gains*. But try to
         # exclude this assertion
         assert(self.nstokes == 4)
@@ -126,8 +138,8 @@ class Data(object):
             uv_indxs = np.where(self.data['time'] == t)[0]
 
             # Loop through uv_indxs (different baselines with the same ``t``)
-            # and multipy visibility with baseline to gain(ant1)*gain(ant2)^*
-            # for ant1 & ant2 derived for this baseline.
+            # and multipy visibility with baseline ant1-ant2 to
+            # gain(ant1)*gain(ant2)^*.
             for uv_indx in uv_indxs:
                 bl = self.data['baseline'][uv_indx]
                 try:
@@ -147,22 +159,18 @@ class Data(object):
 
     def zero_data(self):
         """
-        Method that zeros all data.
+        Method that zeros all visibilities.
         """
-
-        self.uvdata = np.zeros(np.shape(self.uvdata),
-                               dtype=self.uvdata.dtype)
+        self.uvdata = np.zeros(np.shape(self.uvdata), dtype=self.uvdata.dtype)
 
     def load(self, fname):
         """
-        Method that loads data from FITS-file.
+        Method that loads visibilities from FITS-file.
 
-        Inputs:
-
-            fname - file name.
+        :param fname:
+            Path to FITS-file.
         """
-
-        # Don't use property ``data`` here cause self._data is ``None`` now.
+        # FIXME: Don't use property ``data`` here cause self._data is ``None`` now.
         self._data = self._io.load(fname)
         self.nif = self._io.nif
         self.nstokes = self._io.nstokes
@@ -171,11 +179,17 @@ class Data(object):
     # TODO: i need indexes of saving data in original data array!
     def save(self, data, fname):
         """
-        Save ``_data`` attribute of self to FITS-file.
+        Method that saves visibilities to FITS-file.
 
-        Inputs:
-
-            fname - file name.
+        :param data:
+            Numpy structured array with
+            dtype = [('uvw', '<f8', (3,)),
+                     ('time', '<f8'),
+                     ('baseline', 'int'),
+                     ('hands', 'complex', (nif, nstokes,)),
+                     ('weights', '<f8', (nif, nstokes,))]
+        :param fname:
+            Path to FITS-file.
         """
 
         self._io.save(data, fname)
@@ -187,29 +201,33 @@ class Data(object):
     # class too.
     def _choose_data(self, times=None, baselines=None, IF=None, stokes=None):
         """
-        Method that returns chosen data from _date structured array based on
-        user specified parameters. All checks on IF and stokes are made here
-        in one place. This method used by methods that retrieve data, plotting
-        methods.
+        Method that returns chosen data from ``_data`` numpy structured array
+        based on user specified parameters.
 
-        Inputs:
+        All checks on IF and stokes are made here in one place. This method is
+        used by methods that retrieve data, plotting methods.
 
-            times - container with start & stop time, default = all,
+        :param times (optional):
+            Container with start & stop time or ``None``. If ``None`` then use
+            all time. (default: ``None``)
 
-            baselines - one or iterable of baselines numbers, default = all,
+        :param baselines (optional):
+            One or iterable of baselines numbers or ``None``. If ``None`` then
+            use all baselines. (default: ``None``)
 
-            IF - one or iterable of IF numbers (1-#IF), default = all,
+        :parm IF (optional):
+            One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
+            use all IFs. (default: ``None``)
 
-            stokes - string - any of: I, Q, U, V, RR, LL, RL, LR, default = all
-                correlations [RR, LL, RL, LR].
+        :param stokes (optional):
+            Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
+            ``LR`` or ``None``. If ``None`` then use all available stokes.
+            (default: ``None``)
 
-        Outputs:
-
-            numpy.ndarray, numpy.ndarray
-
-                where first array is array of data with shape (#N, #IF, #STOKES)
-                and second array is 1d-array of indexes of data in ``self.data``
-                structured array.
+        :return:
+            Two numpy.ndarrays, where first array is array of data with shape
+            (#N, #IF, #STOKES) and second array is 1d-array of indexes of data
+            in ``self.data`` structured array.
         """
 
         data = self.data
@@ -304,18 +322,27 @@ class Data(object):
     # TODO: add possibility to plot real & imag part of visibilities
     def tplot(self, baselines=None, IF=None, stokes=None, style='a&p'):
         """
-        Method that plots uv-data for given baselines vs. time.
+        Method that plots uv-data vs. time.
 
-        Inputs:
+        :param baselines (optional):
+            One or iterable of baselines numbers or ``None``. If ``None`` then
+            use all baselines. (default: ``None``)
 
-            baselines - one or iterable of baselines numbers,
+        :parm IF (optional):
+            One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
+            use all IFs. (default: ``None``)
 
-            IF - one or iterable of IF numbers (1-#IF),
+        :param stokes (optional):
+            Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
+            ``LR`` or ``None``. If ``None`` then use ``I``.
+            (default: ``None``)
 
-            stokes - string - any of: I, Q, U, V, RR, LL, RL, LR.
+        :param style (optional):
+            How to plot complex visibilities - real and imaginary part
+            (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
+
+        .. note:: All checks are in ``_choose_data`` method.
         """
-
-        # All checks are in self._choose_data()
 
         if not stokes:
             stokes = 'I'
@@ -361,9 +388,26 @@ class Data(object):
     def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p'):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
-        """
 
-        # All checks are in self._choose_data()
+        :param baselines (optional):
+            One or iterable of baselines numbers or ``None``. If ``None`` then
+            use all baselines. (default: ``None``)
+
+        :parm IF (optional):
+            One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
+            use all IFs. (default: ``None``)
+
+        :param stokes (optional):
+            Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
+            ``LR`` or ``None``. If ``None`` then use ``I``.
+            (default: ``None``)
+
+        :param style (optional):
+            How to plot complex visibilities - real and imaginary part
+            (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
+
+        .. note:: All checks are in ``_choose_data`` method.
+        """
 
         if not stokes:
             stokes = 'I'
@@ -407,15 +451,22 @@ class Data(object):
 
     @property
     def baselines(self):
+        """
+        Returns list of baselines numbers.
 
+        :return:
+            List of baselines numbers.
+        """
         return sorted(list(set(self.data['baseline'])))
 
     @property
     def antennas(self):
         """
-        Returns list of antenna numbers.
-        """
+        Returns list of antennas numbers.
 
+        :return:
+            List of antennas numbers.
+        """
         return baselines_2_ants(self.baselines)
 
     @property
@@ -423,34 +474,25 @@ class Data(object):
         """
         Shortcut for all (u, v, w)-elements of self.
 
-        Output:
-
-            numpy.ndarry with shape (N, 3,).
+        :return:
+            numpy.ndarray with shape (N, 3,), where N is the number of (u, v, w)
+            points.
         """
-
         return self.data['uvw']
 
-    # TODO: should it raise Exception if data set with only 1 IF is used?
     @property
     def uvdata_freq_averaged(self):
         """
-        Shortcut for ``self._data['hands']`` averaged in IFs.
+        Shortcut for ``self.data['hands']`` averaged in IFs.
 
-        Returns:
-
-            if #IF > 1:
-
-                 returns ``self._data['hands']`` averaged in IFs,
-
-            if #IF == 1:
-
-                returns ``self._data['hands']''.
+        :returns:
+            ``self.data['hands']`` averaged in IFs, with shape (#vis,
+            #stokes).
         """
-
         if self.nif > 1:
             result = np.mean(self.uvdata, axis=1)
         else:
-            result = self.uvdata
+            result = self.uvdata[:, 0, :]
 
         return result
 
@@ -458,42 +500,44 @@ class Data(object):
     def data(self):
         """
         Shortcut for ``self._data``.
-        """
 
+        :return:
+            Structured numpy array ``self._data``.
+        """
         return self._data
 
     @data.setter
     def data(self, data):
-
         self._data = data
 
     @property
     def uvdata(self):
         """
-        Shortcut for ``self._data['hands']``.
-        """
+        Shortcut for ``self.data['hands']``.
 
+        :return:
+            Numpy.ndarray ``self._data['hands']``.
+        """
         return self.data['hands']
 
     @uvdata.setter
     def uvdata(self, uvdata):
-
         self.data['hands'] = uvdata
 
     @property
     def error(self):
         """
-        Shortcut for error associated with each visibility. It uses noise
-        calculations based on zero V stokes or successive differences
-        implemented in ``noise()`` method to infer sigma of gaussian noise.
-        Later it is supposed to add more functionality (see Issue #8).
+        Shortcut for error associated with each visibility.
 
-        Returns:
+        It uses noise calculations based on zero V stokes or successive
+        differences implemented in ``noise()`` method to infer sigma of
+        gaussian noise.  Later it is supposed to add more functionality (see
+        Issue #8).
 
-            [numpy.ndarray] (#N, #IF, #stokes) - array that repeats the shape of
-            self._data['hands'] array.
+        :return:
+            Numpy.ndarray with shape (#N, #IF, #stokes,) that repeats the shape
+            of self.data['hands'] array.
         """
-
         pass
 
     # TODO: use qq = scipy.stats.probplot((v-mean(v))/std(v), fit=0) then
@@ -506,17 +550,22 @@ class Data(object):
         V data (`RR`` - ``LL``) for computation assuming no signal in V. Else
         use successive differences approach (Brigg's dissertation).
 
-        Input:
+        :param split_scans (optional):
+            Should we calculate noise for each scan? (default: ``False``)
 
-            split_scans [bool]
-            use_V [bool]
+        :param use_V (optional):
+            Use stokes V data (``RR`` - ``LL``) to calculate noise assuming no
+            signal in stokes V? If ``False`` then use successive differences
+            approach (see Brigg's dissertation). (default: ``True``)
 
-        Output:
+        :param average_freq (optional):
+            Use IF-averaged data for calculating noise? (default: ``False``)
 
-            dictionary with keys - baseline numbers, values - array of noise
-                std for each IF (if ``use_V``==True), or array with shape
-                (4, #if) with noise std values for each IF for each hand
-                (RR, LL, ...).
+        :return:
+            Dictionary with keys that are baseline numbers and values are
+            arrays of noise std for each IF (if ``use_V==True``), or array with
+            shape (#stokes, #if) with noise std values for each IF for each
+            stokes parameter (eg. RR, LL, ...).
         """
 
         if average_freq:
@@ -563,18 +612,24 @@ class Data(object):
 
     def noise_add(self, noise=None, df=None, split_scans=False):
         """
-        Add standard gaussian noise with ``noise`` - mapping from baseline
+        Add standard gaussian noise to visibilities.
+
+        with ``noise`` - mapping from baseline
         number to std of noise or to iterables of stds (if ``split_scans`` is
         True).  If df is not None, then use t-distribtion with ``df`` d.o.f.
 
-        Inputs:
+        :param noise:
+            Mapping from baseline number to std of noise or to
+            iterables of stds (if ``split_scans`` parameter is set to ``True``).
 
-            noise - mapping from baseline number to std of noise or to
-                iterables of stds (if ``split_scans``  is set to True).
+        :param df (optional):
+            # of d.o.f. for standard Student t-distribution used as noise model.
+            If set to ``None`` then use gaussian noise model. (default:
+            ``None``)
 
-            df - # of d.o.f. for standard Student t-distribution.
-
-            split_scans [bool]
+        :param split_scans (optional):
+            Is parameter ``noise`` is mapping from baseline numbers to iterables
+            of std of noise for each scan on baseline? (default: ``False``)
         """
 
         if not df:
@@ -607,21 +662,24 @@ class Data(object):
 
         Inputs:
 
-            q [int] - number of folds.
+        :param q:
+            Number of folds for cross-validation.
 
-            fname - base name for output the results.
+        :param fname:
+            Base of file names for output the results.
 
-        Outputs:
-            ``q`` pairs of files (format that of ``io``) with training and
-            testing samples prepaired such that 1/``q``- part of visibilities
-            from each baseline falls in testing sample and other part falls in
-            training sample.
+        :return:
+            ``q`` pairs of files (format that of ``IO`` subclass that loaded
+            current instance of ``Data``) with training and testing samples
+            prepaired in a such way that 1/``q``- part of visibilities from each
+            baseline falls in testing sample and other part falls in training
+            sample.
         """
 
         # List of lists of ``q`` blocks of each baseline
         baselines_chunks = list()
 
-        # split data of each baseline to ``q`` blocks
+        # Split data of each baseline to ``q`` blocks
         for baseline in self.baselines:
             baseline_data = self.data[np.where(self.data['baseline'] ==
                                                baseline)]
@@ -629,13 +687,13 @@ class Data(object):
             indxs = np.arange(blen)
             # Shuffle indexes
             np.random.shuffle(indxs)
-            # indexes of ``q`` nearly equal chunks
+            # Indexes of ``q`` nearly equal chunks
             q_indxs = np.array_split(indxs, q)
             # ``q`` blocks for current baseline
             baseline_chunks = [baseline_data[indx] for indx in q_indxs]
             baselines_chunks.append(baseline_chunks)
 
-        # Combine ``q`` chunks to ``q`` pairs of training & testing datasets.
+        # Combine ``q`` chunks to ``q`` pairs of training & testing datasets
         for i in range(q):
             # List of i-th chunk for testing dataset for each baseline
             testing_data = [baseline_chunks[i] for baseline_chunks in
@@ -656,15 +714,18 @@ class Data(object):
 
     def cv_score(self, model, stokes='I', average_freq=True):
         """
-        Returns Cross-Validation score for self (as testing cv-sample) and
-        model (trained on training cv-sample).
+        Method that returns cross-validation score for ``self`` (as testing
+        cv-sample) and model (trained on training cv-sample).
 
-        Inputs:
+        :param model:
+            Model to cross-validate. Instance of ``Model`` class.
 
-            model [instance of Model class] - model to cross-validate.
+        :param stokes (optional):
+            Stokes parameter: ``I``, ``Q``, ``U``, ``V``. (default: ``I``)
 
-            stokes [str] - string of any of stokes parameters - ['I', 'Q',
-                'U', 'V'], eg. 'I', 'QU'...
+        :return:
+            Cross-validation score between uv-data of current instance and model
+            for stokes ``I``.
         """
 
         baselines_cv_scores = list()
@@ -724,7 +785,15 @@ class Data(object):
 
     def substitute(self, model, baseline=None):
         """
-        Substitue data of self with visibilities of the model.
+        Method that substitutes visibilities of ``self`` model values.
+
+        :param model:
+            Model to cross-validate. Instance of ``Model`` class.
+
+        :param baseline (optional):
+            Number that corresponds to baseline on which to substitute
+            visinilities. If ``None`` then substitute on all baselines.
+            (default: ``None``)
         """
 
         if baseline is None:

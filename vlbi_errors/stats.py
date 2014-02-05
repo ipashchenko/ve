@@ -132,28 +132,24 @@ class CrossValidation(object):
     """
     Class that implements cross-validation analysis of image-plane models.
     """
-
     def __init__(self, data):
-
         self.data = data
 
     def run(self, modelcard=None, testcard=None, stokes='I'):
         """
-        Method that cross-validate set of models obtained by modelling training
-        samples on corresponding set of testing samples.
+        Method that cross-validates set of image-plane models obtained by
+        modelling training samples on corresponding set of testing samples.
 
-            Inputs:
+        :param modelfiles:
+            Wildcard of file names ~ 'model_0i_0jofN.txt', where model in
+            'model_0i_0jofN.txt' file is from modelling ``0j``-th training
+            sample ('train_0jofN.FITS') with ``0i``-th model.
 
-                modelfiles - wildcard of file names ~ 'model_0i_0jofN.txt',
-                    where model in 'model_0i_0jofN.txt' file is from modelling
-                    ``0j``-th training sample ('train_0jofN.FITS') with
-                    ``0i``-th model.
+        :param testfiles:
+            Wildcard of file names ~ 'test_0jofN.FITS'.
 
-                testfiles - wildcard of file names ~ 'test_0jofN.FITS'.
-
-            Output:
-
-                list of lists [modelfilename, CV-score, sigma_cv_score].
+        :return:
+            List of lists [modelfilename, CV-score, sigma_cv_score].
         """
 
         modelfiles = glob.glob(modelcard)

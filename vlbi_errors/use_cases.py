@@ -1,32 +1,29 @@
 #!/usr/bin python
 # -*- coding: utf-8 -*-
 
-
 import glob
-import gains
+from gains import Absorber
 from model import Model
 from new_data import Data
-#from vlbi import Data
-#from stat import Bootstrap
-#from stat import CrossValidation
 
 
 if __name__ == '__main__':
 
-    #load gains from self-calibration sequence of FITS-files
-    absorber = gains.Absorber()
-    file_list = glob.glob('*.FITS')
-    absorber.absorb(file_list)
+    gains = Absorber()
+    fnames = glob.glob('/home/ilya/work/vlbi_errors/fits/12*CALIB*FITS')
+    fnames.remove('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
+    fnames.sort(reverse=True)
+    gains.absorb(fnames)
+    gains.absorb_one('/home/ilya/work/vlbi_errors/fits/1226+023_SPT-C1.FITS',
+                     snver=2)
 
+    model = Data()
+    split_data = Data()
     imodel = Model()
-    imodel.add_from_txt('cc.txt')
-    import ipdb; ipdb.set_trace() ### XXX BREAKPOINT
-
-   # model = Data()
-   # split_data = Data()
-   # model.load('SPLIT.FITS')
-   # split_data.load('SPLIT.FITS')
-   # model.substitute(imodel)
+    imodel.add_from_txt('/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt')
+    model.load('/home/ilya/work/vlbi_errors/fits/1226+023_SPT-C1.FITS')
+    split_data.load('/home/ilya/work/vlbi_errors/fits/1226+023_SPT-C1.FITS')
+    model.substitute(imodel)
    # gained_model = Absorber.absorbed_gains * model
 
    # # 1) Bootstrap data from self-calibrated data and

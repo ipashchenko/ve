@@ -17,6 +17,7 @@ class Model(object):
     def __init__(self):
 
         self.mas_to_rad = 4.8481368 * 1E-09
+        self.degree_to_rad = 0.01745329
         self._uvws = np.array([], dtype=[('u', float), ('v', float), ('w',
                               float)])
         self._image_stokes = {'I': np.array([], dtype=[('flux', float),
@@ -179,9 +180,10 @@ class Model(object):
         dt = self._image_stokes[stoke].dtype
 
         if style == 'aips':
-            adds = np.loadtxt(fname)
-            if not adds.shape[1] == 6:
-                raise Exception
+            adds_ = np.loadtxt(fname)
+            adds = adds_.copy()
+            adds[:, 1] = self.degree_to_rad * adds_[:, 1]
+            adds[:, 2] = self.degree_to_rad * adds_[:, 2]
 
         elif style == 'difmap':
             adds_ = np.loadtxt(fname, comments='!')
@@ -190,15 +192,17 @@ class Model(object):
                                                                 np.pi / 180.)
             adds[:, 2] = self.mas_to_rad * adds_[:, 1] * np.cos(adds_[:, 2] *
                                                                 np.pi / 180.)
+        else:
+            raise Exception('style = aips or difmap')
 
-            # If components are CCs
-            if adds.shape[1] == 3:
-                adds = np.hstack((adds, np.zeros((len(adds), 3,)),))
-            elif adds.shape[1] == 6:
-                raise NotImplementedError('Implement difmap format of gaussian'
-                                          'components')
-            else:
-                raise Exception
+        # If components are CCs
+        if adds.shape[1] == 3:
+            adds = np.hstack((adds, np.zeros((len(adds), 3,)),))
+        elif adds.shape[1] == 6:
+            raise NotImplementedError('Implement difmap format of gaussian'
+                                      'components')
+        else:
+            raise Exception
 
         self._image_stokes[stoke] = adds.ravel().view(dt)
         self._updated[stoke] = True
@@ -232,3 +236,10 @@ class Model(object):
                 self._uv_correlations[hand] = np.array([], dtype=complex)
         else:
             self._uv_correlations[hand] = np.array([], dtype=complex)
+
+
+if __name__ == '__main__':
+
+    imodel = Model()
+    imodel.add_from_txt('/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt')
+    print imodel._image_stokes

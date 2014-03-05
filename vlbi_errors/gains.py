@@ -3,8 +3,10 @@
 
 import copy
 import numpy as np
-import pylab as plt
-#import new_data as newd
+try:
+    import pylab as plt
+except ImportError:
+    pylab = None
 from data_io import AN
 from utils import baselines_2_ants
 
@@ -91,7 +93,8 @@ class Gains(object):
     def __mul__(self, other):
         """
         Method that multiplies complex antenna gains of ``self`` on gains of
-        another instance of ``Gains`` class.
+        another instance of ``Gains`` class. ``Self`` must have more time
+        steps then ``other``.
 
         :param other:
             Instance of ``Gains`` class.
@@ -108,16 +111,21 @@ class Gains(object):
                 indxs_self = np.where(0.5 * (self._data['start'] +
                                       self._data['stop']) == t)[0]
                 for ant in self._data[indxs_self]['antenna']:
-                    # Indexes of self._data array wich have ``t`` and ``ant``
+                    # Indexes of self._data array which have ``t`` and ``ant``
                     indx = np.where((0.5 * (self._data['start'] +
                                     self._data['stop']) == t) &
                                     (self._data['antenna'] == ant))[0]
+                    print (indx)
+                    print (np.shape(self._data[indx]['gains'] ))
+                    print (np.shape(other.find_gains_for_antenna(t, ant)))
                     self_copy._data['gains'][indx] =\
                             self._data[indx]['gains'] *\
                             other.find_gains_for_antenna(t, ant)
+                    if other.find_gains_for_antenna(t, ant) is None:
+                        print self_copy._data['gains'][indx]
         else:
-            raise Exception('Gains instances can be multiplied only on\
-                    instances of Gains class!')
+            raise Exception('Gains instances can be multiplied only on'
+                            'instances of Gains class!')
 
         return self_copy
 
@@ -141,7 +149,7 @@ class Gains(object):
                 indxs_self = np.where(0.5 * (self._data['start'] +
                                       self._data['stop']) == t)[0]
                 for ant in self._data[indxs_self]['antenna']:
-                    # Indexes of self._data array wich have ``t`` and ``ant``
+                    # Indexes of self._data array which have ``t`` and ``ant``
                     indx = np.where((0.5 * (self._data['start'] +
                                     self._data['stop']) == t) &
                                     (self._data['antenna'] == ant))[0]
@@ -149,8 +157,8 @@ class Gains(object):
                             self._data[indx]['gains'] /\
                             other.find_gains_for_antenna(t, ant)
         else:
-            raise Exception('Gains instances can be divided only by\
-                    instances of Gains class!')
+            raise Exception('Gains instances can be divided only by '
+                            'instances of Gains class!')
 
         return self_copy
 
@@ -177,8 +185,15 @@ class Gains(object):
         indx = np.where((t <= self._data['stop']) & (t >= self._data['start'])
                 & (self._data['antenna'] == ant))[0]
 
-        # Shape (#if, #pol)
-        gains = np.squeeze(self._data[indx]['gains'])
+        if not indx:
+            print "No gains for time and antenna: " + str(t) + ' ' + str(ant)
+            gains = np.empty(np.shape(self.gains[0]))
+            gains[:] = np.nan
+            print "Returning"
+            print gains
+        else:
+            # Shape (#if, #pol)
+            gains = np.squeeze(self._data[indx]['gains'])
 
         return gains
 
@@ -228,27 +243,29 @@ class Gains(object):
         Method that plots complex antenna gains for given antennas vs. time.
 
         :param antenna:
-            Antenna/s for which plot gains.
+            Antenna for which plot gains.
 
         :param IF:
-            IF number/s for which plot gains.
+            IF number for which plot gains.
 
         :param pol:
             Polarization for which plot gains. ``R`` or ``L``.
         """
 
         if not antenna:
-            raise Exception
+            raise Exception('Choose antenna number to display!')
 
         if not IF:
             raise Exception('Choose IF # to display: from ' + str(1) + ' to ' +
-                             str(np.shape(self._data['gains']))[1])
+                             str(np.shape(self._data['gains'])[1]))
+        else:
+            IF -= 1
 
         if not pol:
             raise Exception('Choose pol. to display: L or R')
 
         antenna_data = self._data[np.where(self._data['antenna'] == antenna)]
-        # TODO: i need function choose parameters
+        # TODO: i need function to choose parameters
         #smth. like data = self._choose_data(antenna=antenna, IF=IF, pol=None)
         times = 0.5 * (antenna_data['start'] + antenna_data['stop'])
 
@@ -280,16 +297,16 @@ class Absorber(object):
         self._absorbed_gains = Gains()
         self.fnames = list()
 
-    def absorb_one(self, fname):
+    def absorb_one(self, fname, snver=1):
         """
-        Method that absorbes complex antenna gains from specified FITS-file.
+        Method that absorbs complex antenna gains from specified FITS-file.
 
         :param fname:
             Path to FITS-file.
         """
 
         gain = Gains()
-        gain.load(fname)
+        gain.load(fname, snver=snver)
 
         # if no any gains in
         if self._absorbed_gains._data is None:
@@ -309,7 +326,11 @@ class Absorber(object):
         """
 
         for fname in fnames:
-            self.absorb_one(fname)
+            try:
+                self.absorb_one(fname)
+            except:
+                print "Failed to read in gains"
+                print fname
 
     def exclude_one(self, fname):
         """
@@ -347,3 +368,15 @@ class Absorber(object):
         #if not isinstance(data, newd.Data):
         #    raise Exception
         return data.__mul__(self.absorbed_gains)
+
+
+if __name__ == '__main__':
+
+    gains = Absorber()
+    gains.absorb_one('/home/ilya/work/vlbi_errors/fits/1226+023_SPT-C1.FITS',
+                     snver=2)
+    import glob
+    fnames = glob.glob('/home/ilya/work/vlbi_errors/fits/12*CALIB*FITS')
+    fnames.remove('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
+    gains.absorb(fnames)
+

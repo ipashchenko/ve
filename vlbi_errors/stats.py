@@ -27,9 +27,9 @@ class Bootstrap(object):
     :param calibs:
         Iterable of paths to self-calibration sequence of FITS-files. That is
         used for constructing gain curves for each antenna. AIPS keep antenna
-        gains solutions in each iteration of self-calibration cyrcle in
+        gains solutions in each iteration of self-calibration circle in
         FITS-files that are calibrated. So in sequence of 1st, 2nd, ..., nth
-        files gain curve info lives in 2nd, ..., nth FITS-file.
+        files gain curve info lives in 1nd, ..., (n-1)th FITS-file.
     """
 
     def __init__(self, model, uncal=None, calibs=None):
@@ -70,13 +70,13 @@ class Bootstrap(object):
             raise NotImplementedError('Implement split_scans=True option!')
 
         noise_residuals = self.residuals.noise(split_scans=split_scans,
-                                        use_V=use_V)
+                                               use_V=use_V)
         if use_V:
             nstokes = self.residuals.nstokes
             nif = self.residuals.nif
             for key, value in noise_residuals.items():
-                noise_residuals[key] = (value.repeat(nstokes).reshape((len(value),
-                                                                       nstokes)))
+                noise_residuals[key] =\
+                    (value.repeat(nstokes).reshape((len(value), nstokes)))
         # Now ``noise_residuals`` has shape (nstokes, nif)
 
         # Do resampling
@@ -88,10 +88,11 @@ class Bootstrap(object):
             # by noise_residuals[baseline] std
             for baseline in self.residuals.baselines:
                 # Find data from one baseline
-                indxs = np.where(self.residuals._data['baseline'] == baseline)[0]
+                indxs = np.where(self.residuals._data['baseline'] ==
+                                 baseline)[0]
                 data_to_add_normvars = self.residuals._data[indxs]
-                # Generate (len(indxs),8,4,) array of random variables ``anormvars``
-                # to add:
+                # Generate (len(indxs),8,4,) array of random variables
+                # ``anormvars`` to add:
                 lnormvars = list()
                 for std in noise_residuals[baseline].flatten():
                     lnormvars.append(np.random.normal(std, size=len(indxs)))
@@ -112,7 +113,7 @@ class Bootstrap(object):
 
                 # Add to residuals.substitute(model)
                 self.model_uv._data['hands'][indxs] =\
-                    self.model_uv._data['hands'][indxs] +\
+                    self.model_uv._data['hands'][indxs] + \
                     resampled_data['hands']
 
         self.last_calib.save(self.model_uv._data, outname)
@@ -121,6 +122,7 @@ class Bootstrap(object):
             split_scans=False, use_V=True):
         """
         Generate ``n`` data sets.
+
         """
         for i in range(n):
             outname_ = outname + '_' + str(i + 1) + '.FITS'

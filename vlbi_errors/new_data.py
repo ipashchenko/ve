@@ -4,7 +4,10 @@
 import copy
 import math
 import numpy as np
-from pylab import ylim, subplot, show, plot
+try:
+    import pylab
+except ImportError:
+    pylab = None
 from data_io import Groups, IDI
 from utils import baselines_2_ants
 from utils import index_of
@@ -344,6 +347,9 @@ class Data(object):
         .. note:: All checks are in ``_choose_data`` method.
         """
 
+        if not pylab:
+            raise Exception('Install ``pylab`` for plotting!')
+
         if not stokes:
             stokes = 'I'
 
@@ -374,16 +380,16 @@ class Data(object):
         #angles = np.angle(data)
         #amplitudes = np.real(np.sqrt(data * np.conj(data)))
 
-        subplot(2, 1, 1)
+        pylab.subplot(2, 1, 1)
         for _if in range(n_if):
             # TODO: plot in different colors and make a legend
-            plot(times, a1[:, _if], syms[_if])
-        subplot(2, 1, 2)
+            pylab.plot(times, a1[:, _if], syms[_if])
+        pylab.subplot(2, 1, 2)
         for _if in range(n_if):
-            plot(times, a2[:, _if], syms[_if])
+            pylab.plot(times, a2[:, _if], syms[_if])
             if style == 'a&p':
-                ylim([-math.pi, math.pi])
-        show()
+                pylab.ylim([-math.pi, math.pi])
+        pylab.show()
 
     def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p'):
         """
@@ -408,6 +414,9 @@ class Data(object):
 
         .. note:: All checks are in ``_choose_data`` method.
         """
+
+        if not pylab:
+            raise Exception('Install ``pylab`` for plotting!')
 
         if not stokes:
             stokes = 'I'
@@ -438,16 +447,16 @@ class Data(object):
         else:
             raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
 
-        subplot(2, 1, 1)
+        pylab.subplot(2, 1, 1)
         for _if in range(n_if):
             # TODO: plot in different colors and make a legend
-            plot(uv_radius, a2[:, _if], syms[_if])
-        subplot(2, 1, 2)
+            pylab.plot(uv_radius, a2[:, _if], syms[_if])
+        pylab.subplot(2, 1, 2)
         for _if in range(n_if):
-            plot(uv_radius, a1[:, _if], syms[_if])
+            pylab.plot(uv_radius, a1[:, _if], syms[_if])
             if style == 'a&p':
-                ylim([-math.pi, math.pi])
-        show()
+                pylab.ylim([-math.pi, math.pi])
+        pylab.show()
 
     @property
     def baselines(self):
@@ -814,5 +823,8 @@ class Data(object):
 
 if __name__ == '__main__':
 
-    data = open_fits('PRELAST_CALIB.FITS')
-    data.save(data.data, 'test')
+    data = open_fits('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
+    from model import Model
+    imodel = Model()
+    imodel.add_from_txt('/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt')
+    data.substitute(imodel)

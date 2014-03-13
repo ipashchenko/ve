@@ -6,6 +6,7 @@ import numpy as np
 from utils import EmptyImageFtError
 
 
+#as TODO: use IO.PyFits subclasses to i/o in this class
 class Model(object):
     """
     Class that represents models.

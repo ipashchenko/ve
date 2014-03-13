@@ -378,5 +378,6 @@ if __name__ == '__main__':
     import glob
     fnames = glob.glob('/home/ilya/work/vlbi_errors/fits/12*CALIB*FITS')
     fnames.remove('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
+    fnames.sort(reverse=True)
     gains.absorb(fnames)
 

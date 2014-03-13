@@ -3,7 +3,7 @@
 
 from model import Model
 from gains import Absorber
-from new_data import open_fits
+from uv_data import open_fits
 import glob
 import copy
 import numpy as np
@@ -228,7 +228,8 @@ if __name__ == '__main__':
     #residuals = uncal - absorber * last_calib
     model = Model()
     model.add_from_txt('cc.txt')
-    bootstrap = Bootstrap(model, uncal='FIRST_CALIB.FITS',
+    bootstrap = Bootstrap(model,
+                          uncal='/home/ilya/work/vlbi_errors/fits/1226+023_SPT-C1.FITS',
                           calibs=['PRELAST_CALIB.FITS'],
                           nonparametric=False,
                           split_scans=False,

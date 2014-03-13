@@ -4,7 +4,7 @@
 import glob
 from gains import Absorber
 from model import Model
-from new_data import Data
+from uv_data import Data
 
 
 if __name__ == '__main__':

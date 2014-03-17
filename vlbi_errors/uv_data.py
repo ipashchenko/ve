@@ -547,7 +547,7 @@ class Data(object):
             Numpy.ndarray with shape (#N, #IF, #stokes,) that repeats the shape
             of self.data['hands'] array.
         """
-        pass
+        raise NotImplementedError()
 
     # TODO: use qq = scipy.stats.probplot((v-mean(v))/std(v), fit=0) then
     # plot(qq[0], qq[1]) - how to check normality
@@ -621,24 +621,25 @@ class Data(object):
 
     def noise_add(self, noise=None, df=None, split_scans=False):
         """
-        Add standard gaussian noise to visibilities.
-
-        with ``noise`` - mapping from baseline
-        number to std of noise or to iterables of stds (if ``split_scans`` is
-        True).  If df is not None, then use t-distribtion with ``df`` d.o.f.
+        Add noise to visibilities. Here std - standard deviation of
+        real/imaginary component.
 
         :param noise:
-            Mapping from baseline number to std of noise or to
-            iterables of stds (if ``split_scans`` parameter is set to ``True``).
+            Mapping from baseline number to:
+
+            1) std of noise. Will use one value of std for all stokes and IFs.
+            2) iterable of stds. Will use different values of std for different
+                stokes and IFs (not implemented yet).
 
         :param df (optional):
-            # of d.o.f. for standard Student t-distribution used as noise model.
-            If set to ``None`` then use gaussian noise model. (default:
+            Number of d.o.f. for standard Student t-distribution used as noise
+            model.  If set to ``None`` then use gaussian noise model. (default:
             ``None``)
 
         :param split_scans (optional):
-            Is parameter ``noise`` is mapping from baseline numbers to iterables
-            of std of noise for each scan on baseline? (default: ``False``)
+            Is parameter ``noise`` is mapping from baseline numbers to
+            iterables of std of noise for each scan on baseline? (default:
+            ``False``)
         """
 
         if not df:
@@ -680,9 +681,9 @@ class Data(object):
         :return:
             ``q`` pairs of files (format that of ``IO`` subclass that loaded
             current instance of ``Data``) with training and testing samples
-            prepaired in a such way that 1/``q``- part of visibilities from each
-            baseline falls in testing sample and other part falls in training
-            sample.
+            prepaired in a such way that 1/``q``- part of visibilities from
+            each baseline falls in testing sample and other part falls in
+            training sample.
         """
 
         # List of lists of ``q`` blocks of each baseline
@@ -733,8 +734,8 @@ class Data(object):
             Stokes parameter: ``I``, ``Q``, ``U``, ``V``. (default: ``I``)
 
         :return:
-            Cross-validation score between uv-data of current instance and model
-            for stokes ``I``.
+            Cross-validation score between uv-data of current instance and
+            model for stokes ``I``.
         """
 
         baselines_cv_scores = list()

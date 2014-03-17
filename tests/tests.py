@@ -7,8 +7,7 @@ import pyfits as pf
 from unittest import TestCase, skip
 from vlbi_errors.utils import (aips_bintable_fortran_fields_to_dtype_conversion,
                                index_of)
-from vlbi_errors.data_io import IO, PyFitsIO
-from vlbi_errors.data_io import Groups
+from vlbi_errors.data_io import IO, PyFitsIO, Groups
 from vlbi_errors.uv_data import Data, open_fits
 
 
@@ -65,7 +64,7 @@ class Test_PyFitsIO(TestCase):
             self.assertTrue(np.alltrue(groups_hdus[0].data[i][-1] ==
                                        hdu.data[i][-1]))
 
-@skip
+
 class Test_Data_Groups(TestCase):
     def setUp(self):
         self.split_groups_uv_fname = \
@@ -74,19 +73,18 @@ class Test_Data_Groups(TestCase):
             '/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS'
         self.im_fname =\
             '/home/ilya/work/vlbi_errors/fits/1226+023_ICLN_SEQ11.FITS'
-        self.sc_uv = Data()
-        self.split_uv = Data()
+        self.sc_uv = Data(io=Groups())
+        self.split_uv = Data(io=Groups())
         self.sc_uv.load(self.sc_groups_uv_fname)
         self.split_uv.load(self.split_groups_uv_fname)
 
-    def test_open_fits(self):
-        sc_uv = open_fits(self.sc_groups_uv_fname)
-        # Test that sc_uv is the same as self.sc_uv
+   # @skip
+   # def test_open_fits(self):
+   #     sc_uv = open_fits(self.sc_groups_uv_fname)
+   #     # Test that sc_uv is the same as self.sc_uv
 
     def test_noise(self):
-        self.sc_uv.load(self.sc_groups_uv_fname)
-        # Test that ``noise`` method does return dictionary with keys that are
-        # arrays with right dimensions ((1,) or (nstokes, nif,)).
+        #self.sc_uv.load(self.sc_groups_uv_fname)
 
         noise = self.sc_uv.noise(use_V=True, average_freq=False)
         self.assertEqual(len(noise), len(self.sc_uv.baselines))
@@ -105,16 +103,24 @@ class Test_Data_Groups(TestCase):
         noise = self.sc_uv.noise(use_V=True, average_freq=True)
         self.assertEqual(len(noise), len(self.sc_uv.baselines))
         for key in noise:
-            self.assertEqual(np.shape(noise[key]), (self.sc_uv.nif, self.sc_uv.nstokes))
-            self.assertEqual(noise[key].ndim, 1)
+            self.assertEqual(noise[key].ndim, 0)
             self.assertEqual(noise[key].size, 1)
 
         noise = self.sc_uv.noise(use_V=False, average_freq=True)
         self.assertEqual(len(noise), len(self.sc_uv.baselines))
         for key in noise:
-            self.assertEqual(np.shape(noise[key]), (self.sc_uv.nif, self.sc_uv.nstokes))
+            self.assertEqual(np.shape(noise[key]), (self.sc_uv.nstokes,))
             self.assertEqual(noise[key].ndim, 1)
             self.assertEqual(noise[key].size, self.sc_uv.nstokes)
+
+    def test_noise_add(self):
+        sc_uv = Data(io=Groups())
+        sc_uv.load(self.sc_groups_uv_fname)
+        for i in np.random.random_integers(0, len(self.sc_uv.baselines) - 1,
+                size=5):
+            self.sc_uv.noise_add(noise={self.sc_uv.baselines[i]: 1.})
+            self.assertGreater(self.sc_uv.noise(average_freq=True)[self.sc_uv.baselines[i]],
+                               sc_uv.noise(average_freq=True)[self.sc_uv.baselines[i]])
 
 
 @skip

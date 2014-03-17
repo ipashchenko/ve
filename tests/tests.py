@@ -4,10 +4,12 @@
 import numpy as np
 import glob
 import pyfits as pf
-from unittest import TestCase
+from unittest import TestCase, skip
 from vlbi_errors.utils import (aips_bintable_fortran_fields_to_dtype_conversion,
                                index_of)
-from vlbi_errors.data_io import IO, PyFitsIO, Groups
+from vlbi_errors.data_io import IO, PyFitsIO
+from vlbi_errors.data_io import Groups
+from vlbi_errors.uv_data import Data, open_fits
 
 
 class Test_utils(TestCase):
@@ -38,28 +40,50 @@ class Test_utils(TestCase):
 
 class Test_IO(TestCase):
     def setUp(self):
-        self.groups_uv_file = \
-            '/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS'
-        self.idi_uv_file = None
-        self.im_file = \
-            '/home/ilya/work/vlbi_errors/fits/1226+023_ICLN_SEQ11.FITS'
         self.io = IO()
 
     def test_IO(self):
-        self.assertRaises(NotImplementedError, self.io.load())
-        self.assertRaises(NotImplementedError, self.io.save())
-
-    def test_PyFitsIO(self):
-        # TODO: How to compare HDU? Compare all keys in header and parnames
+        with self.assertRaises(NotImplementedError) as context:
+            self.io.load()
+            self.io.save()
 
 
-class Test_Data(TestCase):
+class Test_PyFitsIO(TestCase):
     def setUp(self):
-        self.self_calibrated_fname =\
-            '/home/ilya/work/vlbi_errors/fits/11226+023_CALIB_SEQ10.FITS'
-        self.image_fname =\
+        self.groups_uv_fname = \
+            '/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS'
+        self.idi_uv_fname = None
+        self.im_fname = \
             '/home/ilya/work/vlbi_errors/fits/1226+023_ICLN_SEQ11.FITS'
 
+    def test_get_hdu_groups(self):
+        # TODO: How to compare HDU? Compare all keys in header and parnames
+        groups_hdus = pf.open(self.groups_uv_fname)
+        uv = PyFitsIO()
+        hdu = uv.get_hdu(self.groups_uv_fname)
+        for i in range(len(groups_hdus[0].data)):
+            self.assertTrue(np.alltrue(groups_hdus[0].data[i][-1] ==
+                                       hdu.data[i][-1]))
+
+@skip
+class Test_Data(TestCase):
+    def setUp(self):
+        self.split_groups_uv_fname = \
+            '/home/ilya/work/vlbi_errors/fits/1226+023_SPT-C1.FITS'
+        self.sc_groups_uv_fname =\
+            '/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS'
+        self.im_fname =\
+            '/home/ilya/work/vlbi_errors/fits/1226+023_ICLN_SEQ11.FITS'
+        self.sc_uv = Data()
+        self.split_uv = Data()
+        self.sc_uv.load(self.sc_groups_uv_fname)
+        self.split_uv.load(self.split_groups_uv_fname)
+
+    def test_open_fits(self):
+        sc_uv = open_fits(self.sc_groups_uv_fname)
+        # Test that sc_uv is the same as self.sc_uv
+
+@skip
 class Test_gains(TestCase):
     def setUp(self):
         fnames = glob.glob('/home/ilya/work/vlbi_errors/fits/12*CALIB*FITS')

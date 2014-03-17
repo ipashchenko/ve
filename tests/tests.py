@@ -66,7 +66,7 @@ class Test_PyFitsIO(TestCase):
                                        hdu.data[i][-1]))
 
 @skip
-class Test_Data(TestCase):
+class Test_Data_Groups(TestCase):
     def setUp(self):
         self.split_groups_uv_fname = \
             '/home/ilya/work/vlbi_errors/fits/1226+023_SPT-C1.FITS'
@@ -82,6 +82,40 @@ class Test_Data(TestCase):
     def test_open_fits(self):
         sc_uv = open_fits(self.sc_groups_uv_fname)
         # Test that sc_uv is the same as self.sc_uv
+
+    def test_noise(self):
+        self.sc_uv.load(self.sc_groups_uv_fname)
+        # Test that ``noise`` method does return dictionary with keys that are
+        # arrays with right dimensions ((1,) or (nstokes, nif,)).
+
+        noise = self.sc_uv.noise(use_V=True, average_freq=False)
+        self.assertEqual(len(noise), len(self.sc_uv.baselines))
+        for key in noise:
+            self.assertEqual(np.shape(noise[key]), (self.sc_uv.nif,))
+            self.assertEqual(noise[key].ndim, 1)
+            self.assertEqual(noise[key].size, self.sc_uv.nif)
+
+        noise = self.sc_uv.noise(use_V=False, average_freq=False)
+        self.assertEqual(len(noise), len(self.sc_uv.baselines))
+        for key in noise:
+            self.assertEqual(np.shape(noise[key]), (self.sc_uv.nif, self.sc_uv.nstokes))
+            self.assertEqual(noise[key].ndim, self.sc_uv.nif)
+            self.assertEqual(noise[key].size, self.sc_uv.nif * self.sc_uv.nstokes)
+
+        noise = self.sc_uv.noise(use_V=True, average_freq=True)
+        self.assertEqual(len(noise), len(self.sc_uv.baselines))
+        for key in noise:
+            self.assertEqual(np.shape(noise[key]), (self.sc_uv.nif, self.sc_uv.nstokes))
+            self.assertEqual(noise[key].ndim, 1)
+            self.assertEqual(noise[key].size, 1)
+
+        noise = self.sc_uv.noise(use_V=False, average_freq=True)
+        self.assertEqual(len(noise), len(self.sc_uv.baselines))
+        for key in noise:
+            self.assertEqual(np.shape(noise[key]), (self.sc_uv.nif, self.sc_uv.nstokes))
+            self.assertEqual(noise[key].ndim, 1)
+            self.assertEqual(noise[key].size, self.sc_uv.nstokes)
+
 
 @skip
 class Test_gains(TestCase):

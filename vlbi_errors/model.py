@@ -132,8 +132,8 @@ class Model(object):
                 RR = self.ft(stoke='V')
                 LL = RR
             else:
-                raise EmptyImageFtError('Not enough data for RR&LL visibility\
-                        calculation')
+                raise EmptyImageFtError('Not enough data for RR&LL visibility'
+                                        ' calculation')
             self._uv_correlations['RR'] = RR
             self._uv_correlations['LL'] = LL
 
@@ -145,8 +145,8 @@ class Model(object):
                 # RL = FT(Q + j*U)
                 # LR = FT(Q - j*U)
             else:
-                raise EmptyImageFtError('Not enough data for RL&LR visibility\
-                        calculation')
+                raise EmptyImageFtError('Not enough data for RL&LR visibility'
+                                        ' calculation')
             self._uv_correlations['RL'] = RL
             self._uv_correlations['LR'] = LR
 
@@ -163,7 +163,7 @@ class Model(object):
             Stokes parameter of file ``fname``. (default: ``I``)
         """
         raise NotImplementedError('Implement loading  CC-table of FITS-file')
-        self._updated[stoke] = True
+        #self._updated[stoke] = True
 
     def add_from_txt(self, fname, stoke='I', style='aips'):
         """
@@ -201,7 +201,7 @@ class Model(object):
             adds = np.hstack((adds, np.zeros((len(adds), 3,)),))
         elif adds.shape[1] == 6:
             raise NotImplementedError('Implement difmap format of gaussian'
-                                      'components')
+                                      ' components')
         else:
             raise Exception
 

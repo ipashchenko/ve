@@ -324,8 +324,7 @@ class Groups(PyFitsIO):
             # Now temp has shape (20156, 8, 4, 3, 1, 1, 1)
 
         temp = change_shape(temp, self.data_of__data, {key:
-                                                           self.data_of_data[key][0] for key in
-                                                       self.data_of_data.keys()})
+                                                           self.data_of_data[key][0] for key in self.data_of_data.keys()})
         # => (20156, 1, 1, 8, 1, 4, 3) as 'DATA' part of recarray
 
         # Write regular array data (``temp``) and corresponding parameters to
@@ -400,7 +399,7 @@ class Groups(PyFitsIO):
         GroupsHDU.
         """
 
-        b = self._data_to_HDU(_data, self.header)
+        b = self._data_to_HDU(_data, self.hdu.header)
 
         hdulist = pf.HDUList([b])
         for hdu in self.hdulist[1:]:

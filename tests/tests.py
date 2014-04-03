@@ -113,6 +113,7 @@ class Test_Data_Groups(TestCase):
             self.assertEqual(noise[key].ndim, 1)
             self.assertEqual(noise[key].size, self.sc_uv.nstokes)
 
+    # TODO: Extend tests after implementing more general options.
     def test_noise_add(self):
         sc_uv = Data(io=Groups())
         sc_uv.load(self.sc_groups_uv_fname)
@@ -121,6 +122,16 @@ class Test_Data_Groups(TestCase):
             self.sc_uv.noise_add(noise={self.sc_uv.baselines[i]: 1.})
             self.assertGreater(self.sc_uv.noise(average_freq=True)[self.sc_uv.baselines[i]],
                                sc_uv.noise(average_freq=True)[self.sc_uv.baselines[i]])
+
+
+class Test_model(TestCase):
+    def setUp(self):
+        self.im_fits_fname = \
+            '/home/ilya/work/vlbi_errors/fits/1226+023_ICLN_SEQ11.FITS'
+        self.im_txt_aips_fname = \
+            '/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt'
+        self.im_txt_difmap_fname = \
+            '/home/ilya/work/vlbi_errors/txt/cc_difmap.txt'
 
 
 @skip

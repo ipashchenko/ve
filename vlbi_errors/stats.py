@@ -9,6 +9,14 @@ import copy
 import numpy as np
 
 
+class AddNoise(object):
+    """
+    Class that implements the simplest method of errors estimates.
+    """
+    def __init__(self, n=100):
+        pass
+
+
 class Bootstrap(object):
     """
     Class that implements bootstrapping of uv-data.
@@ -29,7 +37,9 @@ class Bootstrap(object):
         used for constructing gain curves for each antenna. AIPS keep antenna
         gains solutions in each iteration of self-calibration circle in
         FITS-files that are calibrated. So in sequence of 1st, 2nd, ..., nth
-        files gain curve info lives in 1nd, ..., (n-1)th FITS-file.
+        (final) files gain curve info lives in 1nd, ..., (n-1)th FITS-file.
+        Sequence must be in order of self-calibration (longer solution times
+        go first).
     """
 
     def __init__(self, model, uncal=None, calibs=None):

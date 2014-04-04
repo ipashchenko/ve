@@ -4,6 +4,7 @@
 import math
 import numpy as np
 from utils import EmptyImageFtError
+from data_io import BinTable
 
 
 #as TODO: use IO.PyFits subclasses to i/o in this class
@@ -152,7 +153,8 @@ class Model(object):
 
         return self._uv_correlations
 
-    def add_from_fits(self, fname, stoke='I'):
+    # TODO: Check that AIPS CC binary table has dx&dy in rad!
+    def add_cc_from_fits(self, fname, stoke='I', ver=1):
         """
         Adds CC components of Stokes type ``stoke`` to model from FITS-file.
 
@@ -162,8 +164,17 @@ class Model(object):
         :param stoke (optional):
             Stokes parameter of file ``fname``. (default: ``I``)
         """
-        raise NotImplementedError('Implement loading  CC-table of FITS-file')
-        #self._updated[stoke] = True
+        dt = self._image_stokes[stoke].dtype
+        cc = BinTable(fname, extname='AIPS CC', ver=ver)
+        adds = cc.load()
+        temp = np.zeros(len(adds), dtype=dt)
+        temp['flux'] = adds['FLUX']
+        temp['dx'] = adds['DELTAX'] * self.degree_to_rad
+        temp['dy'] = adds['DELTAY'] * self.degree_to_rad
+        # Append to _image_stokes
+        self._image_stokes[stoke] = np.hstack((self._image_stokes[stoke],
+                                              temp))
+        self._updated[stoke] = True
 
     def add_from_txt(self, fname, stoke='I', style='aips'):
         """

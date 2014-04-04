@@ -43,11 +43,11 @@ class Model(object):
 
     def get_uvws(self, data):
         """
-        Sets ``_uvws`` attribute of self with values from Data class instance
+        Sets ``_uvws`` attribute of self with values from UVData class instance
         ``data``.
 
         :param data:
-            Instance of ``Data`` class. Model visibilities will be calculated
+            Instance of ``UVData`` class. Model visibilities will be calculated
             for (u,v)-points of this instance.
         """
         self._uvws = data.uvw
@@ -74,8 +74,8 @@ class Model(object):
         if not uvws:
             uvws = self._uvws
             if not uvws.size:
-                raise Exception("Can't find uv-points on wich to calculate"
-                                "visibilities of model.")
+                raise Exception("Can't find uv-points on which to calculate"
+                                " visibilities of model.")
 
         components = self._image_stokes[stoke]
 

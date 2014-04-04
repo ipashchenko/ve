@@ -363,9 +363,9 @@ class Absorber(object):
 
     def __mul__(self, data):
         """
-        Multiplicate ``data`` instance of ``Data`` class on absorbed gains.
+        Multiplicate ``data`` instance of ``UVData`` class on absorbed gains.
         """
-        #if not isinstance(data, newd.Data):
+        #if not isinstance(data, newd.UVData):
         #    raise Exception
         return data.__mul__(self.absorbed_gains)
 

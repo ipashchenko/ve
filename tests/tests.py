@@ -8,7 +8,7 @@ from unittest import TestCase, skip
 from vlbi_errors.utils import (aips_bintable_fortran_fields_to_dtype_conversion,
                                index_of)
 from vlbi_errors.data_io import IO, PyFitsIO, Groups
-from vlbi_errors.uv_data import Data, open_fits
+from vlbi_errors.uv_data import UVData, open_fits
 
 
 class Test_utils(TestCase):
@@ -73,8 +73,8 @@ class Test_Data_Groups(TestCase):
             '/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS'
         self.im_fname =\
             '/home/ilya/work/vlbi_errors/fits/1226+023_ICLN_SEQ11.FITS'
-        self.sc_uv = Data(io=Groups())
-        self.split_uv = Data(io=Groups())
+        self.sc_uv = UVData(io=Groups())
+        self.split_uv = UVData(io=Groups())
         self.sc_uv.load(self.sc_groups_uv_fname)
         self.split_uv.load(self.split_groups_uv_fname)
 
@@ -115,7 +115,7 @@ class Test_Data_Groups(TestCase):
 
     # TODO: Extend tests after implementing more general options.
     def test_noise_add(self):
-        sc_uv = Data(io=Groups())
+        sc_uv = UVData(io=Groups())
         sc_uv.load(self.sc_groups_uv_fname)
         for i in np.random.random_integers(0, len(self.sc_uv.baselines) - 1,
                 size=5):

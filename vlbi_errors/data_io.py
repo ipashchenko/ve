@@ -7,7 +7,7 @@ from utils import AbsentHduExtensionError
 from utils import change_shape
 from utils import index_of
 from utils import _to_one_ndarray
-#from utils import build_dtype_for_bintable_data
+from utils import build_dtype_for_bintable_data
 
 
 vec_int = np.vectorize(np.int)
@@ -40,7 +40,7 @@ class IO(object):
 
     def save(self):
         """
-        Method that transforms structured array (_data attribute of Data class
+        Method that transforms structured array (_data attribute of UVData class
         instance) to native format.
         """
 

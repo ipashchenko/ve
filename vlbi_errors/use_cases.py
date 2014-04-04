@@ -4,7 +4,7 @@
 import glob
 from gains import Absorber
 from model import Model
-from uv_data import Data
+from uv_data import UVData
 
 
 if __name__ == '__main__':
@@ -17,8 +17,8 @@ if __name__ == '__main__':
     gains.absorb_one('/home/ilya/work/vlbi_errors/fits/1226+023_SPT-C1.FITS',
                      snver=2)
 
-    model = Data()
-    split_data = Data()
+    model = UVData()
+    split_data = UVData()
     imodel = Model()
     imodel.add_from_txt('/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt')
     model.load('/home/ilya/work/vlbi_errors/fits/1226+023_SPT-C1.FITS')
@@ -44,5 +44,5 @@ if __name__ == '__main__':
    # # batch model train_i_CV.FITS files and get model_i.txt files
    # # cross-validate models on testing samples
    # for model_file, data_file in cv_samples:
-   #     test_data = Data()
+   #     test_data = UVData()
    #     test_data.load()

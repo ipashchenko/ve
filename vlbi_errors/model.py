@@ -4,6 +4,7 @@
 import math
 import numpy as np
 from utils import EmptyImageFtError
+from data_io import BinTable
 
 
 #as TODO: use IO.PyFits subclasses to i/o in this class
@@ -42,11 +43,11 @@ class Model(object):
 
     def get_uvws(self, data):
         """
-        Sets ``_uvws`` attribute of self with values from Data class instance
+        Sets ``_uvws`` attribute of self with values from UVData class instance
         ``data``.
 
         :param data:
-            Instance of ``Data`` class. Model visibilities will be calculated
+            Instance of ``UVData`` class. Model visibilities will be calculated
             for (u,v)-points of this instance.
         """
         self._uvws = data.uvw
@@ -73,8 +74,8 @@ class Model(object):
         if not uvws:
             uvws = self._uvws
             if not uvws.size:
-                raise Exception("Can't find uv-points on wich to calculate"
-                                "visibilities of model.")
+                raise Exception("Can't find uv-points on which to calculate"
+                                " visibilities of model.")
 
         components = self._image_stokes[stoke]
 
@@ -132,8 +133,8 @@ class Model(object):
                 RR = self.ft(stoke='V')
                 LL = RR
             else:
-                raise EmptyImageFtError('Not enough data for RR&LL visibility\
-                        calculation')
+                raise EmptyImageFtError('Not enough data for RR&LL visibility'
+                                        ' calculation')
             self._uv_correlations['RR'] = RR
             self._uv_correlations['LL'] = LL
 
@@ -145,14 +146,15 @@ class Model(object):
                 # RL = FT(Q + j*U)
                 # LR = FT(Q - j*U)
             else:
-                raise EmptyImageFtError('Not enough data for RL&LR visibility\
-                        calculation')
+                raise EmptyImageFtError('Not enough data for RL&LR visibility'
+                                        ' calculation')
             self._uv_correlations['RL'] = RL
             self._uv_correlations['LR'] = LR
 
         return self._uv_correlations
 
-    def add_from_fits(self, fname, stoke='I'):
+    # TODO: Check that AIPS CC binary table has dx&dy in rad!
+    def add_cc_from_fits(self, fname, stoke='I', ver=1):
         """
         Adds CC components of Stokes type ``stoke`` to model from FITS-file.
 
@@ -162,7 +164,16 @@ class Model(object):
         :param stoke (optional):
             Stokes parameter of file ``fname``. (default: ``I``)
         """
-        raise NotImplementedError('Implement loading  CC-table of FITS-file')
+        dt = self._image_stokes[stoke].dtype
+        cc = BinTable(fname, extname='AIPS CC', ver=ver)
+        adds = cc.load()
+        temp = np.zeros(len(adds), dtype=dt)
+        temp['flux'] = adds['FLUX']
+        temp['dx'] = adds['DELTAX'] * self.degree_to_rad
+        temp['dy'] = adds['DELTAY'] * self.degree_to_rad
+        # Append to _image_stokes
+        self._image_stokes[stoke] = np.hstack((self._image_stokes[stoke],
+                                              temp))
         self._updated[stoke] = True
 
     def add_from_txt(self, fname, stoke='I', style='aips'):
@@ -201,7 +212,7 @@ class Model(object):
             adds = np.hstack((adds, np.zeros((len(adds), 3,)),))
         elif adds.shape[1] == 6:
             raise NotImplementedError('Implement difmap format of gaussian'
-                                      'components')
+                                      ' components')
         else:
             raise Exception
 

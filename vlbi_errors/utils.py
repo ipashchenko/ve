@@ -120,12 +120,12 @@ def change_shape(_array, _dict1, _dict2):
                 print "from " + str(dict1[key]) + " to " + str(dict2[key])
                 array = np.swapaxes(array, dict1[key], dict2[key])
                 # Updated values for 2 changed keys in dict1
+                dict1[key] = dict2[key]
                 for item in dict1.items():
                     # If found other key in dict1 with the same value
                     if (item[1] == dict2[key]) and (item[0] != key):
                         print "Found item : " + str(item)
                         dict1[item[0]] = dict1[key]
-                        dict1[key] = dict2[key]
                 print "Updated dict1 is :"
                 print dict1
 
@@ -236,6 +236,7 @@ def build_dtype_for_bintable_data(header):
         maxis = int(header['MAXIS'])
     except KeyError:
         print "non UV_DATA"
+        maxis = None
 
     #build np.dtype format
     names = []
@@ -254,7 +255,7 @@ def build_dtype_for_bintable_data(header):
             str(i)])
 
         #building format & names for regular data matrix
-        if name == 'FLUX':
+        if name == 'FLUX' and maxis is not None:
             for i in range(1, maxis + 1):
                 maxisi = int(header['MAXIS' + str(i)])
                 if maxisi > 1:

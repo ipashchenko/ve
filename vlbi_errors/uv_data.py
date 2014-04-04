@@ -30,19 +30,19 @@ def open_fits(fname, structure='UV'):
             Structure of FITS-file. ``UV`` or ``IDI``. (default: ``UV``)
 
         :return:
-            Instance of ``Data`` class for the specified FITS-file.
+            Instance of ``UVData`` class for the specified FITS-file.
     """
 
     assert(structure in ['UV', 'IDI'])
 
     structures = {'UV': Groups(), 'IDI': IDI()}
-    data = Data(io=structures[structure])
+    data = UVData(io=structures[structure])
     data.load(fname)
 
     return data
 
 
-class Data(object):
+class UVData(object):
     """
     Class that represents uv-data.
 
@@ -66,14 +66,14 @@ class Data(object):
     # TODO: should i use ``_data['hands']`` attribute instead of ``uvdata``?
     def __add__(self, other):
         """
-        Add to self another instance of Data.
+        Add to self another instance of UVData.
 
         :param other:
-            Instance of ``Data`` class. Or object that has ``uvdata`` attribute
+            Instance of ``UVData`` class. Or object that has ``uvdata`` attribute
             that is numpy structured array with the same ``dtype`` as ``self``.
 
         :return:
-            Instance od ``Data`` class with uv-data in ``uvdata`` attribute
+            Instance od ``UVData`` class with uv-data in ``uvdata`` attribute
             that is sum of ``self`` and other.
         """
 
@@ -87,14 +87,14 @@ class Data(object):
 
     def __sub__(self, other):
         """
-        Substruct from self another instance of Data.
+        Substruct from self another instance of UVData.
 
         :param other:
-            Instance of ``Data`` class. Or object that has ``uvdata`` attribute
+            Instance of ``UVData`` class. Or object that has ``uvdata`` attribute
             that is numpy structured array with the same ``dtype`` as ``self``.
 
         :return:
-            Instance od ``Data`` class with uv-data in ``uvdata`` attribute
+            Instance od ``UVData`` class with uv-data in ``uvdata`` attribute
             that is difference of ``self`` and other.
         """
 
@@ -107,7 +107,7 @@ class Data(object):
         return self_copy
 
     # TODO: Do i need the possibility of multiplying on any complex number?
-    # FIXME: After absorbing gains and multiplying on Data instance some
+    # FIXME: After absorbing gains and multiplying on UVData instance some
     # entries do contain NaN. Is that because of some data is flagged and no
     # gains solution are available for that data?
     def __mul__(self, gains):
@@ -124,7 +124,7 @@ class Data(object):
                    ('weights', '<f8', (nif, npol,))]
 
         :return:
-            Instance of ``Data`` class with visibilities multiplyied by complex
+            Instance of ``UVData`` class with visibilities multiplyied by complex
             antenna gains.
         """
 
@@ -547,7 +547,7 @@ class Data(object):
             Numpy.ndarray with shape (#N, #IF, #stokes,) that repeats the shape
             of self.data['hands'] array.
         """
-        pass
+        raise NotImplementedError()
 
     # TODO: use qq = scipy.stats.probplot((v-mean(v))/std(v), fit=0) then
     # plot(qq[0], qq[1]) - how to check normality
@@ -621,24 +621,25 @@ class Data(object):
 
     def noise_add(self, noise=None, df=None, split_scans=False):
         """
-        Add standard gaussian noise to visibilities.
-
-        with ``noise`` - mapping from baseline
-        number to std of noise or to iterables of stds (if ``split_scans`` is
-        True).  If df is not None, then use t-distribtion with ``df`` d.o.f.
+        Add noise to visibilities. Here std - standard deviation of
+        real/imaginary component.
 
         :param noise:
-            Mapping from baseline number to std of noise or to
-            iterables of stds (if ``split_scans`` parameter is set to ``True``).
+            Mapping from baseline number to:
+
+            1) std of noise. Will use one value of std for all stokes and IFs.
+            2) iterable of stds. Will use different values of std for different
+                stokes and IFs (not implemented yet).
 
         :param df (optional):
-            # of d.o.f. for standard Student t-distribution used as noise model.
-            If set to ``None`` then use gaussian noise model. (default:
+            Number of d.o.f. for standard Student t-distribution used as noise
+            model.  If set to ``None`` then use gaussian noise model. (default:
             ``None``)
 
         :param split_scans (optional):
-            Is parameter ``noise`` is mapping from baseline numbers to iterables
-            of std of noise for each scan on baseline? (default: ``False``)
+            Is parameter ``noise`` is mapping from baseline numbers to
+            iterables of std of noise for each scan on baseline? (default:
+            ``False``)
         """
 
         if not df:
@@ -679,10 +680,10 @@ class Data(object):
 
         :return:
             ``q`` pairs of files (format that of ``IO`` subclass that loaded
-            current instance of ``Data``) with training and testing samples
-            prepaired in a such way that 1/``q``- part of visibilities from each
-            baseline falls in testing sample and other part falls in training
-            sample.
+            current instance of ``UVData``) with training and testing samples
+            prepaired in a such way that 1/``q``- part of visibilities from
+            each baseline falls in testing sample and other part falls in
+            training sample.
         """
 
         # List of lists of ``q`` blocks of each baseline
@@ -733,8 +734,8 @@ class Data(object):
             Stokes parameter: ``I``, ``Q``, ``U``, ``V``. (default: ``I``)
 
         :return:
-            Cross-validation score between uv-data of current instance and model
-            for stokes ``I``.
+            Cross-validation score between uv-data of current instance and
+            model for stokes ``I``.
         """
 
         baselines_cv_scores = list()
@@ -801,7 +802,7 @@ class Data(object):
 
         :param baseline (optional):
             Number that corresponds to baseline on which to substitute
-            visinilities. If ``None`` then substitute on all baselines.
+            visibilities. If ``None`` then substitute on all baselines.
             (default: ``None``)
         """
 

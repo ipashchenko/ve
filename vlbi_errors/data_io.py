@@ -407,6 +407,35 @@ class Groups(PyFitsIO):
         hdulist.writeto(fname + '.FITS')
 
 
+# TODO: Leave __init__ empty? To make possible load different table with one
+# instance?
+class BinTable(PyFitsIO):
+    """
+    Class that represents input/output of data in Binary Table format.
+    """
+    def __init__(self, fname, extname=None, ver=1):
+        super(BinTable, self).__init__()
+        self.fname = fname
+        self.extname = extname
+        self.ver = ver
+
+    def _HDU_to_data(self, hdu):
+        # TODO: Need this when dealing with IDI UV_DATA extension binary table
+        #dtype = build_dtype_for_bintable_data(hdu.header)
+        dtype = hdu.data.dtype
+        _data = np.zeros(hdu.header['NAXIS2'], dtype=dtype)
+        for name in _data.dtype.names:
+            _data[name] = hdu.data[name]
+
+        return _data
+
+    def load(self):
+        hdu = self.get_hdu(self.fname, extname=self.extname, ver=self.ver)
+        self.hdu = hdu
+
+        return self._HDU_to_data(hdu)
+
+
 class IDI(PyFitsIO):
     """
     Class that represents input/output of uv-data in IDI-FITS format.

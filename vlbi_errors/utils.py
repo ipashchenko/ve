@@ -236,6 +236,7 @@ def build_dtype_for_bintable_data(header):
         maxis = int(header['MAXIS'])
     except KeyError:
         print "non UV_DATA"
+        maxis = None
 
     #build np.dtype format
     names = []
@@ -254,7 +255,7 @@ def build_dtype_for_bintable_data(header):
             str(i)])
 
         #building format & names for regular data matrix
-        if name == 'FLUX':
+        if name == 'FLUX' and maxis is not None:
             for i in range(1, maxis + 1):
                 maxisi = int(header['MAXIS' + str(i)])
                 if maxisi > 1:

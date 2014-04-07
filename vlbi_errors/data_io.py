@@ -16,7 +16,8 @@ vec_complex = np.vectorize(np.complex)
 
 class IO(object):
     """
-    Abstract class for I/O of different formats of interferometric data.
+    Abstract class for I/O of different formats of interferometric data and
+    intensity models.
     """
 
     def load(self):
@@ -33,7 +34,14 @@ class IO(object):
                    ('antenna', 'int'),
                    ('gains', 'complex', (nif, npol,)),
                    ('weights', '<f8', (nif, npol,))]
-                - for antenna gains data.
+                - for antenna gains data,
+            dtype=[('flux', float),
+                   ('dx', float),
+                   ('dy', float),
+                   ('bmaj', float),
+                   ('bmin', float),
+                   ('bpa', float)])
+                - for image plane models.
         """
 
         raise NotImplementedError("Method must be implemented in subclasses")
@@ -47,6 +55,10 @@ class IO(object):
         raise NotImplementedError("Method must be implemented in subclasses")
 
 
+class TXT(IO):
+    """
+    Class that handles I/O of data/models from text files.
+    """
 class PyFitsIO(IO):
 
     def __init__(self):
@@ -407,6 +419,9 @@ class Groups(PyFitsIO):
         hdulist.writeto(fname + '.FITS')
 
 
+# TODO: Seems that this methods just create structured array from record - but
+# really if one is working with FITS IDI then _HDU_to_data must account for
+# data array in table.
 # TODO: Leave __init__ empty? To make possible load different table with one
 # instance?
 class BinTable(PyFitsIO):

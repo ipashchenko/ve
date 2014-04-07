@@ -479,6 +479,14 @@ class UVData(object):
         return baselines_2_ants(self.baselines)
 
     @property
+    def scans(self):
+        """
+        Returns list of times that separates different scans. If NX table is
+        present in the original
+        :return:
+        """
+
+    @property
     def uvw(self):
         """
         Shortcut for all (u, v, w)-elements of self.

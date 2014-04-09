@@ -130,6 +130,61 @@ class PyFitsIO(IO):
     #    raise NotImplementedError('method must be implemented in subclasses')
 
 
+#class UV(PyFitsIO):
+#    """
+#    Abstract class that handle i/o of uv-data with auxiliary information (such
+#    as scans from AIPS NX binary table or antenna info from AIPS AN or ANTENNA
+#    IDI FITS binary table.
+#    """
+#
+#    @property
+#    def scans(self):
+#        """
+#        Returns list of times that separates different scans. If NX table is
+#        present in the original
+#
+#        :return:
+#            np.ndarray with shape (#scans, 2,) with start & stop time for each
+#                of #scans scans.
+#        """
+#        try:
+#            indx = self.hdulist.index_of('AIPS NX')
+#            print "Found AIPS NX table!"
+#        except KeyError:
+#            indx = None
+#            print "No AIPS NX table are found!"
+#
+#        if indx is not None:
+#            nx_hdu = self.hdulist[indx]
+#            scans = (np.vstack((nx_hdu.data['TIME'], nx_hdu.data['TIME'] +
+#                                nx_hdu.data['TIME INTERVAL']))).T
+#
+#        else:
+#            scans = None
+#
+#        return scans
+#
+#    # TODO: AIPS AN or ANTENNA - should it be based on file type? Not just check
+#    # both.
+#    @property
+#    def antennas(self):
+#        """
+#        Returns dictionary {antenna name: antenna number}
+#
+#        :returns
+#            dictionary with keys = antenna names (strings) and values = antenna
+#                numbers (ints)
+#        """
+#        try:
+#            indx = self.hdulist.index_of('AIPS NX')
+#            print "Found AIPS NX table!"
+#        except KeyError:
+#            indx = None
+#            print "No AIPS NX table are found!"
+#
+#
+
+
 # TODO: subclass IO.PyFitsIO.IDI! SN table is a binary table (as all HDUs in IDI
 # format). So there must be general method to populate self._data structured
 # array using given dtype and some kwargs.
@@ -367,7 +422,7 @@ class Groups(PyFitsIO):
         pardata = list()
         for name in parnames:
             par = self.hdu.data[name][par_indxs]
-            par = (par - self.hdu.header['PZERO' + str(self.par_dict[name])]) / \
+            par = (par - self.hdu.header['PZERO' + str(self.par_dict[name])]) /\
                   self.hdu.header['PSCAL' + str(self.par_dict[name])]
             pardata.append(par)
 
@@ -418,6 +473,33 @@ class Groups(PyFitsIO):
             hdulist.append(hdu)
         hdulist.writeto(fname + '.FITS')
 
+    @property
+    def scans(self):
+        """
+        Returns list of times that separates different scans. If NX table is
+        present in the original
+
+        :return:
+            np.ndarray with shape (#scans, 2,) with start & stop time for each
+                of #scans scans.
+        """
+        try:
+            indx = self.hdulist.index_of('AIPS NX')
+            print "Found AIPS NX table!"
+        except KeyError:
+            indx = None
+            print "No AIPS NX table are found!"
+
+        if indx is not None:
+            nx_hdu = self.hdulist[indx]
+            scans = (np.vstack((nx_hdu.data['TIME'], nx_hdu.data['TIME'] +
+                                                     nx_hdu.data['TIME INTERVAL']))).T
+
+        else:
+            scans = None
+
+        return scans
+
 
 # TODO: Seems that this methods just create structured array from record - but
 # really if one is working with FITS IDI then _HDU_to_data must account for
@@ -456,37 +538,95 @@ class IDI(PyFitsIO):
     Class that represents input/output of uv-data in IDI-FITS format.
     """
 
-#    def load(self, fname):
-#        """
-#        Load data from FITS-file.
-#        """
-#
-#        self.hdulist = pf.open(fname)
-#        hdu = self.get_hdu(fname, extname='UV_DATA')
-#        self.hdu = hdu
-#
-#        dtype, array_names = build_dtype_for_bintable_data(self.hdu.header)
-#
-#        # Change ``GCOUNT`` to IDIFITS-specific
-#        _data = np.zeros(hdu.header['GCOUNT'], dtype=[('uvw', '<f8', (3,)),
-#                                                      ('time', '<f8'),
-#                                                      ('baseline', 'int'),
-#                                                      ('hands', 'complex',
-#                                                       (nif, nstokes)),
-#                                                      ('weights', '<f8',
-#                                                       (nif, nstokes,))])
-#
-#        data_of_data = dict()
-#        data_of_data.update({'GROUP': (0, hdu.header['GCOUNT'])})
-#        for i in range(2, hdu.header['NAXIS'] + 1):
-#            data_of_data.update({hdu.header['CTYPE' + str(i)]:
-#                                     (hdu.header['NAXIS'] - i + 1,
-#                                      hdu.header['NAXIS' + str(i)])})
-#        nstokes = data_of_data['STOKES'][1]
-#        nif = data_of_data['IF'][1]
-#        self.nstokes = nstokes
-#        self.nif = nif
-#        # Describe shape and dimensions of original data recarray
-#        self.data_of_data = data_of_data
-#        # Describe shape and dimensions of structured array
-#        self.data_of__data = {'COMPLEX': 3, 'GROUP': 0, 'STOKES': 2, 'IF': 1}
+    # TODO: First create smth. like groups and then use the same method to io.
+    def _HDU_to_data(self, hdu):
+        """
+        Method that converts instance of ``PyFits.GroupsHDU`` class to numpy
+        structured array with dtype = [('uvw', '<f8', (3,)),
+                                       ('time', '<f8'),
+                                       ('baseline', 'int'),
+                                       ('hands', 'complex', (nif, nstokes,)),
+                                       ('weights', '<f8', (nif, nstokes,))]
+
+        :param hdu:
+            Instance of ``PyFits.GroupsHDU`` class.
+
+        :return:
+            numpy.ndarray.
+        """
+
+        dtype, array_names = build_dtype_for_bintable_data(hdu.header)
+
+        data_of_data = dict()
+        data_of_data.update({'GROUP': (0, hdu.header['GCOUNT'])})
+        for i in range(2, hdu.header['NAXIS'] + 1):
+            data_of_data.update({hdu.header['CTYPE' + str(i)]:
+                                     (hdu.header['NAXIS'] - i + 1,
+                                      hdu.header['NAXIS' + str(i)])})
+        nstokes = data_of_data['STOKES'][1]
+        nif = data_of_data['IF'][1]
+        self.nstokes = nstokes
+        self.nif = nif
+        # Describe shape and dimensions of original data recarray
+        self.data_of_data = data_of_data
+        # Describe shape and dimensions of structured array
+        self.data_of__data = {'COMPLEX': 3, 'GROUP': 0, 'STOKES': 2, 'IF': 1}
+
+        # Dictionary with name and corresponding index of parameters in group
+        par_dict = dict()
+        for name in self.hdu.data.parnames:
+            # It is cool that if parameter name does appear twice it is index
+            # of the first appearence that is recorded in ``par_dict``
+            par_dict.update({name: self.hdu.data.parnames.index(name) + 1})
+        self.par_dict = par_dict
+
+        # Number of axis with ndim = 1.
+        self.ndim_ones = sum([value[1] for value in data_of_data.values() if
+                              value[1] == 1])
+
+        _data = np.zeros(hdu.header['GCOUNT'], dtype=[('uvw', '<f8', (3,)),
+                                                      ('time', '<f8'),
+                                                      ('baseline', 'int'),
+                                                      ('hands', 'complex',
+                                                       (nif, nstokes)),
+                                                      ('weights', '<f8',
+                                                       (nif, nstokes,))])
+
+        # Swap axis and squeeze array to get complex array (nif, nstokes,)
+        # FIXME: refactor to (nstokes, nif,)? - bad idea? think about it later!
+        # Now IF is has index 1.
+        temp = np.swapaxes(hdu.data['DATA'], 1, data_of_data['IF'][0])
+        # Now STOKES has index 2
+        temp = np.swapaxes(temp, 2, data_of_data['STOKES'][0])
+        temp = temp.squeeze()
+        # Insert dimension for IF if 1 IF in data and it was squeezed
+        if self.nif == 1:
+            temp = np.expand_dims(temp, axis=1)
+        hands = vec_complex(temp[..., 0], temp[..., 1])
+        weights = temp[..., 2]
+
+        # TODO: Find out what PARAMETERS correspond to u, v, w
+        u = hdu.data[hdu.header['PTYPE1']] / hdu.header['PSCAL1'] - \
+            hdu.header['PZERO1']
+        v = hdu.data[hdu.header['PTYPE2']] / hdu.header['PSCAL2'] - \
+            hdu.header['PZERO2']
+        w = hdu.data[hdu.header['PTYPE3']] / hdu.header['PSCAL3'] - \
+            hdu.header['PZERO3']
+        # ``DATE`` can have different number among parameters
+        indx_date = par_dict['DATE']
+        time = hdu.data[hdu.header['PTYPE' + str(indx_date)]] / \
+               hdu.header['PSCAL' + str(indx_date)] - hdu.header['PZERO' +
+                                                                 str(indx_date)]
+
+        # Filling structured array by fields
+        _data['uvw'] = np.column_stack((u, v, w))
+        _data['time'] = time
+        indx_bl = par_dict['BASELINE']
+        _data['baseline'] = \
+            vec_int(hdu.data[hdu.header['PTYPE' + str(indx_bl)]] /
+                    hdu.header['PSCAL' + str(indx_bl)] -
+                    hdu.header['PZERO' + str(indx_bl)])
+        _data['hands'] = hands
+        _data['weights'] = weights
+
+        return _data

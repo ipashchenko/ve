@@ -486,6 +486,20 @@ class UVData(object):
         :return:
         """
 
+        scans = self._io.scans
+        if scans is None:
+            pass
+            # Calculate scans for each baseline separately
+        #for bl in self.baselines:
+        #    bl_times = sc.data[sc._choose_data(baselines=bl)[1]]['time']
+        #    a, b = histogram(bl_times[1:] - bl_times[:-1])
+        #    scan_borders = bl_times[(np.where((bl_times[1:] - bl_times[:-1]) > b[1])[0])]
+
+        #    bl_times[0] scan_borders[0]
+        #    bl_times[np.where(bl_times == scan_borders[0]) + 1] scan_borders[1]
+        #    bl_times[np.where(bl_times == scan_borders[1]) + 1] scan_borders[2]
+        return scans
+
     @property
     def uvw(self):
         """

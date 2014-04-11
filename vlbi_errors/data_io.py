@@ -59,6 +59,9 @@ class TXT(IO):
     """
     Class that handles I/O of data/models from text files.
     """
+    pass
+
+
 class PyFitsIO(IO):
 
     def __init__(self):
@@ -493,8 +496,7 @@ class Groups(PyFitsIO):
         if indx is not None:
             nx_hdu = self.hdulist[indx]
             scans = (np.vstack((nx_hdu.data['TIME'], nx_hdu.data['TIME'] +
-                                                     nx_hdu.data['TIME INTERVAL']))).T
-
+                                nx_hdu.data['TIME INTERVAL']))).T
         else:
             scans = None
 

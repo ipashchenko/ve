@@ -481,24 +481,36 @@ class UVData(object):
     @property
     def scans(self):
         """
-        Returns list of times that separates different scans. If NX table is
-        present in the original
+        Returns list of times that separates different scans. If no AIPS NX
+        table is present in the original FITS-file then return None.
+
         :return:
         """
+        return self._io.scans
 
-        scans = self._io.scans
-        if scans is None:
-            pass
-            # Calculate scans for each baseline separately
-        #for bl in self.baselines:
-        #    bl_times = sc.data[sc._choose_data(baselines=bl)[1]]['time']
-        #    a, b = histogram(bl_times[1:] - bl_times[:-1])
-        #    scan_borders = bl_times[(np.where((bl_times[1:] - bl_times[:-1]) > b[1])[0])]
+    @property
+    def scans_bl(self):
+        """
+        Calculate scans for each baseline separately.
 
-        #    bl_times[0] scan_borders[0]
-        #    bl_times[np.where(bl_times == scan_borders[0]) + 1] scan_borders[1]
-        #    bl_times[np.where(bl_times == scan_borders[1]) + 1] scan_borders[2]
-        return scans
+        :return:
+            Dictionary with scans borders for each baseline.
+        """
+        scans_dict = dict()
+        for bl in self.baselines:
+            bl_times = self.data[self._choose_data(baselines=bl)[1]]['time']
+            a, b = np.histogram(bl_times[1:] - bl_times[:-1])
+            scan_borders = bl_times[(np.where((bl_times[1:] -
+                                               bl_times[:-1]) > b[1])[0])]
+            scans_list = [[bl_times[0], scan_borders[0]]]
+            for i in range(len(scan_borders) - 1):
+                scans_list.append([float(bl_times[np.where(bl_times == scan_borders[i])[0] + 1]),
+                                   scan_borders[i + 1]])
+            scans_list.append([float(bl_times[np.where(bl_times == scan_borders[i + 1])[0] + 1]),
+                               bl_times[-1]])
+            scans_dict.update({bl: np.asarray(scans_list)})
+
+        return scans_dict
 
     @property
     def uvw(self):
@@ -638,6 +650,7 @@ class UVData(object):
             else:
                 # Use each scan
                 raise NotImplementedError("Implement with split_scans = True")
+
 
         return baseline_noises
 

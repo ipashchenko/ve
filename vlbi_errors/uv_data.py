@@ -264,6 +264,15 @@ class UVData(object):
                 indxs.extend(indx)
             indxs = np.array(np.sort(indxs))
 
+        # If we are given some time interval then find among ``indxs`` only
+        # those from given time interval
+        if times is not None:
+            # Assert that ``times`` consists of start and stop
+            assert(len(times) == 2)
+            lower_indxs = np.where(data[indxs]['time'] < times[1])[0]
+            high_indxs = np.where(data[indxs]['time'] > times[0])[0]
+            indxs = np.intersect1d(lower_indxs, high_indxs)
+
         print "INDXS : "
         print indxs
 
@@ -650,7 +659,6 @@ class UVData(object):
             else:
                 # Use each scan
                 raise NotImplementedError("Implement with split_scans = True")
-
 
         return baseline_noises
 

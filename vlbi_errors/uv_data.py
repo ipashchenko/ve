@@ -543,6 +543,8 @@ class UVData(object):
         """
         if self.nif > 1:
             result = np.mean(self.uvdata, axis=1)
+        # FIXME: if self.nif=1 then np.mean for axis=1 will remove this
+        # dimension. So don't need this else
         else:
             result = self.uvdata[:, 0, :]
 
@@ -619,12 +621,6 @@ class UVData(object):
             shape (#stokes, #if) with noise std values for each IF for each
             stokes parameter (eg. RR, LL, ...).
         """
-
-        if average_freq:
-            uvdata = self.uvdata_freq_averaged
-        else:
-            uvdata = self.uvdata
-
         baseline_noises = dict()
         if use_V:
             # Calculate dictionary {baseline: noise} (if split_scans is False)
@@ -632,8 +628,9 @@ class UVData(object):
             if not split_scans:
                 for baseline in self.baselines:
                     # TODO: use extended ``choose_data`` method?
-                    baseline_uvdata = uvdata[np.where(self.data['baseline'] ==
-                                                      baseline)]
+                    baseline_uvdata = self._choose_data(baselines=baseline)[0]
+                    if average_freq:
+                        baseline_uvdata = np.mean(baseline_uvdata, axis=1)
                     v = (baseline_uvdata[..., 0] - baseline_uvdata[..., 1]).real
                     mask = ~np.isnan(v)
                     baseline_noises[baseline] = np.asarray(np.std(np.ma.array(v,
@@ -647,8 +644,9 @@ class UVData(object):
             if not split_scans:
                 for baseline in self.baselines:
                     # TODO: use extended ``choose_data`` method?
-                    baseline_uvdata = uvdata[np.where(self.data['baseline'] ==
-                                                      baseline)]
+                    baseline_uvdata = self._choose_data(baselines=baseline)[0]
+                    if average_freq:
+                        baseline_uvdata = np.mean(baseline_uvdata, axis=1)
                     differences = (baseline_uvdata[:-1, ...] -
                                    baseline_uvdata[1:, ...])
                     mask = ~np.isnan(differences)

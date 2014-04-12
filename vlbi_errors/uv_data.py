@@ -273,8 +273,8 @@ class UVData(object):
             high_indxs = np.where(data[indxs]['time'] > times[0])[0]
             indxs = np.intersect1d(lower_indxs, high_indxs)
 
-        print "INDXS : "
-        print indxs
+        #print "INDXS : "
+        #print indxs
 
         if IF is None:
             IF = np.arange(self.nif) + 1
@@ -292,8 +292,8 @@ class UVData(object):
             raise Exception('Choose IF numbers from ' + str(1) + ' to ' +
                             str(self.nif))
         IF -= 1
-        print 'IF : '
-        print IF
+        #print 'IF : '
+        #print IF
 
         if stokes == 'I':
             # I = 0.5 * (RR + LL)

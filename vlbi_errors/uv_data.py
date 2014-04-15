@@ -197,6 +197,7 @@ class UVData(object):
 
         self._io.save(data, fname)
 
+    # TODO: It returns copy - but if i'd like to change choosen data? Use indxs!
     # TODO: make possible to choose all IFs and stokes?
     # TODO: should it be a general method for choosing subsample of structured
     # array using kwargs for parameters and kwargs with dictionary values for
@@ -718,7 +719,7 @@ class UVData(object):
 
             1) std of noise. Will use one value of std for all stokes and IFs.
             2) iterable of stds. Will use different values of std for different
-                stokes and IFs (not implemented yet).
+            scans. Will use first #scans values from iterable and ignore others.
 
         :param df (optional):
             Number of d.o.f. for standard Student t-distribution used as noise
@@ -731,24 +732,37 @@ class UVData(object):
             ``False``)
         """
 
+        # TODO: if on df before generating noise values
         if not df:
-            if not split_scans:
-                for baseline, std in noise.items():
-                    # TODO: use extended ``choose_data`` method?
-                    baseline_uvdata = self.uvdata[np.where(self.data['baseline']
-                                                           == baseline)]
+            for baseline, stds in noise.items():
+                # FIXME: i can be > len(scans) => IndexError
+                try:
+                    for i, std in enumerate(stds):
+                        scan = self.scans_bl[baseline][i]
+                        scan_baseline_uvdata, sc_bl_indxs =\
+                            self._choose_data(baselines=baseline,
+                                              times=(scan[0], scan[1],))
+                        n = np.prod(np.shape(scan_baseline_uvdata))
+                        noise_to_add = vec_complex(np.random.normal(scale=std,
+                                                                    size=n),
+                                                   np.random.normal(scale=std,
+                                                                    size=n))
+                        noise_to_add = np.reshape(noise_to_add,
+                                                  np.shape(scan_baseline_uvdata))
+                        scan_baseline_uvdata += noise_to_add
+                        self.uvdata[sc_bl_indxs] = scan_baseline_uvdata
+                except TypeError:
+                    baseline_uvdata, bl_indxs =\
+                        self._choose_data(baselines=baseline)
                     n = np.prod(np.shape(baseline_uvdata))
-                    noise_to_add = vec_complex(np.random.normal(scale=std,
-                        size=n), np.random.normal(scale=std, size=n))
+                    noise_to_add = vec_complex(np.random.normal(scale=stds,
+                                                                size=n),
+                                               np.random.normal(scale=stds,
+                                                                size=n))
                     noise_to_add = np.reshape(noise_to_add,
                                               np.shape(baseline_uvdata))
                     baseline_uvdata += noise_to_add
-                    self.uvdata[np.where(self.data['baseline'] == baseline)] =\
-                        baseline_uvdata
-
-            else:
-                # Use each scan
-                raise NotImplementedError("Implement with split_scans = True")
+                    self.uvdata[bl_indxs] = baseline_uvdata
 
         else:
             # Use t-distribution

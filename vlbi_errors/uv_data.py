@@ -272,7 +272,7 @@ class UVData(object):
             assert(len(times) == 2)
             lower_indxs = np.where(data[indxs]['time'] < times[1])[0]
             high_indxs = np.where(data[indxs]['time'] > times[0])[0]
-            indxs = np.intersect1d(lower_indxs, high_indxs)
+            indxs = indxs[np.intersect1d(lower_indxs, high_indxs)]
 
         #print "INDXS : "
         #print indxs
@@ -733,40 +733,41 @@ class UVData(object):
         """
 
         # TODO: if on df before generating noise values
-        if not df:
-            for baseline, stds in noise.items():
-                # FIXME: i can be > len(scans) => IndexError
-                try:
-                    for i, std in enumerate(stds):
+        for baseline, stds in noise.items():
+            nscans = len(self.scans_bl[baseline])
+            try:
+                assert len(stds) >= nscans, "Give >= " + str(nscans) +\
+                                            " stds for baseline " +\
+                                            str(baseline)
+                for i, std in enumerate(stds):
+                    try:
                         scan = self.scans_bl[baseline][i]
-                        scan_baseline_uvdata, sc_bl_indxs =\
-                            self._choose_data(baselines=baseline,
-                                              times=(scan[0], scan[1],))
-                        n = np.prod(np.shape(scan_baseline_uvdata))
-                        noise_to_add = vec_complex(np.random.normal(scale=std,
-                                                                    size=n),
-                                                   np.random.normal(scale=std,
-                                                                    size=n))
-                        noise_to_add = np.reshape(noise_to_add,
-                                                  np.shape(scan_baseline_uvdata))
-                        scan_baseline_uvdata += noise_to_add
-                        self.uvdata[sc_bl_indxs] = scan_baseline_uvdata
-                except TypeError:
-                    baseline_uvdata, bl_indxs =\
-                        self._choose_data(baselines=baseline)
-                    n = np.prod(np.shape(baseline_uvdata))
-                    noise_to_add = vec_complex(np.random.normal(scale=stds,
+                    except IndexError:
+                        break
+                    scan_baseline_uvdata, sc_bl_indxs =\
+                        self._choose_data(baselines=baseline,
+                                          times=(scan[0], scan[1],))
+                    n = np.prod(np.shape(scan_baseline_uvdata))
+                    noise_to_add = vec_complex(np.random.normal(scale=std,
                                                                 size=n),
-                                               np.random.normal(scale=stds,
+                                               np.random.normal(scale=std,
                                                                 size=n))
                     noise_to_add = np.reshape(noise_to_add,
-                                              np.shape(baseline_uvdata))
-                    baseline_uvdata += noise_to_add
-                    self.uvdata[bl_indxs] = baseline_uvdata
-
-        else:
-            # Use t-distribution
-            raise NotImplementedError("Implement with df not None")
+                                              np.shape(scan_baseline_uvdata))
+                    scan_baseline_uvdata += noise_to_add
+                    self.uvdata[sc_bl_indxs] = scan_baseline_uvdata
+            except TypeError:
+                baseline_uvdata, bl_indxs =\
+                    self._choose_data(baselines=baseline)
+                n = np.prod(np.shape(baseline_uvdata))
+                noise_to_add = vec_complex(np.random.normal(scale=stds,
+                                                            size=n),
+                                           np.random.normal(scale=stds,
+                                                            size=n))
+                noise_to_add = np.reshape(noise_to_add,
+                                          np.shape(baseline_uvdata))
+                baseline_uvdata += noise_to_add
+                self.uvdata[bl_indxs] = baseline_uvdata
 
     def cv(self, q, fname):
         """
@@ -927,8 +928,11 @@ class UVData(object):
 
 if __name__ == '__main__':
 
-    data = open_fits('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
-    from model import Model
-    imodel = Model()
-    imodel.add_from_txt('/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt')
-    data.substitute(imodel)
+   # data = open_fits('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
+   # from model import Model
+   # imodel = Model()
+   # imodel.add_from_txt('/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt')
+   # data.substitute(imodel)
+   sc = open_fits('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
+   sc.noise_add(noise={258: 10})
+   #sc.noise_add(noise={258: [10,1,0.1,10,1,10,1,10,1,10]})

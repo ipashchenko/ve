@@ -197,6 +197,7 @@ class UVData(object):
 
         self._io.save(data, fname)
 
+    # TODO: It returns copy - but if i'd like to change choosen data? Use indxs!
     # TODO: make possible to choose all IFs and stokes?
     # TODO: should it be a general method for choosing subsample of structured
     # array using kwargs for parameters and kwargs with dictionary values for
@@ -264,8 +265,17 @@ class UVData(object):
                 indxs.extend(indx)
             indxs = np.array(np.sort(indxs))
 
-        print "INDXS : "
-        print indxs
+        # If we are given some time interval then find among ``indxs`` only
+        # those from given time interval
+        if times is not None:
+            # Assert that ``times`` consists of start and stop
+            assert(len(times) == 2)
+            lower_indxs = np.where(data[indxs]['time'] < times[1])[0]
+            high_indxs = np.where(data[indxs]['time'] > times[0])[0]
+            indxs = indxs[np.intersect1d(lower_indxs, high_indxs)]
+
+        #print "INDXS : "
+        #print indxs
 
         if IF is None:
             IF = np.arange(self.nif) + 1
@@ -283,8 +293,8 @@ class UVData(object):
             raise Exception('Choose IF numbers from ' + str(1) + ' to ' +
                             str(self.nif))
         IF -= 1
-        print 'IF : '
-        print IF
+        #print 'IF : '
+        #print IF
 
         if stokes == 'I':
             # I = 0.5 * (RR + LL)
@@ -481,10 +491,47 @@ class UVData(object):
     @property
     def scans(self):
         """
-        Returns list of times that separates different scans. If NX table is
-        present in the original
+        Returns list of times that separates different scans. If no AIPS NX
+        table is present in the original FITS-file then return None.
+
         :return:
         """
+        return self._io.scans
+
+    @property
+    def scans_bl(self):
+        """
+        Calculate scans for each baseline separately.
+
+        It won't coincide with UVData.scans because different baselines have
+        different number of scans.
+
+        :return:
+            Dictionary with scans borders for each baseline.
+        """
+        scans_dict = dict()
+        all_times = self.data['time']
+        all_a, all_b = np.histogram(all_times[1:] - all_times[:-1])
+        for bl in self.baselines:
+            bl_times = self.data[self._choose_data(baselines=bl)[1]]['time']
+            a, b = np.histogram(bl_times[1:] - bl_times[:-1])
+            # If baseline consists only of 1 scan
+            if b[-1] < all_b[1]:
+                scans_dict.update({bl: np.atleast_2d([bl_times[0],
+                                                      bl_times[-1]])})
+            # If baseline has > 1 scan
+            else:
+                scan_borders = bl_times[(np.where((bl_times[1:] -
+                                                   bl_times[:-1]) > b[1])[0])]
+                scans_list = [[bl_times[0], scan_borders[0]]]
+                for i in range(len(scan_borders) - 1):
+                    scans_list.append([float(bl_times[np.where(bl_times == scan_borders[i])[0] + 1]),
+                                       scan_borders[i + 1]])
+                scans_list.append([float(bl_times[np.where(bl_times == scan_borders[i + 1])[0] + 1]),
+                                   bl_times[-1]])
+                scans_dict.update({bl: np.asarray(scans_list)})
+
+        return scans_dict
 
     @property
     def uvw(self):
@@ -508,6 +555,8 @@ class UVData(object):
         """
         if self.nif > 1:
             result = np.mean(self.uvdata, axis=1)
+        # FIXME: if self.nif=1 then np.mean for axis=1 will remove this
+        # dimension. So don't need this else
         else:
             result = self.uvdata[:, 0, :]
 
@@ -584,48 +633,81 @@ class UVData(object):
             shape (#stokes, #if) with noise std values for each IF for each
             stokes parameter (eg. RR, LL, ...).
         """
-
-        if average_freq:
-            uvdata = self.uvdata_freq_averaged
-        else:
-            uvdata = self.uvdata
-
-        baseline_noises = dict()
+        baselines_noises = dict()
         if use_V:
             # Calculate dictionary {baseline: noise} (if split_scans is False)
             # or {baseline: [noises]} if split_scans is True.
             if not split_scans:
                 for baseline in self.baselines:
-                    # TODO: use extended ``choose_data`` method?
-                    baseline_uvdata = uvdata[np.where(self.data['baseline'] ==
-                                                      baseline)]
+                    baseline_uvdata = self._choose_data(baselines=baseline)[0]
+                    if average_freq:
+                        baseline_uvdata = np.mean(baseline_uvdata, axis=1)
                     v = (baseline_uvdata[..., 0] - baseline_uvdata[..., 1]).real
                     mask = ~np.isnan(v)
-                    baseline_noises[baseline] = np.asarray(np.std(np.ma.array(v,
+                    baselines_noises[baseline] = np.asarray(np.std(np.ma.array(v,
                                                        mask=np.invert(mask)).data,
                                                        axis=0))
             else:
                 # Use each scan
-                raise NotImplementedError("Implement with split_scans = True")
+                for baseline in self.baselines:
+                    baseline_noise = list()
+                    for scan in self.scans_bl[baseline]:
+                        # (#obs in scan, #nif, #nstokes,)
+                        scan_baseline_uvdata = self._choose_data(baselines=baseline,
+                                                                 times=(scan[0],
+                                                                        scan[1],))[0]
+                        if average_freq:
+                            # (#obs in scan, #nstokes,)
+                            scan_baseline_uvdata = np.mean(scan_baseline_uvdata,
+                                                           axis=1)
+                        v = (scan_baseline_uvdata[..., 0] -
+                             scan_baseline_uvdata[..., 1]).real
+                        mask = ~np.isnan(v)
+                        scan_noise = np.asarray(np.std(np.ma.array(v,
+                                                                   mask=np.invert(mask)).data,
+                                                       axis=0))
+                        baseline_noise.append(scan_noise)
+                    baselines_noises[baseline] = np.asarray(baseline_noise)
 
         else:
             if not split_scans:
                 for baseline in self.baselines:
-                    # TODO: use extended ``choose_data`` method?
-                    baseline_uvdata = uvdata[np.where(self.data['baseline'] ==
-                                                      baseline)]
+                    baseline_uvdata = self._choose_data(baselines=baseline)[0]
+                    if average_freq:
+                        baseline_uvdata = np.mean(baseline_uvdata, axis=1)
                     differences = (baseline_uvdata[:-1, ...] -
                                    baseline_uvdata[1:, ...])
                     mask = ~np.isnan(differences)
-                    baseline_noises[baseline] =\
+                    baselines_noises[baseline] =\
                         np.asarray([np.std(np.ma.array(differences,
                             mask=np.invert(mask)).real[..., i], axis=0) for i
                             in range(self.nstokes)]).T
             else:
                 # Use each scan
-                raise NotImplementedError("Implement with split_scans = True")
+                for baseline in self.baselines:
+                    baseline_noise = list()
+                    for scan in self.scans_bl[baseline]:
+                        # shape = (#obs in scan, #nif, #nstokes,)
+                        scan_baseline_uvdata = self._choose_data(baselines=baseline,
+                                                                 times=(scan[0],
+                                                                        scan[1],))[0]
+                        if average_freq:
+                            # shape = (#obs in scan, #nstokes,)
+                            scan_baseline_uvdata = np.mean(scan_baseline_uvdata,
+                                                           axis=1)
+                        # (#obs in scan, #nif, #nstokes,)
+                        differences = (scan_baseline_uvdata[:-1, ...] -
+                                       scan_baseline_uvdata[1:, ...])
+                        mask = ~np.isnan(differences)
+                        # (nif, nstokes,)
+                        scan_noise = np.asarray([np.std(np.ma.array(differences,
+                                                mask=np.invert(mask)).real[..., i],
+                                                        axis=0) for i in
+                                                 range(self.nstokes)]).T
+                        baseline_noise.append(scan_noise)
+                    baselines_noises[baseline] = np.asarray(baseline_noise)
 
-        return baseline_noises
+        return baselines_noises
 
     def noise_add(self, noise=None, df=None, split_scans=False):
         """
@@ -637,7 +719,7 @@ class UVData(object):
 
             1) std of noise. Will use one value of std for all stokes and IFs.
             2) iterable of stds. Will use different values of std for different
-                stokes and IFs (not implemented yet).
+            scans. Will use first #scans values from iterable and ignore others.
 
         :param df (optional):
             Number of d.o.f. for standard Student t-distribution used as noise
@@ -650,28 +732,42 @@ class UVData(object):
             ``False``)
         """
 
-        if not df:
-            if not split_scans:
-                for baseline, std in noise.items():
-                    # TODO: use extended ``choose_data`` method?
-                    baseline_uvdata = self.uvdata[np.where(self.data['baseline']
-                                                           == baseline)]
-                    n = np.prod(np.shape(baseline_uvdata))
+        # TODO: if on df before generating noise values
+        for baseline, stds in noise.items():
+            nscans = len(self.scans_bl[baseline])
+            try:
+                assert len(stds) >= nscans, "Give >= " + str(nscans) +\
+                                            " stds for baseline " +\
+                                            str(baseline)
+                for i, std in enumerate(stds):
+                    try:
+                        scan = self.scans_bl[baseline][i]
+                    except IndexError:
+                        break
+                    scan_baseline_uvdata, sc_bl_indxs =\
+                        self._choose_data(baselines=baseline,
+                                          times=(scan[0], scan[1],))
+                    n = np.prod(np.shape(scan_baseline_uvdata))
                     noise_to_add = vec_complex(np.random.normal(scale=std,
-                        size=n), np.random.normal(scale=std, size=n))
+                                                                size=n),
+                                               np.random.normal(scale=std,
+                                                                size=n))
                     noise_to_add = np.reshape(noise_to_add,
-                                              np.shape(baseline_uvdata))
-                    baseline_uvdata += noise_to_add
-                    self.uvdata[np.where(self.data['baseline'] == baseline)] =\
-                        baseline_uvdata
-
-            else:
-                # Use each scan
-                raise NotImplementedError("Implement with split_scans = True")
-
-        else:
-            # Use t-distribution
-            raise NotImplementedError("Implement with df not None")
+                                              np.shape(scan_baseline_uvdata))
+                    scan_baseline_uvdata += noise_to_add
+                    self.uvdata[sc_bl_indxs] = scan_baseline_uvdata
+            except TypeError:
+                baseline_uvdata, bl_indxs =\
+                    self._choose_data(baselines=baseline)
+                n = np.prod(np.shape(baseline_uvdata))
+                noise_to_add = vec_complex(np.random.normal(scale=stds,
+                                                            size=n),
+                                           np.random.normal(scale=stds,
+                                                            size=n))
+                noise_to_add = np.reshape(noise_to_add,
+                                          np.shape(baseline_uvdata))
+                baseline_uvdata += noise_to_add
+                self.uvdata[bl_indxs] = baseline_uvdata
 
     def cv(self, q, fname):
         """
@@ -832,8 +928,11 @@ class UVData(object):
 
 if __name__ == '__main__':
 
-    data = open_fits('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
-    from model import Model
-    imodel = Model()
-    imodel.add_from_txt('/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt')
-    data.substitute(imodel)
+   # data = open_fits('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
+   # from model import Model
+   # imodel = Model()
+   # imodel.add_from_txt('/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt')
+   # data.substitute(imodel)
+   sc = open_fits('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
+   sc.noise_add(noise={258: 10})
+   #sc.noise_add(noise={258: [10,1,0.1,10,1,10,1,10,1,10]})

@@ -93,25 +93,52 @@ class Test_Data_Groups(TestCase):
             self.assertEqual(noise[key].ndim, 1)
             self.assertEqual(noise[key].size, self.sc_uv.nif)
 
+        noise = self.sc_uv.noise(use_V=True, average_freq=False,
+                                 split_scans=True)
+        self.assertEqual(len(noise), len(self.sc_uv.baselines))
+        for key in noise:
+            self.assertEqual(np.shape(noise[key]),
+                             (len(self.sc_uv.scans_bl[key]),
+                             self.sc_uv.nif,))
+            self.assertEqual(noise[key].ndim, 2)
+            self.assertEqual(noise[key].size, len(self.sc_uv.scans_bl[key]) *
+                             self.sc_uv.nif)
+
         noise = self.sc_uv.noise(use_V=False, average_freq=False)
         self.assertEqual(len(noise), len(self.sc_uv.baselines))
         for key in noise:
             self.assertEqual(np.shape(noise[key]), (self.sc_uv.nif, self.sc_uv.nstokes))
-            self.assertEqual(noise[key].ndim, self.sc_uv.nif)
+            self.assertEqual(noise[key].ndim, 2)
             self.assertEqual(noise[key].size, self.sc_uv.nif * self.sc_uv.nstokes)
 
-        noise = self.sc_uv.noise(use_V=True, average_freq=True)
+        noise = self.sc_uv.noise(use_V=False, average_freq=False,
+                                 split_scans=True)
         self.assertEqual(len(noise), len(self.sc_uv.baselines))
         for key in noise:
-            self.assertEqual(noise[key].ndim, 0)
-            self.assertEqual(noise[key].size, 1)
+            self.assertEqual(np.shape(noise[key]),
+                             (len(self.sc_uv.scans_bl[key]),
+                             self.sc_uv.nif, self.sc_uv.nstokes))
+            self.assertEqual(noise[key].ndim, 3)
+            self.assertEqual(noise[key].size, len(self.sc_uv.scans_bl[key]) *
+                             self.sc_uv.nif * self.sc_uv.nstokes)
 
-        noise = self.sc_uv.noise(use_V=False, average_freq=True)
+        noise = self.sc_uv.noise(use_V=True, average_freq=True,
+                                 split_scans=True)
         self.assertEqual(len(noise), len(self.sc_uv.baselines))
         for key in noise:
-            self.assertEqual(np.shape(noise[key]), (self.sc_uv.nstokes,))
             self.assertEqual(noise[key].ndim, 1)
-            self.assertEqual(noise[key].size, self.sc_uv.nstokes)
+            self.assertEqual(noise[key].size, len(self.sc_uv.scans_bl[key]))
+
+        noise = self.sc_uv.noise(use_V=False, average_freq=True,
+                                 split_scans=True)
+        self.assertEqual(len(noise), len(self.sc_uv.baselines))
+        for key in noise:
+            self.assertEqual(np.shape(noise[key]),
+                             (len(self.sc_uv.scans_bl[key]),
+                             self.sc_uv.nstokes,))
+            self.assertEqual(noise[key].ndim, 2)
+            self.assertEqual(noise[key].size, len(self.sc_uv.scans_bl[key]) *
+                             self.sc_uv.nstokes)
 
     # TODO: Extend tests after implementing more general options.
     def test_noise_add(self):

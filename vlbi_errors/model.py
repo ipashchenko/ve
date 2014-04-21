@@ -7,7 +7,9 @@ from utils import EmptyImageFtError
 from data_io import BinTable
 
 
-#as TODO: use IO.PyFits subclasses to i/o in this class
+# TODO: use IO.PyFits subclasses to i/o in this class.
+# TODO: implement Image class with methods to load from FITS/txt.
+# TODO: implement method that accepts Image() instance and plot model to them.
 class Model(object):
     """
     Class that represents models.
@@ -15,6 +17,54 @@ class Model(object):
     This class is used to describe model of VLBI-data in both image and
     uv-domain: clean components (delta functions), gaussians etc.
     """
+
+    @classmethod
+    def ft_2dgaussian(uvs, amp, x0, y0, bmaj, bmin, bpa):
+        """
+        Return the Fourie Transform of 2D gaussian defined in image plane by
+        it's amplitude ``amp``, center ``x0`` & ``y0``, major and minor axes
+        ``bmaj`` & ``bmin`` and positional angle of major axis ``bpa``.
+
+        :param uvs:
+            Iterable of uv-points for which calculate FT.
+
+        :param amp:
+            Amplitude of gaussian [Jy].
+
+        :param x0:
+            X-coordinate of gaussian center [rad].
+
+        :param y0:
+            Y-coordinate of gaussian center [rad].
+
+        :param bmaj:
+            Size of major axis [rad].
+
+        :param bmin:
+            Size of min axis [rad].
+
+        :param bpa:
+            Positional angle of major axis [rad].
+
+        :return:
+            Numpy array of complex visibilities for specified points ``uvs``.
+            Length of resulting array = len(uvs).
+        """
+        # Rotate the uv-plane on angle -bpa
+        uvs_ = uvs.copy()
+        uvs_[:, 0] = uvs[:, 0] * math.cos(bpa) + uvs[:, 1] * math.sin(bpa)
+        uvs_[:, 1] = -uvs[:, 0] * math.sin(bpa) + uvs[:, 1] * math.cos(bpa)
+        # Sequence of FT of gaussian(amp, x0=0, y0=0, bmaj, bmin) with len(ft) =
+        # len(uvs)
+        ft = amp * math.pi * bmaj * bmin * np.exp(-math.pi ** 2 *
+                                                  (bmaj ** 2 * uvs_[:, 0] ** 2 +
+                                                   bmin ** 2 * uvs_[:, 1] ** 2))
+        # Multiply on phases of x0, y0 in rotated system
+        x0_ = x0 * math.cos(bpa) + y0 * math.sin(bpa)
+        y0_= -x0 * math.sin(bpa) + y0 * math.cos(bpa)
+        ft *= np.exp(2 * math.pi * 1j * (x0_ * uvs_[:, 0] + y0_ * uvs_[:, 1]))
+
+        return ft
 
     def __init__(self):
 
@@ -100,18 +150,24 @@ class Model(object):
                       == 0))[0]
         indxs_of_gc = np.where((flux != 0) & (bmaj != 0) & (bmin != 0))[0]
 
-        visibilities_cc = (flux[indxs_of_cc] * np.exp(2.0 * math.pi * 1j *
-            (u[:, np.newaxis] * dx[indxs_of_cc] + v[:, np.newaxis] *
-                dy[indxs_of_cc]))).sum(axis=1)
+        # Calculate visibilities_cc with indxs_of_cc. If indxs_of_cc is empty
+        # then visibilities_cc will be zeros. So add it!
+        visibilities_cc = np.zeros(len(uvws))
+        if indxs_of_cc.size:
+            visibilities_cc = (flux[indxs_of_cc] * np.exp(2.0 * math.pi * 1j *
+                (u[:, np.newaxis] * dx[indxs_of_cc] + v[:, np.newaxis] *
+                    dy[indxs_of_cc]))).sum(axis=1)
 
-        # TODO: just calculate visibilities_gc with indxs_of_gc. If indxs_of_gc
-        # is empty then visibilities_gc will be zeros. So add it!
+        # Calculate visibilities_gc with indxs_of_gc. If indxs_of_gc is empty
+        # then visibilities_gc will be zeros. So add it!
+        visibilities_gc = np.zeros(len(uvws))
         if indxs_of_gc.size:
-            raise NotImplementedError('Implement FT of gaussians in ft()')
-        else:
-            visibilities = visibilities_cc
+            for indx in indxs_of_gc:
+                visibilities_gc_ = self.ft_2dgaussian(uvws[:, :2],
+                                                      *components[indx])
+                visibilities_gc += visibilities_gc_
 
-        return visibilities
+        return visibilities_cc + visibilities_gc
 
     @property
     def uv_correlations(self):
@@ -219,6 +275,18 @@ class Model(object):
         self._image_stokes[stoke] = adds.ravel().view(dt)
         self._updated[stoke] = True
 
+    def plot_model(self, image=None, stokes='I'):
+        """
+        Method that plots specified model to specified instance of ``Image``
+        class.
+
+        :param image:
+            Instance of ``Image`` class on which to plot model.
+
+        :param stokes (optional):
+        """
+        pass
+
     def clear_im(self, stoke='I'):
         """
         Clear the model for stoke Stokes parameter.
@@ -248,6 +316,42 @@ class Model(object):
                 self._uv_correlations[hand] = np.array([], dtype=complex)
         else:
             self._uv_correlations[hand] = np.array([], dtype=complex)
+
+
+class Image(object):
+    """
+    Class that implements images.
+    :param imsize:
+    :param pixsize:
+    :param beam:
+    :param stokes:
+    """
+    def __init__(self, imsize=None, pixsize=None, beam=None, stokes=None):
+        self.imsize = imsize
+        self.pixsize = pixsize
+        self.beam = beam
+        self.stokes = stokes
+
+    def add_from_txt(self, fname, stokes='I'):
+        """
+        Load image from text file.
+
+        :param fname:
+            Text file with image data.
+        :param stokes (optional):
+        """
+        pass
+
+    def add_from_fits(self, fname, stokes='I'):
+        """
+        Load image from FITS file.
+
+        :param fname:
+            FITS file with image data.
+
+        :param stokes (optional):
+        """
+        pass
 
 
 if __name__ == '__main__':

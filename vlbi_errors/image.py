@@ -1,6 +1,7 @@
 __author__ = 'ilya'
 
 import glob
+import numpy as np
 
 
 class Image(object):
@@ -104,3 +105,10 @@ class ImageSet(object):
             image = Image()
             image.add_from_txt(fname, stokes=stokes)
             self.images.append(image)
+
+    def pixels_histogram(self):
+        # 3D array for holding data
+        self._array = np.empty((len(self.images), self.pixsize[0],
+                                self.pixsize[1]))
+        for i, image in enumerate(self.images):
+            self._array[i] = image.data

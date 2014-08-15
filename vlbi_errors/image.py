@@ -38,17 +38,24 @@ class Image(object):
 
         :param fname:
             FITS file with image data.
-
         :param stokes (optional):
         """
         pass
 
-    def cross_corelate(self, image):
+    def cross_correlate(self, image, region1=(None, None, None, None), region2=(None, None, None, None)):
         """
         Cross-correlates image with another image.
+        
+        Computes normalized cross-correlation of images. 
 
         :param image:
             Instance of image class.
+        :param region1:
+            Region to EXCLUDE in current instance of ``Image``. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+        :param region2:
+            Region to EXCLUDE in ``image``. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+        :return:
+            (dx, dy,) tuple of shifts (subpixeled) in each direction.
         """
         pass
         
@@ -135,3 +142,33 @@ class ImageSet(object):
     def pixels_histogram(self):
         for i, image in enumerate(self.images):
             self._3_darray[i] = image.data
+            
+    def cross_correlate_with_image(self, image, region1=(None, None, None, None), region2=(None, None, None, None)):
+        """
+        Cross-correlate with one image.
+        
+        :param image:
+            Instance of ``Image`` class.
+        :param region1:
+            Region to EXCLUDE in current instance images. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+        :param region2:
+            Region to EXCLUDE in ``image``. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+        :return:
+            Tuple of tuples (dx, dy,) of shifts (subpixeled) in each direction.
+        """
+        pass
+        
+    def cross_correlate_with_set_of_images(self, images, region1=(None, None, None, None), region2=(None, None, None, None)):
+        """
+        Cross-correlate with set of images.
+        
+        :param images:
+            Instance of ``ImageSet`` class.
+        :param region1:
+            Region to EXCLUDE in current instance images. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+        :param region2:
+            Region to EXCLUDE in images of ``images``. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+        :return:
+            Tuple of tuples (dx, dy,) of shifts (subpixeled) in each direction.
+        """
+        pass

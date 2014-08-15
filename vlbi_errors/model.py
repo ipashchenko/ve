@@ -5,6 +5,10 @@ import math
 import numpy as np
 from utils import EmptyImageFtError
 from data_io import BinTable
+try:
+    import pylab
+except ImportError:
+    pylab = None
 
 
 # TODO: use IO.PyFits subclasses to i/o in this class.
@@ -101,6 +105,22 @@ class Model(object):
             for (u,v)-points of this instance.
         """
         self._uvws = data.uvw
+
+    def upvlot(self, stokes=None, style='a&p', PA=None):
+        """
+        Method that plots model transfered to the uv-domain vs. uv-radius
+        :param style:
+        :param PA:
+        :return:
+        """
+
+        if not pylab:
+            raise Exception('Install ``pylab`` for plotting!')
+        if not stokes:
+            stokes = 'I'
+        # Check that there's ``stokes`` Stokes data to plot.
+        if not self._image_stokes[stokes]:
+            raise Exception('No stokes ' + stokes + ' to plot!')
 
     def ft(self, stoke='I', uvws=None):
         """
@@ -316,42 +336,6 @@ class Model(object):
                 self._uv_correlations[hand] = np.array([], dtype=complex)
         else:
             self._uv_correlations[hand] = np.array([], dtype=complex)
-
-
-class Image(object):
-    """
-    Class that implements images.
-    :param imsize:
-    :param pixsize:
-    :param beam:
-    :param stokes:
-    """
-    def __init__(self, imsize=None, pixsize=None, beam=None, stokes=None):
-        self.imsize = imsize
-        self.pixsize = pixsize
-        self.beam = beam
-        self.stokes = stokes
-
-    def add_from_txt(self, fname, stokes='I'):
-        """
-        Load image from text file.
-
-        :param fname:
-            Text file with image data.
-        :param stokes (optional):
-        """
-        pass
-
-    def add_from_fits(self, fname, stokes='I'):
-        """
-        Load image from FITS file.
-
-        :param fname:
-            FITS file with image data.
-
-        :param stokes (optional):
-        """
-        pass
 
 
 if __name__ == '__main__':

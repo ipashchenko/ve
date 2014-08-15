@@ -52,7 +52,7 @@ class Image(object):
         """
         pass
         
-    def plot(self, blc=None, trc=None):
+    def plot(self, blc=None, trc=None, clim=None, cmap=None):
         """
         Plot image.
         """
@@ -60,8 +60,18 @@ class Image(object):
             raise Exception("Install matplotlib for plotting!")
         if blc or trc:
             patch_to_plot = self._array[blc[0]:trc[0], blc[1]:trc[1]]
-            pylab.imshow(path_to_plot)
-
+            imgplot = pylab.imshow(path_to_plot)
+            if cmap:
+                try:
+                    imgplot.set_cmap(cmap)
+                except:
+                    # Show wo ``cmap`` set, print availbale ``cmap``s.
+                    pass
+            if clim:
+                # TODO: Warn if ``clim`` is out of range for image.
+                imgplot.set_clim(clim)
+            
+            
 class ImageSet(object):
     """
     Class that implements collection of images.

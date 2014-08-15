@@ -64,3 +64,6 @@ target/
 
 # Pycharm
 .idea/
+
+# vim rope
+.ropeproject/

@@ -2,6 +2,10 @@ __author__ = 'ilya'
 
 import glob
 import numpy as np
+try:
+    import pylab
+except ImportError:
+    pylab = None
 
 
 class Image(object):
@@ -47,7 +51,16 @@ class Image(object):
             Instance of image class.
         """
         pass
-
+        
+    def plot(self, blc=None, trc=None):
+        """
+        Plot image.
+        """
+        if not pylab:
+            raise Exception("Install matplotlib for plotting!")
+        if blc or trc:
+            patch_to_plot = self._array[blc[0]:trc[0], blc[1]:trc[1]]
+            pylab.imshow(path_to_plot)
 
 class ImageSet(object):
     """

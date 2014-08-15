@@ -401,6 +401,11 @@ class UVData(object):
                 pylab.ylim([-math.pi, math.pi])
         pylab.show()
 
+    # TODO: Implement PA[deg] slicing of uv-plane with keyword argument ``PA``.
+    # TODO: Add ``model`` kwarg for plotting image plane model with data
+    # together.
+    # TODO: Add ``plot_noise`` boolean kwarg for plotting error bars also. (Use
+    # ``UVData.noise()`` method for finding noise values.)
     def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p'):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
@@ -435,6 +440,7 @@ class UVData(object):
                                           stokes=stokes)
 
         # # of chosen IFs
+        # TODO: Better use len(IF) if ``data`` shape will change sometimes.
         n_if = np.shape(uvdata)[1]
 
         # TODO: define colors
@@ -467,6 +473,35 @@ class UVData(object):
             if style == 'a&p':
                 pylab.ylim([-math.pi, math.pi])
         pylab.show()
+
+    def uvplot_model(self, model, baselines=None, stokes=None, style='a&p'):
+        """
+        Plot given image plain model.
+
+        :param model:
+            Instance of ``Model`` class.
+
+        :param baselines (optional):
+            One or iterable of baselines numbers or ``None``. If ``None`` then
+            use all baselines. (default: ``None``)
+
+        :parm IF (optional):
+            One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
+            use all IFs. (default: ``None``)
+
+        :param stokes (optional):
+            Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
+            ``LR`` or ``None``. If ``None`` then use ``I``.
+            (default: ``None``)
+
+        :param style (optional):
+            How to plot complex visibilities - real and imaginary part
+            (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
+        """
+        # Copy ``model``, choose ``uvws`` given ``baselines`` and set ``_uvws``
+        # atribute of ``model``'s copy to calculated ``uvws``. Use
+        # ``model.uvplot()`` method to plot model.
+        raise NotImplementedError
 
     @property
     def baselines(self):

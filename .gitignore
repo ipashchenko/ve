@@ -53,3 +53,14 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# uv&im-data files
+*.mod
+*.fits
+*.uvf
+
+# some txt-files
+*.txt
+
+# Pycharm
+.idea/

@@ -75,6 +75,9 @@ class ImageSet(object):
             # Use first added image to initialize reference parameters
             # (``imsize``, ``pixsize``, ``beam``, ``stokes``)
             pass
+        # Keeping image data in 3D-cube.
+        self._3d_array = np.empty((len(self.images), self.pixsize[0],
+                                   self.pixsize[1]))
 
     def add_from_fits(self, wildcard, stokes='I'):
         """
@@ -107,8 +110,5 @@ class ImageSet(object):
             self.images.append(image)
 
     def pixels_histogram(self):
-        # 3D array for holding data
-        self._array = np.empty((len(self.images), self.pixsize[0],
-                                self.pixsize[1]))
         for i, image in enumerate(self.images):
-            self._array[i] = image.data
+            self._3_darray[i] = image.data

@@ -122,6 +122,18 @@ class Model(object):
         self._uv_correlations = {'RR': np.array([], dtype=complex), 'LL':
             np.array([], dtype=complex), 'RL': np.array([], dtype=complex),
             'LR': np.array([], dtype=complex)}
+            
+    def get_p(self, stokes='I'):
+        """
+        Shortcut for parameters of model.
+        """
+        return self._image_stokes[stokes].flatten()
+        
+    # TODO: Sometimes we need to change only some parameters (circular gaussians),
+    # thus we need mapping (f, x, y, b, a, bpa) <-> p. 
+    def set_p(self, p, stokes='I')
+        self._image_stokes[stokes]
+        
 
     def get_uvws(self, data):
         """

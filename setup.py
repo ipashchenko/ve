@@ -13,7 +13,7 @@ setup(
     author_email='in4pashchenko@gmail.com',
     packages=['vlbi_errors', 'tests'],
     scripts=[],
-    url='https://github.com/ipashchenko/uvmod',
+    url='https://github.com/ipashchenko/vlbi_errors',
     license='MIT',
     description='Tools for acscesing uncertaintes of VLBI results',
     long_description=open('README.rst').read(),

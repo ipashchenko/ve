@@ -123,6 +123,12 @@ class Model(object):
             np.array([], dtype=complex), 'RL': np.array([], dtype=complex),
             'LR': np.array([], dtype=complex)}
             
+    def _ndarray_image_stokes(self, stokes='I'):
+        """Just to remember:)
+        """
+        struct_array = self._image_stokes[stokes]
+        return struct_array.view((float, len(struct_array.dtype.names)))
+            
     def get_p(self, stokes='I'):
         """
         Shortcut for parameters of model.

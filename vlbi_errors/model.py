@@ -127,7 +127,7 @@ class Model(object):
         """
         Shortcut for parameters of model.
         """
-        return self._image_stokes[stokes].flatten()
+        p = self._image_stokes[stokes].flatten()
         
     # TODO: Sometimes we need to change only some parameters (circular gaussians),
     # thus we need mapping (f, x, y, b, a, bpa) <-> p. 
@@ -283,7 +283,8 @@ class Model(object):
         dt = self._image_stokes[stoke].dtype
         cc = BinTable(fname, extname='AIPS CC', ver=ver)
         adds = cc.load()
-        temp = np.zeros(len(adds), dtype=dt)
+        temp = np.empty(len(adds), dtype=dt)
+        temp.fill(np.NAN)
         temp['flux'] = adds['FLUX']
         temp['dx'] = adds['DELTAX'] * self.degree_to_rad
         temp['dy'] = adds['DELTAY'] * self.degree_to_rad
@@ -325,7 +326,9 @@ class Model(object):
 
         # If components are CCs
         if adds.shape[1] == 3:
-            adds = np.hstack((adds, np.zeros((len(adds), 3,)),))
+            nans = np.empty((len(adds), 3,))
+            nans.fill(np.NAN)
+            adds = np.hstack((adds, nans,))
         elif adds.shape[1] == 6:
             raise NotImplementedError('Implement difmap format of gaussian'
                                       ' components')

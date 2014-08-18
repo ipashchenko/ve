@@ -23,6 +23,34 @@ class Model(object):
     """
 
     @classmethod
+    def ft_delta(uvs, amp, x0, y0):
+        """
+        Return the Fourie Transform of delta functions defined in image plane by
+        it's amplitude ``amp``, center ``x0`` & ``y0``.
+
+        :param uvs:
+            Iterable of uv-points for which calculate FT.
+
+        :param amp:
+            Amplitude or iterable of amplitudes of delta functions [Jy].
+
+        :param x0:
+            X-coordinate or iterable of X-coordinates of center [rad].
+
+        :param y0:
+            Y-coordinate or iterable of Y-coordinates of center [rad].
+
+        :return:
+            Numpy array of complex visibilities for specified points ``uvs``.
+            Length of resulting array = len(uvs).
+        """
+        u = uvs[:, 0]
+        v = uvs[:, 1]
+        visibilities = (flux * np.exp(2.0 * math.pi * 1j * (u[:, np.newaxis] *
+                        x0 + v[:, np.newaxis] * y0))).sum(axis=1)
+        return visibilities
+
+    @classmethod
     def ft_2dgaussian(uvs, amp, x0, y0, bmaj, bmin, bpa):
         """
         Return the Fourie Transform of 2D gaussian defined in image plane by

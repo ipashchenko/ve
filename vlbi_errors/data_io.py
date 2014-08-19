@@ -14,6 +14,58 @@ vec_int = np.vectorize(np.int)
 vec_complex = np.vectorize(np.complex)
 
 
+def get_image(image_file, BLC = (0,0), TRC = (0,0)):
+    hdulist = pf.open(image_file)
+    header = hdulist[0].header
+    naxis1 = hdulist[0].header["NAXIS1"]
+    naxis2 = hdulist[0].header["NAXIS2"]
+
+    if TRC == (0,0):
+        TRC = (naxis1,naxis2)
+
+    image = np.rot90(hdulist[0].data[0][0][:, :].transpose(),
+                     k=1)[naxis1 - TRC[1]: naxis2 - BLC[1], BLC[0]: TRC[0]]
+
+    return image
+
+
+
+def get_hdu(fname, extname=None, ver=1):
+    """
+    Function that returns instance of ``PyFits.HDU`` class with specified
+    extension and version from specified file.
+
+    :param fname:
+        Path to FITS-file.
+
+    :param extname (optional):
+        Header's extension. If ``None`` then return first from
+        ``PyFits.HDUList``. (default: ``None``)
+
+    :param ver (optional):
+        Version of ``HDU`` with specified extension.
+
+    :return:
+        Instance of ``PyFits.HDU`` class.
+    """
+
+    hdulist = pf.open(fname)
+
+    if extname:
+        try:
+            indx = hdulist.index_of((extname, ver,))
+            hdu = hdulist[indx]
+        except:
+            raise AbsentHduExtensionError('Haven\'t  found ' + extname
+                                          + ' binary table in ' + fname)
+
+    # Get Primary HDU with UV-data in groups.
+    else:
+        hdu = hdulist[0]
+
+    return hdu
+
+
 class IO(object):
     """
     Abstract class for I/O of different formats of interferometric data and
@@ -69,6 +121,7 @@ class PyFitsIO(IO):
         # We need hdu in save()
         self.hdu = None
 
+    # TODO: This is quite general method -> module-level function
     def get_hdu(self, fname, extname=None, ver=1):
         """
         Method that returns instance of ``PyFits.HDU`` class with specified

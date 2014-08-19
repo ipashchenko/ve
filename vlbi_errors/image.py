@@ -6,6 +6,7 @@ try:
     import pylab
 except ImportError:
     pylab = None
+from vlbi_errors.model import Model
 
 
 class Image(object):
@@ -16,11 +17,23 @@ class Image(object):
     :param beam:
     :param stokes:
     """
-    def __init__(self, imsize=None, pixsize=None, beam=None, stokes=None):
+    def __init__(self, imsize=None, pixsize=None, bmaj=None, bmin=None,
+                 bpa=None, stokes=None):
         self.imsize = imsize
         self.pixsize = pixsize
-        self.beam = beam
+        self.bmaj = bmaj
+        self.bmin = bmin
+        self.bpa = bpa
         self.stokes = stokes
+
+    def add_from_array(self, data, pixsize=None, bmaj=None, bmin=None, bpa=None,
+                       stokes=None):
+        self._image = np.atleast_2d(data)
+        self.imsize = (self._image.shape)
+        self.pixsize = pixsize
+        self.bmaj = bmaj
+        self.bmin = bmin
+        self.bpa = bpa
 
     def add_from_txt(self, fname, stokes='I'):
         """
@@ -40,13 +53,18 @@ class Image(object):
             FITS file with image data.
         :param stokes (optional):
         """
-        pass
+        model = Model()
+        model.add_cc_from_fits(fname, stoke=stokes)
+        components = model._image_stokes[stokes]
+        flux = components['flux']
+        dx = components['dx']
+        dy = components['dy']
 
     def cross_correlate(self, image, region1=(None, None, None, None), region2=(None, None, None, None)):
         """
         Cross-correlates image with another image.
-        
-        Computes normalized cross-correlation of images. 
+
+        Computes normalized cross-correlation of images.
 
         :param image:
             Instance of image class.
@@ -58,7 +76,7 @@ class Image(object):
             (dx, dy,) tuple of shifts (subpixeled) in each direction.
         """
         pass
-        
+
     def plot(self, blc=None, trc=None, clim=None, cmap=None):
         """
         Plot image.
@@ -66,7 +84,7 @@ class Image(object):
         if not pylab:
             raise Exception("Install matplotlib for plotting!")
         if blc or trc:
-            patch_to_plot = self._array[blc[0]:trc[0], blc[1]:trc[1]]
+            path_to_plot = self._array[blc[0]:trc[0], blc[1]:trc[1]]
             imgplot = pylab.imshow(path_to_plot)
             if cmap:
                 try:
@@ -77,8 +95,8 @@ class Image(object):
             if clim:
                 # TODO: Warn if ``clim`` is out of range for image.
                 imgplot.set_clim(clim)
-            
-            
+
+
 class ImageSet(object):
     """
     Class that implements collection of images.
@@ -142,11 +160,11 @@ class ImageSet(object):
     def pixels_histogram(self):
         for i, image in enumerate(self.images):
             self._3_darray[i] = image.data
-            
+
     def cross_correlate_with_image(self, image, region1=(None, None, None, None), region2=(None, None, None, None)):
         """
         Cross-correlate with one image.
-        
+
         :param image:
             Instance of ``Image`` class.
         :param region1:
@@ -157,11 +175,11 @@ class ImageSet(object):
             Tuple of tuples (dx, dy,) of shifts (subpixeled) in each direction.
         """
         pass
-        
+
     def cross_correlate_with_set_of_images(self, images, region1=(None, None, None, None), region2=(None, None, None, None)):
         """
         Cross-correlate with set of images.
-        
+
         :param images:
             Instance of ``ImageSet`` class.
         :param region1:

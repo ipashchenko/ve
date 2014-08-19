@@ -4,11 +4,69 @@
 import math
 import numpy as np
 from utils import EmptyImageFtError
-from data_io import BinTable
+from data_io import get_hdu, BinTable
+from scipy import signal
+from image import Image
 try:
     import pylab
 except ImportError:
     pylab = None
+
+v_int = np.vectorize(int)
+v_round = np.vectorize(round)
+
+
+def create_grid(imsize):
+    """Create meshgrid of size ``imsize``.
+
+        :param imsize:
+            Container of image dimensions
+        :return:
+            Meshgrid of size (imsize[0], imsize[1])
+    """
+    xsize, ysize = imsize
+    x = np.linspace(0, xsize - 1, xsize)
+    y = np.linspace(0, ysize - 1, ysize)
+    x, y = np.meshgrid(x, y)
+    return (x, y,)
+
+
+def gaussianBeam(size_x, bmaj, bmin, bpa, size_y=None):
+    """
+    Generate and return a 2D Gaussian function
+    of dimensions (size_x,size_y).
+
+    See Briggs PhD (Appendix B) for details.
+
+    :param size_x:
+        Size of first dimension [pixels].
+    :param bmaj:
+        Beam major axis size [pixels].
+    :param bmin:
+        Beam minor axis size [pixels].
+    :param bpa:
+        Beam positional angle [deg].
+    :param size_y (optional):
+        Size of second dimension. Default is ``size_x``.
+    :return:
+        Numpy.ndarray of size (``size_x``, ``size_y``,).
+    """
+    size_y = size_y or size_x
+    x, y = np.mgrid[-size_x: size_x + 1, -size_y: size_y + 1]
+    # Constructing parameters of gaussian from ``bmaj``, ``bmin``, ``bpa``.
+    a0 = 1. / (0.5 * bmaj) ** 2.
+    c0 = 1. / (0.5 * bmin) ** 2.
+    theta = math.pi * (bpa + 90.) / 180.
+    a = math.log(2) * (a0 * math.cos(theta) ** 2. +
+                       c0 * math.sin(theta) ** 2.)
+    b = (-(c0 - a0) * math.sin(2. * theta)) * math.log(2.)
+    c = math.log(2) * (a0 * math.sin(theta) ** 2. +
+                       c0 * math.cos(theta) ** 2.)
+
+    g = np.exp(-a * x ** 2. - b * x * y - c * y ** 2.)
+    # FIXME: It is already normalized?
+    #return g/g.sum()
+    return g
 
 
 # TODO: use IO.PyFits subclasses to i/o in this class.
@@ -23,7 +81,7 @@ class Model(object):
     """
 
     @classmethod
-    def ft_delta(uvs, amp, x0, y0):
+    def ft_delta(uvs, flux, x0, y0):
         """
         Return the Fourie Transform of delta functions defined in image plane by
         it's amplitude ``amp``, center ``x0`` & ``y0``.
@@ -102,6 +160,11 @@ class Model(object):
 
         self.mas_to_rad = 4.8481368 * 1E-09
         self.degree_to_rad = 0.01745329
+        self.imsize = None
+        self.pixsize = None
+        self.bmaj = None
+        self.bmin = None
+        self.bpa = None
         self._uvws = np.array([], dtype=[('u', float), ('v', float), ('w',
                               float)])
         self._image_stokes = {'I': np.array([], dtype=[('flux', float),
@@ -122,24 +185,26 @@ class Model(object):
         self._uv_correlations = {'RR': np.array([], dtype=complex), 'LL':
             np.array([], dtype=complex), 'RL': np.array([], dtype=complex),
             'LR': np.array([], dtype=complex)}
-            
+
+        self._image_grids = {'I': None, 'Q': None, 'U': None, 'V': None}
+
     def _ndarray_image_stokes(self, stokes='I'):
         """Just to remember:)
         """
         struct_array = self._image_stokes[stokes]
         return struct_array.view((float, len(struct_array.dtype.names)))
-            
+
     def get_p(self, stokes='I'):
         """
         Shortcut for parameters of model.
         """
         p = self._image_stokes[stokes].flatten()
-        
+
     # TODO: Sometimes we need to change only some parameters (circular gaussians),
-    # thus we need mapping (f, x, y, b, a, bpa) <-> p. 
-    def set_p(self, p, stokes='I')
-        self._image_stokes[stokes]
-        
+    # thus we need mapping (f, x, y, b, a, bpa) <-> p.
+    def set_p(self, p, stokes='I'):
+        self._image_stokes[stokes] = p
+
 
     def get_uvws(self, data):
         """
@@ -287,6 +352,15 @@ class Model(object):
             Stokes parameter of file ``fname``. (default: ``I``)
         """
         dt = self._image_stokes[stoke].dtype
+        # Fetch image parameters information
+        header = get_hdu(fname).header
+        self.imsize = (header['NAXIS1'], header['NAXIS2'],)
+        self.pixref = (int(header['CRPIX1']), int(header['CRPIX2']),)
+        self.bmaj = header['BMAJ'] * self.degree_to_rad
+        self.bmin = header['BMIN'] * self.degree_to_rad
+        self.bpa = header['BPA'] * self.degree_to_rad
+        self.pixsize = (header['CDELT1'], header['CDELT2'],)
+        # Fetch CCs
         cc = BinTable(fname, extname='AIPS CC', ver=ver)
         adds = cc.load()
         temp = np.empty(len(adds), dtype=dt)
@@ -298,6 +372,18 @@ class Model(object):
         self._image_stokes[stoke] = np.hstack((self._image_stokes[stoke],
                                               temp))
         self._updated[stoke] = True
+
+        # Putting CCs to image grid
+        self._image_grids[stoke] = np.zeros(self.imsize, dtype=float)
+        dx, dy = self.pixsize
+        x_c, y_c = self.pixref
+        x_coords = v_int(v_round(adds['DELTAX'] / dx))
+        y_coords = v_int(v_round(adds['DELTAY'] / dy))
+        # 2 means that x_c & x_coords should be zero-indexed actually both.
+        x = x_c + x_coords - 2
+        y = y_c + y_coords - 2
+        for i, (x_, y_,) in enumerate(zip(x, y)):
+            self._image_grids[stoke][x_, y_] = adds['FLUX'][i]
 
     def add_from_txt(self, fname, stoke='I', style='aips'):
         """
@@ -355,6 +441,39 @@ class Model(object):
         :param stokes (optional):
         """
         pass
+
+    def make_image(self, bmaj, bmin, bpa, stokes='I', size_x=None, size_y=None):
+        """
+        Method that returns instance of Image class using model data (CCs, clean
+        beam, map size & pixel size).
+        :param bmaj:
+            Beam major axis size [rad].
+        :param bmin:
+            Beam minor axis size [rad].
+        :param bpa:
+            Beam positional angle [deg]
+        :param stokes:
+            Stokes parameter of image. I, Q, U or V.
+        :param size_x (optional):
+            Size of the first dimension [pixels]. Default is half of image size.
+        :param size_y (optional):
+            Size of the second dimension [pixels]. Default is half of image size.
+        :return:
+            Instance of image class.
+        """
+        if not size_x:
+            size_x = int(self.imsize[0] / 2.)
+        if not size_y:
+            size_y = int(self.imsize[1] / 2.)
+        bmaj = bmaj / self.pixsize[0]
+        bmin = bmin / self.pixsize[1]
+        gaussian_beam = gaussianBeam(size_x, bmaj, bmin, bpa)
+        cc_convolved = signal.convolve(self._image_grids[stokes], gaussian_beam,
+                                       mode='same')
+        image = Image()
+        image.add_from_array(cc_convolved, pixsize=self.pixsize, bmaj=self.bmaj,
+                             bmin = self.bmin, bpa = self.bpa, stokes=stokes)
+        return image
 
     def clear_im(self, stoke='I'):
         """

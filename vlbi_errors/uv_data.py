@@ -332,7 +332,6 @@ class UVData(object):
 
     # TODO: convert time to datetime format and use date2num for plotting
     # TODO: make a kwarg argument - to plot in different symbols/colors
-    # TODO: add possibility to plot real & imag part of visibilities
     def tplot(self, baselines=None, IF=None, stokes=None, style='a&p'):
         """
         Method that plots uv-data vs. time.

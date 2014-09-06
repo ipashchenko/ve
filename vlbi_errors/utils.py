@@ -4,8 +4,9 @@
 import re
 import numpy as np
 import string
-#from itertools import permutations
+# from itertools import permutations
 from math import floor
+from scipy import optimize
 
 
 class AbsentHduExtensionError(Exception):
@@ -19,7 +20,7 @@ class AbsentVersionOfBinTableError(Exception):
 class EmptyImageFtError(Exception):
     pass
 
-#TODO: convert utils to using arrays instead of lists
+# TODO: convert utils to using arrays instead of lists
 
 
 def index_of(ar1, ar2, issubset=True):
@@ -36,7 +37,7 @@ def index_of(ar1, ar2, issubset=True):
     if issubset:
         # assert that all elements of ar1 are in ar2
         assert np.all(np.intersect1d(ar2, ar1) == np.sort(ar1))
-        #assert np.all(np.in1d(ar1, ar2))
+        # assert np.all(np.in1d(ar1, ar2))
 
     indxs_ar2_sorted = np.argsort(ar2)
     ar1_pos_left = np.searchsorted(ar2[indxs_ar2_sorted], ar1, side='left')
@@ -46,7 +47,7 @@ def index_of(ar1, ar2, issubset=True):
     for i in range(len(ar1_pos_left)):
         indxs.append(range(ar1_pos_left[i], ar1_pos_right[i]))
 
-    #indxs = sum(indxs, [])
+    # indxs = sum(indxs, [])
     result = list()
     for indx in indxs:
         if indx:
@@ -54,8 +55,9 @@ def index_of(ar1, ar2, issubset=True):
         else:
             result.append(None)
 
-    #return indxs_ar2_sorted[indxs]
+    # return indxs_ar2_sorted[indxs]
     return result
+
 
 def _to_complex_array(struct_array, real_name, imag_name):
     """
@@ -63,8 +65,8 @@ def _to_complex_array(struct_array, real_name, imag_name):
     complex numpy.ndarray.
     """
 
-    assert(np.shape(struct_array[real_name]) ==\
-                                            np.shape(struct_array[imag_name]))
+    assert(np.shape(struct_array[real_name]) ==
+           np.shape(struct_array[imag_name]))
 
     return struct_array[real_name] + 1j * struct_array[imag_name]
 
@@ -86,7 +88,7 @@ def _to_one_ndarray(struct_array, *names):
             l.extend(np.hsplit(struct_array[name], struct_array[name].shape[1]))
 
     return np.hstack(l)
-    #return np.vstack([struct_array[name] for name in names]).T
+    # return np.vstack([struct_array[name] for name in names]).T
 
 
 def change_shape(_array, _dict1, _dict2):
@@ -110,7 +112,7 @@ def change_shape(_array, _dict1, _dict2):
 
     for key in dict1:
         print "check " + str(key)
-        if not key in dict2:
+        if key not in dict2:
             # Don't alter position of this dimension directly (but it could
             # change it's position because of other dimensions).
             pass
@@ -182,7 +184,7 @@ def aips_bintable_fortran_fields_to_dtype_conversion(aips_type):
     _shape = None
 
     format_dict = {'L': 'bool', 'I': '>i2', 'J': '>i4', 'A': 'S',  'E': '>f4',
-            'D': '>f8'}
+                   'D': '>f8'}
 
     for key in format_dict.keys():
         if key in aips_type:
@@ -194,11 +196,12 @@ def aips_bintable_fortran_fields_to_dtype_conversion(aips_type):
     try:
         dtype_char = format_dict[aips_char]
     except KeyError:
-        raise Exception("no dtype counterpart for aips data format" + str(aips_char))
+        raise Exception("no dtype counterpart for aips data format" +
+                        str(aips_char))
 
     try:
         repeat = int(re.search(r"^(\d+)" + aips_char,
-            aips_type).groups()[0])
+                     aips_type).groups()[0])
         if aips_char is 'A':
             dtype_char = str(repeat) + dtype_char
             repeat = 1
@@ -207,7 +210,9 @@ def aips_bintable_fortran_fields_to_dtype_conversion(aips_type):
 
     if repeat is None:
         _shape = tuple(intv(string.split(re.search(r"^" + aips_char +
-            "\((.+)\)$", aips_type).groups()[0], sep=',')))
+                                                   "\((.+)\)$",
+                                                   aips_type).groups()[0],
+                                         sep=',')))
     else:
         _shape = repeat
 
@@ -218,27 +223,28 @@ def build_dtype_for_bintable_data(header):
     """Builds dtype for recarray from header.
     """
 
-    #substitue = {'UV--SIN': 'u', 'VV--SIN': 'v', 'WW--SIN': 'w', 'BASELINE': 'bl', 'DATE': 't'}
-    #assert(header_dict['EXTNAME'] == 'UV_DATA')
+    # substitue = {'UV--SIN': 'u', 'VV--SIN': 'v', 'WW--SIN': 'w', 'BASELINE':
+    # 'bl', 'DATE': 't'}
+    # assert(header_dict['EXTNAME'] == 'UV_DATA')
 
-   # # # of axis. 2 => matrix
-   # naxis = int(header['NAXIS'])
-   # # # of fields in a item
+    # # # of axis. 2 => matrix
+    # naxis = int(header['NAXIS'])
+    # # # of fields in a item
     tfields = int(header['TFIELDS'])
-   # # # of Bytes in a item (sum of length of tfields elements)
-   # naxis1 = int(header['NAXIS1'])
-   # # # of items
-   # naxis2 = int(header['NAXIS2'])
-   # nrecords = naxis2
+    # # # of Bytes in a item (sum of length of tfields elements)
+    # naxis1 = int(header['NAXIS1'])
+    # # # of items
+    # naxis2 = int(header['NAXIS2'])
+    # nrecords = naxis2
 
-    #parameters of regular data matrix if in UV_DATA table
+    # parameters of regular data matrix if in UV_DATA table
     try:
         maxis = int(header['MAXIS'])
     except KeyError:
         print "non UV_DATA"
         maxis = None
 
-    #build np.dtype format
+    # build np.dtype format
     names = []
     formats = []
     shapes = []
@@ -251,10 +257,10 @@ def build_dtype_for_bintable_data(header):
             name = name * 2
         names.append(name)
         _format, _shape = \
-            aips_bintable_fortran_fields_to_dtype_conversion(header['TFORM' + \
-            str(i)])
+            aips_bintable_fortran_fields_to_dtype_conversion(header['TFORM' +
+                                                                    str(i)])
 
-        #building format & names for regular data matrix
+        # building format & names for regular data matrix
         if name == 'FLUX' and maxis is not None:
             for i in range(1, maxis + 1):
                 maxisi = int(header['MAXIS' + str(i)])
@@ -271,8 +277,7 @@ def build_dtype_for_bintable_data(header):
     print names, formats, shapes, array_names
 
     dtype_builder = zip(names, formats, shapes)
-    dtype = [(name, _format, shape) for (name, _format, shape) in
-            dtype_builder]
+    dtype = [(name, _format, shape) for (name, _format, shape) in dtype_builder]
 
     return dtype, array_names
 
@@ -281,7 +286,7 @@ def baselines_2_ants(baselines):
     """Given list of baseline numbers (fits keyword) returns list of
     corresponding antennas.
     """
-    #TODO: CHECK IF OUTPUT/INPUT IS OK!!!
+    # TODO: CHECK IF OUTPUT/INPUT IS OK!!!
     for baseline in baselines:
         baseline = abs(baseline)
         assert(baseline > 256)
@@ -301,16 +306,16 @@ def baselines_2_ants(baselines):
     return ants
 
 
-#def ants_2_baselines(ants):
-#    """Given several antennas returns corresponding baselines.
-#    """
+# def ants_2_baselines(ants):
+#     """Given several antennas returns corresponding baselines.
+#     """
 #
-#    baselines = list()
-#    ants_by2 = list(permutations(ants, 2))
-#    for ant in ants_by2:
-#        baseline = 256 * ant[0] + ant[1]
-#        baselines.append(baseline)
-#    return baselines
+#     baselines = list()
+#     ants_by2 = list(permutations(ants, 2))
+#     for ant in ants_by2:
+#         baseline = 256 * ant[0] + ant[1]
+#         baselines.append(baseline)
+#     return baselines
 
 
 def ant_2_containing_baslines(ant, antennas):
@@ -366,7 +371,86 @@ def time_dhms_to_frac(dhmses):
     for dhms in dhmses:
         day, hour, minute, second = dhms
         fraction = day + hour / 24.0 + minute / (24.0 * 60.0) + \
-                   second / (24.0 * 60.0 * 60.0)
+            second / (24.0 * 60.0 * 60.0)
         fractions.append(fraction)
 
     return fractions
+
+
+def moments_ext(data, circle, rotate, vheight, estimator=np.median, **kwargs):
+    """
+    Returns (height, amplitude, x, y, width_x, width_y, rotation angle)
+    the gaussian parameters of a 2D distribution by calculating its
+    moments.  Depending on the input parameters, will only output
+    a subset of the above.
+
+    If using masked arrays, pass estimator=np.ma.median
+    """
+    total = np.abs(data).sum()
+    Y, X = np.indices(data.shape)  # python convention: reverse x,y np.indices
+    y = np.argmax((X * np.abs(data)).sum(axis=1) / total)
+    x = np.argmax((Y * np.abs(data)).sum(axis=0) / total)
+    col = data[int(y), :]
+    # FIRST moment, not second!
+    width_x = np.sqrt(np.abs((np.arange(col.size) - y) * col).sum() /
+                      np.abs(col).sum())
+    row = data[:, int(x)]
+    width_y = np.sqrt(np.abs((np.arange(row.size) - x) * row).sum() /
+                      np.abs(row).sum())
+    width = (width_x + width_y) / 2.
+    height = estimator(data.ravel())
+    amplitude = data.max() - height
+    mylist = [amplitude, x, y]
+    if np.isnan(width_y) or np.isnan(width_x) or np.isnan(height) or \
+            np.isnan(amplitude):
+        raise ValueError("something is nan")
+    if vheight == 1:
+        mylist = [height] + mylist
+    if circle == 0:
+        mylist = mylist + [width_x, width_y]
+        if rotate == 1:
+            mylist = mylist + [0.]  # rotation "moment" is just zero...
+            # also, circles don't rotate.
+    else:
+        mylist = mylist + [width]
+    return mylist
+
+
+def moments(data):
+    """Returns (height, x, y, width_x, width_y)
+    the gaussian parameters of a 2D distribution by calculating its
+    moments """
+    total = data.sum()
+    X, Y = np.indices(data.shape)
+    x = (X * data).sum() / total
+    y = (Y * data).sum() / total
+    col = data[:, int(y)]
+    width_x = np.sqrt(abs((np.arange(col.size) - y) ** 2 * col).sum() /
+                      col.sum())
+    row = data[int(x), :]
+    width_y = np.sqrt(abs((np.arange(row.size) - x) ** 2 * row).sum() /
+                      row.sum())
+    height = data.max()
+    return height, x, y, width_x, width_y
+
+
+def gaussian(height, center_x, center_y, width_x, width_y):
+    """
+    Returns a gaussian function with the given parameters.
+    """
+    width_x = float(width_x)
+    width_y = float(width_y)
+    return lambda x, y: height * np.exp(-(((center_x - x) / width_x) ** 2 +
+                                          ((center_y - y) / width_y) ** 2) / 2.)
+
+
+def fitgaussian(data):
+    """
+    Returns (height, x, y, width_x, width_y)
+    the gaussian parameters of a 2D distribution found by a fit.
+    """
+    params = moments(data)
+    errorfunction = lambda p: np.ravel(gaussian(*p)(*np.indices(data.shape)) -
+                                       data)
+    p, success = optimize.leastsq(errorfunction, params)
+    return p

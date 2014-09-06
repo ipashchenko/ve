@@ -108,6 +108,7 @@ class Model(object):
                         x0 + v[:, np.newaxis] * y0))).sum(axis=1)
         return visibilities
 
+    # TODO: check Briggs PhD App. B
     @classmethod
     def ft_2dgaussian(uvs, amp, x0, y0, bmaj, bmin, bpa):
         """
@@ -151,7 +152,7 @@ class Model(object):
                                                    bmin ** 2 * uvs_[:, 1] ** 2))
         # Multiply on phases of x0, y0 in rotated system
         x0_ = x0 * math.cos(bpa) + y0 * math.sin(bpa)
-        y0_= -x0 * math.sin(bpa) + y0 * math.cos(bpa)
+        y0_ = -x0 * math.sin(bpa) + y0 * math.cos(bpa)
         ft *= np.exp(2 * math.pi * 1j * (x0_ * uvs_[:, 0] + y0_ * uvs_[:, 1]))
 
         return ft
@@ -472,7 +473,7 @@ class Model(object):
                                        mode='same')
         image = Image()
         image.add_from_array(cc_convolved, pixsize=self.pixsize, bmaj=self.bmaj,
-                             bmin = self.bmin, bpa = self.bpa, stokes=stokes)
+                             bmin=self.bmin, bpa=self.bpa, stokes=stokes)
         return image
 
     def clear_im(self, stoke='I'):

@@ -62,6 +62,10 @@ target/
 # some txt-files
 *.txt
 
+# images and archives with data
+*.png
+*.ps.gz
+
 # Pycharm
 .idea/
 

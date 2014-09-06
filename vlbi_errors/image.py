@@ -6,7 +6,6 @@ try:
     import pylab
 except ImportError:
     pylab = None
-from vlbi_errors.model import Model
 
 
 class Image(object):

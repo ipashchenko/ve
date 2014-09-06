@@ -260,7 +260,7 @@ class UVData(object):
             # Find indexes of structured array (in zero dim) with given
             # baselines
             for baseline in baselines_list:
-                # Vectorize that shit
+                # TODO: Vectorize that shit
                 indx = np.where(data['baseline'] == baseline)[0]
                 indxs.extend(indx)
             indxs = np.array(np.sort(indxs))

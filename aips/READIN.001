@@ -1,0 +1,43 @@
+$ Comment:
+$ This defines the variables for the procedure ``readin`` 
+
+
+proc init_vars
+
+    scalar nfiles, outputdisk, sequence
+    string*6 inputdir
+    string*4 basename 
+
+finish
+
+$
+$ This procedure will load all fits-files from ``inputdir`` directory to AIPS
+$ to ``inputdisk`` disk.
+$ If ``sequence`` = 1, then use the same OUTNAME but different OUTSEQ.
+$ Otherwise, use different OUTNAME and OUTSEQ = 1.
+$ TODO: If ``nfiles``<0 then load one file ``basename`` to ``nfiles`` files
+$ with different OUTSEQ.
+$
+proc readin(inputdir, basename, nfiles, outputdisk, sequence)
+type 'WILL LOAD N='!!CHAR(nfiles)!!' FILES TO AIPS'
+$
+for i = 1 to nfiles
+    clrtemp
+    default fitld
+    outdi outputdisk
+    IF sequence = 1
+        THEN outname basename
+        outseq i
+        type 'OUTPUT NAME -> '!!basename
+        type 'OUTSEQ -> '!!CHAR(i)
+    ELSE
+        outname basename!!'_'!!CHAR(i)
+        type 'OUTPUT NAME -> '!!basename!!'_'!!CHAR(i)
+        type 'OUTSEQ -> 1
+    END
+    datain 'FITS:/'!!inputdir!!'/'!!basename!!'_'!!CHAR(i)!!'.UVF' 
+    type 'DATA TO LOAD -> FITS:/'!!inputdir!!'/'!!basename!!'_'!!CHAR(i)!!'.UVF'
+    go fitld; wait
+end
+
+return; finish

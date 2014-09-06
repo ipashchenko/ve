@@ -65,6 +65,7 @@ target/
 # images and archives with data
 *.png
 *.ps.gz
+*.gz
 
 # Pycharm
 .idea/

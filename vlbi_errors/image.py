@@ -60,7 +60,8 @@ class Image(object):
         dx = components['dx']
         dy = components['dy']
 
-    def cross_correlate(self, image, region1=(None, None, None, None), region2=(None, None, None, None)):
+    def cross_correlate(self, image, region1=(None, None, None, None),
+                        region2=(None, None, None, None)):
         """
         Cross-correlates image with another image.
 
@@ -69,9 +70,12 @@ class Image(object):
         :param image:
             Instance of image class.
         :param region1:
-            Region to EXCLUDE in current instance of ``Image``. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+            Region to EXCLUDE in current instance of ``Image``.
+            Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r,
+            None,).
         :param region2:
-            Region to EXCLUDE in ``image``. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+            Region to EXCLUDE in ``image``. Or (blc[0], blc[1], trc[0], trc[1],)
+            or (center[0], center[1], r, None,).
         :return:
             (dx, dy,) tuple of shifts (subpixeled) in each direction.
         """

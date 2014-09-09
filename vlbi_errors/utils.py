@@ -454,3 +454,32 @@ def fitgaussian(data):
                                        data)
     p, success = optimize.leastsq(errorfunction, params)
     return p
+
+
+def mask_region(data, region):
+    """
+    Function that maskes 2D numpy array.
+    :param data:
+        2D numpy array.
+    :param region:
+        Tuple (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r,
+        None,).
+    :return:
+        Masked 2D numpy array.
+    """
+    if region[3] is None:
+        # Creating a disc shaped mask with radius r
+        a, b = region[0], region[1]
+        n = min(data.shape)
+        r = region[2]
+        y, x = np.ogrid[-a: n - a, -b: n - b]
+        mask = x ** 2 + y ** 2 <= r ** 2
+        masked_array = np.ma.array(data, mask=mask)
+
+    else:
+        # Creating rectangular mask
+        y, x = np.ogrid[0: data.shape[0], 0: data.shape[1]]
+        mask = (region[0] < x) & (x < region[2]) & (region[1] < y) & (y < region[3])
+        masked_array = np.ma.array(data, mask=mask)
+
+    return masked_array

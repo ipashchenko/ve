@@ -358,7 +358,7 @@ class Groups(PyFitsIO):
                                                       ('time', '<f8'),
                                                       ('baseline', 'int'),
                                                       ('hands', 'complex',
-                                                       (nif, nstokes)),
+                                                       (nif, nstokes,)),
                                                       ('weights', '<f8',
                                                        (nif, nstokes,))])
 
@@ -372,6 +372,9 @@ class Groups(PyFitsIO):
         # Insert dimension for IF if 1 IF in data and it was squeezed
         if self.nif == 1:
             temp = np.expand_dims(temp, axis=1)
+        # Insert dimension for STOKES if 1 STOKES in data and it was squeezed
+        if self.nstokes == 1:
+            temp = np.expand_dims(temp, axis=2)
         hands = vec_complex(temp[..., 0], temp[..., 1])
         weights = temp[..., 2]
 

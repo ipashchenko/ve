@@ -1,0 +1,55 @@
+$ Comment:
+$ This defines the variables for the procedure ``cleann`` 
+
+proc init_vars
+
+    scalar insq, ind, outd, f, cellsz, imsz, nf, rb 
+    string*4 stks
+    string*12 inn
+    string*6 incl
+    string*48 bxfl
+
+finish
+
+$
+$ This procedure will clean uv-data fits-files with user specified parameters.
+$ It will clean ``nf`` uv-files with specified INNAME ``inn`` and INSEQ from
+$ specified ``insq`` to ``insq`` + ``nf``.
+$ 
+$ Use value of min of loaded to TV flux at first interactive CLEANing.
+$ E.g. see IMAGR's output for:  " Reached minimum algorithm flux =  209.035
+$ MicroJy". So use flux1 = 0.0002.
+$
+$ TODO: implement residual map (BMAJ<0) for postprocessing.
+$
+
+proc cleann(inn, incl, insq, ind, outd, bxfl, f, imsz, cellsz, stks, nf, rb)
+clrtemp
+default imagr
+inname inn
+inclass incl
+inseq insq
+indisk ind
+outdisk outd
+outname inn
+stokes stks
+cmethod='DFT'   $ only hardcore
+boxfile bxfl
+imsize imsz
+robust rb
+cellsize cellsz
+flux f
+dotv -1    $ non-interactive mode on
+niter 10000   $ for sure
+type 'OK'
+FOR i = 1 TO nf
+    type 'OK'
+    inseq insq + i - 1
+    type '1OK'
+    outseq i
+    type '2OK'
+    type inn!!'.'!!incl!!'.'!!CHAR(insq)!!' ON DISK #'!!CHAR(ind)
+    type 'OUTPUT -> '!!inn!!'.'!!stks!!'CL001.'!!CHAR(outseq)
+    go imagr; wait
+END
+return; finish

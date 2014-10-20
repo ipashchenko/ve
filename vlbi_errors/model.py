@@ -108,6 +108,7 @@ class Model(object):
                         x0 + v[:, np.newaxis] * y0))).sum(axis=1)
         return visibilities
 
+    # TODO: check Briggs PhD App. B
     @classmethod
     def ft_2dgaussian(uvs, amp, x0, y0, bmaj, bmin, bpa):
         """
@@ -151,7 +152,7 @@ class Model(object):
                                                    bmin ** 2 * uvs_[:, 1] ** 2))
         # Multiply on phases of x0, y0 in rotated system
         x0_ = x0 * math.cos(bpa) + y0 * math.sin(bpa)
-        y0_= -x0 * math.sin(bpa) + y0 * math.cos(bpa)
+        y0_ = -x0 * math.sin(bpa) + y0 * math.cos(bpa)
         ft *= np.exp(2 * math.pi * 1j * (x0_ * uvs_[:, 0] + y0_ * uvs_[:, 1]))
 
         return ft
@@ -359,7 +360,8 @@ class Model(object):
         self.bmaj = header['BMAJ'] * self.degree_to_rad
         self.bmin = header['BMIN'] * self.degree_to_rad
         self.bpa = header['BPA'] * self.degree_to_rad
-        self.pixsize = (header['CDELT1'], header['CDELT2'],)
+        self.pixsize = (header['CDELT1'] * self.degree_to_rad,
+                        header['CDELT2'] * self.degree_to_rad,)
         # Fetch CCs
         cc = BinTable(fname, extname='AIPS CC', ver=ver)
         adds = cc.load()
@@ -377,8 +379,8 @@ class Model(object):
         self._image_grids[stoke] = np.zeros(self.imsize, dtype=float)
         dx, dy = self.pixsize
         x_c, y_c = self.pixref
-        x_coords = v_int(v_round(adds['DELTAX'] / dx))
-        y_coords = v_int(v_round(adds['DELTAY'] / dy))
+        x_coords = v_int(v_round(adds['DELTAX'] * self.degree_to_rad / dx))
+        y_coords = v_int(v_round(adds['DELTAY'] * self.degree_to_rad / dy))
         # 2 means that x_c & x_coords should be zero-indexed actually both.
         x = x_c + x_coords - 2
         y = y_c + y_coords - 2
@@ -442,17 +444,18 @@ class Model(object):
         """
         pass
 
-    def make_image(self, bmaj, bmin, bpa, stokes='I', size_x=None, size_y=None):
+    def make_image(self, bmaj=None, bmin=None, bpa=None, stokes='I',
+                   size_x=None, size_y=None):
         """
         Method that returns instance of Image class using model data (CCs, clean
         beam, map size & pixel size).
-        :param bmaj:
+        :param bmaj: (optional)
             Beam major axis size [rad].
-        :param bmin:
+        :param bmin: (optional)
             Beam minor axis size [rad].
-        :param bpa:
+        :param bpa: (optional)
             Beam positional angle [deg]
-        :param stokes:
+        :param stokes: (optional)
             Stokes parameter of image. I, Q, U or V.
         :param size_x (optional):
             Size of the first dimension [pixels]. Default is half of image size.
@@ -465,14 +468,18 @@ class Model(object):
             size_x = int(self.imsize[0] / 2.)
         if not size_y:
             size_y = int(self.imsize[1] / 2.)
-        bmaj = bmaj / self.pixsize[0]
-        bmin = bmin / self.pixsize[1]
+        if not bmaj:
+            bmaj = self.bmaj / abs(self.pixsize[0])
+        if not bmin:
+            bmin = self.bmin / abs(self.pixsize[1])
+        if bpa is None:
+            bpa = self.bpa
         gaussian_beam = gaussianBeam(size_x, bmaj, bmin, bpa)
-        cc_convolved = signal.convolve(self._image_grids[stokes], gaussian_beam,
-                                       mode='same')
+        cc_convolved = signal.fftconvolve(self._image_grids[stokes],
+                                          gaussian_beam, mode='same')
         image = Image()
         image.add_from_array(cc_convolved, pixsize=self.pixsize, bmaj=self.bmaj,
-                             bmin = self.bmin, bpa = self.bpa, stokes=stokes)
+                             bmin=self.bmin, bpa=self.bpa, stokes=stokes)
         return image
 
     def clear_im(self, stoke='I'):
@@ -508,6 +515,6 @@ class Model(object):
 
 if __name__ == '__main__':
 
-    imodel = Model()
-    imodel.add_from_txt('/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt')
-    print imodel._image_stokes
+    model = Model()
+    model.add_cc_from_fits('0003-066.j.2006_07_07.i_0.1.fits')
+    image = model.make_image()

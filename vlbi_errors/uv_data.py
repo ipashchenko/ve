@@ -638,7 +638,14 @@ class UVData(object):
             Numpy.ndarray with shape (#N, #IF, #stokes,) that repeats the shape
             of self.data['hands'] array.
         """
-        raise NotImplementedError()
+        if not self._error:
+            noise_dict = self.noise(use_V=False, split_scans=False)
+            self._error = np.empty((len(self.uvdata), self.nif, self.nstokes,),
+                                   dtype=float)
+            for i, baseline in enumerate(self.data['baseline']):
+                self._error[i] = noise_dict[baseline]
+
+        return self._error
 
     # TODO: use qq = scipy.stats.probplot((v-mean(v))/std(v), fit=0) then
     # plot(qq[0], qq[1]) - how to check normality

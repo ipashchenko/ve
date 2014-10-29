@@ -387,9 +387,12 @@ class Groups(PyFitsIO):
             hdu.header['PZERO3']
         # ``DATE`` can have different number among parameters
         indx_date = par_dict['DATE']
-        time = hdu.data[hdu.header['PTYPE' + str(indx_date)]] / \
-               hdu.header['PSCAL' + str(indx_date)] - hdu.header['PZERO' +
-                                                                 str(indx_date)]
+        # ``_DATE`` doesn't figure in ``hdu.data.parnames``
+        time = hdu.data['DATE'] / hdu.header['PSCAL' + str(indx_date)] -\
+               hdu.header['PZERO' + str(indx_date)]
+        time_ = hdu.data['_DATE'] / hdu.header['PSCAL' + str(indx_date + 1)] - \
+               hdu.header['PZERO' + str(indx_date + 1)]
+        time += time_
 
         # Filling structured array by fields
         _data['uvw'] = np.column_stack((u, v, w))

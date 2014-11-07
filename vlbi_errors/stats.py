@@ -206,8 +206,9 @@ class LnLikelihood(object):
     Class that implements likelihood calculation for given data.
     """
 
-    def __init__(self, data, model):
-        pass
+    def __init__(self, uvdata, model):
+        self.uvdata = uvdata
+        self.model = model
 
     def __call__(self, p):
         pass

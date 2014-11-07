@@ -522,3 +522,33 @@ def mask_region(data, region):
         masked_array = np.ma.array(data, mask=mask)
 
     return masked_array
+
+
+def find_close_regions(data, std_decrease_factor=1.1):
+    """
+    Function that finds entries of array with close elements (aka scans for time
+    domain).
+    :param data:
+        1D numpy array with data.
+    :return:
+        list of lists with (first index, last index) of close regions.
+    """
+    maxs = np.diff(data)[np.argsort(np.diff(data))[::-1]]
+    i = 0
+    while np.std(maxs[i:])/np.std(maxs[i+1:]) > std_decrease_factor:
+        i += 1
+    threshold = maxs[i-1]
+    borders = np.where((data[1:] - data[:-1]) > maxs[i-1])[0]
+    print len(borders)
+    regions_list = list()
+    # Append first region
+    regions_list.append([data[0], data[borders[0]]])
+    # Append others
+    for k in range(len(borders) - 1):
+        regions_list.append([data[borders[k] + 1], data[borders[k+1]]])
+    # Append last
+    regions_list.append([data[borders[k+1] + 1], data[-1]])
+
+    return regions_list
+
+

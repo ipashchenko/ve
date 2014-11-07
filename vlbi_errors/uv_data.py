@@ -203,7 +203,8 @@ class UVData(object):
     # array using kwargs for parameters and kwargs with dictionary values for
     # specifying dimensions of arrays in strutured array. I need it in Gains
     # class too.
-    def _choose_data(self, times=None, baselines=None, IF=None, stokes=None):
+    def _choose_data(self, times=None, baselines=None, IF=None, stokes=None,
+                     freq_average=False):
         """
         Method that returns chosen data from ``_data`` numpy structured array
         based on user specified parameters.
@@ -328,11 +329,15 @@ class UVData(object):
             raise Exception('Allowed stokes parameters: I, Q, U, V, RR, LL, RL,'
                             'LR or (default) all [RR, LL, RL, LR].')
 
+        if freq_average:
+            result = np.mean(result, axis=1)
+
         return result, indxs
 
     # TODO: convert time to datetime format and use date2num for plotting
     # TODO: make a kwarg argument - to plot in different symbols/colors
-    def tplot(self, baselines=None, IF=None, stokes=None, style='a&p'):
+    def tplot(self, baselines=None, IF=None, stokes=None, style='a&p',
+              freq_average=False):
         """
         Method that plots uv-data vs. time.
 
@@ -363,17 +368,8 @@ class UVData(object):
             stokes = 'I'
 
         uvdata, indxs = self._choose_data(baselines=baselines, IF=IF,
-                                          stokes=stokes)
-        # # of chosen IFs
-        n_if = np.shape(uvdata)[1]
-
-        # TODO: define colors
-        try:
-            syms = self.__color_list[:n_if]
-        except AttributeError:
-            print "Define self.__color_list to show in different colors!"
-            syms = ['.k'] * n_if
-
+                                          stokes=stokes,
+                                          freq_average=freq_average)
         # TODO: i need function to choose parameters
         times = self.data[indxs]['time']
 
@@ -389,23 +385,45 @@ class UVData(object):
         #angles = np.angle(data)
         #amplitudes = np.real(np.sqrt(data * np.conj(data)))
 
-        pylab.subplot(2, 1, 1)
-        for _if in range(n_if):
-            # TODO: plot in different colors and make a legend
-            pylab.plot(times, a1[:, _if], syms[_if])
-        pylab.subplot(2, 1, 2)
-        for _if in range(n_if):
-            pylab.plot(times, a2[:, _if], syms[_if])
+        if not freq_average:
+
+            # # of chosen IFs
+            n_if = np.shape(uvdata)[1]
+
+            # TODO: define colors
+            try:
+                syms = self.__color_list[:n_if]
+            except AttributeError:
+                print "Define self.__color_list to show in different colors!"
+                syms = ['.k'] * n_if
+
+            pylab.subplot(2, 1, 1)
+            for _if in range(n_if):
+                # TODO: plot in different colors and make a legend
+                pylab.plot(times, a1[:, _if], syms[_if])
+            pylab.subplot(2, 1, 2)
+            for _if in range(n_if):
+                pylab.plot(times, a2[:, _if], syms[_if])
+                if style == 'a&p':
+                    pylab.ylim([-math.pi, math.pi])
+            pylab.show()
+
+        else:
+            pylab.subplot(2, 1, 1)
+            pylab.plot(times, a1, '.k')
+            pylab.subplot(2, 1, 2)
+            pylab.plot(times, a2, '.k')
             if style == 'a&p':
                 pylab.ylim([-math.pi, math.pi])
-        pylab.show()
+            pylab.show()
 
     # TODO: Implement PA[deg] slicing of uv-plane with keyword argument ``PA``.
     # TODO: Add ``model`` kwarg for plotting image plane model with data
     # together.
     # TODO: Add ``plot_noise`` boolean kwarg for plotting error bars also. (Use
     # ``UVData.noise()`` method for finding noise values.)
-    def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p'):
+    def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p',
+               freq_average=False):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
 
@@ -436,18 +454,8 @@ class UVData(object):
             stokes = 'I'
 
         uvdata, indxs = self._choose_data(baselines=baselines, IF=IF,
-                                          stokes=stokes)
-
-        # # of chosen IFs
-        # TODO: Better use len(IF) if ``data`` shape will change sometimes.
-        n_if = np.shape(uvdata)[1]
-
-        # TODO: define colors
-        try:
-            syms = self.__color_list[:n_if]
-        except AttributeError:
-            print "Define self.__color_list to show in different colors!"
-            syms = ['.k'] * n_if
+                                          stokes=stokes,
+                                          freq_average=freq_average)
 
         # TODO: i need function choose parameters
         uvw_data = self.data[indxs]['uvw']
@@ -462,16 +470,37 @@ class UVData(object):
         else:
             raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
 
-        pylab.subplot(2, 1, 1)
-        for _if in range(n_if):
-            # TODO: plot in different colors and make a legend
-            pylab.plot(uv_radius, a2[:, _if], syms[_if])
-        pylab.subplot(2, 1, 2)
-        for _if in range(n_if):
-            pylab.plot(uv_radius, a1[:, _if], syms[_if])
+        if not freq_average:
+            # # of chosen IFs
+            # TODO: Better use len(IF) if ``data`` shape will change sometimes.
+            n_if = np.shape(uvdata)[1]
+
+            # TODO: define colors
+            try:
+                syms = self.__color_list[:n_if]
+            except AttributeError:
+                print "Define self.__color_list to show in different colors!"
+                syms = ['.k'] * n_if
+
+            pylab.subplot(2, 1, 1)
+            for _if in range(n_if):
+                # TODO: plot in different colors and make a legend
+                pylab.plot(uv_radius, a2[:, _if], syms[_if])
+            pylab.subplot(2, 1, 2)
+            for _if in range(n_if):
+                pylab.plot(uv_radius, a1[:, _if], syms[_if])
+                if style == 'a&p':
+                    pylab.ylim([-math.pi, math.pi])
+            pylab.show()
+        else:
+            pylab.subplot(2, 1, 1)
+            pylab.plot(uv_radius, a2, '.k')
+            pylab.subplot(2, 1, 2)
+            pylab.plot(uv_radius, a1, '.k')
             if style == 'a&p':
                 pylab.ylim([-math.pi, math.pi])
-        pylab.show()
+            pylab.show()
+
 
     def uvplot_model(self, model, baselines=None, stokes=None, style='a&p'):
         """
@@ -547,6 +576,7 @@ class UVData(object):
         all_times = self.data['time']
         all_a, all_b = np.histogram(all_times[1:] - all_times[:-1])
         for bl in self.baselines:
+            print "Processing baseline ", bl
             bl_times = self.data[self._choose_data(baselines=bl)[1]]['time']
             a, b = np.histogram(bl_times[1:] - bl_times[:-1])
             # If baseline consists only of 1 scan
@@ -624,8 +654,7 @@ class UVData(object):
     def uvdata(self, uvdata):
         self.data['hands'] = uvdata
 
-    @property
-    def error(self):
+    def error(self, average_freq=False):
         """
         Shortcut for error associated with each visibility.
 
@@ -638,10 +667,16 @@ class UVData(object):
             Numpy.ndarray with shape (#N, #IF, #stokes,) that repeats the shape
             of self.data['hands'] array.
         """
-        if not self._error:
-            noise_dict = self.noise(use_V=False, split_scans=False)
-            self._error = np.empty((len(self.uvdata), self.nif, self.nstokes,),
-                                   dtype=float)
+        if self._error is None:
+            noise_dict = self.noise(use_V=False, split_scans=False,
+                                    average_freq=average_freq)
+            if not average_freq:
+                self._error = np.empty((len(self.uvdata), self.nif,
+                                        self.nstokes,), dtype=float)
+            else:
+                self._error = np.empty((len(self.uvdata), self.nstokes,),
+                                       dtype=float)
+
             for i, baseline in enumerate(self.data['baseline']):
                 self._error[i] = noise_dict[baseline]
 

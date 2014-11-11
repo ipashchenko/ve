@@ -1,11 +1,37 @@
-__author__ = 'ilya'
-
 import glob
 import numpy as np
+#from model_old import Model
+from data_io import get_fits_image_info
 try:
     import pylab
 except ImportError:
     pylab = None
+
+
+class ImageGrid(object):
+    """
+    Class that represents image grid (array) representation of models.
+    """
+    def __init__(self, fname=None, imsize=None, pixref=None, pixsize=None):
+        if fname:
+            self.from_image(fname)
+        else:
+            self.imsize = imsize
+            self.dx, self.dy = pixsize
+            self.x_c, self.y_c = pixref
+        self.image_grid = np.zeros(self.imsize, dtype=float)
+
+    def from_image(self, fname):
+        imsize, pixref, (bmaj, bmin, bpa,), pixsize = get_fits_image_info(fname)
+        self.imsize = imsize
+        self.dx, self.dy = pixsize
+        self.x_c, self.y_c = pixref
+
+    def add_component(self, component):
+        component.add_to_image_grid(self)
+
+    def add_noise(self, std, df=None):
+        pass
 
 
 class Image(object):
@@ -141,7 +167,7 @@ class ImageSet(object):
         """
         fnames = glob.glob(wildcard)
         for fname in fnames:
-            image = Image()
+            image = ImageGrid()
             image.add_from_fits(fname, stokes=stokes)
             self.images.append(image)
 
@@ -156,7 +182,7 @@ class ImageSet(object):
         """
         fnames = glob.glob(wildcard)
         for fname in fnames:
-            image = Image()
+            image = ImageGrid()
             image.add_from_txt(fname, stokes=stokes)
             self.images.append(image)
 
@@ -164,7 +190,9 @@ class ImageSet(object):
         for i, image in enumerate(self.images):
             self._3_darray[i] = image.data
 
-    def cross_correlate_with_image(self, image, region1=(None, None, None, None), region2=(None, None, None, None)):
+    def cross_correlate_with_image(self, image,
+                                   region1=(None, None, None, None),
+                                   region2=(None, None, None, None)):
         """
         Cross-correlate with one image.
 
@@ -179,7 +207,9 @@ class ImageSet(object):
         """
         pass
 
-    def cross_correlate_with_set_of_images(self, images, region1=(None, None, None, None), region2=(None, None, None, None)):
+    def cross_correlate_with_set_of_images(self, images,
+                                           region1=(None, None, None, None),
+                                           region2=(None, None, None, None)):
         """
         Cross-correlate with set of images.
 

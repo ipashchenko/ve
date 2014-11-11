@@ -1,12 +1,11 @@
-#!/usr/bin python2
-# -*- coding: utf-8 -*-
-
-from model import Model
+import math
+from model_old import Model
 from gains import Absorber
 from uv_data import open_fits
 import glob
 import copy
 import numpy as np
+from utils import is_sorted
 
 
 class AddNoise(object):
@@ -202,16 +201,79 @@ class CrossValidation(object):
 
 
 class LnLikelihood(object):
-    """
-    Class that implements likelihood calculation for given data.
-    """
+    def __init__(self, uvdata, model, average_freq=True):
+        error = uvdata.error(average_freq=average_freq)
+        self.model = model
+        self.uv = uvdata.uvw[:, :2]
+        stokes = model.stokes
+        if average_freq:
+            if stokes == 'I':
+                self.uvdata = 0.5 * (uvdata.uvdata_freq_averaged[:, 0] +
+                                     uvdata.uvdata_freq_averaged[:, 1])
+                self.error = 0.5 * np.sqrt(error[:, 0] ** 2. +
+                                           error[:, 1] ** 2.)
+            elif stokes == 'RR':
+                self.uvdata = uvdata.uvdata_freq_averaged[:, 0]
+                self.error = error[:, 0]
+            elif stokes == 'LL':
+                self.uvdata = uvdata.uvdata_freq_averaged[:, 1]
+                self.error = error[:, 1]
+            else:
+                raise Exception("Working with only I, RR or LL!")
+        else:
+            if stokes == 'I':
+                self.uvdata = 0.5 * (uvdata.uvdata[:, 0] + uvdata.uvdata[:, 1])
+            elif stokes == 'RR':
+                self.uvdata = uvdata.uvdata[:, 0]
+            elif stokes == 'LL':
+                self.uvdata = uvdata.uvdata[:, 1]
+            else:
+                raise Exception("Working with only I, RR or LL!")
 
-    def __init__(self, uvdata, model):
-        self.uvdata = uvdata
+    def __call__(self, p):
+        """
+        Returns ln of likelihood for data and model with parameters ``p``.
+        :param p:
+        :return:
+        """
+        # Data visibilities and noise
+        data = self.uvdata
+        error = self.error
+        # Model visibilities at uv-points of data
+        self.model.p = p
+        model_data = self.model.ft(self.uv)
+        # ln of data likelihood
+        lnlik = -0.5 * np.log(2. * math.pi * error ** 2.) - \
+                (data - model_data) * (data - model_data).conj() / \
+                (2. * error ** 2.)
+        lnlik = lnlik.real
+        return lnlik.sum()
+
+
+class LnPrior(object):
+    def __init__(self, model):
         self.model = model
 
     def __call__(self, p):
-        pass
+        self.model.p = p
+        distances = list()
+        for component in self.model._components:
+            distances.append(component.r)
+        if not is_sorted(distances):
+            print "Components are not sorted."
+            return -np.inf
+        else:
+            print "Components are sorted. OK!"
+        lnpr = list()
+        for component in self.model._components:
+            print "Passing to component ", component
+            print "parameters : ", p[:component.size]
+            component.p = p[:component.size]
+            p = p[component.size:]
+            print "Got lnprior for component : ", component.lnpr
+            lnpr.append(component.lnpr)
+
+        return sum(lnpr)
 
 
 if __name__ == '__main__':

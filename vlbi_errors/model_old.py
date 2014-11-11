@@ -1,12 +1,9 @@
-#!/usr/bin python
-# -*- coding: utf-8 -*-
-
 import math
 import numpy as np
 from utils import EmptyImageFtError
 from data_io import get_hdu, BinTable
 from scipy import signal
-from image import Image
+from image import ImageGrid
 try:
     import pylab
 except ImportError:
@@ -477,7 +474,7 @@ class Model(object):
         gaussian_beam = gaussianBeam(size_x, bmaj, bmin, bpa)
         cc_convolved = signal.fftconvolve(self._image_grids[stokes],
                                           gaussian_beam, mode='same')
-        image = Image()
+        image = ImageGrid()
         image.add_from_array(cc_convolved, pixsize=self.pixsize, bmaj=self.bmaj,
                              bmin=self.bmin, bpa=self.bpa, stokes=stokes)
         return image

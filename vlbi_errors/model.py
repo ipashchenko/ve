@@ -3,467 +3,177 @@
 
 import math
 import numpy as np
-from utils import EmptyImageFtError
-from data_io import get_hdu, BinTable
-from scipy import signal
+from utils import gaussianBeam
 from image import Image
+from scipy import signal
+from data_io import BinTable, get_hdu
+from uv_data import open_fits
+
 try:
     import pylab
 except ImportError:
     pylab = None
 
-v_int = np.vectorize(int)
-v_round = np.vectorize(round)
+def ln_uniform(x, a, b):
+    assert(a < b)
+    if not a < x < b:
+        return -np.inf
+    return -math.log(b - a)
 
 
-def create_grid(imsize):
-    """Create meshgrid of size ``imsize``.
-
-        :param imsize:
-            Container of image dimensions
-        :return:
-            Meshgrid of size (imsize[0], imsize[1])
-    """
-    xsize, ysize = imsize
-    x = np.linspace(0, xsize - 1, xsize)
-    y = np.linspace(0, ysize - 1, ysize)
-    x, y = np.meshgrid(x, y)
-    return (x, y,)
+def is_sorted(lst):
+    return (sorted(lst) == lst)
 
 
-def gaussianBeam(size_x, bmaj, bmin, bpa, size_y=None):
-    """
-    Generate and return a 2D Gaussian function
-    of dimensions (size_x,size_y).
-
-    See Briggs PhD (Appendix B) for details.
-
-    :param size_x:
-        Size of first dimension [pixels].
-    :param bmaj:
-        Beam major axis size [pixels].
-    :param bmin:
-        Beam minor axis size [pixels].
-    :param bpa:
-        Beam positional angle [deg].
-    :param size_y (optional):
-        Size of second dimension. Default is ``size_x``.
-    :return:
-        Numpy.ndarray of size (``size_x``, ``size_y``,).
-    """
-    size_y = size_y or size_x
-    x, y = np.mgrid[-size_x: size_x + 1, -size_y: size_y + 1]
-    # Constructing parameters of gaussian from ``bmaj``, ``bmin``, ``bpa``.
-    a0 = 1. / (0.5 * bmaj) ** 2.
-    c0 = 1. / (0.5 * bmin) ** 2.
-    theta = math.pi * (bpa + 90.) / 180.
-    a = math.log(2) * (a0 * math.cos(theta) ** 2. +
-                       c0 * math.sin(theta) ** 2.)
-    b = (-(c0 - a0) * math.sin(2. * theta)) * math.log(2.)
-    c = math.log(2) * (a0 * math.sin(theta) ** 2. +
-                       c0 * math.cos(theta) ** 2.)
-
-    g = np.exp(-a * x ** 2. - b * x * y - c * y ** 2.)
-    # FIXME: It is already normalized?
-    #return g/g.sum()
-    return g
+def get_fits_image_info(self, fname):
+    header = get_hdu(fname).header
+    imsize = (header['NAXIS1'], header['NAXIS2'],)
+    pixref = (int(header['CRPIX1']), int(header['CRPIX2']),)
+    bmaj = header['BMAJ'] * degree_to_rad
+    bmin = header['BMIN'] * degree_to_rad
+    bpa = header['BPA'] * degree_to_rad
+    pixsize = (header['CDELT1'] * degree_to_rad,
+               header['CDELT2'] * degree_to_rad,)
+    return imsize, pixref, (bmaj, bmin, bpa,), pixsize
 
 
-# TODO: use IO.PyFits subclasses to i/o in this class.
-# TODO: implement Image class with methods to load from FITS/txt.
-# TODO: implement method that accepts Image() instance and plot model to them.
+# TODO: move create_image_grid to ``Component`` subclasses. Thus, we can mix
+# different components in one model and call their own methods. ``Model`` should
+# have method, specifying image grid parameters, construct 2D numpy array and
+# call component's method ``add_to_image_grid`` to add to this general 2D array.
 class Model(object):
     """
-    Class that represents models.
-
-    This class is used to describe model of VLBI-data in both image and
-    uv-domain: clean components (delta functions), gaussians etc.
+    Basic class that represents general functionality of models.
     """
+    def __init__(self, stokes=None):
+        self._components = list()
+        self._p = None
+        self._uv = None
+        self.stokes = stokes
+        self._image_grid = None
 
-    @classmethod
-    def ft_delta(uvs, flux, x0, y0):
+    def __add__(self, other):
+        self._components.extend(other._components)
+
+    def add_component(self, component):
+        self._components.append(component)
+
+    def add_components(self, *components):
+        for component in components:
+            self._components.append(component)
+
+    def remove_component(self, component):
+        self._components.remove(component)
+
+    def remove_components(self, *components):
+        for component in components:
+            self._components.remove(component)
+
+    def clear_components(self):
+        self._components = list()
+
+    def clear_uv(self):
+        self._uv = None
+
+    def ft(self, uv=None):
         """
-        Return the Fourie Transform of delta functions defined in image plane by
-        it's amplitude ``amp``, center ``x0`` & ``y0``.
-
-        :param uvs:
-            Iterable of uv-points for which calculate FT.
-
-        :param amp:
-            Amplitude or iterable of amplitudes of delta functions [Jy].
-
-        :param x0:
-            X-coordinate or iterable of X-coordinates of center [rad].
-
-        :param y0:
-            Y-coordinate or iterable of Y-coordinates of center [rad].
-
-        :return:
-            Numpy array of complex visibilities for specified points ``uvs``.
-            Length of resulting array = len(uvs).
+        Returns FT of model's components at specified points of uv-plane.
         """
-        u = uvs[:, 0]
-        v = uvs[:, 1]
-        visibilities = (flux * np.exp(2.0 * math.pi * 1j * (u[:, np.newaxis] *
-                        x0 + v[:, np.newaxis] * y0))).sum(axis=1)
-        return visibilities
-
-    # TODO: check Briggs PhD App. B
-    @classmethod
-    def ft_2dgaussian(uvs, amp, x0, y0, bmaj, bmin, bpa):
-        """
-        Return the Fourie Transform of 2D gaussian defined in image plane by
-        it's amplitude ``amp``, center ``x0`` & ``y0``, major and minor axes
-        ``bmaj`` & ``bmin`` and positional angle of major axis ``bpa``.
-
-        :param uvs:
-            Iterable of uv-points for which calculate FT.
-
-        :param amp:
-            Amplitude of gaussian [Jy].
-
-        :param x0:
-            X-coordinate of gaussian center [rad].
-
-        :param y0:
-            Y-coordinate of gaussian center [rad].
-
-        :param bmaj:
-            Size of major axis [rad].
-
-        :param bmin:
-            Size of min axis [rad].
-
-        :param bpa:
-            Positional angle of major axis [rad].
-
-        :return:
-            Numpy array of complex visibilities for specified points ``uvs``.
-            Length of resulting array = len(uvs).
-        """
-        # Rotate the uv-plane on angle -bpa
-        uvs_ = uvs.copy()
-        uvs_[:, 0] = uvs[:, 0] * math.cos(bpa) + uvs[:, 1] * math.sin(bpa)
-        uvs_[:, 1] = -uvs[:, 0] * math.sin(bpa) + uvs[:, 1] * math.cos(bpa)
-        # Sequence of FT of gaussian(amp, x0=0, y0=0, bmaj, bmin) with len(ft) =
-        # len(uvs)
-        ft = amp * math.pi * bmaj * bmin * np.exp(-math.pi ** 2 *
-                                                  (bmaj ** 2 * uvs_[:, 0] ** 2 +
-                                                   bmin ** 2 * uvs_[:, 1] ** 2))
-        # Multiply on phases of x0, y0 in rotated system
-        x0_ = x0 * math.cos(bpa) + y0 * math.sin(bpa)
-        y0_ = -x0 * math.sin(bpa) + y0 * math.cos(bpa)
-        ft *= np.exp(2 * math.pi * 1j * (x0_ * uvs_[:, 0] + y0_ * uvs_[:, 1]))
-
+        if uv is None:
+            uv = self._uv
+        ft = np.zeros(len(uv), dtype=complex)
+        for component in self._components:
+            ft += component.ft(uv)
         return ft
 
-    def __init__(self):
-
-        self.mas_to_rad = 4.8481368 * 1E-09
-        self.degree_to_rad = 0.01745329
-        self.imsize = None
-        self.pixsize = None
-        self.bmaj = None
-        self.bmin = None
-        self.bpa = None
-        self._uvws = np.array([], dtype=[('u', float), ('v', float), ('w',
-                              float)])
-        self._image_stokes = {'I': np.array([], dtype=[('flux', float),
-            ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
-                float), ('bpa', float)]),
-                              'Q': np.array([], dtype=[('flux', float),
-            ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
-                float), ('bpa', float)]),
-                              'U': np.array([], dtype=[('flux', float),
-            ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
-                float), ('bpa', float)]),
-                              'V': np.array([], dtype=[('flux', float),
-            ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
-                float), ('bpa', float)])}
-
-        self._updated = {'I': False, 'Q': False, 'U': False, 'V': False}
-
-        self._uv_correlations = {'RR': np.array([], dtype=complex), 'LL':
-            np.array([], dtype=complex), 'RL': np.array([], dtype=complex),
-            'LR': np.array([], dtype=complex)}
-
-        self._image_grids = {'I': None, 'Q': None, 'U': None, 'V': None}
-
-    def _ndarray_image_stokes(self, stokes='I'):
-        """Just to remember:)
+    def get_uv(self, uvdata):
         """
-        struct_array = self._image_stokes[stokes]
-        return struct_array.view((float, len(struct_array.dtype.names)))
+        Sets ``_uv`` attribute of self with values from UVData class instance
+        ``uvdata``.
 
-    def get_p(self, stokes='I'):
-        """
-        Shortcut for parameters of model.
-        """
-        p = self._image_stokes[stokes].flatten()
-
-    # TODO: Sometimes we need to change only some parameters (circular gaussians),
-    # thus we need mapping (f, x, y, b, a, bpa) <-> p.
-    def set_p(self, p, stokes='I'):
-        self._image_stokes[stokes] = p
-
-
-    def get_uvws(self, data):
-        """
-        Sets ``_uvws`` attribute of self with values from UVData class instance
-        ``data``.
-
-        :param data:
+        :param uvdata:
             Instance of ``UVData`` class. Model visibilities will be calculated
             for (u,v)-points of this instance.
         """
-        self._uvws = data.uvw
+        self._uv = uvdata.uvw[:, :2]
 
-    def upvlot(self, stokes=None, style='a&p', PA=None):
+    def uvplot(self, uv=None, style='a&p'):
         """
-        Method that plots model transfered to the uv-domain vs. uv-radius
-        :param style:
-        :param PA:
-        :return:
+        Plot FT of model vs uv-radius.
         """
+        if uv is None:
+            uv = self._uv
+        ft = self.ft(uv=uv)
 
-        if not pylab:
-            raise Exception('Install ``pylab`` for plotting!')
-        if not stokes:
-            stokes = 'I'
-        # Check that there's ``stokes`` Stokes data to plot.
-        if not self._image_stokes[stokes]:
-            raise Exception('No stokes ' + stokes + ' to plot!')
+        if style == 'a&p':
+            a1 = np.angle(ft)
+            a2 = np.real(np.sqrt(ft * np.conj(ft)))
+        elif style == 're&im':
+            a1 = ft.real
+            a2 = ft.imag
+        else:
+            raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
 
-    def ft(self, stoke='I', uvws=None):
-        """
-        Fourie transform model from image to uv-domain in specified points of
-        uv-plane. If no uvw-points are specified, use _uvws attribute. If it is
-        None, raise exception.
-
-        :param stoke (optional):
-            Stokes parameter to calculate on set of (u,v)-points using current
-            model. (default: ``I``)
-
-        :param uvws (optional):
-            Set of (u,v,w)-points on which to calculate visibilities. If
-            ``None`` is specified then use ``_uvws`` attriubute. If it doesn't
-            contain any points then raise Exception. (default: ``None``)
-
-        :return:
-            Numpy array of visibilities of Stokes type ``stoke`` for set of
-            (u,v,w)-points ``uvws``.
-        """
-        if not uvws:
-            uvws = self._uvws
-            if not uvws.size:
-                raise Exception("Can't find uv-points on which to calculate"
-                                " visibilities of model.")
-
-        components = self._image_stokes[stoke]
-
-        #TODO: check that component is not empty array. If so =>
-        # raise EmptyImageFtException exception
-
-        #flux, dx, dy, maja, mina, pa, ctype = component
-        flux = components['flux']
-        dx = components['dx']
-        dy = components['dy']
-        bmaj = components['bmaj']
-        bmin = components['bmin']
-        bpa = components['bpa']
-
-        # FIXME: Should i use ``w``?
-        # u, v, w must already be properly scaled
-        u = uvws[:, 0]
-        v = uvws[:, 1]
-        #w = uvws['w']
-
-        indxs_of_cc = np.where((flux != 0) & (bmaj == 0) & (bmin == 0) & (bpa
-                      == 0))[0]
-        indxs_of_gc = np.where((flux != 0) & (bmaj != 0) & (bmin != 0))[0]
-
-        # Calculate visibilities_cc with indxs_of_cc. If indxs_of_cc is empty
-        # then visibilities_cc will be zeros. So add it!
-        visibilities_cc = np.zeros(len(uvws))
-        if indxs_of_cc.size:
-            visibilities_cc = (flux[indxs_of_cc] * np.exp(2.0 * math.pi * 1j *
-                (u[:, np.newaxis] * dx[indxs_of_cc] + v[:, np.newaxis] *
-                    dy[indxs_of_cc]))).sum(axis=1)
-
-        # Calculate visibilities_gc with indxs_of_gc. If indxs_of_gc is empty
-        # then visibilities_gc will be zeros. So add it!
-        visibilities_gc = np.zeros(len(uvws))
-        if indxs_of_gc.size:
-            for indx in indxs_of_gc:
-                visibilities_gc_ = self.ft_2dgaussian(uvws[:, :2],
-                                                      *components[indx])
-                visibilities_gc += visibilities_gc_
-
-        return visibilities_cc + visibilities_gc
+        uv_radius = np.sqrt(uv[:, 0] ** 2 + uv[:, 1] ** 2)
+        pylab.subplot(2, 1, 1)
+        pylab.plot(uv_radius, a2, '.k')
+        if style == 'a&p':
+            pylab.ylim([0., 1.3 * max(a2)])
+        pylab.subplot(2, 1, 2)
+        pylab.plot(uv_radius, a1, '.k')
+        if style == 'a&p':
+            pylab.ylim([-math.pi, math.pi])
+        pylab.show()
 
     @property
-    def uv_correlations(self):
+    def p(self):
         """
-        Property that updates and returns ``_uv_correlation`` attribute if
-        model is updated.
+        Shortcut for parameters of model.
         """
-        if self._updated['I'] or self._updated['V']:
+        p = list()
+        for component in self._components:
+            p.extend(component.p)
+        return p
 
-            if self._image_stokes['I'].size and self._image_stokes['V'].size:
-                RR = self.ft(stoke='I') + self.ft(stoke='V')
-                LL = self.ft(stoke='I') - self.ft(stoke='V')
-            elif not self._image_stokes['V'].size and\
-                                            self._image_stokes['I'].size:
-                RR = self.ft(stoke='I')
-                LL = RR
-            elif not self._image_stokes['I'].size and\
-                                            self._image_stokes['V'].size:
-                RR = self.ft(stoke='V')
-                LL = RR
-            else:
-                raise EmptyImageFtError('Not enough data for RR&LL visibility'
-                                        ' calculation')
-            self._uv_correlations['RR'] = RR
-            self._uv_correlations['LL'] = LL
+    @p.setter
+    def p(self, p):
+        for component in self._components:
+            component.p = p[:component.size]
+            p = p[component.size:]
 
-        elif self._updated['Q'] or self._updated['U']:
-
-            if self._image_stokes['Q'].size and self._image_stokes['U'].size:
-                RL = self.ft(stoke='Q') + 1j * self.ft(stoke='U')
-                LR = self.ft(stoke='Q') - 1j * self.ft(stoke='U')
-                # RL = FT(Q + j*U)
-                # LR = FT(Q - j*U)
-            else:
-                raise EmptyImageFtError('Not enough data for RL&LR visibility'
-                                        ' calculation')
-            self._uv_correlations['RL'] = RL
-            self._uv_correlations['LR'] = LR
-
-        return self._uv_correlations
-
-    # TODO: Check that AIPS CC binary table has dx&dy in rad!
-    def add_cc_from_fits(self, fname, stoke='I', ver=1):
-        """
-        Adds CC components of Stokes type ``stoke`` to model from FITS-file.
-
-        :param fname:
-            Path to FITS-file with model (Clean Components CC-table).
-
-        :param stoke (optional):
-            Stokes parameter of file ``fname``. (default: ``I``)
-        """
-        dt = self._image_stokes[stoke].dtype
-        # Fetch image parameters information
-        header = get_hdu(fname).header
-        self.imsize = (header['NAXIS1'], header['NAXIS2'],)
-        self.pixref = (int(header['CRPIX1']), int(header['CRPIX2']),)
-        self.bmaj = header['BMAJ'] * self.degree_to_rad
-        self.bmin = header['BMIN'] * self.degree_to_rad
-        self.bpa = header['BPA'] * self.degree_to_rad
-        self.pixsize = (header['CDELT1'] * self.degree_to_rad,
-                        header['CDELT2'] * self.degree_to_rad,)
-        # Fetch CCs
-        cc = BinTable(fname, extname='AIPS CC', ver=ver)
-        adds = cc.load()
-        temp = np.empty(len(adds), dtype=dt)
-        temp.fill(np.NAN)
-        temp['flux'] = adds['FLUX']
-        temp['dx'] = adds['DELTAX'] * self.degree_to_rad
-        temp['dy'] = adds['DELTAY'] * self.degree_to_rad
-        # Append to _image_stokes
-        self._image_stokes[stoke] = np.hstack((self._image_stokes[stoke],
-                                              temp))
-        self._updated[stoke] = True
-
-        # Putting CCs to image grid
-        self._image_grids[stoke] = np.zeros(self.imsize, dtype=float)
-        dx, dy = self.pixsize
-        x_c, y_c = self.pixref
-        x_coords = v_int(v_round(adds['DELTAX'] * self.degree_to_rad / dx))
-        y_coords = v_int(v_round(adds['DELTAY'] * self.degree_to_rad / dy))
-        # 2 means that x_c & x_coords should be zero-indexed actually both.
-        x = x_c + x_coords - 2
-        y = y_c + y_coords - 2
-        for i, (x_, y_,) in enumerate(zip(x, y)):
-            self._image_grids[stoke][x_, y_] = adds['FLUX'][i]
-
-    def add_from_txt(self, fname, stoke='I', style='aips'):
-        """
-        Adds components of Stokes type ``stoke`` to model from txt-file.
-
-        :param fname:
-            Path to text file with model.
-
-        :param stoke (optional):
-            Stokes parameter of file ``fname``. (default: ``I``)
-
-        :param style (optional):
-            Type of model specifying format. (default: ``aips``)
-        """
-        dt = self._image_stokes[stoke].dtype
-
-        if style == 'aips':
-            adds_ = np.loadtxt(fname)
-            adds = adds_.copy()
-            adds[:, 1] = self.degree_to_rad * adds_[:, 1]
-            adds[:, 2] = self.degree_to_rad * adds_[:, 2]
-
-        elif style == 'difmap':
-            adds_ = np.loadtxt(fname, comments='!')
-            adds = adds_.copy()
-            adds[:, 1] = self.mas_to_rad * adds_[:, 1] * np.sin(adds_[:, 2] *
-                                                                np.pi / 180.)
-            adds[:, 2] = self.mas_to_rad * adds_[:, 1] * np.cos(adds_[:, 2] *
-                                                                np.pi / 180.)
-        else:
-            raise Exception('style = aips or difmap')
-
-        # If components are CCs
-        if adds.shape[1] == 3:
-            nans = np.empty((len(adds), 3,))
-            nans.fill(np.NAN)
-            adds = np.hstack((adds, nans,))
-        elif adds.shape[1] == 6:
-            raise NotImplementedError('Implement difmap format of gaussian'
-                                      ' components')
-        else:
-            raise Exception
-
-        self._image_stokes[stoke] = adds.ravel().view(dt)
-        self._updated[stoke] = True
-
-    def plot_model(self, image=None, stokes='I'):
-        """
-        Method that plots specified model to specified instance of ``Image``
-        class.
-
-        :param image:
-            Instance of ``Image`` class on which to plot model.
-
-        :param stokes (optional):
-        """
-        pass
-
-    def make_image(self, bmaj=None, bmin=None, bpa=None, stokes='I',
-                   size_x=None, size_y=None):
+    def make_image(self, fname=None, imsize=None, bmaj=None, bmin=None,
+                   bpa=None, size_x=None, size_y=None):
         """
         Method that returns instance of Image class using model data (CCs, clean
         beam, map size & pixel size).
+
+        :param fname: (optional)
+            Fits file of image to get image parameters.
         :param bmaj: (optional)
             Beam major axis size [rad].
         :param bmin: (optional)
             Beam minor axis size [rad].
         :param bpa: (optional)
             Beam positional angle [deg]
-        :param stokes: (optional)
-            Stokes parameter of image. I, Q, U or V.
         :param size_x (optional):
             Size of the first dimension [pixels]. Default is half of image size.
         :param size_y (optional):
-            Size of the second dimension [pixels]. Default is half of image size.
+            Size of the second dimension [pixels]. Default is half of image
+            size.
         :return:
-            Instance of image class.
+            Instance of ``Image`` class.
         """
+        # If we got fits-file then get parameters of image from it
+        if fname:
+            imsize, pixref, (bmaj, bmin, bpa,), pixsize =\
+                get_fits_image_info(fname)
+
+        # First create image grid with components
+        # Putting components to image grid
+        image_grid = ImagePlane(imsize, pixref, pixsize)
+        for component in self._components:
+            image_grid.add_component(component)
+
         if not size_x:
             size_x = int(self.imsize[0] / 2.)
         if not size_y:
@@ -475,46 +185,480 @@ class Model(object):
         if bpa is None:
             bpa = self.bpa
         gaussian_beam = gaussianBeam(size_x, bmaj, bmin, bpa)
-        cc_convolved = signal.fftconvolve(self._image_grids[stokes],
-                                          gaussian_beam, mode='same')
+        cc_convolved = signal.fftconvolve(image_grid.image_grid, gaussian_beam,
+                                          mode='same')
         image = Image()
         image.add_from_array(cc_convolved, pixsize=self.pixsize, bmaj=self.bmaj,
-                             bmin=self.bmin, bpa=self.bpa, stokes=stokes)
+                             bmin=self.bmin, bpa=self.bpa)
         return image
 
-    def clear_im(self, stoke='I'):
-        """
-        Clear the model for stoke Stokes parameter.
+    # def create_image_grid(self, imsize, pixref, bmaj, bmin, bpa, pixsize):
+    #     raise NotImplementedError()
 
-        :param stoke (optional):
-            Stokes parameter to clear. (default: ``I``)
-        """
-        self._image_stokes[stoke] = np.array([], dtype=[('flux', float),
-                        ('dx', float), ('dy', float), ('bmaj', float), ('bmin',
-                         float), ('bpa', float)])
-        self._updated[stoke] = False
 
-    def clear_all_im(self):
+class CCModel(Model):
+    """
+    Class that represents clean components model.
+    """
+    def add_cc_from_fits(self, fname, ver=1):
         """
-        Clear model for all Stokes parameters.
-        """
-        for stoke in self._image_stokes.keys():
-            self.clear(stoke=stoke)
+        Adds CC components to model from FITS-file.
 
-    def clear_uv(self, hand=None):
+        :param fname:
+            Path to FITS-file with model (Clean Components CC-table).
         """
-        Clear uv-correlations.
-        """
+        cc = BinTable(fname, extname='AIPS CC', ver=ver)
+        adds = cc.load()
+        for flux, x, y in zip(adds['FLUX'], adds['DELTAX'] * degree_to_rad,
+                              adds['DELTAY'] * degree_to_rad):
+            r = math.sqrt(x ** 2. + y ** 2.)
+            theta = math.atan2(y / x)
+            component = DeltaComponent(flux, r, theta)
+            self.add_component(component)
 
-        if not hand:
-            for hand in self._uv_correlations.keys():
-                self._uv_correlations[hand] = np.array([], dtype=complex)
+    # def create_image_grid(self, imsize, pixref, bmaj, bmin, bpa, pixsize):
+    #     image_grid = np.zeros(imsize, dtype=float)
+    #     dx, dy = pixsize
+    #     x_c, y_c = pixref
+    #     x_coords = list()
+    #     y_coords = list()
+    #     flux_list = list()
+    #     for components in self._components:
+    #         flux, r, theta = self.p
+    #         x = r * math.cos(theta)
+    #         y = r * math.sin(theta)
+    #         x_coords.append(int(round(x / dx)))
+    #         y_coords.append(int(round(y / dy)))
+    #         flux_list.append(flux)
+    #     x_coords = np.asarray(x_coords)
+    #     y_coords = np.asarray(y_coords)
+    #     # 2 means that x_c & x_coords should be zero-indexed actually both.
+    #     x = x_c + x_coords - 2
+    #     y = y_c + y_coords - 2
+    #     for i, (x_, y_,) in enumerate(zip(x, y)):
+    #         image_grid[x_, y_] = flux_list[i]
+
+
+class Component(object):
+    """
+    Basic class that implements single component of model.
+    """
+    def __init__(self):
+        self._p = None
+        self._parnames = ['flux', 'r', 'theta']
+        self._lnprior = dict()
+
+    def add_prior(self, **lnprior):
+        """
+        Add prior for some parameters.
+        :param lnprior:
+            Kwargs with keys - name of the parameter and values - (callable,
+            args, kwargs,) where args & kwargs - additional arguments to
+            callable. Each callable is called callable(p, *args, **kwargs).
+        Example:
+        {'flux': (scipy.stats.norm.logpdf, [mu, s], dict(),),
+        'e': (scipy.stats.beta.logpdf, [alpha, beta], dict(),)}
+        First key will result in calling: scipy.stats.norm.logpdf(x, mu, s) as
+        prior for ``flux`` parameter.
+        """
+        for key, value in lnprior.items():
+            if key in self._parnames:
+                func, args, kwargs = value
+                self._lnprior.update({key: _function_wrapper(func, args,
+                                                             kwargs)})
+            else:
+                raise Exception("Uknown parameter name: " + str(key))
+
+    @property
+    def size(self):
+        return len(self.p)
+
+    @property
+    def p(self):
+        """
+        Shortcut for parameters of model.
+        """
+        p = self._p
+        p[1] /= mas_to_rad
+        try:
+            p[3] /= mas_to_rad
+        except IndexError:
+            pass
+        return p
+
+    @p.setter
+    def p(self, p):
+        p[1] *= mas_to_rad
+        try:
+            p[3] *= mas_to_rad
+        except IndexError:
+            pass
+        self._p = p
+
+    def ft(self, uv):
+        """
+        Method that returns Fourier Transform of component in given points of
+        uv-plane.
+        :param uv:
+            2D-numpy array of uv-coordinates with shape (#data, 2,)
+        :return:
+            Numpy array (length = length(uv)) with complex visibility values.
+        """
+        raise NotImplementedError("Method must me implemented in subclasses!")
+
+    def add_to_image_grid(self, image_grid):
+        """
+        Add component to image plane.
+
+        :param image_grid:
+            Instance of ``ImagePlane`` class
+        """
+        pass
+
+    def uvplot(self, uv=None, style='a&p'):
+        """
+        Plot FT of component vs uv-radius.
+        """
+        if uv is None:
+            uv = self._uv
+        ft = self.ft(uv=uv)
+
+        if style == 'a&p':
+            a1 = np.angle(ft)
+            a2 = np.real(np.sqrt(ft * np.conj(ft)))
+        elif style == 're&im':
+            a1 = ft.real
+            a2 = ft.imag
         else:
-            self._uv_correlations[hand] = np.array([], dtype=complex)
+            raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
+
+        uv_radius = np.sqrt(uv[:, 0] ** 2 + uv[:, 1] ** 2)
+        pylab.subplot(2, 1, 1)
+        pylab.plot(uv_radius, a2, '.k')
+        pylab.subplot(2, 1, 2)
+        pylab.plot(uv_radius, a1, '.k')
+        if style == 'a&p':
+            pylab.ylim([-math.pi, math.pi])
+        pylab.show()
+
+    @property
+    def lnpr(self):
+        print "Calculating lnprior for component ", self
+        if not self._lnprior.keys():
+            print "No priors specified"
+            return 0
+        lnprior = list()
+        for key, value in self._lnprior.items():
+            lnprior.append(value(self.__getattribute__(key)))
+        return sum(lnprior)
 
 
-if __name__ == '__main__':
+class EGComponent(Component):
+    """
+    Class that implements elliptical gaussian component.
+    """
+    def __init__(self, flux, r, theta, bmaj, e, bpa, **lnprior):
+        """
+        :param flux:
+            Flux of component [Jy].
+        :param r:
+            Distance of component form phase center [mas].
+        :param theta:
+            Angle counted from x-axis of image plane counter clockwise [rad].
+        :param bmaj:
+            Std of component size [mas].
+        :param e:
+            Minor-to-major axis ratio.
+        :param bpa:
+            Positional angle of major axis. Angle counted from x-axis of image
+            plane counter clockwise [rad].
 
-    model = Model()
-    model.add_cc_from_fits('0003-066.j.2006_07_07.i_0.1.fits')
-    image = model.make_image()
+        :note:
+            This is nonstandard convention on ``theta``.
+        """
+        super(EGComponent, self).__init__()
+        self._parnames.extend(['bmaj', 'e', 'bpa'])
+        self.flux = flux
+        self.r = mas_to_rad * r
+        self.theta = theta
+        self.bmaj = mas_to_rad * bmaj
+        self.e = e
+        self.bpa = bpa
+        self._p = [flux, mas_to_rad * r, theta, mas_to_rad * bmaj, e, bpa]
+
+    def ft(self, uv):
+        """
+        Return the Fourier Transform of component for given uv-points.
+        :param uv:
+            2D numpy array of uv-points for which to calculate FT.
+        :return:
+            Numpy array of complex visibilities for specified points of
+            uv-plane. Length of the resulting array = length of ``uv`` array.
+
+        :note:
+
+            The value of the Fourier transform of gaussian function (Wiki):
+
+            g(x, y) = A*exp[-(a*(x-x0)**2+b*(x-x0)*(y-y0)+c*(y-y0)**2)]  (1)
+
+            where:
+
+                a = cos(\theta)**2/(2*std_x**2)+sin(\theta)**2/(2*std_y**2)
+                b = sin(2*\theta)/(2*std_x**2)-sin(2*\theta)/(2*std_y**2)
+                (corresponds to rotation counter clockwise)
+                c = sin(\theta)**2/(2*std_x**2)+cos(\theta)**2/(2*std_y**2)
+
+            For x0=0, y0=0 in point u,v of uv-plane is (Briggs Thesis):
+
+            2*pi*A*(4*a*c-b**2)**(-1/2)*exp[(4*pi**2/(4*a*c-b**2))*
+                    (-c*u**2+b*u*v-a*v**2)] (2)
+
+            As we parametrize the flux as full flux of gaussian (that is flux at
+            zero (u,v)-spacing), then change coefficient in front of exponent to
+            A.
+
+            Shift of (x0, y0) in image plane corresponds to phase shift in
+            uv-plane:
+
+            ft(x0,y0) = ft(x0=0,y0=0)*exp(-2*pi*(u*x0+v*y0))
+        """
+        try:
+            flux, r, theta, bmaj, e, bpa = self.p
+        # If we call method inside ``CGComponent``
+        except ValueError:
+            flux, r, theta, bmaj = self.p
+            e = 1.
+            bpa = 0.
+
+        x0 = r * math.cos(theta)
+        y0 = r * math.sin(theta)
+        u = uv[:, 0]
+        v = uv[:, 1]
+        # Construct parameter of gaussian function (1)
+        std_x = bmaj
+        std_y = e * bmaj
+        bpa = self.bpa
+        a = math.cos(bpa) ** 2. / (2. * std_x ** 2.) + \
+            math.sin(bpa) ** 2. / (2. * std_y ** 2.)
+        b = math.sin(2. * bpa) / (2. * std_x ** 2.) - \
+            math.sin(2. * bpa) / (2. * std_y ** 2.)
+        c = math.sin(bpa) ** 2. / (2. * std_x ** 2.) + \
+            math.cos(bpa) ** 2. / (2. * std_y ** 2.)
+        # Calculate the value of FT in point (u,v) for x0=0,y0=0 case using (2)
+        k = (4. * a * c - b ** 2.)
+        ft = self.flux * np.exp((4. * math.pi ** 2. / k) * (-c * u ** 2. +
+                                                            b * u * v -
+                                                            a * v ** 2.))
+        ft = vcomplex(ft)
+        # If x0=!0 or y0=!0 then shift phase accordingly
+        if x0 or y0:
+            ft *= np.exp(-2. * math.pi * 1j * (u * x0 + v * y0))
+        return ft
+
+
+class CGComponent(EGComponent):
+    """
+    Class that implements circular gaussian component.
+    """
+    def __init__(self, flux, r, theta, bmaj):
+        """
+        :param flux:
+            Flux of component [Jy].
+        :param r:
+            Distance of component form phase center [mas].
+        :param theta:
+            Angle counted from x-axis of image plane counter clockwise [rad].
+        :param bmaj:
+            Std of component size [mas].
+
+        :note:
+            This is nonstandard convention on ``theta``.
+        """
+        super(CGComponent, self).__init__(flux, r, theta, bmaj, e=1., bpa=0.)
+        self._parnames.remove('e')
+        self._parnames.remove('bpa')
+        self._p = [flux, mas_to_rad * r, theta, mas_to_rad * bmaj]
+
+
+class DeltaComponent(Component):
+    """
+    Class that implements delta-function component.
+    """
+    def __init__(self, flux, r, theta):
+        """
+        :param flux:
+            Flux of component [Jy].
+        :param r:
+            Distance form phase center [mas].
+        :param theta:
+            Angle counted from x-axis of image plane counter clockwise [rad].
+
+        :note:
+            This is nonstandard convention on ``theta``.
+        """
+        super(DeltaComponent, self).__init__()
+        self.flux = flux
+        self.r = r * mas_to_rad
+        self.theta = theta
+        self._p = [flux, r, theta]
+
+    def ft(self, uv):
+        """
+        Return the Fourier Transform of component for given uv-points.
+        :param uv:
+            2D numpy array of uv-points for which to calculate FT.
+        :return:
+            Numpy array of complex visibilities for specified points of
+            uv-plane. Length of the resulting array = length of ``uv`` array.
+        """
+        flux, r, theta = self.p
+        x0 = r * math.cos(theta)
+        y0 = r * math.sin(theta)
+        u = uv[:, 0]
+        v = uv[:, 1]
+        visibilities = (self.flux * np.exp(2.0 * math.pi * 1j *
+                                           (u[:, np.newaxis] * x0 +
+                                            v[:, np.newaxis] * y0))).sum(axis=1)
+        return visibilities
+
+    def add_to_image_grid(self, image_grid):
+        """
+        Add component to given instance of ``ImagePlane`` class.
+        """
+        dx, dy = image_grid.dx, image_grid.dy
+        x_c, y_c = image_grid.x_c, image_grid.y_c
+
+        flux, r, theta = self.p
+        x = r * math.cos(theta)
+        y = r * math.sin(theta)
+        x_coords = int(round(x / dx))
+        y_coords = int(round(y / dy))
+        # 2 means that x_c & x_coords should be zero-indexed actually both.
+        x = x_c + x_coords - 2
+        y = y_c + y_coords - 2
+        image_grid.image_grid[x, y] += flux
+
+
+# TODO: add ``add_noise`` method
+class ImagePlane(object):
+    """
+    Class that represents models in image plane.
+    """
+    def __init__(self, fname=None, imsize=None, pixref=None, pixsize=None):
+        if not fname:
+            self.from_image(fname)
+        else:
+            self.imsize = imsize
+            self.dx, self.dy = pixsize
+            self.x_c, self.y_c = pixref
+        self.image_grid = np.zeros(self.imsize, dtype=float)
+
+    def from_image(self, fname):
+        imsize, pixref, (bmaj, bmin, bpa,), pixsize = get_fits_image_info(fname)
+        self.imsize = imsize
+        self.dx, self.dy = pixsize
+        self.x_c, self.y_c = pixref
+
+    def add_component(self, component):
+        component.add_to_image_grid(self)
+
+
+class LnLikelihood(object):
+    def __init__(self, uvdata, model, average_freq=True):
+        error = uvdata.error(average_freq=average_freq)
+        self.model = model
+        self.uv = uvdata.uvw[:, :2]
+        stokes = model.stokes
+        if average_freq:
+            if stokes == 'I':
+                self.uvdata = 0.5 * (uvdata.uvdata_freq_averaged[:, 0] +
+                                     uvdata.uvdata_freq_averaged[:, 1])
+                self.error = 0.5 * np.sqrt(error[:, 0] ** 2. +
+                                           error[:, 1] ** 2.)
+            elif stokes == 'RR':
+                self.uvdata = uvdata.uvdata_freq_averaged[:, 0]
+                self.error = error[:, 0]
+            elif stokes == 'LL':
+                self.uvdata = uvdata.uvdata_freq_averaged[:, 1]
+                self.error = error[:, 1]
+            else:
+                raise Exception("Working with only I, RR or LL!")
+        else:
+            if stokes == 'I':
+                self.uvdata = 0.5 * (uvdata.uvdata[:, 0] + uvdata.uvdata[:, 1])
+            elif stokes == 'RR':
+                self.uvdata = uvdata.uvdata[:, 0]
+            elif stokes == 'LL':
+                self.uvdata = uvdata.uvdata[:, 1]
+            else:
+                raise Exception("Working with only I, RR or LL!")
+
+    def __call__(self, p):
+        """
+        Returns ln of likelihood for data and model with parameters ``p``.
+        :param p:
+        :return:
+        """
+        # Data visibilities and noise
+        data = self.uvdata
+        error = self.error
+        # Model visibilities at uv-points of data
+        self.model.p = p
+        model_data = self.model.ft(self.uv)
+        # ln of data likelihood
+        lnlik = -0.5 * np.log(2. * math.pi * error ** 2.) -\
+            (data - model_data) * (data - model_data).conj() /\
+            (2. * error ** 2.)
+        lnlik = lnlik.real
+        return lnlik.sum()
+
+
+class LnPrior(object):
+    def __init__(self, model):
+        self.model = model
+
+    def __call__(self, p):
+        self.model.p = p
+        distances = list()
+        for component in self.model._components:
+            distances.append(component.r)
+        if not is_sorted(distances):
+            print "Components are not sorted."
+            return -np.inf
+        else:
+            print "Components are sorted. OK!"
+        lnpr = list()
+        for component in self.model._components:
+            print "Passing to component ", component
+            print "parameters : ", p[:component.size]
+            component.p = p[:component.size]
+            p = p[component.size:]
+            print "Got lnprior for component : ", component.lnpr
+            lnpr.append(component.lnpr)
+
+        return sum(lnpr)
+
+
+if __name__ == "__main__":
+
+    # Load uv-data
+    uvdata = open_fits('0642+449.l18.2010_05_21.uvf')
+    uv = uvdata.uvw[:, :2]
+    mas_to_rad = 4.85 * 10 ** (-9)
+    # Create several components
+    c1 = DeltaComponent(.3, mas_to_rad*0, 0.)
+    c2 = EGComponent(1., mas_to_rad*1.0, 0., mas_to_rad*1., .5, 2.)
+    c3 = CGComponent(1., mas_to_rad*1.0, 0.9, mas_to_rad*1.)
+    # Create model
+    model = Model(stokes='I')
+    # Add components to model
+    model.add_component(c1)
+    model.add_component(c2)
+    model.add_component(c3)
+    # Create likelihood for data & model
+    lnlik = LnLikelihood(uvdata, model)
+    p = model.p
+    print "Ln of likelihood: "
+    lnlik(p)
+    # model.uvplot(uv = uv)
+    # model.ft(uv=uv)

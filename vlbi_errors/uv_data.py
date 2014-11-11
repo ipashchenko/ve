@@ -337,7 +337,7 @@ class UVData(object):
     # TODO: convert time to datetime format and use date2num for plotting
     # TODO: make a kwarg argument - to plot in different symbols/colors
     def tplot(self, baselines=None, IF=None, stokes=None, style='a&p',
-              freq_average=False):
+              freq_average=False, sym=None):
         """
         Method that plots uv-data vs. time.
 
@@ -409,10 +409,12 @@ class UVData(object):
             pylab.show()
 
         else:
+            if not sym:
+                sym = '.k'
             pylab.subplot(2, 1, 1)
-            pylab.plot(times, a1, '.k')
+            pylab.plot(times, a1, sym)
             pylab.subplot(2, 1, 2)
-            pylab.plot(times, a2, '.k')
+            pylab.plot(times, a2, sym)
             if style == 'a&p':
                 pylab.ylim([-math.pi, math.pi])
             pylab.show()
@@ -423,7 +425,7 @@ class UVData(object):
     # TODO: Add ``plot_noise`` boolean kwarg for plotting error bars also. (Use
     # ``UVData.noise()`` method for finding noise values.)
     def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p',
-               freq_average=False):
+               freq_average=False, sym=None):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
 
@@ -493,14 +495,15 @@ class UVData(object):
                     pylab.ylim([-math.pi, math.pi])
             pylab.show()
         else:
+            if not sym:
+                sym = '.k'
             pylab.subplot(2, 1, 1)
-            pylab.plot(uv_radius, a2, '.k')
+            pylab.plot(uv_radius, a2, sym)
             pylab.subplot(2, 1, 2)
-            pylab.plot(uv_radius, a1, '.k')
+            pylab.plot(uv_radius, a1, sym)
             if style == 'a&p':
                 pylab.ylim([-math.pi, math.pi])
             pylab.show()
-
 
     def uvplot_model(self, model, baselines=None, stokes=None, style='a&p'):
         """

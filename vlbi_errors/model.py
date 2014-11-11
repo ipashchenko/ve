@@ -1,40 +1,17 @@
-#!/usr/bin python
-# -*- coding: utf-8 -*-
-
 import math
 import numpy as np
-from utils import gaussianBeam
-from image import Image
+from utils import degree_to_rad, gaussianBeam, _function_wrapper, vcomplex,\
+    is_sorted
+from image import ImageGrid
 from scipy import signal
-from data_io import BinTable, get_hdu
+from data_io import BinTable, get_fits_image_info
 from uv_data import open_fits
+from stats import LnLikelihood
 
 try:
     import pylab
 except ImportError:
     pylab = None
-
-def ln_uniform(x, a, b):
-    assert(a < b)
-    if not a < x < b:
-        return -np.inf
-    return -math.log(b - a)
-
-
-def is_sorted(lst):
-    return (sorted(lst) == lst)
-
-
-def get_fits_image_info(self, fname):
-    header = get_hdu(fname).header
-    imsize = (header['NAXIS1'], header['NAXIS2'],)
-    pixref = (int(header['CRPIX1']), int(header['CRPIX2']),)
-    bmaj = header['BMAJ'] * degree_to_rad
-    bmin = header['BMIN'] * degree_to_rad
-    bpa = header['BPA'] * degree_to_rad
-    pixsize = (header['CDELT1'] * degree_to_rad,
-               header['CDELT2'] * degree_to_rad,)
-    return imsize, pixref, (bmaj, bmin, bpa,), pixsize
 
 
 # TODO: move create_image_grid to ``Component`` subclasses. Thus, we can mix
@@ -97,7 +74,7 @@ class Model(object):
         """
         self._uv = uvdata.uvw[:, :2]
 
-    def uvplot(self, uv=None, style='a&p'):
+    def uvplot(self, uv=None, style='a&p', sym='.r'):
         """
         Plot FT of model vs uv-radius.
         """
@@ -116,11 +93,11 @@ class Model(object):
 
         uv_radius = np.sqrt(uv[:, 0] ** 2 + uv[:, 1] ** 2)
         pylab.subplot(2, 1, 1)
-        pylab.plot(uv_radius, a2, '.k')
+        pylab.plot(uv_radius, a2, sym)
         if style == 'a&p':
             pylab.ylim([0., 1.3 * max(a2)])
         pylab.subplot(2, 1, 2)
-        pylab.plot(uv_radius, a1, '.k')
+        pylab.plot(uv_radius, a1,sym)
         if style == 'a&p':
             pylab.ylim([-math.pi, math.pi])
         pylab.show()
@@ -140,6 +117,16 @@ class Model(object):
         for component in self._components:
             component.p = p[:component.size]
             p = p[component.size:]
+
+    def add_to_image_grid(self, image_grid):
+        """
+        Add model to instances of ``ImagePlane`` subclasses.
+
+        :param image_grid:
+            Instance of ``ImagePlane`` subclass.
+        """
+        for component in self._components:
+            image_grid.add_component(component)
 
     def make_image(self, fname=None, imsize=None, bmaj=None, bmin=None,
                    bpa=None, size_x=None, size_y=None):
@@ -169,10 +156,9 @@ class Model(object):
                 get_fits_image_info(fname)
 
         # First create image grid with components
-        # Putting components to image grid
-        image_grid = ImagePlane(imsize, pixref, pixsize)
-        for component in self._components:
-            image_grid.add_component(component)
+        image_grid = ImageGrid(imsize=imsize, pixref=pixref, pixsize=pixsize)
+        # Putting model components to image grid
+        self.add_to_image_grid(image_grid)
 
         if not size_x:
             size_x = int(self.imsize[0] / 2.)
@@ -187,7 +173,7 @@ class Model(object):
         gaussian_beam = gaussianBeam(size_x, bmaj, bmin, bpa)
         cc_convolved = signal.fftconvolve(image_grid.image_grid, gaussian_beam,
                                           mode='same')
-        image = Image()
+        image = ImageGrid()
         image.add_from_array(cc_convolved, pixsize=self.pixsize, bmaj=self.bmaj,
                              bmin=self.bmin, bpa=self.bpa)
         return image
@@ -537,106 +523,6 @@ class DeltaComponent(Component):
         x = x_c + x_coords - 2
         y = y_c + y_coords - 2
         image_grid.image_grid[x, y] += flux
-
-
-# TODO: add ``add_noise`` method
-class ImagePlane(object):
-    """
-    Class that represents models in image plane.
-    """
-    def __init__(self, fname=None, imsize=None, pixref=None, pixsize=None):
-        if not fname:
-            self.from_image(fname)
-        else:
-            self.imsize = imsize
-            self.dx, self.dy = pixsize
-            self.x_c, self.y_c = pixref
-        self.image_grid = np.zeros(self.imsize, dtype=float)
-
-    def from_image(self, fname):
-        imsize, pixref, (bmaj, bmin, bpa,), pixsize = get_fits_image_info(fname)
-        self.imsize = imsize
-        self.dx, self.dy = pixsize
-        self.x_c, self.y_c = pixref
-
-    def add_component(self, component):
-        component.add_to_image_grid(self)
-
-
-class LnLikelihood(object):
-    def __init__(self, uvdata, model, average_freq=True):
-        error = uvdata.error(average_freq=average_freq)
-        self.model = model
-        self.uv = uvdata.uvw[:, :2]
-        stokes = model.stokes
-        if average_freq:
-            if stokes == 'I':
-                self.uvdata = 0.5 * (uvdata.uvdata_freq_averaged[:, 0] +
-                                     uvdata.uvdata_freq_averaged[:, 1])
-                self.error = 0.5 * np.sqrt(error[:, 0] ** 2. +
-                                           error[:, 1] ** 2.)
-            elif stokes == 'RR':
-                self.uvdata = uvdata.uvdata_freq_averaged[:, 0]
-                self.error = error[:, 0]
-            elif stokes == 'LL':
-                self.uvdata = uvdata.uvdata_freq_averaged[:, 1]
-                self.error = error[:, 1]
-            else:
-                raise Exception("Working with only I, RR or LL!")
-        else:
-            if stokes == 'I':
-                self.uvdata = 0.5 * (uvdata.uvdata[:, 0] + uvdata.uvdata[:, 1])
-            elif stokes == 'RR':
-                self.uvdata = uvdata.uvdata[:, 0]
-            elif stokes == 'LL':
-                self.uvdata = uvdata.uvdata[:, 1]
-            else:
-                raise Exception("Working with only I, RR or LL!")
-
-    def __call__(self, p):
-        """
-        Returns ln of likelihood for data and model with parameters ``p``.
-        :param p:
-        :return:
-        """
-        # Data visibilities and noise
-        data = self.uvdata
-        error = self.error
-        # Model visibilities at uv-points of data
-        self.model.p = p
-        model_data = self.model.ft(self.uv)
-        # ln of data likelihood
-        lnlik = -0.5 * np.log(2. * math.pi * error ** 2.) -\
-            (data - model_data) * (data - model_data).conj() /\
-            (2. * error ** 2.)
-        lnlik = lnlik.real
-        return lnlik.sum()
-
-
-class LnPrior(object):
-    def __init__(self, model):
-        self.model = model
-
-    def __call__(self, p):
-        self.model.p = p
-        distances = list()
-        for component in self.model._components:
-            distances.append(component.r)
-        if not is_sorted(distances):
-            print "Components are not sorted."
-            return -np.inf
-        else:
-            print "Components are sorted. OK!"
-        lnpr = list()
-        for component in self.model._components:
-            print "Passing to component ", component
-            print "parameters : ", p[:component.size]
-            component.p = p[:component.size]
-            p = p[component.size:]
-            print "Got lnprior for component : ", component.lnpr
-            lnpr.append(component.lnpr)
-
-        return sum(lnpr)
 
 
 if __name__ == "__main__":

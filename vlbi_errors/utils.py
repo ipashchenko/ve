@@ -1,6 +1,3 @@
-#!/usr/bin python2
-# -*- coding: utf-8 -*-
-
 import re
 import math
 import numpy as np
@@ -8,6 +5,14 @@ import string
 # from itertools import permutations
 from math import floor
 from scipy import optimize
+
+
+vcomplex = np.vectorize(complex)
+v_int = np.vectorize(int)
+v_round = np.vectorize(round)
+
+mas_to_rad = 4.8481368 * 1E-09
+degree_to_rad = 0.01745329
 
 
 class AbsentHduExtensionError(Exception):
@@ -552,3 +557,36 @@ def find_close_regions(data, std_decrease_factor=1.1):
     return regions_list
 
 
+class _function_wrapper(object):
+    """
+    This is a hack to make the likelihood function pickleable when ``args``
+    and ``kwargs``are also included.
+    """
+    def __init__(self, f, args, kwargs):
+        self.f = f
+        self.args = args
+        self.kwargs = kwargs
+
+    def __call__(self, x):
+        try:
+            return self.f(x, *self.args, **self.kwargs)
+        except:
+            import traceback
+            print("vlbi_errors: Exception while calling your prior pdf:")
+            print(" params:", x)
+            print(" args:", self.args)
+            print(" kwargs:", self.kwargs)
+            print(" exception:")
+            traceback.print_exc()
+            raise
+
+
+def ln_uniform(x, a, b):
+    assert(a < b)
+    if not a < x < b:
+        return -np.inf
+    return -math.log(b - a)
+
+
+def is_sorted(lst):
+    return (sorted(lst) == lst)

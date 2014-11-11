@@ -8,6 +8,7 @@ from utils import change_shape
 from utils import index_of
 from utils import _to_one_ndarray
 from utils import build_dtype_for_bintable_data
+from utils import degree_to_rad
 
 
 vec_int = np.vectorize(np.int)
@@ -28,6 +29,17 @@ def get_image(image_file, BLC = (0,0), TRC = (0,0)):
 
     return image
 
+
+def get_fits_image_info(fname):
+    header = get_hdu(fname).header
+    imsize = (header['NAXIS1'], header['NAXIS2'],)
+    pixref = (int(header['CRPIX1']), int(header['CRPIX2']),)
+    bmaj = header['BMAJ'] * degree_to_rad
+    bmin = header['BMIN'] * degree_to_rad
+    bpa = header['BPA'] * degree_to_rad
+    pixsize = (header['CDELT1'] * degree_to_rad,
+               header['CDELT2'] * degree_to_rad,)
+    return imsize, pixref, (bmaj, bmin, bpa,), pixsize
 
 
 def get_hdu(fname, extname=None, ver=1):

@@ -286,10 +286,21 @@ class Component(object):
         """
         Shortcut for parameters of model.
         """
-        return self._p
+        p = self._p
+        p[1] /= mas_to_rad
+        try:
+            p[3] /= mas_to_rad
+        except IndexError:
+            pass
+        return p
 
     @p.setter
     def p(self, p):
+        p[1] *= mas_to_rad
+        try:
+            p[3] *= mas_to_rad
+        except IndexError:
+            pass
         self._p = p
 
     def ft(self, uv):
@@ -359,11 +370,11 @@ class EGComponent(Component):
         :param flux:
             Flux of component [Jy].
         :param r:
-            Distance of component form phase center [rad].
+            Distance of component form phase center [mas].
         :param theta:
             Angle counted from x-axis of image plane counter clockwise [rad].
         :param bmaj:
-            Std of component size [rad].
+            Std of component size [mas].
         :param e:
             Minor-to-major axis ratio.
         :param bpa:
@@ -376,12 +387,12 @@ class EGComponent(Component):
         super(EGComponent, self).__init__()
         self._parnames.extend(['bmaj', 'e', 'bpa'])
         self.flux = flux
-        self.r = r
+        self.r = mas_to_rad * r
         self.theta = theta
-        self.bmaj = bmaj
+        self.bmaj = mas_to_rad * bmaj
         self.e = e
         self.bpa = bpa
-        self._p = [flux, r, theta, bmaj, e, bpa]
+        self._p = [flux, mas_to_rad * r, theta, mas_to_rad * bmaj, e, bpa]
 
     def ft(self, uv):
         """
@@ -462,11 +473,11 @@ class CGComponent(EGComponent):
         :param flux:
             Flux of component [Jy].
         :param r:
-            Distance of component form phase center [rad].
+            Distance of component form phase center [mas].
         :param theta:
             Angle counted from x-axis of image plane counter clockwise [rad].
         :param bmaj:
-            Std of component size [rad].
+            Std of component size [mas].
 
         :note:
             This is nonstandard convention on ``theta``.
@@ -474,7 +485,7 @@ class CGComponent(EGComponent):
         super(CGComponent, self).__init__(flux, r, theta, bmaj, e=1., bpa=0.)
         self._parnames.remove('e')
         self._parnames.remove('bpa')
-        self._p = [flux, r, theta, bmaj]
+        self._p = [flux, mas_to_rad * r, theta, mas_to_rad * bmaj]
 
 
 class DeltaComponent(Component):
@@ -486,7 +497,7 @@ class DeltaComponent(Component):
         :param flux:
             Flux of component [Jy].
         :param r:
-            Distance form phase center [rad].
+            Distance form phase center [mas].
         :param theta:
             Angle counted from x-axis of image plane counter clockwise [rad].
 
@@ -495,7 +506,7 @@ class DeltaComponent(Component):
         """
         super(DeltaComponent, self).__init__()
         self.flux = flux
-        self.r = r
+        self.r = r * mas_to_rad
         self.theta = theta
         self._p = [flux, r, theta]
 
@@ -625,7 +636,6 @@ class LnPrior(object):
         else:
             print "Components are sorted. OK!"
         lnpr = list()
-        # FIXME: pass only component's own parameters!
         for component in self.model._components:
             print "Passing to component ", component
             print "parameters : ", p[:component.size]

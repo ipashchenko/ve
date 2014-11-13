@@ -1,7 +1,7 @@
 import math
 import numpy as np
-from utils import degree_to_rad, gaussianBeam, _function_wrapper, vcomplex,\
-    is_sorted
+from utils import degree_to_rad, mas_to_rad, gaussianBeam, _function_wrapper,\
+    vcomplex, is_sorted
 from image import ImageGrid
 from scipy import signal
 from data_io import BinTable, get_fits_image_info
@@ -24,7 +24,6 @@ class Model(object):
     """
     def __init__(self, stokes=None):
         self._components = list()
-        self._p = None
         self._uv = None
         self.stokes = stokes
         self._image_grid = None
@@ -117,6 +116,10 @@ class Model(object):
         for component in self._components:
             component.p = p[:component.size]
             p = p[component.size:]
+
+    @property
+    def size(self):
+        return len(self.p)
 
     def add_to_image_grid(self, image_grid):
         """
@@ -231,7 +234,7 @@ class Component(object):
     """
     def __init__(self):
         self._p = None
-        self._parnames = ['flux', 'r', 'theta']
+        self._parnames = ['flux', 'x', 'y']
         self._lnprior = dict()
 
     def add_prior(self, **lnprior):
@@ -256,16 +259,13 @@ class Component(object):
                 raise Exception("Uknown parameter name: " + str(key))
 
     @property
-    def size(self):
-        return len(self.p)
-
-    @property
     def p(self):
         """
         Shortcut for parameters of model.
         """
-        p = self._p
+        p = self._p[:]
         p[1] /= mas_to_rad
+        p[2] /= mas_to_rad
         try:
             p[3] /= mas_to_rad
         except IndexError:
@@ -274,12 +274,16 @@ class Component(object):
 
     @p.setter
     def p(self, p):
+        #print "Setting comp's parameters with ", p
+        #print "Before: ", self._p
         p[1] *= mas_to_rad
+        p[2] *= mas_to_rad
         try:
             p[3] *= mas_to_rad
         except IndexError:
             pass
-        self._p = p
+        self._p = p[:]
+        #print "After: ", self._p
 
     def ft(self, uv):
         """
@@ -301,13 +305,11 @@ class Component(object):
         """
         pass
 
-    def uvplot(self, uv=None, style='a&p'):
+    def uvplot(self, uv, style='a&p', sym='.k'):
         """
         Plot FT of component vs uv-radius.
         """
-        if uv is None:
-            uv = self._uv
-        ft = self.ft(uv=uv)
+        ft = self.ft(uv)
 
         if style == 'a&p':
             a1 = np.angle(ft)
@@ -320,9 +322,9 @@ class Component(object):
 
         uv_radius = np.sqrt(uv[:, 0] ** 2 + uv[:, 1] ** 2)
         pylab.subplot(2, 1, 1)
-        pylab.plot(uv_radius, a2, '.k')
+        pylab.plot(uv_radius, a2, sym)
         pylab.subplot(2, 1, 2)
-        pylab.plot(uv_radius, a1, '.k')
+        pylab.plot(uv_radius, a1, sym)
         if style == 'a&p':
             pylab.ylim([-math.pi, math.pi])
         pylab.show()
@@ -343,14 +345,14 @@ class EGComponent(Component):
     """
     Class that implements elliptical gaussian component.
     """
-    def __init__(self, flux, r, theta, bmaj, e, bpa, **lnprior):
+    def __init__(self, flux, x, y, bmaj, e, bpa):
         """
         :param flux:
             Flux of component [Jy].
-        :param r:
-            Distance of component form phase center [mas].
-        :param theta:
-            Angle counted from x-axis of image plane counter clockwise [rad].
+        :param x:
+            X-coordinate of component phase center [mas].
+        :param y:
+            Y-coordinate of component phase center [mas].
         :param bmaj:
             Std of component size [mas].
         :param e:
@@ -358,19 +360,12 @@ class EGComponent(Component):
         :param bpa:
             Positional angle of major axis. Angle counted from x-axis of image
             plane counter clockwise [rad].
-
-        :note:
-            This is nonstandard convention on ``theta``.
         """
         super(EGComponent, self).__init__()
         self._parnames.extend(['bmaj', 'e', 'bpa'])
-        self.flux = flux
-        self.r = mas_to_rad * r
-        self.theta = theta
-        self.bmaj = mas_to_rad * bmaj
-        self.e = e
-        self.bpa = bpa
-        self._p = [flux, mas_to_rad * r, theta, mas_to_rad * bmaj, e, bpa]
+        self._p = [flux, mas_to_rad * x, mas_to_rad * y, mas_to_rad * bmaj, e,
+                   bpa]
+        self.size = 6
 
     def ft(self, uv):
         """
@@ -409,21 +404,18 @@ class EGComponent(Component):
             ft(x0,y0) = ft(x0=0,y0=0)*exp(-2*pi*(u*x0+v*y0))
         """
         try:
-            flux, r, theta, bmaj, e, bpa = self.p
+            flux, x0, y0, bmaj, e, bpa = self._p
         # If we call method inside ``CGComponent``
         except ValueError:
-            flux, r, theta, bmaj = self.p
+            flux, x0, y0, bmaj = self._p
             e = 1.
             bpa = 0.
 
-        x0 = r * math.cos(theta)
-        y0 = r * math.sin(theta)
         u = uv[:, 0]
         v = uv[:, 1]
         # Construct parameter of gaussian function (1)
         std_x = bmaj
         std_y = e * bmaj
-        bpa = self.bpa
         a = math.cos(bpa) ** 2. / (2. * std_x ** 2.) + \
             math.sin(bpa) ** 2. / (2. * std_y ** 2.)
         b = math.sin(2. * bpa) / (2. * std_x ** 2.) - \
@@ -432,9 +424,8 @@ class EGComponent(Component):
             math.cos(bpa) ** 2. / (2. * std_y ** 2.)
         # Calculate the value of FT in point (u,v) for x0=0,y0=0 case using (2)
         k = (4. * a * c - b ** 2.)
-        ft = self.flux * np.exp((4. * math.pi ** 2. / k) * (-c * u ** 2. +
-                                                            b * u * v -
-                                                            a * v ** 2.))
+        ft = flux * np.exp((4. * math.pi ** 2. / k) * (-c * u ** 2. +
+                                                       b * u * v - a * v ** 2.))
         ft = vcomplex(ft)
         # If x0=!0 or y0=!0 then shift phase accordingly
         if x0 or y0:
@@ -446,47 +437,40 @@ class CGComponent(EGComponent):
     """
     Class that implements circular gaussian component.
     """
-    def __init__(self, flux, r, theta, bmaj):
+    def __init__(self, flux, x, y, bmaj):
         """
         :param flux:
             Flux of component [Jy].
-        :param r:
-            Distance of component form phase center [mas].
-        :param theta:
-            Angle counted from x-axis of image plane counter clockwise [rad].
+        :param x:
+            X-coordinate of component phase center [mas].
+        :param y:
+            Y-coordinate of component phase center [mas].
         :param bmaj:
             Std of component size [mas].
-
-        :note:
-            This is nonstandard convention on ``theta``.
         """
-        super(CGComponent, self).__init__(flux, r, theta, bmaj, e=1., bpa=0.)
+        super(CGComponent, self).__init__(flux, x, y, bmaj, e=1., bpa=0.)
         self._parnames.remove('e')
         self._parnames.remove('bpa')
-        self._p = [flux, mas_to_rad * r, theta, mas_to_rad * bmaj]
+        self._p = self._p[:-2]
+        self.size = 4
 
 
 class DeltaComponent(Component):
     """
     Class that implements delta-function component.
     """
-    def __init__(self, flux, r, theta):
+    def __init__(self, flux, x, y):
         """
         :param flux:
             Flux of component [Jy].
-        :param r:
-            Distance form phase center [mas].
-        :param theta:
-            Angle counted from x-axis of image plane counter clockwise [rad].
-
-        :note:
-            This is nonstandard convention on ``theta``.
+        :param x:
+            X-coordinate of component phase center [mas].
+        :param y:
+            Y-coordinate of component phase center [mas].
         """
         super(DeltaComponent, self).__init__()
-        self.flux = flux
-        self.r = r * mas_to_rad
-        self.theta = theta
-        self._p = [flux, r, theta]
+        self._p = [flux, mas_to_rad * x, mas_to_rad * y]
+        self.size = 3
 
     def ft(self, uv):
         """
@@ -497,14 +481,12 @@ class DeltaComponent(Component):
             Numpy array of complex visibilities for specified points of
             uv-plane. Length of the resulting array = length of ``uv`` array.
         """
-        flux, r, theta = self.p
-        x0 = r * math.cos(theta)
-        y0 = r * math.sin(theta)
+        flux, x0, y0 = self._p
         u = uv[:, 0]
         v = uv[:, 1]
-        visibilities = (self.flux * np.exp(2.0 * math.pi * 1j *
-                                           (u[:, np.newaxis] * x0 +
-                                            v[:, np.newaxis] * y0))).sum(axis=1)
+        visibilities = (flux * np.exp(2.0 * math.pi * 1j *
+                                      (u[:, np.newaxis] * x0 +
+                                       v[:, np.newaxis] * y0))).sum(axis=1)
         return visibilities
 
     def add_to_image_grid(self, image_grid):
@@ -514,9 +496,7 @@ class DeltaComponent(Component):
         dx, dy = image_grid.dx, image_grid.dy
         x_c, y_c = image_grid.x_c, image_grid.y_c
 
-        flux, r, theta = self.p
-        x = r * math.cos(theta)
-        y = r * math.sin(theta)
+        flux, x, y = self._p
         x_coords = int(round(x / dx))
         y_coords = int(round(y / dy))
         # 2 means that x_c & x_coords should be zero-indexed actually both.
@@ -530,17 +510,12 @@ if __name__ == "__main__":
     # Load uv-data
     uvdata = open_fits('0642+449.l18.2010_05_21.uvf')
     uv = uvdata.uvw[:, :2]
-    mas_to_rad = 4.85 * 10 ** (-9)
     # Create several components
-    c1 = DeltaComponent(.3, mas_to_rad*0, 0.)
-    c2 = EGComponent(1., mas_to_rad*1.0, 0., mas_to_rad*1., .5, 2.)
-    c3 = CGComponent(1., mas_to_rad*1.0, 0.9, mas_to_rad*1.)
+    c = CGComponent(1., 0, 0, 1.)
     # Create model
-    model = Model(stokes='I')
+    model = Model(stokes='RR')
     # Add components to model
-    model.add_component(c1)
-    model.add_component(c2)
-    model.add_component(c3)
+    model.add_component(c)
     # Create likelihood for data & model
     lnlik = LnLikelihood(uvdata, model)
     p = model.p
@@ -548,3 +523,11 @@ if __name__ == "__main__":
     lnlik(p)
     # model.uvplot(uv = uv)
     # model.ft(uv=uv)
+    import emcee
+    ndim = model.size
+    nwalkers = 100
+    p0 = emcee.utils.sample_ball(p, [0.2, 0.1, 0.1, 0.1], size=nwalkers)
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnlik)
+    pos, prob, state = sampler.run_mcmc(p0, 100)
+    sampler.reset()
+    sampler.run_mcmc(pos, 200)

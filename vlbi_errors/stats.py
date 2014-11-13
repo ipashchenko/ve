@@ -236,10 +236,12 @@ class LnLikelihood(object):
         :param p:
         :return:
         """
+        #print "calculating lnlik for ", p
         # Data visibilities and noise
         data = self.uvdata
         error = self.error
         # Model visibilities at uv-points of data
+        assert(self.model.size == len(p))
         self.model.p = p
         model_data = self.model.ft(self.uv)
         # ln of data likelihood

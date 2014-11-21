@@ -478,14 +478,30 @@ def moments(data):
     return height, x, y, width_x, width_y
 
 
-def gaussian(height, center_x, center_y, width_x, width_y):
+#def gaussian(height, center_x, center_y, width_x, width_y):
+#    """
+#    Returns a gaussian function with the given parameters.
+#    """
+#    width_x = float(width_x)
+#    width_y = float(width_y)
+#    return lambda x, y: height * np.exp(-(((center_x - x) / width_x) ** 2 +
+#                                          ((center_y - y) / width_y) ** 2) / 2.)
+
+
+
+def gaussian(height, x0, y0, std_x, std_y, bpa):
     """
     Returns a gaussian function with the given parameters.
     """
-    width_x = float(width_x)
-    width_y = float(width_y)
-    return lambda x, y: height * np.exp(-(((center_x - x) / width_x) ** 2 +
-                                          ((center_y - y) / width_y) ** 2) / 2.)
+    a = math.cos(bpa) ** 2. / (2. * std_x ** 2.) + \
+        math.sin(bpa) ** 2. / (2. * std_y ** 2.)
+    b = math.sin(2. * bpa) / (2. * std_x ** 2.) - \
+        math.sin(2. * bpa) / (2. * std_y ** 2.)
+    c = math.sin(bpa) ** 2. / (2. * std_x ** 2.) + \
+        math.cos(bpa) ** 2. / (2. * std_y ** 2.)
+    return lambda x, y: height * np.exp(-(a * (x - x0) ** 2 +
+                                          b * (x - x0) * (y - y0) +
+                                          c * (y - y0) ** 2))
 
 
 def fitgaussian(data):

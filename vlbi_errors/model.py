@@ -511,11 +511,14 @@ if __name__ == "__main__":
     uvdata = open_fits('0642+449.l18.2010_05_21.uvf')
     uv = uvdata.uvw[:, :2]
     # Create several components
-    c = CGComponent(1., 0, 0, 1.)
+    # 0.86, -0.09, 0.02, 0.43 - best for 1
+    c1 = CGComponent(0.86, -0.09, 0.02, 0.43)
+    c2 = CGComponent(0.2, 10., 10., 0.5)
     # Create model
     model = Model(stokes='RR')
     # Add components to model
-    model.add_component(c)
+    model.add_component(c1)
+    model.add_component(c2)
     # Create likelihood for data & model
     lnlik = LnLikelihood(uvdata, model)
     p = model.p
@@ -526,7 +529,8 @@ if __name__ == "__main__":
     import emcee
     ndim = model.size
     nwalkers = 100
-    p0 = emcee.utils.sample_ball(p, [0.2, 0.1, 0.1, 0.1], size=nwalkers)
+    p0 = emcee.utils.sample_ball(p, [0.2, 0.1, 0.1, 0.1, 0.03, 5., 5., 0.05],
+                                 size=nwalkers)
     sampler = emcee.EnsembleSampler(nwalkers, ndim, lnlik)
     pos, prob, state = sampler.run_mcmc(p0, 100)
     sampler.reset()

@@ -1,12 +1,13 @@
 import math
+import scipy as sp
 import numpy as np
 from utils import degree_to_rad, mas_to_rad, gaussianBeam, _function_wrapper,\
-    vcomplex, is_sorted
+    vcomplex, gaussian
 from image import ImageGrid
 from scipy import signal
 from data_io import BinTable, get_fits_image_info
 from uv_data import open_fits
-from stats import LnLikelihood
+from stats import LnLikelihood, LnPost, LnPrior
 
 try:
     import pylab
@@ -96,7 +97,7 @@ class Model(object):
         if style == 'a&p':
             pylab.ylim([0., 1.3 * max(a2)])
         pylab.subplot(2, 1, 2)
-        pylab.plot(uv_radius, a1,sym)
+        pylab.plot(uv_radius, a1, sym)
         if style == 'a&p':
             pylab.ylim([-math.pi, math.pi])
         pylab.show()
@@ -185,6 +186,7 @@ class Model(object):
     #     raise NotImplementedError()
 
 
+# TODO: add ft_all method for speed up
 class CCModel(Model):
     """
     Class that represents clean components model.
@@ -245,8 +247,9 @@ class Component(object):
             args, kwargs,) where args & kwargs - additional arguments to
             callable. Each callable is called callable(p, *args, **kwargs).
         Example:
-        {'flux': (scipy.stats.norm.logpdf, [mu, s], dict(),),
-        'e': (scipy.stats.beta.logpdf, [alpha, beta], dict(),)}
+        {'flux': (scipy.stats.uniform, [0., 10.], dict(),),
+         'bmaj': (scipy.stats.uniform, [0, 5.], dict(),),
+         'e': (scipy.stats.beta.logpdf, [alpha, beta], dict(),)}
         First key will result in calling: scipy.stats.norm.logpdf(x, mu, s) as
         prior for ``flux`` parameter.
         """
@@ -263,27 +266,14 @@ class Component(object):
         """
         Shortcut for parameters of model.
         """
-        p = self._p[:]
-        p[1] /= mas_to_rad
-        p[2] /= mas_to_rad
-        try:
-            p[3] /= mas_to_rad
-        except IndexError:
-            pass
-        return p
+        return self._p[:]
 
     @p.setter
     def p(self, p):
-        #print "Setting comp's parameters with ", p
-        #print "Before: ", self._p
-        p[1] *= mas_to_rad
-        p[2] *= mas_to_rad
-        try:
-            p[3] *= mas_to_rad
-        except IndexError:
-            pass
+        # print "Setting comp's parameters with ", p
+        # print "Before: ", self._p
         self._p = p[:]
-        #print "After: ", self._p
+        # print "After: ", self._p
 
     def ft(self, uv):
         """
@@ -303,7 +293,7 @@ class Component(object):
         :param image_grid:
             Instance of ``ImagePlane`` class
         """
-        pass
+        raise NotImplementedError("Method must me implemented in subclasses!")
 
     def uvplot(self, uv, style='a&p', sym='.k'):
         """
@@ -331,13 +321,14 @@ class Component(object):
 
     @property
     def lnpr(self):
-        print "Calculating lnprior for component ", self
         if not self._lnprior.keys():
             print "No priors specified"
             return 0
         lnprior = list()
         for key, value in self._lnprior.items():
-            lnprior.append(value(self.__getattribute__(key)))
+            # Index of ``key`` in ``_parnames`` the same as in ``_p``
+            par = self._p[self._parnames.index(key)]
+            lnprior.append(value(par))
         return sum(lnprior)
 
 
@@ -363,8 +354,7 @@ class EGComponent(Component):
         """
         super(EGComponent, self).__init__()
         self._parnames.extend(['bmaj', 'e', 'bpa'])
-        self._p = [flux, mas_to_rad * x, mas_to_rad * y, mas_to_rad * bmaj, e,
-                   bpa]
+        self._p = [flux, x, y, bmaj, e, bpa]
         self.size = 6
 
     def ft(self, uv):
@@ -411,6 +401,11 @@ class EGComponent(Component):
             e = 1.
             bpa = 0.
 
+        # There's ONE place to convert them
+        x0 *= mas_to_rad
+        y0 *= mas_to_rad
+        bmaj *= mas_to_rad
+
         u = uv[:, 0]
         v = uv[:, 1]
         # Construct parameter of gaussian function (1)
@@ -431,6 +426,59 @@ class EGComponent(Component):
         if x0 or y0:
             ft *= np.exp(-2. * math.pi * 1j * (u * x0 + v * y0))
         return ft
+
+    def add_to_image_grid(self, image_grid):
+        """
+        Add component to given instance of ``ImagePlane`` class.
+        """
+        # Cellsize
+        dx, dy = image_grid.dx, image_grid.dy
+        # Center of image
+        x_c, y_c = image_grid.x_c, image_grid.y_c
+
+        # Parameters of component
+        try:
+            flux, x0, y0, bmaj, e, bpa = self._p
+        # If we call method inside ``CGComponent``
+        except ValueError:
+            flux, x0, y0, bmaj = self._p
+            e = 1.
+            bpa = 0.
+
+        # There's ONE place to convert them
+        x0 *= mas_to_rad
+        y0 *= mas_to_rad
+        bmaj *= mas_to_rad
+
+        # Construct parameter of general gaussian function
+        std_x = bmaj
+        std_y = e * bmaj
+        # Amplitude of gaussian component
+        amp = flux / (2. * math.pi * bmaj ** 2. * e)
+
+        # Create gaussian function of (x, y) with given parameters
+        gaussf = gaussian(amp, x0, y0, std_x, std_y, bpa=bpa)
+
+        # Calculating angular distances of cells from center of component
+        # from cell numbers to relative distances
+        # arrays with elements from 1 to imsize
+        x, y = np.mgrid[1: image_grid.imsize[0] + 1,
+                        1: image_grid.imsize[1] + 1]
+        # from -imsize/2 to imsize/2
+        x = x - x_c
+        y = y - y_c
+        # the same in rads
+        x = x * dx
+        y = y * dy
+        # relative to component center
+        x = x - x0
+        y = y - y0
+
+        # Creating grid with component's flux at each cell
+        fluxes = gaussf(x, y)
+
+        # Adding component's flux to image grid
+        image_grid.image_grid += fluxes
 
 
 class CGComponent(EGComponent):
@@ -469,7 +517,7 @@ class DeltaComponent(Component):
             Y-coordinate of component phase center [mas].
         """
         super(DeltaComponent, self).__init__()
-        self._p = [flux, mas_to_rad * x, mas_to_rad * y]
+        self._p = [flux, x, y]
         self.size = 3
 
     def ft(self, uv):
@@ -482,6 +530,11 @@ class DeltaComponent(Component):
             uv-plane. Length of the resulting array = length of ``uv`` array.
         """
         flux, x0, y0 = self._p
+
+        # There's ONE place to convert them
+        x0 *= mas_to_rad
+        y0 *= mas_to_rad
+
         u = uv[:, 0]
         v = uv[:, 1]
         visibilities = (flux * np.exp(2.0 * math.pi * 1j *
@@ -496,9 +549,14 @@ class DeltaComponent(Component):
         dx, dy = image_grid.dx, image_grid.dy
         x_c, y_c = image_grid.x_c, image_grid.y_c
 
-        flux, x, y = self._p
-        x_coords = int(round(x / dx))
-        y_coords = int(round(y / dy))
+        flux, x0, y0 = self._p
+
+        # There's ONE place to convert them
+        x0 *= mas_to_rad
+        y0 *= mas_to_rad
+
+        x_coords = int(round(x0 / dx))
+        y_coords = int(round(y0 / dy))
         # 2 means that x_c & x_coords should be zero-indexed actually both.
         x = x_c + x_coords - 2
         y = y_c + y_coords - 2
@@ -508,30 +566,57 @@ class DeltaComponent(Component):
 if __name__ == "__main__":
 
     # Load uv-data
-    uvdata = open_fits('0642+449.l18.2010_05_21.uvf')
+    uvdata = open_fits('1308+326.U1.2009_08_28.UV_CAL')
     uv = uvdata.uvw[:, :2]
     # Create several components
-    # 0.86, -0.09, 0.02, 0.43 - best for 1
-    c1 = CGComponent(0.86, -0.09, 0.02, 0.43)
-    c2 = CGComponent(0.2, 10., 10., 0.5)
+    cg1 = CGComponent(2.44, 0.02, -0.02, 0.10)
+    cg2 = CGComponent(0.041, 0.71, -1.05, 1.18)
+    cg3 = CGComponent(0.044, 2.60, -3.20, 0.79)
+    cg4 = CGComponent(0.021, 1.50, -5.60, 2.08)
+    cg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 3.], dict(),),
+                  bmaj=(sp.stats.uniform.logpdf, [0, 1.], dict(),))
+    cg2.add_prior(flux=(sp.stats.uniform.logpdf, [0., 0.1], dict(),),
+                  bmaj=(sp.stats.uniform.logpdf, [0, 3.], dict(),))
+    cg3.add_prior(flux=(sp.stats.uniform.logpdf, [0., 0.1], dict(),),
+                  bmaj=(sp.stats.uniform.logpdf, [0, 3.], dict(),))
+    cg4.add_prior(flux=(sp.stats.uniform.logpdf, [0., 0.1], dict(),),
+                  bmaj=(sp.stats.uniform.logpdf, [0, 5.], dict(),))
     # Create model
-    model = Model(stokes='RR')
+    mdl1 = Model(stokes='I')
     # Add components to model
-    model.add_component(c1)
-    model.add_component(c2)
-    # Create likelihood for data & model
-    lnlik = LnLikelihood(uvdata, model)
-    p = model.p
-    print "Ln of likelihood: "
-    lnlik(p)
+    mdl1.add_component(cg1)
+    mdl1.add_component(cg2)
+    mdl1.add_component(cg3)
+    mdl1.add_component(cg4)
+    # Create posterior for data & model
+    lnpost = LnPost(uvdata, mdl1)
+    lnpr = LnPrior(mdl1)
+    lnlik = LnLikelihood(uvdata, mdl1)
     # model.uvplot(uv = uv)
     # model.ft(uv=uv)
     import emcee
-    ndim = model.size
+    ndim = mdl1.size
     nwalkers = 100
-    p0 = emcee.utils.sample_ball(p, [0.2, 0.1, 0.1, 0.1, 0.03, 5., 5., 0.05],
-                                 size=nwalkers)
-    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnlik)
+    # p0 = mdl1.p
+    # cov = np.zeros(ndim * ndim).reshape((ndim, ndim,))
+    # cov[0, 0] = 0.1
+    # cov[1, 1] = 0.1
+    # cov[2, 2] = 0.1
+    # cov[3, 3] = 0.1
+    # sampler = emcee.MHSampler(cov, ndim, lnpost)
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnpost)
+    p_std1 = [0.01, 0.01, 0.01, 0.01]
+    p_std2 = [0.003, 0.01, 0.01, 0.01]
+    p0 = emcee.utils.sample_ball(mdl1.p, p_std1 + p_std2 * 3, size=nwalkers)
     pos, prob, state = sampler.run_mcmc(p0, 100)
     sampler.reset()
-    sampler.run_mcmc(pos, 200)
+    sampler.run_mcmc(pos, 700)
+    # image_grid = ImageGrid(fname='J0005+3820_S_1998_06_24_fey_map.fits')
+    # print image_grid.dx, image_grid.dy, image_grid.imsize, image_grid.x_c,\
+    #     image_grid.y_c
+    # print image_grid.image_grid
+    # eg = EGComponent(1., 5., 5., 3., 0.5, 1.)
+    # print eg.p
+    # print eg._p
+    # eg.add_to_image_grid(image_grid)
+    # print image_grid.image_grid

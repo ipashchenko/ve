@@ -242,7 +242,7 @@ class LnLikelihood(object):
         error = self.error
         # Model visibilities at uv-points of data
         assert(self.model.size == len(p))
-        self.model.p = p
+        self.model.p = p[:]
         model_data = self.model.ft(self.uv)
         # ln of data likelihood
         lnlik = -0.5 * np.log(2. * math.pi * error ** 2.) - \
@@ -257,25 +257,24 @@ class LnPrior(object):
         self.model = model
 
     def __call__(self, p):
-        self.model.p = p
-        distances = list()
-        for component in self.model._components:
-            distances.append(component.r)
-        if not is_sorted(distances):
-            print "Components are not sorted."
-            return -np.inf
-        else:
-            print "Components are sorted. OK!"
+        self.model.p = p[:]
         lnpr = list()
         for component in self.model._components:
-            print "Passing to component ", component
-            print "parameters : ", p[:component.size]
             component.p = p[:component.size]
             p = p[component.size:]
-            print "Got lnprior for component : ", component.lnpr
+            #print "Got lnprior for component : ", component.lnpr
             lnpr.append(component.lnpr)
 
         return sum(lnpr)
+
+
+class LnPost(object):
+    def __init__(self, uvdata, model, average_freq=True):
+        self.lnlik = LnLikelihood(uvdata, model, average_freq=average_freq)
+        self.lnpr = LnPrior(model)
+
+    def __call__(self, p):
+        return self.lnlik(p[:]) + self.lnpr(p[:])
 
 
 if __name__ == '__main__':

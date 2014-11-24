@@ -1,7 +1,11 @@
 import glob
 import numpy as np
 #from model_old import Model
+from scipy import signal
 from data_io import get_fits_image_info
+#from model import CCModel
+from utils import gaussianBeam
+
 try:
     import pylab
 except ImportError:
@@ -42,10 +46,11 @@ class Image(object):
     :param beam:
     :param stokes:
     """
-    def __init__(self, imsize=None, pixsize=None, bmaj=None, bmin=None,
-                 bpa=None, stokes=None):
+    def __init__(self, imsize=None, pixsize=None, pixref=None, bmaj=None,
+                 bmin=None, bpa=None, stokes=None):
         self.imsize = imsize
         self.pixsize = pixsize
+        self.pixref = pixref
         self.bmaj = bmaj
         self.bmin = bmin
         self.bpa = bpa
@@ -53,7 +58,7 @@ class Image(object):
 
     def add_from_array(self, data, pixsize=None, bmaj=None, bmin=None, bpa=None,
                        stokes=None):
-        self._image = np.atleast_2d(data)
+        self.image = np.atleast_2d(data)
         self.imsize = (self._image.shape)
         self.pixsize = pixsize
         self.bmaj = bmaj
@@ -70,7 +75,7 @@ class Image(object):
         """
         pass
 
-    def add_from_fits(self, fname, stokes='I'):
+    def add_cc_from_fits(self, fname, stokes='I'):
         """
         Load image from FITS file.
 
@@ -78,12 +83,15 @@ class Image(object):
             FITS file with image data.
         :param stokes (optional):
         """
-        model = Model()
+        model = CCModel()
         model.add_cc_from_fits(fname, stoke=stokes)
-        components = model._image_stokes[stokes]
-        flux = components['flux']
-        dx = components['dx']
-        dy = components['dy']
+        image_grid = ImageGrid(imsize=self.imsize, pixref=self.pixref,
+                               pixsize=self.pixsize)
+        model.add_to_image_grid(image_grid)
+        gaussian_beam = gaussianBeam(self.imsize[0], self.bmaj, self.bmin,
+                                     self.bpa, self.imsize[1])
+        self.image = signal.fftconvolve(image_grid.image_grid, gaussian_beam,
+                                        mode='same')
 
     def cross_correlate(self, image, region1=(None, None, None, None),
                         region2=(None, None, None, None)):

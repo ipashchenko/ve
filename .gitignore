@@ -72,3 +72,7 @@ target/
 
 # vim rope
 .ropeproject/
+
+# my
+*.UV_CAL
+*.mdl

@@ -11,7 +11,6 @@ except ImportError:
 from data_io import Groups, IDI
 from utils import baselines_2_ants
 from utils import index_of
-#import gains as g
 
 vec_complex = np.vectorize(np.complex)
 
@@ -69,8 +68,9 @@ class UVData(object):
         Add to self another instance of UVData.
 
         :param other:
-            Instance of ``UVData`` class. Or object that has ``uvdata`` attribute
-            that is numpy structured array with the same ``dtype`` as ``self``.
+            Instance of ``UVData`` class. Or object that has ``uvdata``
+            attribute that is numpy structured array with the same ``dtype`` as
+            ``self``.
 
         :return:
             Instance od ``UVData`` class with uv-data in ``uvdata`` attribute
@@ -90,8 +90,9 @@ class UVData(object):
         Substruct from self another instance of UVData.
 
         :param other:
-            Instance of ``UVData`` class. Or object that has ``uvdata`` attribute
-            that is numpy structured array with the same ``dtype`` as ``self``.
+            Instance of ``UVData`` class. Or object that has ``uvdata``
+            attribute that is numpy structured array with the same ``dtype`` as
+            ``self``.
 
         :return:
             Instance od ``UVData`` class with uv-data in ``uvdata`` attribute
@@ -124,8 +125,8 @@ class UVData(object):
                    ('weights', '<f8', (nif, npol,))]
 
         :return:
-            Instance of ``UVData`` class with visibilities multiplyied by complex
-            antenna gains.
+            Instance of ``UVData`` class with visibilities multiplyied by
+            complex antenna gains.
         """
 
         self_copy = copy.deepcopy(self)
@@ -150,11 +151,11 @@ class UVData(object):
                 # If gains is the instance of ``Absorber`` class
                 except AttributeError:
                     gains12 = gains.absorbed_gains.find_gains_for_baseline(t,
-                            bl)
+                                                                           bl)
                 # FIXME: In substitute() ['hands'] then [indxs] does return
                 # view.
-                #print "gains12 :"
-                #print gains12
+                # print "gains12 :"
+                # print gains12
                 # Doesn't it change copying? Order of indexing [][] has changed
                 self_copy.uvdata[uv_indx] *= gains12.T
 
@@ -173,7 +174,8 @@ class UVData(object):
         :param fname:
             Path to FITS-file.
         """
-        # FIXME: Don't use property ``data`` here cause self._data is ``None`` now.
+        # FIXME: Don't use property ``data`` here cause self._data is ``None``
+        # now.
         self._data = self._io.load(fname)
         self.nif = self._io.nif
         self.nstokes = self._io.nstokes
@@ -275,9 +277,6 @@ class UVData(object):
             high_indxs = np.where(data[indxs]['time'] > times[0])[0]
             indxs = indxs[np.intersect1d(lower_indxs, high_indxs)]
 
-        #print "INDXS : "
-        #print indxs
-
         if IF is None:
             IF = np.arange(self.nif) + 1
         else:
@@ -294,8 +293,6 @@ class UVData(object):
             raise Exception('Choose IF numbers from ' + str(1) + ' to ' +
                             str(self.nif))
         IF -= 1
-        #print 'IF : '
-        #print IF
 
         if stokes == 'I':
             # I = 0.5 * (RR + LL)
@@ -333,6 +330,71 @@ class UVData(object):
             result = np.mean(result, axis=1)
 
         return result, indxs
+
+    def uv_coverage(self, antennas=None, baselines=None, color=None, xinc=1,
+                    times=None, x_range=None, y_range=None):
+        """
+        Make plots of uv-coverage for selected baselines/antennas.
+
+        If ``antenna`` is not None, then plot tracs for all baselines of
+        selected antenna with antennas specified in ``baselines``. It is like
+        AIPS task UVPLOT with bparm=6,7,0.
+
+        :param times (optional):
+            Container with start & stop time or ``None``. If ``None`` then use
+            all time. (default: ``None``)
+        """
+        if antennas is None:
+            antennas = self.antennas
+
+        if baselines is None:
+            baselines = self.baselines
+        else:
+            baselines_list = list()
+            # If ``baselines`` is iterable
+            try:
+                baselines_list.extend(baselines)
+            # If ``baselines`` is not iterable (int)
+            except TypeError:
+                baselines_list.append(baselines)
+            baselines = set(baselines_list)
+
+        # Check that given baseline numbers are among existing ones
+        assert(baselines.issubset(self.antennas))
+
+        # Find what baselines to display
+        baselines_to_display = list()
+        antennas_list = list()
+        # If ``antennas`` is iterable
+        try:
+            antennas_list.extend(antennas)
+        # If ``antennas`` is not iterable (int)
+        except TypeError:
+            antennas_list.append(antennas)
+        for ant1 in antennas_list:
+            for ant2 in baselines:
+                if ant2 > ant1:
+                    baselines_to_display.append(ant2 + 256 * ant1)
+                elif ant2 < ant1:
+                    baselines_to_display.append(ant1 + 256 * ant2)
+
+        baselines_to_display = set(baselines_to_display)
+
+        data, indxs = self._choose_data(times=times,
+                                        baselines=baselines_to_display,
+                                        freq_average=True)
+        # If we are given some time interval then find among ``indxs`` only
+        # those from given time interval
+        if times is not None:
+            # Assert that ``times`` consists of start and stop
+            assert(len(times) == 2)
+            lower_indxs = np.where(data[indxs]['time'] < times[1])[0]
+            high_indxs = np.where(data[indxs]['time'] > times[0])[0]
+            indxs = indxs[np.intersect1d(lower_indxs, high_indxs)]
+
+        uv = data[indxs]['uvw'][:, :2]
+        pylab.plot(uv[0, :], uv[1, :], '.k')
+
 
     # TODO: convert time to datetime format and use date2num for plotting
     # TODO: make a kwarg argument - to plot in different symbols/colors
@@ -381,9 +443,6 @@ class UVData(object):
             a2 = uvdata.imag
         else:
             raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
-
-        #angles = np.angle(data)
-        #amplitudes = np.real(np.sqrt(data * np.conj(data)))
 
         if not freq_average:
 
@@ -1012,6 +1071,8 @@ if __name__ == '__main__':
    # imodel = Model()
    # imodel.add_from_txt('/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt')
    # data.substitute(imodel)
-   sc = open_fits('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
-   sc.noise_add(noise={258: 10})
-   #sc.noise_add(noise={258: [10,1,0.1,10,1,10,1,10,1,10]})
+   # sc = open_fits('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
+   # sc.noise_add(noise={258: 10})
+   # sc.noise_add(noise={258: [10,1,0.1,10,1,10,1,10,1,10]})
+   uvdata = open_fits('SgrA_NOFRIN_NOAVE_NOHYBRID_FLAGED.FITS')
+   to_display = uvdata.uv_coverage(antennas=[3, 2], baselines=[2, 4, 3])

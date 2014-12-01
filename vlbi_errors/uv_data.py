@@ -362,6 +362,9 @@ class UVData(object):
 
         # Check that given baseline numbers are among existing ones
         assert(baselines.issubset(self.antennas))
+        # Assert that we don't have one and the same antenna and baseline
+        if len(baselines) == len(antennas) == 1:
+            assert not baselines.issubset(antennas), "Zero spacing baseline!"
 
         # Find what baselines to display
         baselines_to_display = list()
@@ -396,6 +399,7 @@ class UVData(object):
         uv = self.data[indxs]['uvw'][:, :2]
         pylab.subplot(1, 1, 1)
         pylab.plot(uv[:, 0], uv[:, 1], sym)
+        pylab.plot(-uv[:, 0], -uv[:, 1], sym)
         # Find max(u & v)
         umax = max(abs(self.data['uvw'][:, 0]))
         vmax = max(abs(self.data['uvw'][:, 1]))

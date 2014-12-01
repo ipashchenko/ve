@@ -331,7 +331,8 @@ class UVData(object):
 
         return result, indxs
 
-    def uv_coverage(self, antennas=None, baselines=None, color=None, xinc=1,
+    # TODO: use different stokes and symmetry!
+    def uv_coverage(self, antennas=None, baselines=None, sym='.k', xinc=1,
                     times=None, x_range=None, y_range=None):
         """
         Make plots of uv-coverage for selected baselines/antennas.
@@ -392,9 +393,17 @@ class UVData(object):
             high_indxs = np.where(data[indxs]['time'] > times[0])[0]
             indxs = indxs[np.intersect1d(lower_indxs, high_indxs)]
 
-        uv = data[indxs]['uvw'][:, :2]
-        pylab.plot(uv[0, :], uv[1, :], '.k')
-
+        uv = self.data[indxs]['uvw'][:, :2]
+        pylab.subplot(1, 1, 1)
+        pylab.plot(uv[:, 0], uv[:, 1], sym)
+        # Find max(u & v)
+        umax = max(abs(self.data['uvw'][:, 0]))
+        vmax = max(abs(self.data['uvw'][:, 1]))
+        uvmax = max(umax, vmax)
+        uv_range = [-1.1 * uvmax, 1.1 * uvmax]
+        pylab.xlim(uv_range)
+        pylab.ylim(uv_range)
+        pylab.show()
 
     # TODO: convert time to datetime format and use date2num for plotting
     # TODO: make a kwarg argument - to plot in different symbols/colors

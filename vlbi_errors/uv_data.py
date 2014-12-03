@@ -11,6 +11,7 @@ except ImportError:
 from data_io import Groups, IDI
 from utils import baselines_2_ants
 from utils import index_of
+from utils import get_triangles
 
 vec_complex = np.vectorize(np.complex)
 
@@ -349,7 +350,7 @@ class UVData(object):
             antennas = self.antennas
 
         if baselines is None:
-            baselines = self.baselines
+            raise Exception("Provide some antenna num. for baselines!")
         else:
             baselines_list = list()
             # If ``baselines`` is iterable
@@ -399,6 +400,7 @@ class UVData(object):
         uv = self.data[indxs]['uvw'][:, :2]
         pylab.subplot(1, 1, 1)
         pylab.plot(uv[:, 0], uv[:, 1], sym)
+        # FIXME: This is right only for RR/LL!
         pylab.plot(-uv[:, 0], -uv[:, 1], sym)
         # Find max(u & v)
         umax = max(abs(self.data['uvw'][:, 0]))
@@ -496,6 +498,7 @@ class UVData(object):
     # together.
     # TODO: Add ``plot_noise`` boolean kwarg for plotting error bars also. (Use
     # ``UVData.noise()`` method for finding noise values.)
+    # TODO: implement antennas/baselines arguments as in ``uv_coverage``.
     def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p',
                freq_average=False, sym=None):
         """
@@ -1088,4 +1091,4 @@ if __name__ == '__main__':
    # sc.noise_add(noise={258: 10})
    # sc.noise_add(noise={258: [10,1,0.1,10,1,10,1,10,1,10]})
    uvdata = open_fits('SgrA_NOFRIN_NOAVE_NOHYBRID_FLAGED.FITS')
-   to_display = uvdata.uv_coverage(antennas=[3, 2], baselines=[2, 4, 3])
+   triangles = get_triangles(3, antennas=[1, 2, 4, 5])

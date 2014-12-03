@@ -1,3 +1,4 @@
+from itertools import combinations
 import re
 import math
 import numpy as np
@@ -351,6 +352,49 @@ def ants_2_baselines(ants):
 
     return baselines
 
+def get_triangles(antenna, antennas=None):
+    """
+    Find triangles of antennas.
+    :param antenna:
+    Number of antenna to build triangles with.
+    :param antennas:
+    Iterable of antenna numbers to build triangles with.
+    :return:
+    Dictionary with keys - ijk of antenna numbers and values - lists of
+    3 baseline numbers.
+    """
+    if antennas is None:
+        raise Exception("Provide some antenna num. for antennas!")
+    else:
+        baselines_list = list()
+        assert (len(antennas) >= 2), "Need > 2 antennas for triangle!"
+        # antennas must be iterable
+        baselines_list.extend(list(antennas))
+
+    # Assert that we don't have the same antennas in ``antennas`` and
+    # ``antennas`` keywords
+    if len(baselines_list) == 2:
+        assert antenna not in baselines_list, "Need 3 diff. antennas!"
+    else:
+        if antenna in baselines_list:
+            baselines_list.remove(antenna)
+
+    # Find triangles (combinations of 3 antenna numbers)
+    triangles = list()
+    ant_numbers = [antenna] + baselines_list
+    for comb in combinations(ant_numbers, 3):
+        if comb[0] == antenna:
+            triangles.append(comb)
+
+    # Convert to baseline numbers
+    triangle_baselines = dict()
+    for triangle in triangles:
+        i, j, k = sorted(triangle)
+        triangle_baselines.update({str(i) + str(j) + str(k): [j + 256 * i,
+                                                              k + 256 * i,
+                                                              k + 256 * j]})
+
+    return triangle_baselines
 
 def time_frac_to_dhms(fractime):
     """Converts time in fraction of the day format to time in d:h:m:s

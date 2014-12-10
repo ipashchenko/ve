@@ -237,6 +237,7 @@ class Component(object):
     def __init__(self):
         self._p = None
         self._parnames = ['flux', 'x', 'y']
+        self._fixed = np.array([False, False, False])
         self._lnprior = dict()
 
     def add_prior(self, **lnprior):
@@ -261,18 +262,19 @@ class Component(object):
             else:
                 raise Exception("Uknown parameter name: " + str(key))
 
+    # TODO: properties must return only free parameters!
     @property
     def p(self):
         """
         Shortcut for parameters of model.
         """
-        return self._p[:]
+        return self._p[np.logical_not(self._fixed)]
 
     @p.setter
     def p(self, p):
         # print "Setting comp's parameters with ", p
         # print "Before: ", self._p
-        self._p = p[:]
+        self._p[np.logical_not(self._fixed)] = p[:]
         # print "After: ", self._p
 
     def ft(self, uv):
@@ -336,7 +338,7 @@ class EGComponent(Component):
     """
     Class that implements elliptical gaussian component.
     """
-    def __init__(self, flux, x, y, bmaj, e, bpa):
+    def __init__(self, flux, x, y, bmaj, e, bpa, fixed=None):
         """
         :param flux:
             Flux of component [Jy].
@@ -351,11 +353,20 @@ class EGComponent(Component):
         :param bpa:
             Positional angle of major axis. Angle counted from x-axis of image
             plane counter clockwise [rad].
+        :param fixed optional:
+            If not None then it is iterable of parameter's names that are fixed.
         """
         super(EGComponent, self).__init__()
         self._parnames.extend(['bmaj', 'e', 'bpa'])
-        self._p = [flux, x, y, bmaj, e, bpa]
+        self._fixed = np.concatenate((self._fixed,
+                                      np.array([False, False, False]),))
+        self._p = np.array([flux, x, y, bmaj, e, bpa])
         self.size = 6
+        if fixed is not None:
+            for par in fixed:
+                if par not in self._parnames:
+                    raise Exception('Uknown parameter ' + str(par) + ' !')
+                self._fixed[self._parnames.index(par)] = True
 
     def ft(self, uv):
         """
@@ -485,7 +496,7 @@ class CGComponent(EGComponent):
     """
     Class that implements circular gaussian component.
     """
-    def __init__(self, flux, x, y, bmaj):
+    def __init__(self, flux, x, y, bmaj, fixed=None):
         """
         :param flux:
             Flux of component [Jy].
@@ -496,7 +507,9 @@ class CGComponent(EGComponent):
         :param bmaj:
             Std of component size [mas].
         """
-        super(CGComponent, self).__init__(flux, x, y, bmaj, e=1., bpa=0.)
+        super(CGComponent, self).__init__(flux, x, y, bmaj, e=1., bpa=0.,
+                                          fixed=fixed)
+        self._fixed = self._fixed[:-2]
         self._parnames.remove('e')
         self._parnames.remove('bpa')
         self._p = self._p[:-2]
@@ -507,7 +520,7 @@ class DeltaComponent(Component):
     """
     Class that implements delta-function component.
     """
-    def __init__(self, flux, x, y):
+    def __init__(self, flux, x, y, fixed=None):
         """
         :param flux:
             Flux of component [Jy].
@@ -517,8 +530,13 @@ class DeltaComponent(Component):
             Y-coordinate of component phase center [mas].
         """
         super(DeltaComponent, self).__init__()
-        self._p = [flux, x, y]
+        self._p = np.array([flux, x, y])
         self.size = 3
+        if fixed is not None:
+            for par in fixed:
+                if par not in self._parnames:
+                    raise Exception('Uknown parameter ' + str(par) + ' !')
+                self._fixed[self._parnames.index(par)] = True
 
     def ft(self, uv):
         """

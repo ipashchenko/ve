@@ -5,6 +5,7 @@ from uv_data import open_fits
 import glob
 import copy
 import numpy as np
+import scipy as sp
 from utils import is_sorted
 
 
@@ -201,8 +202,9 @@ class CrossValidation(object):
 
 
 class LnLikelihood(object):
-    def __init__(self, uvdata, model, average_freq=True):
+    def __init__(self, uvdata, model, average_freq=True, amp_only=False):
         error = uvdata.error(average_freq=average_freq)
+        self.amp_only = amp_only
         self.model = model
         self.uv = uvdata.uvw[:, :2]
         stokes = model.stokes
@@ -245,10 +247,20 @@ class LnLikelihood(object):
         self.model.p = p[:]
         model_data = self.model.ft(self.uv)
         # ln of data likelihood
-        lnlik = -0.5 * np.log(2. * math.pi * error ** 2.) - \
-                (data - model_data) * (data - model_data).conj() / \
-                (2. * error ** 2.)
-        lnlik = lnlik.real
+        if self.amp_only:
+            model_amp = np.absolute(model_data)
+            data_amp = np.absolute(data)
+            # Use Rice distribution
+            lnlik = np.log(model_amp) - 2. * np.log(error) -\
+                    (model_amp ** 2. + data_amp ** 2.) / (2. * error ** 2.) +\
+                    np.log(sp.special.iv(0.,
+                                         (model_amp * data_amp / error ** 2.)))
+        else:
+            # Use complex normal distribution
+            lnlik = -0.5 * np.log(2. * math.pi * error ** 2.) - \
+                    (data - model_data) * (data - model_data).conj() / \
+                    (2. * error ** 2.)
+            lnlik = lnlik.real
         return lnlik.sum()
 
 

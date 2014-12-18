@@ -14,6 +14,7 @@ v_round = np.vectorize(round)
 
 mas_to_rad = 4.8481368 * 1E-09
 degree_to_rad = 0.01745329
+degree_to_mas = 36. * 10 ** 5
 
 
 class AbsentHduExtensionError(Exception):

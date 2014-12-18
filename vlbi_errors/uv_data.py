@@ -1053,10 +1053,11 @@ class UVData(object):
 
     def substitute(self, model, baseline=None):
         """
-        Method that substitutes visibilities of ``self`` model values.
+        Method that substitutes visibilities of ``self`` with model values.
 
         :param model:
-            Model to cross-validate. Instance of ``Model`` class.
+            Model that substitute visibilities of ``self`` with it's own.
+            Instance of ``Model`` class.
 
         :param baseline (optional):
             Number that corresponds to baseline on which to substitute

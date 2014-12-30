@@ -651,3 +651,57 @@ def ln_uniform(x, a, b):
 
 def is_sorted(lst):
     return (sorted(lst) == lst)
+
+
+def get_uv_correlations(uv, models):
+    """
+    Function that accepts models of stokes parameters in image plane and returns
+    cross-correlations (whatever possible) for given instance of ``UVData``
+    class.
+    """
+    # Create dictionary of type {stokes/hands: model}
+    model_dict = {'I': None, 'Q': None, 'U': None, 'V': None, 'RR': None,
+                  'RL': None}
+    model_dict.update({model.stokes: model for model in models})
+    # Dictionary with keys - 'RR', 'LL', ... and values - correlations
+    uv_correlations = dict()
+    if model_dict['I'] or model_dict['V']:
+        if model_dict['I'] and model_dict['V']:
+            RR = model_dict['I'].ft(uv) + model_dict['V'].ft(uv)
+            LL = model_dict['I'].ft(uv) - model_dict['V'].ft(uv)
+        elif not model_dict['V'] and model_dict['I']:
+            RR = model_dict['I'].ft(uv)
+            LL = RR
+        elif not model_dict['I'] and model_dict['V']:
+            RR = model_dict['V'].ft(uv)
+            LL = RR
+        else:
+            # Actually, we shouldn't get there
+            raise EmptyImageFtError('Not enough data for RR&LL visibility'
+                                    ' calculation')
+        # Setting up parallel hands correlations
+        uv_correlations.update({'RR': RR})
+        uv_correlations.update({'LL': LL})
+
+    else:
+        if model_dict['RR'] or model_dict['LL']:
+            RR = model_dict['RR'].ft(uv)
+            LL = model_dict['LL'].ft(uv)
+            # Setting up parallel hands correlations
+            uv_correlations.update({'RR': RR})
+            uv_correlations.update({'LL': LL})
+
+    if model_dict['Q'] or model_dict['U']:
+        if model_dict['Q'] and model_dict['U']:
+            RL = model_dict['Q'].ft(uv) + 1j * model_dict['U'].ft(uv)
+            LR = model_dict['Q'].ft(uv) - 1j * model_dict['U'].ft(uv)
+            # RL = FT(Q + j*U)
+            # LR = FT(Q - j*U)
+            # Setting up cross hands correlations
+            uv_correlations.update({'RL': RL})
+            uv_correlations.update({'LR': LR})
+        else:
+            raise EmptyImageFtError('Not enough data for RL&LR visibility'
+                                    ' calculation')
+
+    return uv_correlations

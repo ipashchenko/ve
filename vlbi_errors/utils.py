@@ -658,6 +658,17 @@ def get_uv_correlations(uv, models):
     Function that accepts models of stokes parameters in image plane and returns
     cross-correlations (whatever possible) for given instance of ``UVData``
     class.
+
+    :param uv:
+        Numpy 2d-array of (u,v)-coordinates used for calculating correlations.
+    :param models:
+        Iterable of ``Model`` subclass instances. There should be only one (or
+        zero) model for each stokes parameter. If there are two, say I-stokes
+        models, then sum them firstly using ``Model.__add__``.
+    :return:
+        Dictionary with keys from 'RR', 'LL', 'RL', 'LR' and values - 1d numpy
+        arrays with comlex values of visibilities. Length of array equals to
+        number of (u,v)-points specified in argument (that is ``len(uv)``).
     """
     # Create dictionary of type {stokes/hands: model}
     model_dict = {'I': None, 'Q': None, 'U': None, 'V': None, 'RR': None,
@@ -671,10 +682,10 @@ def get_uv_correlations(uv, models):
             LL = model_dict['I'].ft(uv) - model_dict['V'].ft(uv)
         elif not model_dict['V'] and model_dict['I']:
             RR = model_dict['I'].ft(uv)
-            LL = RR
+            LL = RR.copy()
         elif not model_dict['I'] and model_dict['V']:
             RR = model_dict['V'].ft(uv)
-            LL = RR
+            LL = RR.copy()
         else:
             # Actually, we shouldn't get there
             raise EmptyImageFtError('Not enough data for RR&LL visibility'

@@ -9,7 +9,7 @@ try:
 except ImportError:
     pylab = None
 from data_io import Groups, IDI
-from utils import baselines_2_ants
+from utils import baselines_2_ants, get_uv_correlations
 from utils import index_of
 from utils import get_triangles
 
@@ -1062,13 +1062,15 @@ class UVData(object):
 
         return sum(baselines_cv_scores)
 
-    def substitute(self, model, baseline=None):
+    def substitute(self, models, baseline=None):
         """
         Method that substitutes visibilities of ``self`` with model values.
 
-        :param model:
-            Model that substitute visibilities of ``self`` with it's own.
-            Instance of ``Model`` class.
+        :param models:
+            Iterable of ``Model`` instances that substitute visibilities of
+            ``self`` with it's own. There should be only one (or zero) model for
+            each stokes parameter. If there are two, say I-stokes models, then
+            sum them firstly using ``Model.__add__``.
 
         :param baseline (optional):
             Number that corresponds to baseline on which to substitute
@@ -1080,15 +1082,15 @@ class UVData(object):
             baseline = self.baselines
         indxs = np.hstack(index_of(baseline, self.data['baseline']))
         n = len(indxs)
-        uvws = self.data[indxs]['uvw']
-        model._uvws = uvws
+        uv = self.uvw[:, :2]
 
+        uv_correlations = get_uv_correlations(uv, models)
         for i, hand in enumerate(['RR', 'LL', 'RL', 'LR']):
             try:
                 self.uvdata[indxs, :, i] =\
-                    model.uv_correlations[hand].repeat(self.nif).reshape((n, self.nif))
+                    uv_correlations[hand].repeat(self.nif).reshape((n, self.nif))
             # If model doesn't have some hands => pass it
-            except ValueError:
+            except KeyError:
                 pass
 
 

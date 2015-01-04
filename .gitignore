@@ -59,6 +59,9 @@ target/
 *.fits
 *.uvf
 
+# data directory
+data/
+
 # some txt-files
 *.txt
 

@@ -681,10 +681,21 @@ class UVData(object):
         Shortcut for all (u, v, w)-elements of self.
 
         :return:
-            numpy.ndarray with shape (N, 3,), where N is the number of (u, v, w)
+            Numpy.ndarray with shape (N, 3,), where N is the number of (u, v, w)
             points.
         """
         return self.data['uvw']
+
+    @property
+    def uv(self):
+        """
+        Shortcut for (u, v) -coordinates of self.
+
+        :return:
+            Numpy.ndarray with shape (N, 2,), where N is the number of (u, v, w)
+            points.
+        """
+        return self.uvw[:, :2]
 
     @property
     def uvdata_freq_averaged(self):

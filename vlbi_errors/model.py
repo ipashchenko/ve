@@ -15,56 +15,6 @@ except ImportError:
     pylab = None
 
 
-def uv_correlations(uvdata, modeli=None, modelq=None, modelu=None, modelv=None,
-                    modelrr=None, modelll=None):
-    """
-    Function that accepts models of stokes parameters in image plane and returns
-    cross-correlations (whatever possible) for given instance of ``UVData``
-    class.
-    """
-    # Dictionary with keys - 'RR', 'LL', ... and values - correlations
-    uv_correlations = dict()
-    if modeli or modelv:
-        if modeli and modelv:
-            RR = modeli.ft(uv) + modelv.ft(uv)
-            LL = modeli.ft(uv) - modelv.ft(uv)
-        elif not modelv and modeli:
-            RR = modeli.ft(uv)
-            LL = RR
-        elif not modeli and modelv:
-            RR = modelv.ft(uv)
-            LL = RR
-        else:
-            raise EmptyImageFtError('Not enough data for RR&LL visibility'
-                                    ' calculation')
-        # Setting up parallel hands correlations
-        uv_correlations.update({'RR': RR})
-        uv_correlations.update({'LL': LL})
-
-    else:
-        if modelrr or modelll:
-            RR = modelrr.ft(uv)
-            LL = modelll.ft(uv)
-            # Setting up parallel hands correlations
-            uv_correlations.update({'RR': RR})
-            uv_correlations.update({'LL': LL})
-
-    if modelq or modelu:
-        if modelq and modelu:
-            RL = modelq.ft(uv) + 1j * modelu.ft(uv)
-            LR = modelq.ft(uv) - 1j * modelu.ft(uv)
-            # RL = FT(Q + j*U)
-            # LR = FT(Q - j*U)
-            # Setting up cross hands correlations
-            uv_correlations.update({'RL': RL})
-            uv_correlations.update({'LR': LR})
-        else:
-            raise EmptyImageFtError('Not enough data for RL&LR visibility'
-                                    ' calculation')
-
-    return uv_correlations
-
-
 # TODO: move create_image_grid to ``Component`` subclasses. Thus, we can mix
 # different components in one model and call their own methods. ``Model`` should
 # have method, specifying image grid parameters, construct 2D numpy array and

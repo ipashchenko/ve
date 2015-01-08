@@ -1073,8 +1073,8 @@ class UVData(object):
             sum them firstly using ``Model.__add__``.
 
         :param baseline (optional):
-            Number that corresponds to baseline on which to substitute
-            visibilities. If ``None`` then substitute on all baselines.
+            Iterable of baselines on which to substitute visibilities. If
+            ``None`` then substitute on all baselines.
             (default: ``None``)
         """
 
@@ -1082,7 +1082,7 @@ class UVData(object):
             baseline = self.baselines
         indxs = np.hstack(index_of(baseline, self.data['baseline']))
         n = len(indxs)
-        uv = self.uvw[:, :2]
+        uv = self.uvw[indxs, :2]
 
         uv_correlations = get_uv_correlations(uv, models)
         for i, hand in enumerate(['RR', 'LL', 'RL', 'LR']):

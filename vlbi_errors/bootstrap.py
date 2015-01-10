@@ -5,6 +5,8 @@ from uv_data import open_fits
 from gains import Absorber
 
 
+# TODO: detach format of data storage (use instances of UV_Data and Model
+# classes ad argumrnts in constructors.
 class Bootstrap(object):
     """
     Basic class for bootstrapping data using specified model.
@@ -58,7 +60,7 @@ class Bootstrap(object):
                           **kwargs)
 
 
-class CleanedBootstrap(Bootstrap):
+class CleanBootstrap(Bootstrap):
     """
     Class that implements bootstrapping of uv-data using model and residuals
     between data and model. Data are self-calibrated visibilities.
@@ -179,8 +181,12 @@ class SelfCalBootstrap(object):
         (final) files gain curve info lives in 1nd, ..., (n-1)th FITS-file.
         Sequence must be in order of self-calibration (longer solution times
         go first).
+        
+    :note:
+        data argument is always data that is subject of substraction. So, it
+        could be that first element of calibs argument is the same data.
     """
-
+    # TODO: use super
     def __init__(self, model, data, calibs):
         self.model = model
         self.data = data
@@ -189,16 +195,27 @@ class SelfCalBootstrap(object):
         last_calib = open_fits(calibs[-1])
         self.last_calib = last_calib
 
-        self.residuals = self.get_residuals()
-        model_data = copy.deepcopy(self.residuals)
+        model_data = copy.deepcopy(self.data)
         model_data.substitute(model)
-        self.model_uv = model_data
-        # Put to method (that saves residuals and model data)
-        self.last_calib.save(self.residuals._data, 'BOOT_residuals')
-        self.last_calib.save(self.model_data._data, 'BOOT_model_uv')
+        self.model_data = model_data
+        self.residuals = self.get_residuals()
 
     def get_residuals(self):
         absorber = Absorber()
         absorber.absorb(self.calibs)
-        return  self.data - absorber * self.last_calib
-
+        return  self.data - absorber * self.model_data
+    
+        
+if __name__ == "__main__":
+    # Clean bootstrap
+    data_file = "selfcaled_uvdata.fits"
+    model_file = "cc_map.fits"
+    uv_data = open_fits("selfcaled_uvdata.fits")
+    from model import CCModel
+    ccmodel = CCModel.add_from_fits("cc_map.fits")
+    cbootstrap = CleanBootstrap(ccmodel, uv_data)
+    cbootstrap.run(100)
+    
+    # Self-calibration bootstrap
+    sc_sequence_files = ["sc_1.fits", "sc_2.fits", "sc_final.fits"]
+    scbootstrap = SelfCalBootstrap(ccmodel, )

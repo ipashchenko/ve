@@ -545,7 +545,7 @@ class Groups(PyFitsIO):
         hdulist = pf.HDUList([b])
         for hdu in self.hdulist[1:]:
             hdulist.append(hdu)
-        hdulist.writeto(fname + '.FITS')
+        hdulist.writeto(fname)
 
     @property
     def scans(self):

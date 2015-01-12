@@ -11,6 +11,7 @@ except ImportError:
     pylab = None
 
 
+# TODO: Add operation of comparing of ImageGrid instances.
 class ImageGrid(object):
     """
     Class that represents image grid (array) representation of models.
@@ -37,6 +38,7 @@ class ImageGrid(object):
         pass
 
 
+# TODO: Add operation of comparing of Image instances.
 class Image(object):
     """
     Class that implements images.
@@ -54,6 +56,17 @@ class Image(object):
         self.bmin = bmin
         self.bpa = bpa
         self.stokes = stokes
+
+    def __eq__(self, image):
+        """
+        Compares current instance of ``Image`` class with other instance.
+        """
+        if (self.imsize == image.imsize and self.pixsize == image.pixsize and
+                self.bmaj == image.bmaj and self.bmin == image.bmin and
+                self.bpa == image.bpa):
+            return True
+        else:
+            return False
 
     def add_from_array(self, data, pixsize=None, bmaj=None, bmin=None, bpa=None,
                        stokes=None):
@@ -193,9 +206,17 @@ class ImageSet(object):
             image.add_from_txt(fname, stokes=stokes)
             self.images.append(image)
 
-    def pixels_histogram(self):
+    def pixels_histogram(self, region=None, sum=None):
+        """
+        :param region (optional):
+            Region where to calculate histograms. Or (blc[0], blc[1], trc[0],
+            trc[1],) or (center[0], center[1], r, None,).
+        :param sum (optional):
+            Calculate sum of pixels in region?
+        """
+        # First, create mask
         for i, image in enumerate(self.images):
-            self._3_darray[i] = image.data
+            self._3d_array[i] = image.data
 
     def cross_correlate_with_image(self, image,
                                    region1=(None, None, None, None),

@@ -35,8 +35,8 @@ for i = 1 to nfiles
         type 'OUTPUT NAME -> '!!basename!!'_'!!CHAR(i)
         type 'OUTSEQ -> 1
     END
-    datain 'FITS:/'!!inputdir!!'/'!!basename!!'_'!!CHAR(i)!!'.UVF' 
-    type 'DATA TO LOAD -> FITS:/'!!inputdir!!'/'!!basename!!'_'!!CHAR(i)!!'.UVF'
+    datain 'FITS:/'!!inputdir!!'/'!!basename!!'_'!!CHAR(i)!!'.FITS'
+    type 'DATA TO LOAD -> FITS:/'!!inputdir!!'/'!!basename!!'_'!!CHAR(i)!!'.FITS'
     go fitld; wait
 end
 

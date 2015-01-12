@@ -34,11 +34,13 @@ def get_fits_image_info(fname):
     header = get_hdu(fname).header
     imsize = (header['NAXIS1'], header['NAXIS2'],)
     pixref = (int(header['CRPIX1']), int(header['CRPIX2']),)
-    bmaj = header['BMAJ'] * degree_to_rad
-    bmin = header['BMIN'] * degree_to_rad
-    bpa = header['BPA'] * degree_to_rad
     pixsize = (header['CDELT1'] * degree_to_rad,
                header['CDELT2'] * degree_to_rad,)
+    # BEAM info in ``AIPS CG`` table
+    data = get_hdu(fname, extname='AIPS CG').data
+    bmaj = float(data['BMAJ']) * degree_to_rad
+    bmin = float(data['BMIN']) * degree_to_rad
+    bpa = float(data['BPA']) * degree_to_rad
     return imsize, pixref, (bmaj, bmin, bpa,), pixsize
 
 

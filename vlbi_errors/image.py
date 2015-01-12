@@ -1,9 +1,8 @@
 import glob
 import numpy as np
-#from model_old import Model
 from scipy import signal
 from data_io import get_fits_image_info
-#from model import CCModel
+from model import CCModel
 from utils import gaussianBeam
 
 try:
@@ -207,9 +206,11 @@ class ImageSet(object):
         :param image:
             Instance of ``Image`` class.
         :param region1:
-            Region to EXCLUDE in current instance images. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+            Region to EXCLUDE in current instance images. Or (blc[0], blc[1],
+            trc[0], trc[1],) or (center[0], center[1], r, None,).
         :param region2:
-            Region to EXCLUDE in ``image``. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+            Region to EXCLUDE in ``image``. Or (blc[0], blc[1], trc[0], trc[1],)
+            or (center[0], center[1], r, None,).
         :return:
             Tuple of tuples (dx, dy,) of shifts (subpixeled) in each direction.
         """
@@ -224,9 +225,11 @@ class ImageSet(object):
         :param images:
             Instance of ``ImageSet`` class.
         :param region1:
-            Region to EXCLUDE in current instance images. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+            Region to EXCLUDE in current instance images. Or (blc[0], blc[1],
+            trc[0], trc[1],) or (center[0], center[1], r, None,).
         :param region2:
-            Region to EXCLUDE in images of ``images``. Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,).
+            Region to EXCLUDE in images of ``images``. Or (blc[0], blc[1],
+            trc[0], trc[1],) or (center[0], center[1], r, None,).
         :return:
             Tuple of tuples (dx, dy,) of shifts (subpixeled) in each direction.
         """

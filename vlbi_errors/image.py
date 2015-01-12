@@ -43,10 +43,16 @@ class ImageGrid(object):
     def add_component(self, component):
         component.add_to_image_grid(self)
 
+    def add_model(self, model):
+        for component in model._components:
+            component.add_to_image_grid(self)
+
     def add_noise(self, std, df=None):
         pass
 
 
+# TODO: All add operations mustbe with ``ImageGrid`` instances. Here only
+# convolution.
 # TODO: Add operation of comparing of Image instances.
 class Image(object):
     """

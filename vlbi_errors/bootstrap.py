@@ -143,7 +143,8 @@ class CleanBootstrap(Bootstrap):
             # Bootstrap from self.residuals._data. For each baseline.
             for baseline in self.residuals.baselines:
                 # Find data from one baseline
-                indxs = np.where(self.residuals._data['baseline'] == baseline)[0]
+                indxs = np.where(self.residuals._data['baseline'] ==
+                                 baseline)[0]
                 data_to_resample = self.residuals._data[indxs]
                 # Resample it
                 resampled_data = np.random.choice(data_to_resample,
@@ -159,7 +160,7 @@ class CleanBootstrap(Bootstrap):
     def run(self, n, outname=['bootstrapped_data', '.FITS'], nonparametric=True,
             split_scans=False, use_V=True):
         super(CleanBootstrap, self).run(n, outname, nonparametric,
-                                          split_scans=split_scans, use_V=use_V)
+                                        split_scans=split_scans, use_V=use_V)
 
 
 class SelfCalBootstrap(object):
@@ -182,7 +183,7 @@ class SelfCalBootstrap(object):
         (final) files gain curve info lives in 1nd, ..., (n-1)th FITS-file.
         Sequence must be in order of self-calibration (longer solution times
         go first).
-        
+
     :note:
         data argument is always data that is subject of substraction. So, it
         could be that first element of calibs argument is the same data.
@@ -204,9 +205,9 @@ class SelfCalBootstrap(object):
     def get_residuals(self):
         absorber = Absorber()
         absorber.absorb(self.calibs)
-        return  self.data - absorber * self.model_data
-    
-        
+        return self.data - absorber * self.model_data
+
+
 if __name__ == "__main__":
     # Clean bootstrap
     uv_data = open_fits("1633+382.l22.2010_05_21.uvf")
@@ -215,9 +216,9 @@ if __name__ == "__main__":
     ccmodel.add_cc_from_fits("1633+382.l22.2010_05_21.icn.fits")
     cbootstrap = CleanBootstrap(ccmodel, uv_data)
     cbootstrap.run(100, outname=['1633', '.FITS'])
-    
-    ## Self-calibration bootstrap
-    #sc_sequence_files = ["sc_1.fits", "sc_2.fits", "sc_final.fits"]
-    #uv_data = open_fits("sc_1.fits")
-    #scbootstrap = SelfCalBootstrap(ccmodel, uv_data, sc_sequence_files)
-    #scbootstrap.run(100)
+
+    # # Self-calibration bootstrap
+    # sc_sequence_files = ["sc_1.fits", "sc_2.fits", "sc_final.fits"]
+    # uv_data = open_fits("sc_1.fits")
+    # scbootstrap = SelfCalBootstrap(ccmodel, uv_data, sc_sequence_files)
+    # scbootstrap.run(100)

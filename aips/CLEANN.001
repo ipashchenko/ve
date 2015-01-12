@@ -23,20 +23,20 @@ $
 $ TODO: implement residual map (BMAJ<0) for postprocessing.
 $
 
-proc cleann(inn, incl, insq, ind, outd, bxfl, f, imsz, cellsz, stks, nf, rb)
+proc cleann(inn, insq, ind, bxfl, f, imsz, cellsz, nf)
 clrtemp
 default imagr
 inname inn
-inclass incl
+inclass 'CALIB'
 inseq insq
 indisk ind
-outdisk outd
+outdisk indisk
 outname inn
-stokes stks
+stokes 'I'
 cmethod='DFT'   $ only hardcore
 boxfile bxfl
 imsize imsz
-robust rb
+robust 0
 cellsize cellsz
 flux f
 dotv -1    $ non-interactive mode on
@@ -51,5 +51,6 @@ FOR i = 1 TO nf
     type inn!!'.'!!incl!!'.'!!CHAR(insq)!!' ON DISK #'!!CHAR(ind)
     type 'OUTPUT -> '!!inn!!'.'!!stks!!'CL001.'!!CHAR(outseq)
     go imagr; wait
+    clrmsg
 END
 return; finish

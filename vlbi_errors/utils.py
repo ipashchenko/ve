@@ -533,6 +533,20 @@ def moments(data):
 #                                          ((center_y - y) / width_y) ** 2) / 2.)
 
 
+def create_grid(imsize):
+    """Create meshgrid of size ``imsize``.
+
+        :param imsize:
+            Container of image dimensions
+        :return:
+            Meshgrid of size (imsize[0], imsize[1])
+    """
+    xsize, ysize = imsize
+    x = np.linspace(0, xsize - 1, xsize)
+    y = np.linspace(0, ysize - 1, ysize)
+    x, y = np.meshgrid(x, y)
+    return (x, y,)
+
 
 def gaussian(height, x0, y0, bmaj, e, bpa):
     """

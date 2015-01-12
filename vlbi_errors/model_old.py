@@ -13,21 +13,6 @@ v_int = np.vectorize(int)
 v_round = np.vectorize(round)
 
 
-def create_grid(imsize):
-    """Create meshgrid of size ``imsize``.
-
-        :param imsize:
-            Container of image dimensions
-        :return:
-            Meshgrid of size (imsize[0], imsize[1])
-    """
-    xsize, ysize = imsize
-    x = np.linspace(0, xsize - 1, xsize)
-    y = np.linspace(0, ysize - 1, ysize)
-    x, y = np.meshgrid(x, y)
-    return (x, y,)
-
-
 def gaussianBeam(size_x, bmaj, bmin, bpa, size_y=None):
     """
     Generate and return a 2D Gaussian function

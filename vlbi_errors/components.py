@@ -1,6 +1,7 @@
 import math
 import numpy as np
-from utils import _function_wrapper, mas_to_rad, vcomplex
+from utils import _function_wrapper, mas_to_rad, vcomplex, gaussian
+
 try:
     import pylab
 except ImportError:
@@ -210,16 +211,13 @@ class EGComponent(Component):
         :param image_grid:
             Instance of ``ImagePlane`` subclass.
         """
+        x, y = image_grid.x, image_grid.y
         dx, dy = image_grid.dx, image_grid.dy
         x_c, y_c = image_grid.x_c, image_grid.y_c
 
-        flux, x, y = self.p
-        x_coords = int(round(x / dx))
-        y_coords = int(round(y / dy))
-        # 2 means that x_c & x_coords should be both zero-indexed.
-        x = x_c + x_coords - 2
-        y = y_c + y_coords - 2
-        image_grid.image_grid[x, y] += flux
+        flux, x_comp, y_comp, bmaj, e, bpa = self.p
+        gauss_flux = gaussian(flux, x_comp, y_comp, bmaj, e, bpa)
+        image_grid.image_grid += flux
 
 
 class CGComponent(EGComponent):

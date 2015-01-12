@@ -44,8 +44,7 @@ class ImageGrid(object):
         component.add_to_image_grid(self)
 
     def add_model(self, model):
-        for component in model._components:
-            component.add_to_image_grid(self)
+        model.add_to_image_grid(self)
 
     def add_noise(self, std, df=None):
         size = self.imsize[0] * self.imsize[1]
@@ -59,6 +58,7 @@ class ImageGrid(object):
 
 # TODO: All add operations mustbe with ``ImageGrid`` instances. Here only
 # convolution.
+# TODO: Automatically reconvolve ``ImageGrid`` instances after add/sub anything.
 # TODO: Add operation of comparing of Image instances.
 class Image(object):
     """

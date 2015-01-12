@@ -6,7 +6,8 @@ from gains import Absorber
 
 
 # TODO: detach format of data storage (use instances of UV_Data and Model
-# classes ad argumrnts in constructors.
+# classes as arguments in constructors. But for ``calibs`` argument of
+# ``SelfCalBootstrap`` we need paths to files as gain info is in tables.
 class Bootstrap(object):
     """
     Basic class for bootstrapping data using specified model.
@@ -157,7 +158,7 @@ class CleanBootstrap(Bootstrap):
 
     def run(self, n, outname=['bootstrapped_data', '.FITS'], nonparametric=True,
             split_scans=False, use_V=True):
-        super(CleanedBootstrap, self).run(n, outname, nonparametric,
+        super(CleanBootstrap, self).run(n, outname, nonparametric,
                                           split_scans=split_scans, use_V=use_V)
 
 
@@ -208,14 +209,15 @@ class SelfCalBootstrap(object):
         
 if __name__ == "__main__":
     # Clean bootstrap
-    data_file = "selfcaled_uvdata.fits"
-    model_file = "cc_map.fits"
-    uv_data = open_fits("selfcaled_uvdata.fits")
+    uv_data = open_fits("1633+382.l22.2010_05_21.uvf")
     from model import CCModel
-    ccmodel = CCModel.add_from_fits("cc_map.fits")
+    ccmodel = CCModel(stokes='I')
+    ccmodel.add_cc_from_fits("1633+382.l22.2010_05_21.icn.fits")
     cbootstrap = CleanBootstrap(ccmodel, uv_data)
-    cbootstrap.run(100)
+    cbootstrap.run(100, outname=['1633', '.FITS'])
     
-    # Self-calibration bootstrap
-    sc_sequence_files = ["sc_1.fits", "sc_2.fits", "sc_final.fits"]
-    scbootstrap = SelfCalBootstrap(ccmodel, )
+    ## Self-calibration bootstrap
+    #sc_sequence_files = ["sc_1.fits", "sc_2.fits", "sc_final.fits"]
+    #uv_data = open_fits("sc_1.fits")
+    #scbootstrap = SelfCalBootstrap(ccmodel, uv_data, sc_sequence_files)
+    #scbootstrap.run(100)

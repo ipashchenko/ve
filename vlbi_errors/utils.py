@@ -534,16 +534,23 @@ def moments(data):
 
 
 
-def gaussian(height, x0, y0, std_x, std_y, bpa):
+def gaussian(height, x0, y0, bmaj, e, bpa):
     """
     Returns a gaussian function with the given parameters.
+
+    :example:
+    create grid:
+        x, y = np.meshgrid(x, y)
+        imshow(gaussian(x, y))
+
     """
-    a = math.cos(bpa) ** 2. / (2. * std_x ** 2.) + \
-        math.sin(bpa) ** 2. / (2. * std_y ** 2.)
-    b = math.sin(2. * bpa) / (2. * std_x ** 2.) - \
-        math.sin(2. * bpa) / (2. * std_y ** 2.)
-    c = math.sin(bpa) ** 2. / (2. * std_x ** 2.) + \
-        math.cos(bpa) ** 2. / (2. * std_y ** 2.)
+    bmin = bmaj * e
+    a = math.cos(bpa) ** 2. / (2. * bmaj ** 2.) + \
+        math.sin(bpa) ** 2. / (2. * bmin ** 2.)
+    b = math.sin(2. * bpa) / (2. * bmaj ** 2.) - \
+        math.sin(2. * bpa) / (2. * bmin ** 2.)
+    c = math.sin(bpa) ** 2. / (2. * bmaj ** 2.) + \
+        math.cos(bpa) ** 2. / (2. * bmin ** 2.)
     return lambda x, y: height * np.exp(-(a * (x - x0) ** 2 +
                                           b * (x - x0) * (y - y0) +
                                           c * (y - y0) ** 2))

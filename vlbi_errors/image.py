@@ -48,7 +48,13 @@ class ImageGrid(object):
             component.add_to_image_grid(self)
 
     def add_noise(self, std, df=None):
-        pass
+        size = self.imsize[0] * self.imsize[1]
+        if df is None:
+            rvs = np.random.normal(loc=0., scale=std, size=size)
+        else:
+            raise NotImplementedError
+        rvs = rvs.reshape(self.imsize)
+        self.image_grid += rvs
 
 
 # TODO: All add operations mustbe with ``ImageGrid`` instances. Here only

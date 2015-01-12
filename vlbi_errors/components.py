@@ -216,7 +216,7 @@ class EGComponent(Component):
         flux, x, y = self.p
         x_coords = int(round(x / dx))
         y_coords = int(round(y / dy))
-        # 2 means that x_c & x_coords should be zero-indexed actually both.
+        # 2 means that x_c & x_coords should be both zero-indexed.
         x = x_c + x_coords - 2
         y = y_c + y_coords - 2
         image_grid.image_grid[x, y] += flux
@@ -300,7 +300,7 @@ class DeltaComponent(Component):
         flux, x, y = self.p
         x_coords = int(round(x / dx))
         y_coords = int(round(y / dy))
-        # 2 means that x_c & x_coords should be zero-indexed actually both.
+        # 2 means that x_c & x_coords should be both zero-indexed.
         x = x_c + x_coords - 2
         y = y_c + y_coords - 2
         image_grid.image_grid[x, y] += flux

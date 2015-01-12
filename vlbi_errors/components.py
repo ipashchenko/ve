@@ -212,11 +212,17 @@ class EGComponent(Component):
             Instance of ``ImagePlane`` subclass.
         """
         x, y = image_grid.x, image_grid.y
-        dx, dy = image_grid.dx, image_grid.dy
-        x_c, y_c = image_grid.x_c, image_grid.y_c
+        # If in ``EGComponent`` instance
+        try:
+            flux, x_comp, y_comp, bmaj, e, bpa = self.p
+        # If in ``CGComponent``instance
+        except ValueError:
+            flux, x_comp, y_comp, bmaj = self.p
+            e = 1.
+            bpa = 0.
 
-        flux, x_comp, y_comp, bmaj, e, bpa = self.p
         gauss_flux = gaussian(flux, x_comp, y_comp, bmaj, e, bpa)
+        flux = gauss_flux(x, y)
         image_grid.image_grid += flux
 
 
@@ -239,15 +245,6 @@ class CGComponent(EGComponent):
         self._parnames.remove('e')
         self._parnames.remove('bpa')
         self._p = [flux, x, y, bmaj]
-
-    def add_to_image_grid(self, image_grid):
-        """
-        Add component to instances of ``ImagePlane`` subclasses.
-
-        :param image_grid:
-            Instance of ``ImagePlane`` subclass.
-        """
-        pass
 
 
 class DeltaComponent(Component):

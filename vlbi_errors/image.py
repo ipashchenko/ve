@@ -2,8 +2,8 @@ import glob
 import numpy as np
 from scipy import signal
 from data_io import get_fits_image_info
-from model import CCModel
-from utils import gaussianBeam
+#from model import CCModel
+from utils import gaussianBeam, create_grid
 
 try:
     import pylab
@@ -23,7 +23,16 @@ class ImageGrid(object):
             self.imsize = imsize
             self.dx, self.dy = pixsize
             self.x_c, self.y_c = pixref
+        # Create flux array
         self.image_grid = np.zeros(self.imsize, dtype=float)
+        # Create coordinate arrays
+        x, y = create_grid(self.imsize)
+        x = x - self.x_c
+        y = y - self.y_c
+        x = x * self.dx
+        y = y * self.dy
+        self.x = x
+        self.y = y
 
     def from_image(self, fname):
         imsize, pixref, (bmaj, bmin, bpa,), pixsize = get_fits_image_info(fname)

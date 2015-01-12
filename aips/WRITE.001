@@ -1,0 +1,44 @@
+$ Comment:
+$ This defines the variables for the procedure ``write``
+
+
+proc init_vars
+
+    scalar nfiles, indisk, sequence
+    string*6 outdir
+    string*4 basename
+
+finish
+
+$
+$ This procedure will write specified catalog entries to fits-files in
+$ ``outdir`` directory
+$ If ``sequence`` = 1, then use the same INNAME but different OUTSEQ.
+$ Otherwise, use different INNAME and OUTSEQ = 1.
+$ TODO: If ``nfiles``<0 then load one file ``basename`` to ``nfiles`` files
+$ with different OUTSEQ.
+$
+proc write(outdir, basename, nfiles, indisk, sequence)
+type 'WILL WRITE N='!!CHAR(nfiles)!!' FILES FROM AIPS'
+$
+for i = 1 to nfiles
+    clrtemp
+    default fittp
+    indi indisk
+    IF sequence = 1
+        THEN inname basename
+        inseq i
+        type 'INPUT NAME -> '!!basename
+        type 'INSEQ -> '!!CHAR(i)
+    ELSE
+        inname basename!!'_'!!CHAR(i)
+        type 'INPUT NAME -> '!!basename!!'_'!!CHAR(i)
+        type 'INSEQ -> 1
+    END
+    dataout 'FITS:/'!!outdir!!'/'!!basename!!'_'!!CHAR(i)!!'.FITS'
+    type 'DATA TO WRITE -> FITS:/'!!outdir!!'/'!!basename!!'_'!!CHAR(i)!!'.FITS'
+    go fittp; wait
+    clrmsg
+end
+
+return; finish

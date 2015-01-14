@@ -3,7 +3,7 @@ import numpy as np
 import scipy as sp
 from utils import degree_to_mas, mas_to_rad, gaussianBeam, _function_wrapper,\
     vcomplex, gaussian, EmptyImageFtError
-from image import ImageGrid
+from image import ImageModel
 from scipy import signal
 from data_io import BinTable, get_fits_image_info
 from uv_data import open_fits
@@ -15,10 +15,7 @@ except ImportError:
     pylab = None
 
 
-# TODO: move create_image_grid to ``Component`` subclasses. Thus, we can mix
-# different components in one model and call their own methods. ``Model`` should
-# have method, specifying image grid parameters, construct 2D numpy array and
-# call component's method ``add_to_image_grid`` to add to this general 2D array.
+# TODO: ``Model`` subclasses shouldn't have ``uv`` or ``image_grid`` attrs.
 class Model(object):
     """
     Basic class that represents general functionality of models.
@@ -27,7 +24,6 @@ class Model(object):
         self._components = list()
         self._uv = None
         self.stokes = stokes
-        self._image_grid = None
 
     def __add__(self, other):
         self._components.extend(other._components)
@@ -160,7 +156,7 @@ class Model(object):
                 get_fits_image_info(fname)
 
         # First create image grid with components
-        image_grid = ImageGrid(imsize=imsize, pixref=pixref, pixsize=pixsize)
+        image_grid = ImageModel(imsize=imsize, pixref=pixref, pixsize=pixsize)
         # Putting model components to image grid
         self.add_to_image_grid(image_grid)
 
@@ -168,6 +164,7 @@ class Model(object):
             size_x = int(self.imsize[0] / 2.)
         if not size_y:
             size_y = int(self.imsize[1] / 2.)
+        # FIXME: this 3 line should be deleted. There're no beam attrs. in self!
         if not bmaj:
             bmaj = self.bmaj / abs(self.pixsize[0])
         if not bmin:
@@ -177,13 +174,10 @@ class Model(object):
         gaussian_beam = gaussianBeam(size_x, bmaj, bmin, bpa)
         cc_convolved = signal.fftconvolve(image_grid.image_grid, gaussian_beam,
                                           mode='same')
-        image = ImageGrid()
+        image = ImageModel()
         image.add_from_array(cc_convolved, pixsize=self.pixsize, bmaj=self.bmaj,
                              bmin=self.bmin, bpa=self.bpa)
         return image
-
-    # def create_image_grid(self, imsize, pixref, bmaj, bmin, bpa, pixsize):
-    #     raise NotImplementedError()
 
 
 # TODO: add ft_all method for speed up
@@ -639,7 +633,7 @@ if __name__ == "__main__":
     # pos, prob, state = sampler.run_mcmc(p0, 100)
     # sampler.reset()
     # sampler.run_mcmc(pos, 700)
-    # # image_grid = ImageGrid(fname='J0005+3820_S_1998_06_24_fey_map.fits')
+    # # image_grid = ImageModel(fname='J0005+3820_S_1998_06_24_fey_map.fits')
     # # print image_grid.dx, image_grid.dy, image_grid.imsize, image_grid.x_c,\
     # #     image_grid.y_c
     # # print image_grid.image_grid
@@ -680,7 +674,7 @@ if __name__ == "__main__":
     pos, prob, state = sampler.run_mcmc(p0, 1000)
     #sampler.reset()
     #sampler.run_mcmc(pos, 5000)
-    # # image_grid = ImageGrid(fname='J0005+3820_S_1998_06_24_fey_map.fits')
+    # # image_grid = ImageModel(fname='J0005+3820_S_1998_06_24_fey_map.fits')
     # # print image_grid.dx, image_grid.dy, image_grid.imsize, image_grid.x_c,\
     # #     image_grid.y_c
     # # print image_grid.image_grid

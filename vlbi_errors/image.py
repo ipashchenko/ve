@@ -11,8 +11,12 @@ except ImportError:
     pylab = None
 
 
-# TODO: Add operation of comparing of ImageGrid instances.
-class ImageGrid(object):
+# TODO: Add ``remove_*`` methods?
+# TODO: Add operation of comparing of ImageModel instances.
+# TODO: Is this class useless without beam information?
+# TODO: Put ``Beam`` subclass inside (composition). Compare not only image
+# parameters, but also ``Beam`` instances.
+class ImageModel(object):
     """
     Class that represents image grid (array) representation of models.
     """
@@ -33,6 +37,12 @@ class ImageGrid(object):
         y = y * self.dy
         self.x = x
         self.y = y
+
+    def convolve_with_beam(self):
+        """
+        Convolve ``image_grid`` with internal beam.
+        """
+        pass
 
     def from_image(self, fname):
         imsize, pixref, (bmaj, bmin, bpa,), pixsize = get_fits_image_info(fname)
@@ -55,10 +65,25 @@ class ImageGrid(object):
         rvs = rvs.reshape(self.imsize)
         self.image_grid += rvs
 
+    # TODO: test it!
+    def __eq__(self, image):
+        """
+        Compares current instance of ``ImageModel`` class with other instance.
+        """
+        return (self.imsize == image.imsize and self.pixsize == image.pixsize)
 
-# TODO: All add operations mustbe with ``ImageGrid`` instances. Here only
+    @property
+    def image(self):
+        """
+        Shorthand for image array. If ``image_grid`` is changed then reconvolve
+        with internal instance of ``Beam`` subclass.
+        """
+
+
+
+# TODO: All add operations must be with ``ImageModel`` instances. Here only
 # convolution.
-# TODO: Automatically reconvolve ``ImageGrid`` instances after add/sub anything.
+# TODO: Automatically reconvolve ``ImageModel`` instances after add/sub anything.
 # TODO: Add operation of comparing of Image instances.
 class Image(object):
     """
@@ -77,17 +102,23 @@ class Image(object):
         self.bmin = bmin
         self.bpa = bpa
         self.stokes = stokes
+        # Initialize ``ImageModel`` instance
 
+
+    # TODO: test it!
     def __eq__(self, image):
         """
         Compares current instance of ``Image`` class with other instance.
         """
-        if (self.imsize == image.imsize and self.pixsize == image.pixsize and
-                self.bmaj == image.bmaj and self.bmin == image.bmin and
-                self.bpa == image.bpa):
-            return True
-        else:
-            return False
+        return (self.image_grid == image.image_grid and self.bmaj == image.bmaj
+                and self.bmin == image.bmin and self.bpa == image.bpa)
+
+    def __sum__(self, image):
+        """
+        Sums current instance of ``Image`` class with other instance.
+        """
+        if self == image:
+            self.
 
     def add_from_array(self, data, pixsize=None, bmaj=None, bmin=None, bpa=None,
                        stokes=None):
@@ -118,7 +149,7 @@ class Image(object):
         """
         model = CCModel()
         model.add_cc_from_fits(fname, stoke=stokes)
-        image_grid = ImageGrid(imsize=self.imsize, pixref=self.pixref,
+        image_grid = ImageModel(imsize=self.imsize, pixref=self.pixref,
                                pixsize=self.pixsize)
         model.add_to_image_grid(image_grid)
         gaussian_beam = gaussianBeam(self.imsize[0], self.bmaj, self.bmin,
@@ -208,7 +239,7 @@ class ImageSet(object):
         """
         fnames = glob.glob(wildcard)
         for fname in fnames:
-            image = ImageGrid()
+            image = ImageModel()
             image.add_from_fits(fname, stokes=stokes)
             self.images.append(image)
 
@@ -223,7 +254,7 @@ class ImageSet(object):
         """
         fnames = glob.glob(wildcard)
         for fname in fnames:
-            image = ImageGrid()
+            image = ImageModel()
             image.add_from_txt(fname, stokes=stokes)
             self.images.append(image)
 

@@ -7,7 +7,8 @@ try:
 except ImportError:
     pylab = None
 
-
+# TODO: Add MemComponent subclass (array). It is not trivial to reconcile it
+# with Component hierarchy...
 class Component(object):
     """
     Basic class that implements single component of model.

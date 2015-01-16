@@ -66,12 +66,12 @@ class Component(object):
         """
         raise NotImplementedError("Method must me implemented in subclasses!")
 
-    def add_to_image_grid(self, image_grid):
+    def add_to_image(self, image):
         """
-        Add component to image plane.
+        Add component to image.
 
-        :param image_grid:
-            Instance of ``ImagePlane`` class
+        :param image:
+            Instance of ``Image`` class
         """
         raise NotImplementedError("Method must me implemented in subclasses!")
 
@@ -216,14 +216,14 @@ class EGComponent(Component):
             ft *= np.exp(-2. * math.pi * 1j * (u * x0 + v * y0))
         return ft
 
-    def add_to_image_grid(self, image_grid):
+    def add_to_image(self, image):
         """
-        Add component to given instance of ``ImagePlane`` class.
+        Add component to given instance of ``Image`` class.
         """
         # Cellsize
-        dx, dy = image_grid.dx, image_grid.dy
+        dx, dy = image.dx, image.dy
         # Center of image
-        x_c, y_c = image_grid.x_c, image_grid.y_c
+        x_c, y_c = image.x_c, image.y_c
 
         # Parameters of component
         try:
@@ -251,8 +251,8 @@ class EGComponent(Component):
         # Calculating angular distances of cells from center of component
         # from cell numbers to relative distances
         # arrays with elements from 1 to imsize
-        x, y = np.mgrid[1: image_grid.imsize[0] + 1,
-               1: image_grid.imsize[1] + 1]
+        x, y = np.mgrid[1: image.imsize[0] + 1,
+                        1: image.imsize[1] + 1]
         # from -imsize/2 to imsize/2
         x = x - x_c
         y = y - y_c
@@ -267,7 +267,7 @@ class EGComponent(Component):
         fluxes = gaussf(x, y)
 
         # Adding component's flux to image grid
-        image_grid.image_grid += fluxes
+        image.image += fluxes
 
 
 class CGComponent(EGComponent):
@@ -338,12 +338,12 @@ class DeltaComponent(Component):
                                        v[:, np.newaxis] * y0))).sum(axis=1)
         return visibilities
 
-    def add_to_image_grid(self, image_grid):
+    def add_to_image(self, image):
         """
         Add component to given instance of ``ImagePlane`` class.
         """
-        dx, dy = image_grid.dx, image_grid.dy
-        x_c, y_c = image_grid.x_c, image_grid.y_c
+        dx, dy = image.dx, image.dy
+        x_c, y_c = image.x_c, image.y_c
 
         flux, x0, y0 = self._p
 
@@ -356,24 +356,29 @@ class DeltaComponent(Component):
         # 2 means that x_c & x_coords should be zero-indexed actually both.
         x = x_c + x_coords - 2
         y = y_c + y_coords - 2
-        image_grid.image_grid[x, y] += flux
+        image.image[x, y] += flux
 
 
-# TODO: I need to keep coordinates of pixels for FT!
+# TODO: I need to keep coordinates of pixels for FT! Should constructor accept
+# ``MemImage`` instance?
 class MemComponent(Component):
     """
     Class that implements MEM algorithm component (2D-array of flux values).
     """
-    def __init__(self, image_array):
+    def __init__(self, image):
+        """
+        :param image:
+            Instance of ``Image`` class.
+        """
         super(MemComponent, self).__init__()
-        self.imsize = np.shape(image_array)
+        self.imsize = np.shape(image.image)
         self._parnames = [str(i) for i in xrange(self.imsize[0] *
                                                  self.imsize[1])]
         self._fixed = np.zeros(len(self._parnames), dtype=bool)
-        self._p = image_array.flatten()
+        self._p = image.image.flatten()
 
-    def add_to_image_grid(self, image_grid):
-        image_grid.image_grid += self._p.reshape(self.imsize)
+    def add_to_image(self, image):
+        image.image += self._p.reshape(self.imsize)
 
     def ft(self, uv):
         pass

@@ -14,6 +14,7 @@ def create_clean_beam_from_fits(fname):
     imsize, pixref, (bmaj, bmin, bpa), pixsize = get_fits_image_info(fname)
     return CleanBeam(bmaj, bmin, bpa, imsize)
 
+
 class Beam(object):
     """
     Basic class that represents point spread function.
@@ -48,5 +49,3 @@ class CleanBeam(Beam):
         self.size = size
         self.image = gaussianBeam(self.size[0], self.bmaj, self.bmin, self.bpa,
                                   self.size[1])
-
-

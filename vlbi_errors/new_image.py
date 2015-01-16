@@ -1,8 +1,8 @@
 import numpy as np
 from scipy import signal
-from data_io import get_fits_image_info
-from utils import gaussianBeam, create_grid
-from vlbi_errors.model import Model
+from utils import create_grid
+from model import Model
+from beam import CleanBeam
 
 try:
     import pylab
@@ -39,6 +39,8 @@ class Image(object):
         self.x = x
         self.y = y
 
+    # TODO: Sometimes we need to add/substruct convolved images. So subclasses
+    # should implement property with convolution.
     @property
     def image(self):
         """
@@ -46,9 +48,10 @@ class Image(object):
         """
         return self._image
 
+    # TODO: Am i need it? Should i compare instances before setting?
     @image.setter
     def image(self, image):
-        self._image += image.image
+        self._image = image.image
 
     def __eq__(self, image):
         """
@@ -62,10 +65,22 @@ class Image(object):
         """
         raise NotImplementedError
 
+    def __sub__(self, image):
+        """
+        Substruct from current instance of ``Image`` class other instance.
+        """
+        raise NotImplementedError
+
+    def __div__(self, image):
+        """
+        Divide current instance of ``Image`` class on other instance.
+        """
+        raise NotImplementedError
+
     # Convolve with any object that has ``image`` attribute
     def convolve(self, image_like):
         """
-        Convolve ``Image`` array with ``Beam`` instance.
+        Convolve ``Image`` array with image-like instance.
         """
         return signal.fftconvolve(self._image, image_like.image, mode='same')
 
@@ -82,12 +97,12 @@ class Image(object):
         else:
             raise NotImplementedError
         rvs = rvs.reshape(self.imsize)
-        self.image_grid += rvs
+        self._image += rvs
 
     def cross_correlate(self, image, region1=(None, None, None, None),
                         region2=(None, None, None, None)):
         """
-        Cross-correlates image with another image.
+        Cross-correlates current instance of ``Image`` with another instance.
 
         Computes normalized cross-correlation of images.
 
@@ -112,8 +127,8 @@ class Image(object):
         if not pylab:
             raise Exception("Install matplotlib for plotting!")
         if blc or trc:
-            path_to_plot = self._array[blc[0]:trc[0], blc[1]:trc[1]]
-            imgplot = pylab.imshow(path_to_plot)
+            part_to_plot = self._image[blc[0]:trc[0], blc[1]:trc[1]]
+            imgplot = pylab.imshow(part_to_plot)
             if cmap:
                 try:
                     imgplot.set_cmap(cmap)
@@ -125,12 +140,14 @@ class Image(object):
                 imgplot.set_clim(clim)
 
 
-
 class CleanImage(Image):
     """
     Class that represents image made using CLEAN algorithm.
     """
-    pass
+    def __init__(self, imsize=None, pixref=None, pixsize=None, bmaj=None,
+                 bmin=None, bpa=None):
+        super(CleanImage, self).__init__(imsize, pixref, pixsize)
+        self.beam = CleanBeam(bmaj, bmin, bpa, imsize)
 
 
 class MemImage(Image, Model):

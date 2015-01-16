@@ -183,6 +183,7 @@ class Model(object):
 
 
 # TODO: add ft_all method for speed up
+# TODO: move ``add_cc_from_fits`` to function ``create_ccmodel_from_fits``
 class CCModel(Model):
     """
     Class that represents clean components model.

@@ -51,10 +51,10 @@ class ImageModel(object):
         self.x_c, self.y_c = pixref
 
     def add_component(self, component):
-        component.add_to_image_grid(self)
+        component.add_to_image(self)
 
     def add_model(self, model):
-        model.add_to_image_grid(self)
+        model.add_to_image(self)
 
     def add_noise(self, std, df=None):
         size = self.imsize[0] * self.imsize[1]
@@ -151,7 +151,7 @@ class Image(object):
         model.add_cc_from_fits(fname, stoke=stokes)
         image_grid = ImageModel(imsize=self.imsize, pixref=self.pixref,
                                pixsize=self.pixsize)
-        model.add_to_image_grid(image_grid)
+        model.add_to_image(image_grid)
         gaussian_beam = gaussianBeam(self.imsize[0], self.bmaj, self.bmin,
                                      self.bpa, self.imsize[1])
         self.image = signal.fftconvolve(image_grid.image_grid, gaussian_beam,

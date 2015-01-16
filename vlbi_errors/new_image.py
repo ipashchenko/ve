@@ -149,6 +149,13 @@ class CleanImage(Image):
         super(CleanImage, self).__init__(imsize, pixref, pixsize)
         self.beam = CleanBeam(bmaj, bmin, bpa, imsize)
 
+    @property
+    def image(self):
+        """
+        Shorthand for CLEAN image.
+        """
+        return signal.fftconvolve(self._image, self.beam.image, mode='same')
+
 
 class MemImage(Image, Model):
     """

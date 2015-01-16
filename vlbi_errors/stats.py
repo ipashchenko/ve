@@ -9,14 +9,6 @@ import scipy as sp
 from utils import is_sorted
 
 
-class AddNoise(object):
-    """
-    Class that implements the simplest method of errors estimates.
-    """
-    def __init__(self, n=100):
-        pass
-
-
 class CrossValidation(object):
     """
     Class that implements cross-validation analysis of image-plane models.

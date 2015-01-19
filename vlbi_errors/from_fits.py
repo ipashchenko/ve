@@ -6,7 +6,6 @@ from data_io import BinTable, get_fits_image_info
 from new_image import Image, CleanImage
 
 
-# FIXME: Need to asociate stokes w Model! It used in utils.get_uv_correlations
 def create_ccmodel_from_fits_file(fname, stokes='I', ver=1):
     ccmodel = CCModel(stokes=stokes)
     cc = BinTable(fname, extname='AIPS CC', ver=ver)

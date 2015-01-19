@@ -10,16 +10,6 @@ except ImportError:
     pylab = None
 
 
-def create_clean_image_from_fits_file(fname):
-    """
-    Create instance of ``CleanImage`` from FITS-file of CLEAN image.
-    :param fname:
-    :return:
-        Instance of ``CleanImage``.
-    """
-    pass
-
-
 class Image(object):
     """
     Class that represents images.
@@ -39,7 +29,7 @@ class Image(object):
         self.x = x
         self.y = y
 
-    # TODO: Sometimes we need to add/substruct convolved images. So subclasses
+    # TODO: Sometimes we need to add/substract convolved images. So subclasses
     # should implement property with convolution.
     @property
     def image(self):
@@ -154,7 +144,9 @@ class CleanImage(Image):
     def __init__(self, imsize=None, pixref=None, pixsize=None, bmaj=None,
                  bmin=None, bpa=None):
         super(CleanImage, self).__init__(imsize, pixref, pixsize)
-        self.beam = CleanBeam(bmaj, bmin, bpa, imsize)
+        # TODO: What if pixsize has different sizes???
+        self.beam = CleanBeam(bmaj / abs(pixsize[0]), bmin / abs(pixsize[0]),
+                              bpa, imsize)
 
     @property
     def image(self):
@@ -164,8 +156,8 @@ class CleanImage(Image):
         return signal.fftconvolve(self._image, self.beam.image, mode='same')
 
 
-class MemImage(Image, Model):
-    """
-    Class that represents image made using MEM algorithm.
-    """
-    pass
+#class MemImage(Image, Model):
+#    """
+#    Class that represents image made using MEM algorithm.
+#    """
+#    pass

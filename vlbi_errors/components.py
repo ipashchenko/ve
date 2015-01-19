@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from vlbi_errors.utils import _function_wrapper, mas_to_rad, vcomplex, gaussian
+from utils import _function_wrapper, mas_to_rad, vcomplex, gaussian
 
 try:
     import pylab
@@ -356,11 +356,13 @@ class DeltaComponent(Component):
         # 2 means that x_c & x_coords should be zero-indexed actually both.
         x = x_c + x_coords - 2
         y = y_c + y_coords - 2
-        image.image[x, y] += flux
+        # Property ``image.image`` has setter that looks ``.image`` attribute of
+        # ``flux`` object. So use ``_image``.
+        image._image[x, y] += flux
 
 
 # TODO: I need to keep coordinates of pixels for FT! Should constructor accept
-# ``MemImage`` instance?
+# ``Image`` instance?
 class MemComponent(Component):
     """
     Class that implements MEM algorithm component (2D-array of flux values).
@@ -382,5 +384,3 @@ class MemComponent(Component):
 
     def ft(self, uv):
         pass
-
-

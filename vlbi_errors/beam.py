@@ -1,6 +1,6 @@
 from scipy import signal
-from vlbi_errors.data_io import get_fits_image_info
-from vlbi_errors.utils import gaussianBeam
+from data_io import get_fits_image_info
+from utils import gaussianBeam
 
 
 # * Resolution could depend on position in map or frequency. Should i associate
@@ -38,6 +38,7 @@ class DirtyBeam(Beam):
         pass
 
 
+# TODO: bmaj & bmin must be in pixels!!!
 class CleanBeam(Beam):
     """
     Class that represents central part of point spread function.

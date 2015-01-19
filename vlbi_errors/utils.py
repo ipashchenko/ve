@@ -3,7 +3,6 @@ import re
 import math
 import numpy as np
 import string
-# from itertools import permutations
 from math import floor
 from scipy import optimize
 
@@ -466,86 +465,22 @@ def gaussianBeam(size_x, bmaj, bmin, bpa, size_y=None):
     return g
 
 
-def moments_ext(data, circle, rotate, vheight, estimator=np.median, **kwargs):
+def infer_gaussian(data):
     """
-    Returns (height, amplitude, x, y, width_x, width_y, rotation angle)
-    the gaussian parameters of a 2D distribution by calculating its
-    moments.  Depending on the input parameters, will only output
-    a subset of the above.
-
-    If using masked arrays, pass estimator=np.ma.median
+    Return (amplitude, x_0, y_0, width), where width - rough estimate of
+    gaussian width
     """
-    total = np.abs(data).sum()
-    Y, X = np.indices(data.shape)  # python convention: reverse x,y np.indices
-    y = np.argmax((X * np.abs(data)).sum(axis=1) / total)
-    x = np.argmax((Y * np.abs(data)).sum(axis=0) / total)
-    col = data[int(y), :]
-    # FIRST moment, not second!
-    width_x = np.sqrt(np.abs((np.arange(col.size) - y) * col).sum() /
-                      np.abs(col).sum())
-    row = data[:, int(x)]
-    width_y = np.sqrt(np.abs((np.arange(row.size) - x) * row).sum() /
-                      np.abs(row).sum())
-    width = (width_x + width_y) / 2.
-    height = estimator(data.ravel())
-    amplitude = data.max() - height
-    mylist = [amplitude, x, y]
-    if np.isnan(width_y) or np.isnan(width_x) or np.isnan(height) or \
-            np.isnan(amplitude):
-        raise ValueError("something is nan")
-    if vheight == 1:
-        mylist = [height] + mylist
-    if circle == 0:
-        mylist = mylist + [width_x, width_y]
-        if rotate == 1:
-            mylist = mylist + [0.]  # rotation "moment" is just zero...
-            # also, circles don't rotate.
-    else:
-        mylist = mylist + [width]
-    return mylist
+    amplitude = data.max()
+    x_0, y_0 = np.where(data == amplitude)
+    row = data[x_0, :]
+    column = data[:, y_0]
+    x_0 = float(x_0)
+    y_0 = float(y_0)
+    dx = len(np.where(row - amplitude/2 > 0)[0])
+    dy = len(np.where(column - amplitude/2 > 0)[0])
+    width = math.sqrt(dx ** 2. + dy ** 2.)
 
-
-def moments(data):
-    """Returns (height, x, y, width_x, width_y)
-    the gaussian parameters of a 2D distribution by calculating its
-    moments """
-    total = data.sum()
-    X, Y = np.indices(data.shape)
-    x = (X * data).sum() / total
-    y = (Y * data).sum() / total
-    col = data[:, int(y)]
-    width_x = np.sqrt(abs((np.arange(col.size) - y) ** 2 * col).sum() /
-                      col.sum())
-    row = data[int(x), :]
-    width_y = np.sqrt(abs((np.arange(row.size) - x) ** 2 * row).sum() /
-                      row.sum())
-    height = data.max()
-    return height, x, y, width_x, width_y
-
-
-#def gaussian(height, center_x, center_y, width_x, width_y):
-#    """
-#    Returns a gaussian function with the given parameters.
-#    """
-#    width_x = float(width_x)
-#    width_y = float(width_y)
-#    return lambda x, y: height * np.exp(-(((center_x - x) / width_x) ** 2 +
-#                                          ((center_y - y) / width_y) ** 2) / 2.)
-
-
-def create_grid(imsize):
-    """Create meshgrid of size ``imsize``.
-
-        :param imsize:
-            Container of image dimensions
-        :return:
-            Meshgrid of size (imsize[0], imsize[1])
-    """
-    xsize, ysize = imsize
-    x = np.linspace(0, xsize - 1, xsize)
-    y = np.linspace(0, ysize - 1, ysize)
-    x, y = np.meshgrid(x, y)
-    return (x, y,)
+    return amplitude, x_0, y_0, width
 
 
 def gaussian(height, x0, y0, bmaj, e, bpa):
@@ -575,7 +510,9 @@ def fitgaussian(data):
     Returns (height, x, y, width_x, width_y)
     the gaussian parameters of a 2D distribution found by a fit.
     """
-    params = moments(data)
+    # Calculate initial values of circular gaussian + dummy params for
+    # ellipticity
+    params = list(infer_gaussian(data)) + [1., 0.]
     errorfunction = lambda p: np.ravel(gaussian(*p)(*np.indices(data.shape)) -
                                        data)
     p, success = optimize.leastsq(errorfunction, params)
@@ -609,6 +546,21 @@ def mask_region(data, region):
         masked_array = np.ma.array(data, mask=mask)
 
     return masked_array
+
+
+def create_grid(imsize):
+    """Create meshgrid of size ``imsize``.
+
+        :param imsize:
+            Container of image dimensions
+        :return:
+            Meshgrid of size (imsize[0], imsize[1])
+    """
+    xsize, ysize = imsize
+    x = np.linspace(0, xsize - 1, xsize)
+    y = np.linspace(0, ysize - 1, ysize)
+    x, y = np.meshgrid(x, y)
+    return (x, y,)
 
 
 def find_close_regions(data, std_decrease_factor=1.1):

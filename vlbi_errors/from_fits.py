@@ -6,8 +6,9 @@ from data_io import BinTable, get_fits_image_info
 from new_image import Image, CleanImage
 
 
-def create_ccmodel_from_fits_file(fname, ver=1):
-    ccmodel = CCModel()
+# FIXME: Need to asociate stokes w Model! It used in utils.get_uv_correlations
+def create_ccmodel_from_fits_file(fname, stokes='I', ver=1):
+    ccmodel = CCModel(stokes=stokes)
     cc = BinTable(fname, extname='AIPS CC', ver=ver)
     adds = cc.load()
     for flux, x, y in zip(adds['FLUX'], adds['DELTAX'] * degree_to_mas,
@@ -19,14 +20,14 @@ def create_ccmodel_from_fits_file(fname, ver=1):
 
 
 # TESTED w Petrov's data
-def create_clean_image_from_fits_file(fname):
+def create_clean_image_from_fits_file(fname, stokes='I', ver=1):
     """
     Create instance of ``CleanImage`` from FITS-file of CLEAN image.
     :param fname:
     :return:
         Instance of ``CleanImage``.
     """
-    ccmodel = create_ccmodel_from_fits_file(fname)
+    ccmodel = create_ccmodel_from_fits_file(fname, stokes=stokes, ver=ver)
     imsize, pixref, (bmaj, bmin, bpa,), pixsize = get_fits_image_info(fname)
     if bmaj is None:
         raise Exception("Can't find Beam info!")

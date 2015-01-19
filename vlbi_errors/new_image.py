@@ -89,6 +89,7 @@ class Image(object):
         rvs = rvs.reshape(self.imsize)
         self._image += rvs
 
+    # TODO: Should i compare images before?
     def cross_correlate(self, image, region1=None, region2=None):
         """
         Cross-correlates current instance of ``Image`` with another instance.
@@ -115,7 +116,6 @@ class Image(object):
         shift_array = fft_convolve2d(image1, image2)
         params = fitgaussian(shift_array)
         return tuple(params[1: 3])
-
 
     def plot(self, blc=None, trc=None, clim=None, cmap=None):
         """

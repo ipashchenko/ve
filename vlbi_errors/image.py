@@ -118,7 +118,7 @@ class Image(object):
         Sums current instance of ``Image`` class with other instance.
         """
         if self == image:
-            self.
+            pass
 
     def add_from_array(self, data, pixsize=None, bmaj=None, bmin=None, bpa=None,
                        stokes=None):

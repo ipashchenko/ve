@@ -36,11 +36,22 @@ def get_fits_image_info(fname):
     pixref = (int(header['CRPIX1']), int(header['CRPIX2']),)
     pixsize = (header['CDELT1'] * degree_to_rad,
                header['CDELT2'] * degree_to_rad,)
-    # BEAM info in ``AIPS CG`` table
-    data = get_hdu(fname, extname='AIPS CG').data
-    bmaj = float(data['BMAJ']) * degree_to_rad
-    bmin = float(data['BMIN']) * degree_to_rad
-    bpa = float(data['BPA']) * degree_to_rad
+    try:
+        # BEAM info in ``AIPS CG`` table
+        data = get_hdu(fname, extname='AIPS CG').data
+        bmaj = float(data['BMAJ']) * degree_to_rad
+        bmin = float(data['BMIN']) * degree_to_rad
+        bpa = float(data['BPA']) * degree_to_rad
+    # In Petrov's data it in PrimaryHDU header
+    except AbsentHduExtensionError:
+        try:
+            bmaj = header['BMAJ']
+            bmin = header['BMIN']
+            bpa = header['BPA']
+        except KeyError:
+            bmaj = None
+            bmin = None
+            bpa = None
     return imsize, pixref, (bmaj, bmin, bpa,), pixsize
 
 

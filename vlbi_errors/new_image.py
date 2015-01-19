@@ -1,8 +1,8 @@
 import numpy as np
 from scipy import signal
-from utils import create_grid
-from model import Model
+from utils import create_grid, mask_region, fitgaussian
 from beam import CleanBeam
+from fft_routines import fft_convolve2d
 
 try:
     import pylab
@@ -99,8 +99,7 @@ class Image(object):
         rvs = rvs.reshape(self.imsize)
         self._image += rvs
 
-    def cross_correlate(self, image, region1=(None, None, None, None),
-                        region2=(None, None, None, None)):
+    def cross_correlate(self, image, region1=None, region2=None):
         """
         Cross-correlates current instance of ``Image`` with another instance.
 
@@ -108,17 +107,25 @@ class Image(object):
 
         :param image:
             Instance of image class.
-        :param region1:
+        :param region1 (optional):
             Region to EXCLUDE in current instance of ``Image``.
             Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r,
-            None,).
-        :param region2:
+            None,). Default ``None``.
+        :param region2 (optional):
             Region to EXCLUDE in ``image``. Or (blc[0], blc[1], trc[0], trc[1],)
-            or (center[0], center[1], r, None,).
+            or (center[0], center[1], r, None,). Default ``None``.
         :return:
             (dx, dy,) tuple of shifts (subpixeled) in each direction.
         """
-        pass
+        if region1 is not None:
+            image1 = mask_region(self.image, region1)
+        if region2 is not None:
+            image2 = mask_region(image.image, region2)
+        # Cross-correlate images
+        shift_array = fft_convolve2d(image1, image2)
+        params = fitgaussian(shift_array)
+        return tuple(params[1: 3])
+
 
     def plot(self, blc=None, trc=None, clim=None, cmap=None):
         """

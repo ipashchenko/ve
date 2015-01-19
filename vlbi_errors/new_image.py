@@ -117,24 +117,34 @@ class Image(object):
         params = fitgaussian(shift_array)
         return tuple(params[1: 3])
 
+    # TODO: fix BLC,TRC to display expected behavior. Use data_io.get_image()
     def plot(self, blc=None, trc=None, clim=None, cmap=None):
         """
         Plot image.
+
+        :note:
+            ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
+            converted to python-like zero-indexing.
         """
         if not pylab:
             raise Exception("Install matplotlib for plotting!")
         if blc or trc:
-            part_to_plot = self._image[blc[0]:trc[0], blc[1]:trc[1]]
-            imgplot = pylab.imshow(part_to_plot)
-            if cmap:
-                try:
-                    imgplot.set_cmap(cmap)
-                except:
-                    # Show wo ``cmap`` set, print availbale ``cmap``s.
-                    pass
-            if clim:
-                # TODO: Warn if ``clim`` is out of range for image.
-                imgplot.set_clim(clim)
+            blc = blc or (1, 1,)
+            trc = trc or self.imsize
+            part_to_plot = self.image[blc[0] - 1: trc[0] - 1, blc[1] - 1: trc[1]
+                                      - 1]
+        else:
+            part_to_plot = self.image
+        imgplot = pylab.imshow(part_to_plot)
+        if cmap:
+            try:
+                imgplot.set_cmap(cmap)
+            except:
+                # Show wo ``cmap`` set, print availbale ``cmap``s.
+                pass
+        if clim:
+            # TODO: Warn if ``clim`` is out of range for image.
+            imgplot.set_clim(clim)
 
 
 class CleanImage(Image):

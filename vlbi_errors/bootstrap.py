@@ -204,11 +204,11 @@ class SelfCalBootstrap(object):
 if __name__ == "__main__":
     # Clean bootstrap
     uv_data = open_fits("1633+382.l22.2010_05_21.uvf")
-    from model import CCModel
-    ccmodel = CCModel(stokes='I')
-    ccmodel.add_cc_from_fits("1633+382.l22.2010_05_21.icn.fits")
+    from from_fits import create_ccmodel_from_fits_file
+    ccmodel = create_ccmodel_from_fits_file("1633+382.l22.2010_05_21.icn.fits",
+                                            stokes='I')
     cbootstrap = CleanBootstrap(ccmodel, uv_data)
-    cbootstrap.run(100, outname=['1633', '.FITS'])
+    cbootstrap.run(10, outname=['DEL', '.FITS'])
 
     # # Self-calibration bootstrap
     # sc_sequence_files = ["sc_1.fits", "sc_2.fits", "sc_final.fits"]

@@ -18,6 +18,7 @@ def create_ccmodel_from_fits_file(fname, ver=1):
     return ccmodel
 
 
+# TESTED w Petrov's data
 def create_clean_image_from_fits_file(fname):
     """
     Create instance of ``CleanImage`` from FITS-file of CLEAN image.

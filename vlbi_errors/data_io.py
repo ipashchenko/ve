@@ -45,9 +45,9 @@ def get_fits_image_info(fname):
     # In Petrov's data it in PrimaryHDU header
     except AbsentHduExtensionError:
         try:
-            bmaj = header['BMAJ']
-            bmin = header['BMIN']
-            bpa = header['BPA']
+            bmaj = header['BMAJ'] * degree_to_rad
+            bmin = header['BMIN'] * degree_to_rad
+            bpa = header['BPA'] * degree_to_rad
         except KeyError:
             bmaj = None
             bmin = None

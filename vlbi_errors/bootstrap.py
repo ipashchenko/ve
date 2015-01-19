@@ -72,13 +72,6 @@ class CleanBootstrap(Bootstrap):
         Path to FITS-file with uv-data (self-calibrated or not).
     """
 
-    def __init__(self, model, data):
-        self.model = model
-        self.data = data
-        self.model_data = copy.deepcopy(self.data)
-        self.model_data.substitute([model])
-        self.residuals = self.get_residuals()
-
     def get_residuals(self):
         return self.data - self.model_data
 

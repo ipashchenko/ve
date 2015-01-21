@@ -1,9 +1,9 @@
 vlbi_errors
 =====
 
-**Tools for acscesing uncertaintes of VLBI results**
+**Tools for assessing uncertainties of VLBI results**
 
-vlbi_errors is collection of tools used for acscesing uncertaintes of VLBI
+vlbi_errors is collection of tools used for assessing uncertainties of VLBI
 observations - maps, models, ....
 
 Documentation

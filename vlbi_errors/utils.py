@@ -692,12 +692,12 @@ def get_uv_correlations(uv, models):
 
 
 if __name__ == '__main__':
-    from uv_data import open_fits
+    from uv_data import create_uvdata_from_fits_file
     from model import CCModel
     import os
     os.chdir('/home/ilya/code/vlbi_errors/data/Denise')
     # Load self-calinrated uv-data
-    uvdata = open_fits('1038+064.l22.2010_05_21.uvf')
+    uvdata = create_uvdata_from_fits_file('1038+064.l22.2010_05_21.uvf')
     ccmodel = CCModel(stokes='I')
     # Load clean components model
     ccmodel.add_cc_from_fits('1038+064.l22.2010_05_21.icn.fits')

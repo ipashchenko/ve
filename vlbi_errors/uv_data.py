@@ -8,7 +8,6 @@ try:
     import pylab
 except ImportError:
     pylab = None
-from data_io import Groups, IDI
 from utils import baselines_2_ants, get_uv_correlations
 from utils import index_of
 from utils import get_triangles
@@ -17,29 +16,6 @@ vec_complex = np.vectorize(np.complex)
 
 # TODO: add possibility to input/output in different FITS-formats (and other
 # formats too).
-
-
-def open_fits(fname, structure='UV'):
-    """
-    Helper function for loading FITS-files.
-
-        :param fname:
-            Path to FITS-file.
-
-        :param structure (optional):
-            Structure of FITS-file. ``UV`` or ``IDI``. (default: ``UV``)
-
-        :return:
-            Instance of ``UVData`` class for the specified FITS-file.
-    """
-
-    assert(structure in ['UV', 'IDI'])
-
-    structures = {'UV': Groups(), 'IDI': IDI()}
-    data = UVData(io=structures[structure])
-    data.load(fname)
-
-    return data
 
 
 class UVData(object):
@@ -1096,13 +1072,14 @@ class UVData(object):
 
 if __name__ == '__main__':
 
-   # data = open_fits('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
+   # data = create_uvdata_from_fits_file('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
    # from model import Model
    # imodel = Model()
    # imodel.add_from_txt('/home/ilya/work/vlbi_errors/fits/1226+023_CC1_SEQ11.txt')
    # data.substitute(imodel)
-   # sc = open_fits('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
+   # sc = create_uvdata_from_fits_file('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
    # sc.noise_add(noise={258: 10})
    # sc.noise_add(noise={258: [10,1,0.1,10,1,10,1,10,1,10]})
-   uvdata = open_fits('SgrA_NOFRIN_NOAVE_NOHYBRID_FLAGED.FITS')
+   from from_fits import create_uvdata_from_fits_file
+   uvdata = create_uvdata_from_fits_file('SgrA_NOFRIN_NOAVE_NOHYBRID_FLAGED.FITS')
    triangles = get_triangles(3, antennas=[1, 2, 4, 5])

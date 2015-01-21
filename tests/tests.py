@@ -8,7 +8,7 @@ from unittest import TestCase, skip
 from vlbi_errors.utils import (aips_bintable_fortran_fields_to_dtype_conversion,
                                index_of)
 from vlbi_errors.data_io import IO, PyFitsIO, Groups
-from vlbi_errors.uv_data import UVData, open_fits
+from vlbi_errors.uv_data import UVData, create_uvdata_from_fits_file
 
 
 class Test_utils(TestCase):
@@ -80,7 +80,7 @@ class Test_Data_Groups(TestCase):
 
    # @skip
    # def test_open_fits(self):
-   #     sc_uv = open_fits(self.sc_groups_uv_fname)
+   #     sc_uv = create_uvdata_from_fits_file(self.sc_groups_uv_fname)
    #     # Test that sc_uv is the same as self.sc_uv
 
     def test_noise(self):

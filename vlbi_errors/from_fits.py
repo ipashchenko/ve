@@ -2,8 +2,32 @@ import pyfits as pf
 from model import CCModel
 from utils import degree_to_mas
 from components import DeltaComponent
-from data_io import BinTable, get_fits_image_info
-from new_image import Image, CleanImage
+from data_io import Groups, IDI, BinTable, get_fits_image_info
+from uv_data import UVData
+from image import Image, CleanImage
+
+
+def create_uvdata_from_fits_file(fname, structure='UV'):
+    """
+    Helper function for loading FITS-files.
+
+        :param fname:
+            Path to FITS-file.
+
+        :param structure (optional):
+            Structure of FITS-file. ``UV`` or ``IDI``. (default: ``UV``)
+
+        :return:
+            Instance of ``UVData`` class for the specified FITS-file.
+    """
+
+    assert(structure in ['UV', 'IDI'])
+
+    structures = {'UV': Groups(), 'IDI': IDI()}
+    uvdata = UVData(io=structures[structure])
+    uvdata.load(fname)
+
+    return uvdata
 
 
 def create_ccmodel_from_fits_file(fname, stokes='I', ver=1):

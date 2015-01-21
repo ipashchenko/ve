@@ -2,9 +2,9 @@ import math
 import numpy as np
 import scipy as sp
 from utils import degree_to_mas, gaussianBeam
-from new_image import Image
+from image import Image
 from data_io import BinTable, get_fits_image_info
-from uv_data import open_fits
+from from_fits import create_uvdata_from_fits_file
 from stats import LnPost
 from components import DeltaComponent, CGComponent
 
@@ -195,14 +195,14 @@ if __name__ == "__main__":
     # uv_fits_file = '1038+064.l22.2010_05_21.uvf'
     # ccmodel = CCModel(stokes='I')
     # ccmodel.add_cc_from_fits(cc_fits_file)
-    # uvdata = open_fits(uv_fits_file)
+    # uvdata = create_uvdata_from_fits_file(uv_fits_file)
     # uv = uvdata.uvw[:, :2]
     # ft = ccmodel.ft(uv)
     # ccmodel.uvplot(uv)
 
     # TESTING fitting gaussian components to uv-data
     # # Load uv-data
-    # uvdata = open_fits('1308+326.U1.2009_08_28.UV_CAL')
+    # uvdata = create_uvdata_from_fits_file('1308+326.U1.2009_08_28.UV_CAL')
     # uv = uvdata.uvw[:, :2]
     # # Create several components
     # cg1 = CGComponent(2.44, 0.02, -0.02, 0.10)
@@ -260,7 +260,7 @@ if __name__ == "__main__":
     # With sparse RA data
     # TESTING fitting gaussian components to uv-data
     # Load uv-data
-    uvdata = open_fits('0716+714_raes03dp_C_LL_uva.fits')
+    uvdata = create_uvdata_from_fits_file('0716+714_raes03dp_C_LL_uva.fits')
     uvdata.data['uvw'] *= 10 ** 9
     uv = uvdata.uvw[:, :2]
     # Create several components

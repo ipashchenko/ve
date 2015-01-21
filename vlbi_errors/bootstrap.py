@@ -1,7 +1,7 @@
 __author__ = 'ilya'
 import copy
 import numpy as np
-from uv_data import open_fits
+from from_fits import create_uvdata_from_fits_file
 from gains import Absorber
 
 
@@ -187,7 +187,7 @@ class SelfCalBootstrap(object):
         self.data = data
         self.calibs = calibs
         # Last self-calibrated data
-        last_calib = open_fits(calibs[-1])
+        last_calib = create_uvdata_from_fits_file(calibs[-1])
         self.last_calib = last_calib
 
         model_data = copy.deepcopy(self.data)
@@ -203,7 +203,7 @@ class SelfCalBootstrap(object):
 
 if __name__ == "__main__":
     # Clean bootstrap
-    uv_data = open_fits("1633+382.l22.2010_05_21.uvf")
+    uv_data = create_uvdata_from_fits_file("1633+382.l22.2010_05_21.uvf")
     from from_fits import create_ccmodel_from_fits_file
     ccmodel = create_ccmodel_from_fits_file("1633+382.l22.2010_05_21.icn.fits",
                                             stokes='I')
@@ -212,6 +212,6 @@ if __name__ == "__main__":
 
     # # Self-calibration bootstrap
     # sc_sequence_files = ["sc_1.fits", "sc_2.fits", "sc_final.fits"]
-    # uv_data = open_fits("sc_1.fits")
+    # uv_data = create_uvdata_from_fits_file("sc_1.fits")
     # scbootstrap = SelfCalBootstrap(ccmodel, uv_data, sc_sequence_files)
     # scbootstrap.run(100)

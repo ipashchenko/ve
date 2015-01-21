@@ -16,14 +16,12 @@ except ImportError:
 
 # TODO: ``Model`` subclasses can't be convolved with anything! It is ``Image``
 # that can be convolved.
-# TODO: ``Model`` subclasses shouldn't have ``uv`` or ``image_grid`` attrs.
 class Model(object):
     """
     Basic class that represents general functionality of models.
     """
     def __init__(self, stokes=None):
         self._components = list()
-        self._uv = None
         self.stokes = stokes
 
     def __add__(self, other):
@@ -60,23 +58,10 @@ class Model(object):
             ft += component.ft(uv)
         return ft
 
-    def get_uv(self, uvdata):
+    def uvplot(self, uv, style='a&p', sym='.r'):
         """
-        Sets ``_uv`` attribute of self with values from UVData class instance
-        ``uvdata``.
-
-        :param uvdata:
-            Instance of ``UVData`` class. Model visibilities will be calculated
-            for (u,v)-points of this instance.
+        Plot FT of model (visibilities) vs uv-radius.
         """
-        self._uv = uvdata.uvw[:, :2]
-
-    def uvplot(self, uv=None, style='a&p', sym='.r'):
-        """
-        Plot FT of model vs uv-radius.
-        """
-        if uv is None:
-            uv = self._uv
         ft = self.ft(uv=uv)
 
         if style == 'a&p':

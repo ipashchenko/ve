@@ -4,8 +4,8 @@ import scipy as sp
 from utils import degree_to_mas, gaussianBeam
 from image import Image, CleanImage
 from data_io import BinTable, get_fits_image_info
-from from_fits import create_uvdata_from_fits_file
-from stats import LnPost
+#from from_fits import create_uvdata_from_fits_file
+#from stats import LnPost
 from components import DeltaComponent, CGComponent
 
 try:
@@ -176,6 +176,7 @@ class CCModel(Model):
 
 if __name__ == "__main__":
 
+    pass
     # TODO: test with new components.py
     # # TESTING plotting cc-models on uv-data
     # cc_fits_file = '1038+064.l22.2010_05_21.icn.fits'
@@ -247,30 +248,30 @@ if __name__ == "__main__":
     # With sparse RA data
     # TESTING fitting gaussian components to uv-data
     # Load uv-data
-    uvdata = create_uvdata_from_fits_file('0716+714_raes03dp_C_LL_uva.fits')
-    uvdata.data['uvw'] *= 10 ** 9
-    uv = uvdata.uvw[:, :2]
-    # Create several components
-    cg1 = CGComponent(1., 0.0, 0.0, 0.05)
-    cg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 2.], dict(),),
-                  bmaj=(sp.stats.uniform.logpdf, [0, 1.], dict(),))
-    # Create model
-    mdl1 = Model(stokes='RR')
-    # Add components to model
-    mdl1.add_component(cg1)
-    # Create posterior for data & model
-    lnpost = LnPost(uvdata, mdl1)
-    import emcee
-    ndim = mdl1.size
-    nwalkers = 50
-    p0 = mdl1.p
-    cov = np.zeros(ndim * ndim).reshape((ndim, ndim,))
-    cov[0, 0] = 0.1
-    cov[1, 1] = 0.01
-    cov[2, 2] = 0.01
-    cov[3, 3] = 0.01
-    sampler = emcee.MHSampler(cov, ndim, lnpost)
-    pos, prob, state = sampler.run_mcmc(p0, 1000)
+    #uvdata = create_uvdata_from_fits_file('0716+714_raes03dp_C_LL_uva.fits')
+    #uvdata.data['uvw'] *= 10 ** 9
+    #uv = uvdata.uvw[:, :2]
+    ## Create several components
+    #cg1 = CGComponent(1., 0.0, 0.0, 0.05)
+    #cg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 2.], dict(),),
+    #              bmaj=(sp.stats.uniform.logpdf, [0, 1.], dict(),))
+    ## Create model
+    #mdl1 = Model(stokes='RR')
+    ## Add components to model
+    #mdl1.add_component(cg1)
+    ## Create posterior for data & model
+    #lnpost = LnPost(uvdata, mdl1)
+    #import emcee
+    #ndim = mdl1.size
+    #nwalkers = 50
+    #p0 = mdl1.p
+    #cov = np.zeros(ndim * ndim).reshape((ndim, ndim,))
+    #cov[0, 0] = 0.1
+    #cov[1, 1] = 0.01
+    #cov[2, 2] = 0.01
+    #cov[3, 3] = 0.01
+    #sampler = emcee.MHSampler(cov, ndim, lnpost)
+    #pos, prob, state = sampler.run_mcmc(p0, 1000)
     # sampler.reset()
     # sampler.run_mcmc(pos, 5000)
     # # image_grid = ImageModel(fname='J0005+3820_S_1998_06_24_fey_map.fits')

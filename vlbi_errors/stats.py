@@ -1,7 +1,7 @@
 import math
 from model_old import Model
 from gains import Absorber
-from uv_data import open_fits
+from from_fits import create_uvdata_from_fits_file
 import glob
 import copy
 import numpy as np
@@ -56,7 +56,7 @@ class CrossValidation(object):
                 model = Model()
                 model.add_from_txt(models[j], stoke=stokes)
                 print "using test file " + str(testfile)
-                data = open_fits(testfile)
+                data = create_uvdata_from_fits_file(testfile)
                 cv_score = data.cv_score(model, stokes=stokes)
                 print "cv_score for one testing sample is " + str(cv_score)
                 cv_scores.append(cv_score)
@@ -162,7 +162,7 @@ if __name__ == '__main__':
     pass
 
     # Test CrossValidation
-    #data = open_fits('PRELAST_CALIB.FITS')
+    #data = create_uvdata_from_fits_file('PRELAST_CALIB.FITS')
     #cv = CrossValidation(data)
     #test_fits_files = glob.glob('test*.FITS')
     #if not test_fits_files:

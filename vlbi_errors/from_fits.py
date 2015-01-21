@@ -35,6 +35,7 @@ def create_clean_image_from_fits_file(fname, stokes='I', ver=1):
     return ccimage
 
 
+# FIXME: This is quite useless function actually. Remove?
 # TODO: There must be subclass of IO.PyFitsIO class for loading images
 def create_image_from_fits_file(fname):
     """

@@ -180,10 +180,10 @@ class UVData(object):
     # TODO: make possible to choose all IFs and stokes?
     # TODO: should it be a general method for choosing subsample of structured
     # array using kwargs for parameters and kwargs with dictionary values for
-    # specifying dimensions of arrays in strutured array. I need it in Gains
+    # specifying dimensions of arrays in structured array. I need it in Gains
     # class too.
-    def _choose_data(self, times=None, baselines=None, IF=None, stokes=None,
-                     freq_average=False):
+    def _choose_uvdata(self, times=None, baselines=None, IF=None, stokes=None,
+                       freq_average=False):
         """
         Method that returns chosen data from ``_data`` numpy structured array
         based on user specified parameters.
@@ -361,7 +361,7 @@ class UVData(object):
 
         baselines_to_display = set(baselines_to_display)
 
-        data, indxs = self._choose_data(times=times,
+        data, indxs = self._choose_uvdata(times=times,
                                         baselines=baselines_to_display,
                                         freq_average=True)
         # If we are given some time interval then find among ``indxs`` only
@@ -411,7 +411,7 @@ class UVData(object):
             How to plot complex visibilities - real and imaginary part
             (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
 
-        .. note:: All checks are in ``_choose_data`` method.
+        .. note:: All checks are in ``_choose_uvdata`` method.
         """
 
         if not pylab:
@@ -420,7 +420,7 @@ class UVData(object):
         if not stokes:
             stokes = 'I'
 
-        uvdata, indxs = self._choose_data(baselines=baselines, IF=IF,
+        uvdata, indxs = self._choose_uvdata(baselines=baselines, IF=IF,
                                           stokes=stokes,
                                           freq_average=freq_average)
         # TODO: i need function to choose parameters
@@ -497,7 +497,7 @@ class UVData(object):
             How to plot complex visibilities - real and imaginary part
             (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
 
-        .. note:: All checks are in ``_choose_data`` method.
+        .. note:: All checks are in ``_choose_uvdata`` method.
         """
 
         if not pylab:
@@ -506,7 +506,7 @@ class UVData(object):
         if not stokes:
             stokes = 'I'
 
-        uvdata, indxs = self._choose_data(baselines=baselines, IF=IF,
+        uvdata, indxs = self._choose_uvdata(baselines=baselines, IF=IF,
                                           stokes=stokes,
                                           freq_average=freq_average)
 
@@ -631,7 +631,7 @@ class UVData(object):
         all_a, all_b = np.histogram(all_times[1:] - all_times[:-1])
         for bl in self.baselines:
             print "Processing baseline ", bl
-            bl_times = self.data[self._choose_data(baselines=bl)[1]]['time']
+            bl_times = self.data[self._choose_uvdata(baselines=bl)[1]]['time']
             a, b = np.histogram(bl_times[1:] - bl_times[:-1])
             # If baseline consists only of 1 scan
             if b[-1] < all_b[1]:
@@ -780,7 +780,7 @@ class UVData(object):
             # or {baseline: [noises]} if split_scans is True.
             if not split_scans:
                 for baseline in self.baselines:
-                    baseline_uvdata = self._choose_data(baselines=baseline)[0]
+                    baseline_uvdata = self._choose_uvdata(baselines=baseline)[0]
                     if average_freq:
                         baseline_uvdata = np.mean(baseline_uvdata, axis=1)
                     v = (baseline_uvdata[..., 0] - baseline_uvdata[..., 1]).real
@@ -794,7 +794,7 @@ class UVData(object):
                     baseline_noise = list()
                     for scan in self.scans_bl[baseline]:
                         # (#obs in scan, #nif, #nstokes,)
-                        scan_baseline_uvdata = self._choose_data(baselines=baseline,
+                        scan_baseline_uvdata = self._choose_uvdata(baselines=baseline,
                                                                  times=(scan[0],
                                                                         scan[1],))[0]
                         if average_freq:
@@ -813,7 +813,7 @@ class UVData(object):
         else:
             if not split_scans:
                 for baseline in self.baselines:
-                    baseline_uvdata = self._choose_data(baselines=baseline)[0]
+                    baseline_uvdata = self._choose_uvdata(baselines=baseline)[0]
                     if average_freq:
                         baseline_uvdata = np.mean(baseline_uvdata, axis=1)
                     differences = (baseline_uvdata[:-1, ...] -
@@ -829,7 +829,7 @@ class UVData(object):
                     baseline_noise = list()
                     for scan in self.scans_bl[baseline]:
                         # shape = (#obs in scan, #nif, #nstokes,)
-                        scan_baseline_uvdata = self._choose_data(baselines=baseline,
+                        scan_baseline_uvdata = self._choose_uvdata(baselines=baseline,
                                                                  times=(scan[0],
                                                                         scan[1],))[0]
                         if average_freq:
@@ -886,7 +886,7 @@ class UVData(object):
                     except IndexError:
                         break
                     scan_baseline_uvdata, sc_bl_indxs =\
-                        self._choose_data(baselines=baseline,
+                        self._choose_uvdata(baselines=baseline,
                                           times=(scan[0], scan[1],))
                     n = np.prod(np.shape(scan_baseline_uvdata))
                     noise_to_add = vec_complex(np.random.normal(scale=std,
@@ -899,7 +899,7 @@ class UVData(object):
                     self.uvdata[sc_bl_indxs] = scan_baseline_uvdata
             except TypeError:
                 baseline_uvdata, bl_indxs =\
-                    self._choose_data(baselines=baseline)
+                    self._choose_uvdata(baselines=baseline)
                 n = np.prod(np.shape(baseline_uvdata))
                 noise_to_add = vec_complex(np.random.normal(scale=stds,
                                                             size=n),

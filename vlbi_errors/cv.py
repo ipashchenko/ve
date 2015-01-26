@@ -1,5 +1,7 @@
 import glob
+import numpy as np
 from model import Model
+from from_fits import create_uvdata_from_fits_file
 
 
 class CrossValidation(object):
@@ -49,7 +51,7 @@ class CrossValidation(object):
                 model = Model()
                 model.add_from_txt(models[j], stoke=stokes)
                 print "using test file " + str(testfile)
-                data = open_fits(testfile)
+                data = create_uvdata_from_fits_file(testfile)
                 cv_score = data.cv_score(model, stokes=stokes)
                 print "cv_score for one testing sample is " + str(cv_score)
                 cv_scores.append(cv_score)

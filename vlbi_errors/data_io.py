@@ -211,61 +211,6 @@ class PyFitsIO(IO):
     #    raise NotImplementedError('method must be implemented in subclasses')
 
 
-#class UV(PyFitsIO):
-#    """
-#    Abstract class that handle i/o of uv-data with auxiliary information (such
-#    as scans from AIPS NX binary table or antenna info from AIPS AN or ANTENNA
-#    IDI FITS binary table.
-#    """
-#
-#    @property
-#    def scans(self):
-#        """
-#        Returns list of times that separates different scans. If NX table is
-#        present in the original
-#
-#        :return:
-#            np.ndarray with shape (#scans, 2,) with start & stop time for each
-#                of #scans scans.
-#        """
-#        try:
-#            indx = self.hdulist.index_of('AIPS NX')
-#            print "Found AIPS NX table!"
-#        except KeyError:
-#            indx = None
-#            print "No AIPS NX table are found!"
-#
-#        if indx is not None:
-#            nx_hdu = self.hdulist[indx]
-#            scans = (np.vstack((nx_hdu.data['TIME'], nx_hdu.data['TIME'] +
-#                                nx_hdu.data['TIME INTERVAL']))).T
-#
-#        else:
-#            scans = None
-#
-#        return scans
-#
-#    # TODO: AIPS AN or ANTENNA - should it be based on file type? Not just check
-#    # both.
-#    @property
-#    def antennas(self):
-#        """
-#        Returns dictionary {antenna name: antenna number}
-#
-#        :returns
-#            dictionary with keys = antenna names (strings) and values = antenna
-#                numbers (ints)
-#        """
-#        try:
-#            indx = self.hdulist.index_of('AIPS NX')
-#            print "Found AIPS NX table!"
-#        except KeyError:
-#            indx = None
-#            print "No AIPS NX table are found!"
-#
-#
-
-
 # TODO: subclass IO.PyFitsIO.IDI! SN table is a binary table (as all HDUs in IDI
 # format). So there must be general method to populate self._data structured
 # array using given dtype and some kwargs.

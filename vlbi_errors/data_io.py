@@ -661,3 +661,11 @@ class IDI(PyFitsIO):
         _data['weights'] = weights
 
         return _data
+
+
+if __name__ == '__main__':
+    from from_fits import create_uvdata_from_fits_file
+    import os
+    os.chdir('/home/ilya/code/vlbi_errors/data/misha')
+    uvdata = create_uvdata_from_fits_file('1308+326.U1.2009_08_28.UV_CAL')
+    uvdata.cv(15, 'CV_TEST')

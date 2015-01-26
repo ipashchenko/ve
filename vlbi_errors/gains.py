@@ -266,7 +266,7 @@ class Gains(object):
 
         antenna_data = self._data[np.where(self._data['antenna'] == antenna)]
         # TODO: i need function to choose parameters
-        #smth. like data = self._choose_data(antenna=antenna, IF=IF, pol=None)
+        #smth. like data = self._choose_uvdata(antenna=antenna, IF=IF, pol=None)
         times = 0.5 * (antenna_data['start'] + antenna_data['stop'])
 
         if pol == 'R':

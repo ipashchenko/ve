@@ -1,7 +1,6 @@
 import copy
 import numpy as np
 import pyfits as pf
-from numpy.lib.recfunctions import *
 from collections import OrderedDict
 from utils import baselines_2_ants, index_of, get_uv_correlations
 
@@ -26,11 +25,19 @@ class GR(object):
 
     def save(self, data=None, fname=None):
         fname = fname or self.fname
+        # Save data
         if data is None:
             self.hdus.writeto(fname)
         else:
-            # TODO: save data
-            pass
+            # TODO: save data: #groups has changed
+            new_hdu = pf.GroupsHDU(data)
+            # PyFits updates header using given data (``GCOUNT``) anyway
+            new_hdu.header = self.hdu.header
+
+            hdulist = pf.HDUList([new_hdu])
+            for hdu in self.hdulist[1:]:
+                hdulist.append(hdu)
+            hdulist.writeto(fname)
 
     def learn_data_structure(self, hdu):
         # Learn parameters

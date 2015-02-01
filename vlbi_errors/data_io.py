@@ -297,6 +297,8 @@ class Groups(PyFitsIO):
             numpy.ndarray.
         """
 
+        # Create mapping of FITS CTYPEi i number to dimensions of PyFits
+        # hdu.data[`DATA`] (hdu.data.data) numpy ndarray.
         data_of_data = dict()
         data_of_data.update({'GROUP': (0, hdu.header['GCOUNT'])})
         for i in range(2, hdu.header['NAXIS'] + 1):
@@ -334,10 +336,11 @@ class Groups(PyFitsIO):
 
         # Swap axis and squeeze array to get complex array (nif, nstokes,)
         # FIXME: refactor to (nstokes, nif,)? - bad idea? think about it later!
-        # Now IF is has index 1.
+        # Move IF to index 1.
         temp = np.swapaxes(hdu.data['DATA'], 1, data_of_data['IF'][0])
-        # Now STOKES has index 2
+        # Move STOKES to index 2
         temp = np.swapaxes(temp, 2, data_of_data['STOKES'][0])
+        # Remove dimensions of 1
         temp = temp.squeeze()
         # Insert dimension for IF if 1 IF in data and it was squeezed
         if self.nif == 1:
@@ -396,11 +399,12 @@ class Groups(PyFitsIO):
             Instance of ``PyFits.GroupsHDU`` class
         """
 
-        # Constructing array (3, 20156, 4, 8,)
+        # Constructing array (3, N, #stokes, #if,)
         temp = np.vstack((_data['hands'].real[np.newaxis, :],
                           _data['hands'].imag[np.newaxis, :],
                           _data['weights'][np.newaxis, :]))
 
+        # FIXME: PZEROi has different i for same key in different FITS-files!
         # Construct corresponding arrays of parameter values
         _data_copy = _data.copy()
         _data_copy['uvw'][:, 0] = (_data_copy['uvw'][:, 0] +
@@ -414,17 +418,19 @@ class Groups(PyFitsIO):
         _data_copy['baseline'] = (_data_copy['baseline'] +
                                   self.hdu.header['PZERO6']) * self.hdu.header['PSCAL6']
 
-        # Now roll axis 0 to 3rd position (3, 20156, 8, 4) => (20156, 8, 4, 3)
+        # Now roll axis 0 (real,imag,weight) to 3rd position
+        # (3, N, #if, #stokes) => (N, #if, #stokes, 3)
         temp = np.rollaxis(temp, 0, 4)
 
         # First, add dimensions:
         for i in range(self.ndim_ones):
             temp = np.expand_dims(temp, axis=4)
-            # Now temp has shape (20156, 8, 4, 3, 1, 1, 1)
+            # Now temp has shape (N, #if, #stokes, 3, 1, 1, 1)
 
+        # Change dimensions to pyfits.hdu.data['DATA'] dimensions
         temp = change_shape(temp, self.data_of__data, {key:
                                                            self.data_of_data[key][0] for key in self.data_of_data.keys()})
-        # => (20156, 1, 1, 8, 1, 4, 3) as 'DATA' part of recarray
+        # => (N, 1, 1, #if, 1, #stokes, 3) as in 'DATA' part of pyfits recarray
 
         # Write regular array data (``temp``) and corresponding parameters to
         # instances of pyfits.GroupsHDU

@@ -13,7 +13,7 @@ vec_complex = np.vectorize(np.complex)
 vec_int = np.vectorize(np.int)
 
 
-class GR(object):
+class UVData(object):
 
     def __init__(self, fname):
         self.fname = fname
@@ -39,6 +39,7 @@ class GR(object):
                 hdulist.append(hdu)
             hdulist.writeto(fname)
 
+    # TODO: for IDI extend this method
     def learn_data_structure(self, hdu):
         # Learn parameters
         par_dict = OrderedDict()
@@ -840,5 +841,5 @@ class GR(object):
 if __name__ == '__main__':
     import os
     os.chdir('/home/ilya/code/vlbi_errors/data/misha')
-    uvdata = GR('1308+326.U1.2009_08_28.UV_CAL')
+    uvdata = UVData('1308+326.U1.2009_08_28.UV_CAL')
     os.chdir('/home/ilya/code/vlbi_errors/vlbi_errors')

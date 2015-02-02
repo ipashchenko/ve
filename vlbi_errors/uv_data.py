@@ -75,13 +75,13 @@ class UVData(object):
         """
         Returns (#groups, #if, #stokes) complex numpy.ndarray.
         """
-        result = self.hdu.data.data[self.slices_dict.values()]
+        result = self.hdu.data.data[tuple(self.slices_dict.values())]
         return result[..., 0] + 1j*result[..., 1]
 
     @uvdata.setter
     def uvdata(self, uvdata):
-        self.hdu.data.data[self.slices_dict.values()][..., 0] = uvdata.real
-        self.hdu.data.data[self.slices_dict.values()][..., 1] = uvdata.imag
+        self.hdu.data.data[tuple(self.slices_dict.values())][..., 0] = uvdata.real
+        self.hdu.data.data[tuple(self.slices_dict.values())][..., 1] = uvdata.imag
 
     @property
     def uvdata_freq_averaged(self):

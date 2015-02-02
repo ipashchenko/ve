@@ -6,7 +6,7 @@ from image import Image, CleanImage
 from data_io import BinTable, get_fits_image_info
 #from from_fits import create_uvdata_from_fits_file
 #from stats import LnPost
-from components import DeltaComponent, CGComponent
+from components import DeltaComponent, CGComponent, EGComponent
 
 try:
     import pylab
@@ -43,6 +43,25 @@ class Model(object):
 
     def clear_components(self):
         self._components = list()
+
+    def add_difmap_components(self, fname):
+        """
+        Add components from difmap txt-file with model.
+        :param fname:
+            Filename.
+        """
+        components = np.loadtxt(fname, comments='!', usecols=(0,1,2,3,4,5))
+        for component in components:
+            x = component[1] * math.cos(math.pi * component[2] / 180.)
+            y = component[1] * math.sin(math.pi * component[2] / 180.)
+            flux = component[0]
+            bmaj = component[3]
+            e = component[4]
+            bpa = component[5]
+            if e == 1.:
+                self.add_component(CGComponent(flux, x, y, bmaj))
+            else:
+                self.add_component(EGComponent(flux, x, y, bmaj, e, bpa))
 
     def clear_uv(self):
         self._uv = None

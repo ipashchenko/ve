@@ -1,3 +1,4 @@
+import math
 import copy
 import numpy as np
 import pyfits as pf
@@ -846,10 +847,215 @@ class UVData(object):
             except KeyError:
                 pass
 
+    # TODO: convert time to datetime format and use date2num for plotting
+    # TODO: make a kwarg argument - to plot in different symbols/colors
+    def tplot(self, baselines=None, IF=None, stokes=None, style='a&p',
+              freq_average=False, sym=None):
+        """
+        Method that plots uv-data vs. time.
+
+        :param baselines (optional):
+            One or iterable of baselines numbers or ``None``. If ``None`` then
+            use all baselines. (default: ``None``)
+
+        :parm IF (optional):
+            One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
+            use all IFs. (default: ``None``)
+
+        :param stokes (optional):
+            Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
+            ``LR`` or ``None``. If ``None`` then use ``I``.
+            (default: ``None``)
+
+        :param style (optional):
+            How to plot complex visibilities - real and imaginary part
+            (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
+
+        .. note:: All checks are in ``_choose_uvdata`` method.
+        """
+
+        if not pylab:
+            raise Exception('Install ``pylab`` for plotting!')
+
+        if not stokes:
+            stokes = 'I'
+
+        uvdata, indxs = self._choose_uvdata(baselines=baselines, IF=IF,
+                                            stokes=stokes,
+                                            freq_average=freq_average)
+        # TODO: i need function to choose parameters
+        times = self.hdu.columns[self.par_dict['DATE']].array[indxs]
+
+        if style == 'a&p':
+            a1 = np.angle(uvdata)
+            a2 = np.real(np.sqrt(uvdata * np.conj(uvdata)))
+        elif style == 're&im':
+            a1 = uvdata.real
+            a2 = uvdata.imag
+        else:
+            raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
+
+        if not freq_average:
+
+            # # of chosen IFs
+            n_if = np.shape(uvdata)[1]
+
+            # TODO: define colors
+            try:
+                syms = self.__color_list[:n_if]
+            except AttributeError:
+                print "Define self.__color_list to show in different colors!"
+                syms = ['.k'] * n_if
+
+            pylab.subplot(2, 1, 1)
+            for _if in range(n_if):
+                # TODO: plot in different colors and make a legend
+                pylab.plot(times, a1[:, _if], syms[_if])
+            pylab.subplot(2, 1, 2)
+            for _if in range(n_if):
+                pylab.plot(times, a2[:, _if], syms[_if])
+                if style == 'a&p':
+                    pylab.ylim([-math.pi, math.pi])
+            pylab.show()
+
+        else:
+            if not sym:
+                sym = '.k'
+            pylab.subplot(2, 1, 1)
+            pylab.plot(times, a1, sym)
+            pylab.subplot(2, 1, 2)
+            pylab.plot(times, a2, sym)
+            if style == 'a&p':
+                pylab.ylim([-math.pi, math.pi])
+            pylab.show()
+
+    # TODO: Implement PA[deg] slicing of uv-plane with keyword argument ``PA``.
+    # TODO: Add ``model`` kwarg for plotting image plane model with data
+    # together.
+    # TODO: Add ``plot_noise`` boolean kwarg for plotting error bars also. (Use
+    # ``UVData.noise()`` method for finding noise values.)
+    # TODO: implement antennas/baselines arguments as in ``uv_coverage``.
+    def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p',
+               freq_average=False, sym=None):
+        """
+        Method that plots uv-data for given baseline vs. uv-radius.
+
+        :param baselines (optional):
+            One or iterable of baselines numbers or ``None``. If ``None`` then
+            use all baselines. (default: ``None``)
+
+        :parm IF (optional):
+            One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
+            use all IFs. (default: ``None``)
+
+        :param stokes (optional):
+            Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
+            ``LR`` or ``None``. If ``None`` then use ``I``.
+            (default: ``None``)
+
+        :param style (optional):
+            How to plot complex visibilities - real and imaginary part
+            (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
+
+        .. note:: All checks are in ``_choose_uvdata`` method.
+        """
+
+        if not pylab:
+            raise Exception('Install ``pylab`` for plotting!')
+
+        if not stokes:
+            stokes = 'I'
+
+        uvdata, indxs = self._choose_uvdata(baselines=baselines, IF=IF,
+                                            stokes=stokes,
+                                            freq_average=freq_average)
+
+        # TODO: i need function choose parameters
+        uvw_data = self.uvw
+        uv_radius = np.sqrt(uvw_data[:, 0] ** 2 + uvw_data[:, 1] ** 2)
+
+        if style == 'a&p':
+            a1 = np.angle(uvdata)
+            a2 = np.real(np.sqrt(uvdata * np.conj(uvdata)))
+        elif style == 're&im':
+            a1 = uvdata.real
+            a2 = uvdata.imag
+        else:
+            raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
+
+        if not freq_average:
+            # # of chosen IFs
+            # TODO: Better use len(IF) if ``data`` shape will change sometimes.
+            try:
+                # If ``IF`` is at least iterable
+                n_if = len(IF)
+            except TypeError:
+                # If ``IF`` is just a number
+                n_if = 1
+
+            # TODO: define colors
+            try:
+                syms = self.__color_list[:n_if]
+            except AttributeError:
+                print "Define self.__color_list to show in different colors!"
+                syms = ['.k'] * n_if
+
+            pylab.subplot(2, 1, 1)
+            for _if in range(n_if):
+                # TODO: plot in different colors and make a legend
+                pylab.plot(uv_radius, a2[:, _if], syms[_if])
+            pylab.subplot(2, 1, 2)
+            for _if in range(n_if):
+                pylab.plot(uv_radius, a1[:, _if], syms[_if])
+                if style == 'a&p':
+                    pylab.ylim([-math.pi, math.pi])
+            pylab.show()
+        else:
+            if not sym:
+                sym = '.k'
+            pylab.subplot(2, 1, 1)
+            pylab.plot(uv_radius, a2, sym)
+            pylab.subplot(2, 1, 2)
+            pylab.plot(uv_radius, a1, sym)
+            if style == 'a&p':
+                pylab.ylim([-math.pi, math.pi])
+            pylab.show()
+
+    def uvplot_model(self, model, baselines=None, stokes=None, style='a&p'):
+        """
+        Plot given image plain model.
+
+        :param model:
+            Instance of ``Model`` class.
+
+        :param baselines (optional):
+            One or iterable of baselines numbers or ``None``. If ``None`` then
+            use all baselines. (default: ``None``)
+
+        :parm IF (optional):
+            One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
+            use all IFs. (default: ``None``)
+
+        :param stokes (optional):
+            Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
+            ``LR`` or ``None``. If ``None`` then use ``I``.
+            (default: ``None``)
+
+        :param style (optional):
+            How to plot complex visibilities - real and imaginary part
+            (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
+        """
+        # Copy ``model``, choose ``uvws`` given ``baselines`` and set ``_uvws``
+        # atribute of ``model``'s copy to calculated ``uvws``. Use
+        # ``model.uvplot()`` method to plot model.
+        raise NotImplementedError
+
 
 if __name__ == '__main__':
     import os
     os.chdir('/home/ilya/code/vlbi_errors/data/misha')
     uvdata = UVData('1308+326.U1.2009_08_28.UV_CAL')
     uvdata.cv(10, 'cv_test')
+    from model import Model
+    uvdata.cv_score(model)
     os.chdir('/home/ilya/code/vlbi_errors/vlbi_errors')

@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import pyfits as pf
 from collections import OrderedDict
+from numpy.lib.recfunctions import stack_arrays
 from utils import baselines_2_ants, index_of, get_uv_correlations
 
 try:
@@ -27,7 +28,7 @@ class UVData(object):
         fname = fname or self.fname
         # Save data
         if data is None:
-            self.hdus.writeto(fname)
+            self.hdulist.writeto(fname)
         else:
             # TODO: save data: #groups has changed
             new_hdu = pf.GroupsHDU(data)
@@ -714,36 +715,44 @@ class UVData(object):
 
         # Split data of each baseline to ``q`` blocks
         for baseline in self.baselines:
-            baseline_data = self.hdu.data[np.where(self.hdu.columns[self.par_dict['BASELINE']].array ==
-                                          baseline)]
-            blen = len(baseline_data)
-            indxs = np.arange(blen)
+            baseline_indxs = np.where(self.hdu.columns[self.par_dict['BASELINE']].array ==
+                                     baseline)[0]
             # Shuffle indexes
-            np.random.shuffle(indxs)
-            # Indexes of ``q`` nearly equal chunks
-            q_indxs = np.array_split(indxs, q)
+            np.random.shuffle(baseline_indxs)
+            # Indexes of ``q`` nearly equal chunks. That is list of ``q`` index
+            # arrays
+            q_indxs = np.array_split(baseline_indxs, q)
             # ``q`` blocks for current baseline
-            baseline_chunks = [baseline_data[indx] for indx in q_indxs]
+            baseline_chunks = [list(indx) for indx in q_indxs]
             baselines_chunks.append(baseline_chunks)
 
         # Combine ``q`` chunks to ``q`` pairs of training & testing datasets
         for i in range(q):
+            print i
             # List of i-th chunk for testing dataset for each baseline
-            testing_data = [baseline_chunks[i] for baseline_chunks in
+            testing_indxs = [baseline_chunks[i] for baseline_chunks in
                             baselines_chunks]
             # List of "all - i-th" chunk as training dataset for each baseline
-            training_data = [baseline_chunks[:i] + baseline_chunks[i + 1:] for
+            training_indxs = [baseline_chunks[:i] + baseline_chunks[i + 1:] for
                              baseline_chunks in baselines_chunks]
 
+            print testing_indxs
+            print training_indxs
             # Combain testing & training samples of each baseline in one
-            testing_data = np.hstack(testing_data)
-            training_data = np.hstack(sum(training_data, []))
+            testing_indxs = np.sort([item for sublist in testing_indxs for item
+                                     in sublist])
+            training_indxs = [item for sublist in training_indxs for item in
+                              sublist]
+            training_indxs = [item for sublist in training_indxs for item in
+                              sublist]
             # Save each pair of datasets to files
             # NAXIS changed!!!
-            self.save(training_data, 'train' + '_' + str(i + 1).zfill(2) + 'of'
-                      + str(q))
-            self.save(testing_data, 'test' + '_' + str(i + 1).zfill(2) + 'of' +
-                      str(q))
+            training_data=self.hdu.data[training_indxs]
+            testing_data =self.hdu.data[testing_indxs]
+            self.save(data=training_data,
+                      fname='train' + '_' + str(i + 1).zfill(2) + 'of' + str(q))
+            self.save(data=testing_data,
+                      fname='test' + '_' + str(i + 1).zfill(2) + 'of' + str(q))
 
     def cv_score(self, model, stokes='I', average_freq=True):
         """
@@ -842,4 +851,5 @@ if __name__ == '__main__':
     import os
     os.chdir('/home/ilya/code/vlbi_errors/data/misha')
     uvdata = UVData('1308+326.U1.2009_08_28.UV_CAL')
+    uvdata.cv(10, 'cv_test')
     os.chdir('/home/ilya/code/vlbi_errors/vlbi_errors')

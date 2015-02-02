@@ -781,7 +781,7 @@ class UVData(object):
         print noise
 
         data_copied = copy.deepcopy(self)
-        data_copied.substitute(model)
+        data_copied.substitute([model])
         data_copied.uvdata = self.uvdata - data_copied.uvdata
 
         if average_freq:
@@ -834,6 +834,7 @@ class UVData(object):
 
         if baselines is None:
             baselines = self.baselines
+        # Indexes of hdu.data with chosen baselines
         indxs = np.hstack(index_of(baselines, self.hdu.columns[self.par_dict['BASELINE']].array))
         n = len(indxs)
         uv = self.uvw[indxs, :2]

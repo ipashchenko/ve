@@ -23,7 +23,17 @@ class UVData(object):
         self.hdu = self.hdulist[0]
         self._stokes_dict = {'RR': 0, 'LL': 1, 'RL': 2, 'LR': 3}
         self.learn_data_structure(self.hdu)
+        self._complex_uvdata = self.view_uvdata({'COMPLEX':slice(0, 1)}) +\
+            1j * self.view_uvdata({'COMPLEX':slice(1, 2)})
         self._error = None
+
+    def sync(self):
+        """
+        Sync complex representation and internal representation. I need this
+        because i don't know how to make a complex view to real ndarray.
+        """
+        self.view_uvdata({'COMPLEX': slice(0, 1)}) = self.complex_uvdata.real
+        self.view_uvdata({'COMPLEX': slice(1, 2)}) = self.complex_uvdata.imag
 
     def save(self, data=None, fname=None):
         fname = fname or self.fname
@@ -70,27 +80,89 @@ class UVData(object):
                 slices_dict.update({key: slice(None, None)})
         self.slices_dict = slices_dict
 
+    def new_slices(self, key, key_slice):
+        """
+        Return view of internal ``hdu.data.data`` numpy.ndarray with given
+        slice.
+        """
+        slices_dict = self.slices_dict.copy()
+        slices_dict.update({key: key_slice})
+        return slices_dict
+
+    def view_uvdata(self, slices_dict):
+        """
+        Return A VIEW of internal ``hdu.data.data`` numpy.ndarray with given
+        slices.
+
+        :param slices_dict:
+            Ex. {'COMPLEX': slice(0, 1), 'IF': slice(0, 2)}
+        """
+        slices_dict = self.slices_dict.copy()
+        for key, key_slice in slices_dict.items():
+            slices_dict.update({key: key_slice})
+        return self.hdu.data.data[slices_dict.values]
+
+   # @property
+   # def uvdata(self):
+   #     """
+   #     Returns (#groups, #if, #stokes) complex numpy.ndarray.
+   #     """
+   #     result = self.hdu.data.data[self.slices_dict.values()]
+   #     return result[..., 0] + 1j*result[..., 1]
+
+    # Idea is that we must return view and reshape other data to the shape of
+    # the returned view to change original data. Thus, we don't need setter.
+    # The original problem is that using ``self.uvdata[] = ar`` first evaluates
+    # ``self.uvdata`` that returns A COPY. So setter didn't work. Now it does.
+    # @property
+    # def uvdata(self):
+    #     """
+    #     Returns (#groups, #if, #stokes, 2,) numpy.ndarray with last
+    #     dimension - real&imag part of visibilities. It is A VIEW of
+    #     ``hdu.data.data`` numpy.ndarray.
+    #     """
+    #     return self.hdu.data.data[self.new_slices('COMPLEX', slice(0, 2)).values()]
+
     @property
     def uvdata(self):
         """
-        Returns (#groups, #if, #stokes) complex numpy.ndarray.
+        Returns (#groups, #if, #stokes,) complex numpy.ndarray with last
+        dimension - real&imag part of visibilities. It is A COPY of
+        ``hdu.data.data`` numpy.ndarray.
         """
-        result = self.hdu.data.data[tuple(self.slices_dict.values())]
-        return result[..., 0] + 1j*result[..., 1]
+        return self.view_uvdata({'COMPLEX': slice(0, 1)}) +\
+            1j * self.view_uvdata({'COMPLEX': slice(1, 2)})
+
+    @property
+    def complex_uvdata(self):
+        """
+        Returns (#groups, #if, #stokes,) complex numpy.ndarray with last
+        dimension - real&imag part of visibilities. It is A COPY of
+        ``hdu.data.data`` numpy.ndarray.
+        """
+        return self._complex_uvdata
+
+    # FIXME: This solves problem! Syncing betwee complex and real
+    # representation!
+    @complex_uvdata.setter
+    def complex_uvdata(self, other):
+        self._complex_uvdata = other
+        self.sync
 
     @uvdata.setter
     def uvdata(self, uvdata):
-        self.hdu.data.data[tuple(self.slices_dict.values())][..., 0] = uvdata.real
-        self.hdu.data.data[tuple(self.slices_dict.values())][..., 1] = uvdata.imag
+        self.view_uvdata({'COMPLEX', slice(0, 1)}) = uvdata.real
+        self.view_uvdata({'COMPLEX', slice(1, 2)}) = uvdata.imag
+        # FIXME: This suppose that last dimension is COMPLEX
+        # self.hdu.data.data[self.slices_dict.values()][..., 0] = uvdata.real
+        # self.hdu.data.data[self.slices_dict.values()][..., 1] = uvdata.imag
 
     @property
     def uvdata_freq_averaged(self):
         """
-        Shortcut for ``self.data['hands']`` averaged in IFs.
-
         :returns:
-            ``self.data['hands']`` averaged in IFs, with shape (#vis,
-            #stokes).
+            ``self.uvdata`` averaged in IFs, that is complex numpy.ndarray with
+            shape (#N, #stokes).
         """
         if self.nif > 1:
             result = np.mean(self.uvdata, axis=1)
@@ -240,7 +312,9 @@ class UVData(object):
             (#N, #IF, #STOKES) and second array is boolean numpy array of
             indexes of data in original PyFits record array.
         """
+        # Copy with shape (#N, #IF, #STOKES, 2,)
         uvdata = self.uvdata
+        uvdata = uvdata[..., 0] + 1j * uvdata[..., 1]
 
         # TODO: create general method for retrieving indexes of structured array
         # where the specified fields are equal to specified values. Also

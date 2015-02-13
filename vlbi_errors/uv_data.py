@@ -24,8 +24,6 @@ class UVData(object):
         self.learn_data_structure(self.hdu)
         self._uvdata = self.view_uvdata({'COMPLEX': 0}) +\
             1j * self.view_uvdata({'COMPLEX': 1})
-        #self._synced = True
-        #self._uvdata = None
         self._error = None
 
     def sync(self):
@@ -130,14 +128,6 @@ class UVData(object):
         self._uvdata = other
         # Sync internal representation with changed complex representation.
         self.sync()
-
-  #  @uvdata.setter
-  #  def uvdata(self, uvdata):
-  #      self.view_uvdata({'COMPLEX', slice(0, 1)}) = uvdata.real
-  #      self.view_uvdata({'COMPLEX', slice(1, 2)}) = uvdata.imag
-  #      # FIXME: This suppose that last dimension is COMPLEX
-  #      # self.hdu.data.data[self.slices_dict.values()][..., 0] = uvdata.real
-  #      # self.hdu.data.data[self.slices_dict.values()][..., 1] = uvdata.imag
 
     @property
     def uvdata_freq_averaged(self):
@@ -792,8 +782,6 @@ class UVData(object):
             training_indxs = [baseline_chunks[:i] + baseline_chunks[i + 1:] for
                              baseline_chunks in baselines_chunks]
 
-            print testing_indxs
-            print training_indxs
             # Combain testing & training samples of each baseline in one
             testing_indxs = np.sort([item for sublist in testing_indxs for item
                                      in sublist])
@@ -806,9 +794,11 @@ class UVData(object):
             training_data=self.hdu.data[training_indxs]
             testing_data =self.hdu.data[testing_indxs]
             self.save(data=training_data,
-                      fname='train' + '_' + str(i + 1).zfill(2) + 'of' + str(q))
+                      fname=fname + '_train' + '_' + str(i + 1).zfill(2) + 'of'
+                            + str(q) + '.FITS')
             self.save(data=testing_data,
-                      fname='test' + '_' + str(i + 1).zfill(2) + 'of' + str(q))
+                      fname=fname + '_test' + '_' + str(i + 1).zfill(2) + 'of' +
+                            str(q) + '.FITS')
 
     def cv_score(self, model, stokes='I', average_freq=True):
         """

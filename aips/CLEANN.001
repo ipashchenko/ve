@@ -46,7 +46,7 @@ FOR i = 1 TO nf
     type 'OK'
     inseq insq + i - 1
     type '1OK'
-    outseq i
+    outseq insq + i - 1
     type '2OK'
     type inn!!'.'!!incl!!'.'!!CHAR(insq)!!' ON DISK #'!!CHAR(ind)
     type 'OUTPUT -> '!!inn!!'.'!!stks!!'CL001.'!!CHAR(outseq)

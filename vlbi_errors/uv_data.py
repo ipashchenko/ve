@@ -533,6 +533,8 @@ class UVData(object):
                 syms = self.__color_list[:n_if]
             except AttributeError:
                 print "Define self.__color_list to show in different colors!"
+                if not sym:
+                    sym = '.k'
                 syms = [sym] * n_if
 
             pylab.subplot(2, 1, 1)

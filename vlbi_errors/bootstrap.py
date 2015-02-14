@@ -117,11 +117,12 @@ class CleanBootstrap(Bootstrap):
             # shape(self.residuals._data[i]['hands']) = (8,4,)
             # for each baseline create (8,4,) normal random variables with
             # specified by noise_residuals[baseline] std
+            copy_of_model_data = copy.deepcopy(self.model_data)
             for baseline in self.residuals.baselines:
                 # Find data from one baseline
                 indxs = np.where(self.residuals._data['baseline'] ==
                                  baseline)[0]
-                data_to_add_normvars = self.residuals._data[indxs]
+                data_to_add_normvars = copy_of_model_data._data[indxs]
                 # Generate (len(indxs),8,4,) array of random variables
                 # ``anormvars`` to add:
                 lnormvars = list()
@@ -134,6 +135,7 @@ class CleanBootstrap(Bootstrap):
         else:
             # TODO: should i resample all stokes and IFs together? Yes
             # Bootstrap from self.residuals._data. For each baseline.
+            copy_of_model_data = copy.deepcopy(self.model_data)
             for baseline in self.residuals.baselines:
                 # Find data from one baseline
                 indxs = np.where(self.residuals._data['baseline'] ==
@@ -144,11 +146,11 @@ class CleanBootstrap(Bootstrap):
                                                   len(data_to_resample))
 
                 # Add to residuals.substitute(model)
-                self.model_data._data['hands'][indxs] = \
+                copy_of_model_data._data['hands'][indxs] = \
                     self.model_data._data['hands'][indxs] + \
                     resampled_data['hands']
 
-        self.data.save(self.model_data._data, outname)
+        self.data.save(copy_of_model_data._data, outname)
 
     def run(self, n, outname=['bootstrapped_data', '.FITS'], nonparametric=True,
             split_scans=False, use_V=True):

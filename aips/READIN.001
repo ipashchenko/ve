@@ -24,7 +24,7 @@ $
 for i = 1 to nfiles
     clrtemp
     default fitld
-    outdi outputdisk
+    outdisk outputdisk
     IF sequence = 1
         THEN outname basename
         outseq i

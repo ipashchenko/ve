@@ -147,6 +147,7 @@ class Image(object):
             imgplot.set_clim(clim)
 
 
+# FIXME: THIS DOESN't KEEP RESIDUALS! ONLY CCs!
 class CleanImage(Image):
     """
     Class that represents image made using CLEAN algorithm.

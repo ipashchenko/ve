@@ -5,8 +5,8 @@ from utils import degree_to_mas, gaussianBeam
 from image import Image, CleanImage
 from data_io import BinTable, get_fits_image_info
 #from from_fits import create_uvdata_from_fits_file
-#from stats import LnPost
-from components import DeltaComponent, CGComponent
+from stats import LnPost
+from components import DeltaComponent, CGComponent, EGComponent
 
 try:
     import pylab
@@ -189,61 +189,64 @@ if __name__ == "__main__":
     # ccmodel.uvplot(uv)
 
     # TESTING fitting gaussian components to uv-data
-    # # Load uv-data
-    # uvdata = create_uvdata_from_fits_file('1308+326.U1.2009_08_28.UV_CAL')
-    # uv = uvdata.uvw[:, :2]
-    # # Create several components
-    # cg1 = CGComponent(2.44, 0.02, -0.02, 0.10)
-    # cg2 = CGComponent(0.041, 0.71, -1.05, 1.18)
-    # cg3 = CGComponent(0.044, 2.60, -3.20, 0.79)
-    # cg4 = CGComponent(0.021, 1.50, -5.60, 2.08)
-    # cg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 3.], dict(),),
-    #               bmaj=(sp.stats.uniform.logpdf, [0, 1.], dict(),))
-    # cg2.add_prior(flux=(sp.stats.uniform.logpdf, [0., 0.1], dict(),),
-    #               bmaj=(sp.stats.uniform.logpdf, [0, 3.], dict(),))
-    # cg3.add_prior(flux=(sp.stats.uniform.logpdf, [0., 0.1], dict(),),
-    #               bmaj=(sp.stats.uniform.logpdf, [0, 3.], dict(),))
-    # cg4.add_prior(flux=(sp.stats.uniform.logpdf, [0., 0.1], dict(),),
-    #               bmaj=(sp.stats.uniform.logpdf, [0, 5.], dict(),))
-    # # Create model
-    # mdl1 = Model(stokes='I')
-    # # Add components to model
-    # mdl1.add_component(cg1)
-    # mdl1.add_component(cg2)
-    # mdl1.add_component(cg3)
-    # mdl1.add_component(cg4)
-    # # Create posterior for data & model
-    # lnpost = LnPost(uvdata, mdl1)
-    # lnpr = LnPrior(mdl1)
-    # lnlik = LnLikelihood(uvdata, mdl1)
-    # # model.uvplot(uv = uv)
-    # # model.ft(uv=uv)
-    # import emcee
-    # ndim = mdl1.size
-    # nwalkers = 100
-    # # p0 = mdl1.p
-    # # cov = np.zeros(ndim * ndim).reshape((ndim, ndim,))
-    # # cov[0, 0] = 0.1
-    # # cov[1, 1] = 0.1
-    # # cov[2, 2] = 0.1
-    # # cov[3, 3] = 0.1
-    # # sampler = emcee.MHSampler(cov, ndim, lnpost)
-    # sampler = emcee.EnsembleSampler(nwalkers, ndim, lnpost)
-    # p_std1 = [0.01, 0.01, 0.01, 0.01]
-    # p_std2 = [0.003, 0.01, 0.01, 0.01]
-    # p0 = emcee.utils.sample_ball(mdl1.p, p_std1 + p_std2 * 3, size=nwalkers)
-    # pos, prob, state = sampler.run_mcmc(p0, 100)
-    # sampler.reset()
-    # sampler.run_mcmc(pos, 700)
-    # # image_grid = ImageModel(fname='J0005+3820_S_1998_06_24_fey_map.fits')
-    # # print image_grid.dx, image_grid.dy, image_grid.imsize, image_grid.x_c,\
-    # #     image_grid.y_c
-    # # print image_grid.image_grid
-    # # eg = EGComponent(1., 5., 5., 3., 0.5, 1.)
-    # # print eg.p
-    # # print eg._p
-    # # eg.add_to_image_grid(image_grid)
-    # # print image_grid.image_grid
+    # Load uv-data
+    uvdata = create_uvdata_from_fits_file('1308+326.U1.2009_08_28.UV_CAL')
+    uv = uvdata.uvw[:, :2]
+    #twickle
+    # Create several components
+    cg1 = EGComponent(2.44, 0.02, -0.02, 0.10, 0.5, -1.)
+    cg2 = CGComponent(0.041, 0.71, -1.05, 1.18)
+    cg3 = CGComponent(0.044, 2.60, -3.20, 0.79)
+    cg4 = CGComponent(0.021, 1.50, -5.60, 2.08)
+    cg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 3.], dict(),),
+                  bmaj=(sp.stats.uniform.logpdf, [0, 1.], dict(),),
+                  e=(sp.stats.uniform.logpdf, [0., 1.], dict(),),
+                  bpa=(sp.stats.uniform.logpdf, [-math.pi, math.pi], dict(),))
+    cg2.add_prior(flux=(sp.stats.uniform.logpdf, [0., 0.1], dict(),),
+                  bmaj=(sp.stats.uniform.logpdf, [0, 3.], dict(),))
+    cg3.add_prior(flux=(sp.stats.uniform.logpdf, [0., 0.1], dict(),),
+                  bmaj=(sp.stats.uniform.logpdf, [0, 3.], dict(),))
+    cg4.add_prior(flux=(sp.stats.uniform.logpdf, [0., 0.1], dict(),),
+                  bmaj=(sp.stats.uniform.logpdf, [0, 5.], dict(),))
+    # Create model
+    mdl1 = Model(stokes='I')
+    # Add components to model
+    mdl1.add_component(cg1)
+    mdl1.add_component(cg2)
+    mdl1.add_component(cg3)
+    mdl1.add_component(cg4)
+    # Create posterior for data & model
+    lnpost = LnPost(uvdata, mdl1)
+    #lnpr = LnPrior(mdl1)
+    #lnlik = LnLikelihood(uvdata, mdl1)
+    # model.uvplot(uv = uv)
+    # model.ft(uv=uv)
+    import emcee
+    ndim = mdl1.size
+    nwalkers = 100
+    # p0 = mdl1.p
+    # cov = np.zeros(ndim * ndim).reshape((ndim, ndim,))
+    # cov[0, 0] = 0.1
+    # cov[1, 1] = 0.1
+    # cov[2, 2] = 0.1
+    # cov[3, 3] = 0.1
+    # sampler = emcee.MHSampler(cov, ndim, lnpost)
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnpost)
+    p_std1 = [0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
+    p_std2 = [0.003, 0.01, 0.01, 0.01]
+    p0 = emcee.utils.sample_ball(mdl1.p, p_std1 + p_std2 * 3, size=nwalkers)
+    pos, prob, state = sampler.run_mcmc(p0, 100)
+    sampler.reset()
+    sampler.run_mcmc(pos, 700)
+    # image_grid = ImageModel(fname='J0005+3820_S_1998_06_24_fey_map.fits')
+    # print image_grid.dx, image_grid.dy, image_grid.imsize, image_grid.x_c,\
+    #     image_grid.y_c
+    # print image_grid.image_grid
+    # eg = EGComponent(1., 5., 5., 3., 0.5, 1.)
+    # print eg.p
+    # print eg._p
+    # eg.add_to_image_grid(image_grid)
+    # print image_grid.image_grid
 
     # With sparse RA data
     # TESTING fitting gaussian components to uv-data

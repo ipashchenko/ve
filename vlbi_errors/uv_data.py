@@ -511,8 +511,8 @@ class UVData(object):
                                           freq_average=freq_average)
 
         # TODO: i need function choose parameters
-        uvw_data = self.data[indxs]['uvw']
-        uv_radius = np.sqrt(uvw_data[:, 0] ** 2 + uvw_data[:, 1] ** 2)
+        uv = self.uv[indxs]
+        uv_radius = np.sqrt(uv[:, 0] ** 2 + uv[:, 1] ** 2)
 
         if style == 'a&p':
             a1 = np.angle(uvdata)

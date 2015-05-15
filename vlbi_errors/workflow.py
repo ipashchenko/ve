@@ -9,16 +9,15 @@ from stats import LnPost
 
 if __name__ == '__main__':
     uvdata = create_uvdata_from_fits_file('J0006-0623_X_2008_07_09_pus_vis.fits')
-    uv = uvdata.uvw[:, :2]
     # Create several components
     cg1 = CGComponent(2.0, 0.0, 0.0, 0.1)
     # cg2 = CGComponent(1.0, 0.1, -1.05, 1.18)
     cg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 3.], dict(),),
-                  bmaj=(sp.stats.uniform.logpdf, [0, 2.], dict(),))
+                  bmaj=(sp.stats.uniform.logpdf, [0, 10.], dict(),))
     # cg2.add_prior(flux=(sp.stats.uniform.logpdf, [0., 0.1], dict(),),
     #                bmaj=(sp.stats.uniform.logpdf, [0, 3.], dict(),))
     # Create model
-    mdl1 = Model(stokes='I')
+    mdl1 = Model(stokes='RR')
     # Add components to model
     mdl1.add_component(cg1)
     # mdl1.add_component(cg2)
@@ -43,7 +42,14 @@ if __name__ == '__main__':
     p0 = emcee.utils.sample_ball(mdl1.p, p_std1, size=nwalkers)
     pos, prob, state = sampler.run_mcmc(p0, 100)
     sampler.reset()
-    sampler.run_mcmc(pos, 700)
-    uvdata.uvplot_model(mdl1, stokes='RR', style='a&p'):
+    sampler.run_mcmc(pos, 1000)
+
+    # Overplot data and model
+    mdl = Model(stokes='RR')
+    cg = CGComponent(1.441, 0.76, 0.65, 3.725)
+    mdl.add_component(cg)
+    uvdata.uvplot(stokes='RR')
+    mdl.uvplot(uv=uvdata.uv)
+
     fig = triangle.corner(sampler.flatchain[::10, :4],
                           labels=["$flux$", "$y$", "$x$", "$maj$"])

@@ -673,7 +673,11 @@ class UVData(object):
             Numpy.ndarray with shape (N, 2,), where N is the number of (u, v, w)
             points.
         """
-        return self.uvw[:, :2]
+        # FIXME: for Petrov's rfc data
+        k = 1.
+        if self.uvw[:, :2].min() < 1.:
+            k = 10. ** 9
+        return k * self.uvw[:, :2]
 
     @property
     def uvdata_freq_averaged(self):

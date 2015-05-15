@@ -75,7 +75,7 @@ class LnLikelihood(object):
         error = uvdata.error(average_freq=average_freq)
         self.amp_only = amp_only
         self.model = model
-        self.uv = uvdata.uvw[:, :2]
+        self.data = uvdata
         stokes = model.stokes
         if average_freq:
             if stokes == 'I':
@@ -114,7 +114,7 @@ class LnLikelihood(object):
         # Model visibilities at uv-points of data
         assert(self.model.size == len(p))
         self.model.p = p[:]
-        model_data = self.model.ft(self.uv)
+        model_data = self.model.ft(self.data.uv)
         # ln of data likelihood
         if self.amp_only:
             model_amp = np.absolute(model_data)

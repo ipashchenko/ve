@@ -681,7 +681,7 @@ def get_uv_correlations(uv, models):
     """
     # Create dictionary of type {stokes/hands: model}
     model_dict = {'I': None, 'Q': None, 'U': None, 'V': None, 'RR': None,
-                  'RL': None}
+                  'RL': None, 'LL': None, 'LR': None}
     model_dict.update({model.stokes: model for model in models})
     # Dictionary with keys - 'RR', 'LL', ... and values - correlations
     uv_correlations = dict()
@@ -705,8 +705,14 @@ def get_uv_correlations(uv, models):
 
     else:
         if model_dict['RR'] or model_dict['LL']:
-            RR = model_dict['RR'].ft(uv)
-            LL = model_dict['LL'].ft(uv)
+            try:
+                RR = model_dict['RR'].ft(uv)
+            except KeyError:
+                RR = None
+            try:
+                LL = model_dict['LL'].ft(uv)
+            except KeyError:
+                LL = None
             # Setting up parallel hands correlations
             uv_correlations.update({'RR': RR})
             uv_correlations.update({'LL': LL})

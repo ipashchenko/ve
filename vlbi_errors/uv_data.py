@@ -617,6 +617,7 @@ class UVData(object):
         """
         return self._io.scans
 
+    # FIXME: doesn't work for ``J0005+3820_X_1998_06_24_fey_vis.fits``
     @property
     def scans_bl(self):
         """
@@ -781,6 +782,7 @@ class UVData(object):
             stokes parameter (eg. RR, LL, ...).
         """
         baselines_noises = dict()
+        # FIXME: check that we have RR & LL correlations!
         if use_V:
             # Calculate dictionary {baseline: noise} (if split_scans is False)
             # or {baseline: [noises]} if split_scans is True.
@@ -856,6 +858,7 @@ class UVData(object):
 
         return baselines_noises
 
+    # TODO: Add option for IF-depended noise (average_freq=False)
     def noise_add(self, noise=None, df=None, split_scans=False):
         """
         Add noise to visibilities. Here std - standard deviation of
@@ -879,10 +882,11 @@ class UVData(object):
             ``False``)
         """
 
+        # FIXME: fix logic implementing ``split_scans`` option!
         # TODO: if on df before generating noise values
         for baseline, stds in noise.items():
-            nscans = len(self.scans_bl[baseline])
-            try:
+            if split_scans:
+                nscans = len(self.scans_bl[baseline])
                 assert len(stds) >= nscans, "Give >= " + str(nscans) +\
                                             " stds for baseline " +\
                                             str(baseline)
@@ -903,7 +907,7 @@ class UVData(object):
                                               np.shape(scan_baseline_uvdata))
                     scan_baseline_uvdata += noise_to_add
                     self.uvdata[sc_bl_indxs] = scan_baseline_uvdata
-            except TypeError:
+            else:
                 baseline_uvdata, bl_indxs =\
                     self._choose_uvdata(baselines=baseline)
                 n = np.prod(np.shape(baseline_uvdata))
@@ -1061,10 +1065,11 @@ class UVData(object):
         """
 
         if baseline is None:
-            baseline = self.baselines
-        indxs = np.hstack(index_of(baseline, self.data['baseline']))
+            indxs = np.arange(len(self.data['baseline']))
+        else:
+            indxs = np.hstack(index_of(baseline, self.data['baseline']))
         n = len(indxs)
-        uv = self.uvw[indxs, :2]
+        uv = self.uv
 
         uv_correlations = get_uv_correlations(uv, models)
         for i, hand in enumerate(['RR', 'LL', 'RL', 'LR']):

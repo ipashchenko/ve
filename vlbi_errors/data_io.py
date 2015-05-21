@@ -34,6 +34,8 @@ def get_fits_image_info(fname):
     header = get_hdu(fname).header
     imsize = (header['NAXIS1'], header['NAXIS2'],)
     pixref = (int(header['CRPIX1']), int(header['CRPIX2']),)
+    pixrefval = (header['CRVAL1'] * degree_to_rad,
+                 header['CRVAL2'] * degree_to_rad,)
     pixsize = (header['CDELT1'] * degree_to_rad,
                header['CDELT2'] * degree_to_rad,)
     try:
@@ -52,7 +54,7 @@ def get_fits_image_info(fname):
             bmaj = None
             bmin = None
             bpa = None
-    return imsize, pixref, (bmaj, bmin, bpa,), pixsize
+    return imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize
 
 
 def get_hdu(fname, extname=None, ver=1):

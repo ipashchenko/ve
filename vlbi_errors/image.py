@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from scipy import signal
 from utils import create_grid, mask_region, fitgaussian
@@ -118,9 +119,13 @@ class Image(object):
         return tuple(params[1: 3])
 
     # TODO: fix BLC,TRC to display expected behavior. Use data_io.get_image()
-    def plot(self, blc=None, trc=None, clim=None, cmap=None):
+    def plot(self, blc=None, trc=None, clim=None, cmap=None, abs_levels=None,
+             rel_levels=None, min_level=None, factor=2., plot_color=False):
         """
         Plot image.
+
+        :param levels:
+            Iterable of levels.
 
         :note:
             ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
@@ -135,7 +140,37 @@ class Image(object):
                                       - 1]
         else:
             part_to_plot = self.image
-        imgplot = pylab.imshow(part_to_plot)
+
+        # Plotting using color if told
+        if plot_color:
+            imgplot = pylab.matshow(part_to_plot, origin='lower')
+            pylab.colorbar()
+
+        max_level = self.image.max()
+        # And if told - plot contours
+        # Build levels (pylab.contour takes only absolute values)
+        if abs_levels or rel_levels:
+            # If given both then ``abs_levels`` has a priority
+            if abs_levels:
+                rel_levels = None
+            else:
+                abs_levels = [max_level * i for i in rel_levels]
+        # If given only min_level & increment factor (default is 2)
+        elif min_level:
+            n_max = int(math.ceil(math.log(max_level / min_level, factor)))
+            abs_levels = [min_level * factor ** k for k in range(n_max)]
+        # Plot contours
+        if abs_levels:
+            if plot_color:
+                # White levels on colored background
+                colors='w'
+            else:
+                # Black levels on white background
+                colors='b'
+            print "Plotting contours with levels: " + str(abs_levels)
+            # FIXME: if used with image.x, image.y then axis in rads. Use it!
+            imgplot = pylab.contour(part_to_plot, abs_levels, colors=colors)
+
         if cmap:
             try:
                 imgplot.set_cmap(cmap)

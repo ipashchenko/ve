@@ -186,6 +186,7 @@ class EGComponent(Component):
             flux, x0, y0, bmaj, e, bpa = self._p
         # If we call method inside ``CGComponent``
         except ValueError:
+            # Jy, mas, mas, mas
             flux, x0, y0, bmaj = self._p
             e = 1.
             bpa = 0.
@@ -220,13 +221,14 @@ class EGComponent(Component):
         """
         Add component to given instance of ``Image`` class.
         """
-        # Cellsize
+        # Cellsize [rad]
         dx, dy = image.dx, image.dy
-        # Center of image
+        # Center of image [pix]
         x_c, y_c = image.x_c, image.y_c
 
         # Parameters of component
         try:
+            # Jy, mas, mas, mas,  , rad
             flux, x0, y0, bmaj, e, bpa = self._p
         # If we call method inside ``CGComponent``
         except ValueError:
@@ -239,14 +241,12 @@ class EGComponent(Component):
         y0 *= mas_to_rad
         bmaj *= mas_to_rad
 
-        # Construct parameter of general gaussian function
-        std_x = bmaj
-        std_y = e * bmaj
-        # Amplitude of gaussian component
-        amp = flux / (2. * math.pi * bmaj ** 2. * e)
+        # TODO: Is it [Jy/beam]??
+        # Amplitude of gaussian component [Jy/beam]
+        amp = flux / (2. * math.pi * (bmaj / mas_to_rad) ** 2. * e)
 
         # Create gaussian function of (x, y) with given parameters
-        gaussf = gaussian(amp, x0, y0, std_x, std_y, bpa=bpa)
+        gaussf = gaussian(amp, x0, y0, bmaj, e, bpa=bpa)
 
         # Calculating angular distances of cells from center of component
         # from cell numbers to relative distances
@@ -259,15 +259,18 @@ class EGComponent(Component):
         # the same in rads
         x = x * dx
         y = y * dy
-        # relative to component center
-        x = x - x0
-        y = y - y0
+        ## relative to component center
+        #x = x - x0
+        #y = y - y0
+        ## convert to mas cause all params are in mas
+        #x = x / mas_to_rad
+        #y = y / mas_to_rad
 
         # Creating grid with component's flux at each cell
         fluxes = gaussf(x, y)
 
         # Adding component's flux to image grid
-        image.image += fluxes
+        image._image += fluxes
 
 
 class CGComponent(EGComponent):

@@ -1,7 +1,7 @@
 import math
 import numpy as np
 from scipy import signal
-from utils import create_grid, mask_region, fitgaussian
+from utils import create_grid, mask_region, fitgaussian, mas_to_rad
 from beam import CleanBeam
 from fft_routines import fft_convolve2d
 
@@ -118,9 +118,14 @@ class Image(object):
         params = fitgaussian(shift_array)
         return tuple(params[1: 3])
 
-    # TODO: fix BLC,TRC to display expected behavior. Use data_io.get_image()
+    # TODO: fix BLC,TRC to display expected behavior. Or use blc/trc-ing after
+    # constructing x&y.
+    # TODO: plot beam in corner if called inside ``CCImage``. But any image can
+    # has beam... Check UML diagrams...
+    # TODO: how plot coordinates in mas if using matshow?
     def plot(self, blc=None, trc=None, clim=None, cmap=None, abs_levels=None,
-             rel_levels=None, min_level=None, factor=2., plot_color=False):
+             rel_levels=None, min_abs_level=None, min_rel_level=None, factor=2.,
+             plot_color=False):
         """
         Plot image.
 
@@ -136,40 +141,53 @@ class Image(object):
         if blc or trc:
             blc = blc or (1, 1,)
             trc = trc or self.imsize
-            part_to_plot = self.image[blc[0] - 1: trc[0] - 1, blc[1] - 1: trc[1]
-                                      - 1]
+            part_to_plot = self.image[blc[0] - 1: trc[0], blc[1]- 1: trc[1]]
+            x = self.x[blc[0] - 1: trc[0], blc[0] - 1: trc[0]]
+            y = self.y[blc[1] - 1: trc[1], blc[1] - 1: trc[1]]
         else:
             part_to_plot = self.image
+            x = self.x
+            y = self.y
+
+        # Plot coordinates in milliarcseconds
+        x = x / mas_to_rad
+        y = y / mas_to_rad
 
         # Plotting using color if told
         if plot_color:
             imgplot = pylab.matshow(part_to_plot, origin='lower')
             pylab.colorbar()
 
-        max_level = self.image.max()
-        # And if told - plot contours
-        # Build levels (pylab.contour takes only absolute values)
-        if abs_levels or rel_levels:
-            # If given both then ``abs_levels`` has a priority
+        # Or plot contours
+        elif abs_levels or rel_levels or min_abs_level or min_rel_level:
+            max_level = self.image.max()
+            # Build levels (pylab.contour takes only absolute values)
+            if abs_levels or rel_levels:
+                # If given both then ``abs_levels`` has a priority
+                if abs_levels:
+                    rel_levels = None
+                else:
+                    abs_levels = [max_level * i for i in rel_levels]
+            # If given only min_abs_level & increment factor (default is 2)
+            elif min_abs_level or min_rel_level:
+                if min_rel_level:
+                    min_abs_level = min_rel_level * max_level / 100.
+                n_max = int(math.ceil(math.log(max_level / min_abs_level, factor)))
+                abs_levels = [min_abs_level * factor ** k for k in range(n_max)]
+            # Plot contours
             if abs_levels:
-                rel_levels = None
-            else:
-                abs_levels = [max_level * i for i in rel_levels]
-        # If given only min_level & increment factor (default is 2)
-        elif min_level:
-            n_max = int(math.ceil(math.log(max_level / min_level, factor)))
-            abs_levels = [min_level * factor ** k for k in range(n_max)]
-        # Plot contours
-        if abs_levels:
-            if plot_color:
-                # White levels on colored background
-                colors='w'
-            else:
-                # Black levels on white background
-                colors='b'
-            print "Plotting contours with levels: " + str(abs_levels)
-            # FIXME: if used with image.x, image.y then axis in rads. Use it!
-            imgplot = pylab.contour(part_to_plot, abs_levels, colors=colors)
+                if plot_color:
+                    # White levels on colored background
+                    colors='w'
+                else:
+                    # Black levels on white background
+                    colors='b'
+                print "Plotting contours with levels: " + str(abs_levels)
+                imgplot = pylab.contour(x, y, part_to_plot, abs_levels,
+                                        colors=colors)
+        else:
+            raise Exception("Specify ``plot_color=True`` or choose some "
+                            "levels!")
 
         if cmap:
             try:

@@ -676,7 +676,7 @@ class UVData(object):
         """
         # FIXME: for Petrov's rfc data
         k = 1.
-        if self.uvw[:, :2].min() < 1.:
+        if abs(self.uvw[:, :2]).min() < 1.:
             k = 10. ** 9
         return k * self.uvw[:, :2]
 

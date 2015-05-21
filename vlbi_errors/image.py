@@ -15,10 +15,13 @@ class Image(object):
     """
     Class that represents images.
     """
-    def __init__(self, imsize=None, pixref=None, pixsize=None):
+    def __init__(self, imsize=None, pixref=None, pixrefval=None, pixsize=None):
         self.imsize = imsize
         self.dx, self.dy = pixsize
         self.x_c, self.y_c = pixref
+        if pixrefval is None:
+            pixrefval = (0., 0.,)
+        self.x_c_val, self.y_c_val = pixrefval
         # Create flux array
         self._image = np.zeros(self.imsize, dtype=float)
         # Create coordinate arrays
@@ -205,9 +208,9 @@ class CleanImage(Image):
     """
     Class that represents image made using CLEAN algorithm.
     """
-    def __init__(self, imsize=None, pixref=None, pixsize=None, bmaj=None,
-                 bmin=None, bpa=None):
-        super(CleanImage, self).__init__(imsize, pixref, pixsize)
+    def __init__(self, imsize=None, pixref=None, pixrefval=None, pixsize=None,
+                 bmaj=None, bmin=None, bpa=None):
+        super(CleanImage, self).__init__(imsize, pixref, pixrefval, pixsize)
         # TODO: What if pixsize has different sizes???
         self.beam = CleanBeam(bmaj / abs(pixsize[0]), bmin / abs(pixsize[0]),
                               bpa, imsize)

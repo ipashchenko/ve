@@ -1,5 +1,5 @@
 import math
-from model_old import Model
+#from model import Model
 from gains import Absorber
 from from_fits import create_uvdata_from_fits_file
 import glob
@@ -138,6 +138,13 @@ class LnPrior(object):
         self.model = model
 
     def __call__(self, p):
+        distances = list()
+        for component in self.model._components:
+            distances.append(np.sqrt(component.p[1] ** 2. +
+                                     component.p[2] ** 2.))
+        if not is_sorted(distances):
+            print "Components are not sorted:("
+            return -np.inf
         self.model.p = p[:]
         lnpr = list()
         for component in self.model._components:

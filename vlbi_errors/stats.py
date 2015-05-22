@@ -167,6 +167,10 @@ class LnPost(object):
 
 if __name__ == '__main__':
     # Test LS_estimates
+    from from_fits import create_uvdata_from_fits_file
+    from components import CGComponent
+    from model import Model
+    from scipy.optimize import minimize, fmin
     uv_fname = '1633+382.l22.2010_05_21.uvf'
     uvdata = create_uvdata_from_fits_file(uv_fname)
     # Create model
@@ -176,11 +180,10 @@ if __name__ == '__main__':
     # Create log of likelihood function
     lnlik = LnLikelihood(uvdata, mdl, average_freq=True, amp_only=False)
     # Nelder-Mead simplex algorithm
-    p_ml = scipy.optimize.fmin(lambda p: -lnlik(p), mdl.p)
+    p_ml = fmin(lambda p: -lnlik(p), mdl.p)
     # Various methods of minimization (some require jacobians)
     # TODO: Implement analitical grad of likelihood (it's gaussian)
-    fit = scipy.optimize.minimize(lambda p: -lnlik(p), mdl.p,
-                                   method='Nelder-Mead')
+    fit = minimize(lambda p: -lnlik(p), mdl.p, method='Nelder-Mead')
     if fit['success']:
         print "Succesful fit!"
         p_ml = fit['x']

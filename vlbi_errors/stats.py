@@ -166,17 +166,22 @@ class LnPost(object):
 
 
 if __name__ == '__main__':
-    pass
-
-    # Test CrossValidation
-    #data = create_uvdata_from_fits_file('PRELAST_CALIB.FITS')
-    #cv = CrossValidation(data)
-    #test_fits_files = glob.glob('test*.FITS')
-    #if not test_fits_files:
-    #    data.cv(10, 'test')
-    #    print "Prepairing testing and training samples."
-    #else:
-    #    print "Testing and training samples are ready."
-    #res = cv.run(modelcard='model_*_**of10.txt', testcard='test_*of10.FITS')
-    #print res
-
+    # Test LS_estimates
+    uv_fname = '1633+382.l22.2010_05_21.uvf'
+    uvdata = create_uvdata_from_fits_file(uv_fname)
+    # Create model
+    cg1 = CGComponent(1.0, 0.0, 0.0, 1.)
+    mdl = Model(stokes='I')
+    mdl.add_component(cg1)
+    # Create log of likelihood function
+    lnlik = LnLikelihood(uvdata, mdl, average_freq=True, amp_only=False)
+    # Nelder-Mead simplex algorithm
+    p_ml = scipy.optimize.fmin(lambda p: -lnlik(p), mdl.p)
+    # Various methods of minimization (some require jacobians)
+    # TODO: Implement analitical grad of likelihood (it's gaussian)
+    fit = scipy.optimize.minimize(lambda p: -lnlik(p), mdl.p,
+                                   method='Nelder-Mead')
+    if fit['success']:
+        print "Succesful fit!"
+        p_ml = fit['x']
+        print p_ml

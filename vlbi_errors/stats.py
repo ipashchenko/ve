@@ -167,10 +167,14 @@ class LnPost(object):
 
 if __name__ == '__main__':
     # Test LS_estimates
+    import sys
     from from_fits import create_uvdata_from_fits_file
     from components import CGComponent
     from model import Model
-    from scipy.optimize import minimize, fmin
+    try:
+        from scipy.optimize import minimize, fmin
+    except ImportError:
+        sys.exit("install scipy for ml estimation")
     uv_fname = '1633+382.l22.2010_05_21.uvf'
     uvdata = create_uvdata_from_fits_file(uv_fname)
     # Create model

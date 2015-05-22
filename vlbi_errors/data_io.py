@@ -1,6 +1,7 @@
 #!/usr/bin python2
 # -*- coding: utf-8 -*-
 
+import warnings
 import numpy as np
 import pyfits as pf
 from utils import AbsentHduExtensionError
@@ -15,14 +16,13 @@ vec_int = np.vectorize(np.int)
 vec_complex = np.vectorize(np.complex)
 
 
-def get_image(image_file, BLC = (0,0), TRC = (0,0)):
+def get_image(image_file, BLC=(0, 0), TRC=(0, 0)):
     hdulist = pf.open(image_file)
-    header = hdulist[0].header
     naxis1 = hdulist[0].header["NAXIS1"]
     naxis2 = hdulist[0].header["NAXIS2"]
 
-    if TRC == (0,0):
-        TRC = (naxis1,naxis2)
+    if TRC == (0, 0):
+        TRC = (naxis1, naxis2)
 
     image = np.rot90(hdulist[0].data[0][0][:, :].transpose(),
                      k=1)[naxis1 - TRC[1]: naxis2 - BLC[1], BLC[0]: TRC[0]]
@@ -30,7 +30,9 @@ def get_image(image_file, BLC = (0,0), TRC = (0,0)):
     return image
 
 
+# TODO: In Denise data on 1038 beam info only in history:)
 def get_fits_image_info(fname):
+    bmaj, bmin, bpa = None, None, None
     header = get_hdu(fname).header
     imsize = (header['NAXIS1'], header['NAXIS2'],)
     pixref = (int(header['CRPIX1']), int(header['CRPIX2']),)
@@ -51,9 +53,16 @@ def get_fits_image_info(fname):
             bmin = header['BMIN'] * degree_to_rad
             bpa = header['BPA'] * degree_to_rad
         except KeyError:
-            bmaj = None
-            bmin = None
-            bpa = None
+            # In Denise data it is in PrimaryHDU ``HISTORY``
+            # TODO: Use ``pyfits.header._HeaderCommentaryCards`` interface if
+            # any
+            for line in header['HISTORY']:
+                if 'BMAJ' in line and 'BMIN' in line and 'BPA' in line:
+                    bmaj = float(line.split()[3]) * degree_to_rad
+                    bmin = float(line.split()[5]) * degree_to_rad
+                    bpa = float(line.split()[7]) * degree_to_rad
+        if not (bmaj and bmin and bpa):
+            warnings.warn("Beam info absent!")
     return imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize
 
 
@@ -205,12 +214,12 @@ class PyFitsIO(IO):
         raise NotImplementedError('method must be implemented in subclasses')
 
     # PyFits does it using data (``GCOUNT`` keyword ex.)
-    #def _update_header(self, data):
-    #    """
-    #    Method that updates header info using data recarray.
-    #    """
+    # def _update_header(self, data):
+    #     """
+    #     Method that updates header info using data recarray.
+    #     """
 
-    #    raise NotImplementedError('method must be implemented in subclasses')
+    #     raise NotImplementedError('method must be implemented in subclasses')
 
 
 # TODO: subclass IO.PyFitsIO.IDI! SN table is a binary table (as all HDUs in IDI
@@ -305,8 +314,8 @@ class Groups(PyFitsIO):
         data_of_data.update({'GROUP': (0, hdu.header['GCOUNT'])})
         for i in range(2, hdu.header['NAXIS'] + 1):
             data_of_data.update({hdu.header['CTYPE' + str(i)]:
-                                     (hdu.header['NAXIS'] - i + 1,
-                                      hdu.header['NAXIS' + str(i)])})
+                                 (hdu.header['NAXIS'] - i + 1,
+                                  hdu.header['NAXIS' + str(i)])})
         nstokes = data_of_data['STOKES'][1]
         nif = data_of_data['IF'][1]
         self.nstokes = nstokes
@@ -364,9 +373,9 @@ class Groups(PyFitsIO):
         indx_date = par_dict['DATE']
         # ``_DATE`` doesn't figure in ``hdu.data.parnames``
         time = hdu.data['DATE'] / hdu.header['PSCAL' + str(indx_date)] -\
-               hdu.header['PZERO' + str(indx_date)]
+            hdu.header['PZERO' + str(indx_date)]
         time_ = hdu.data['_DATE'] / hdu.header['PSCAL' + str(indx_date + 1)] - \
-               hdu.header['PZERO' + str(indx_date + 1)]
+            hdu.header['PZERO' + str(indx_date + 1)]
         time += time_
 
         # Filling structured array by fields
@@ -410,15 +419,20 @@ class Groups(PyFitsIO):
         # Construct corresponding arrays of parameter values
         _data_copy = _data.copy()
         _data_copy['uvw'][:, 0] = (_data_copy['uvw'][:, 0] +
-                                   self.hdu.header['PZERO1']) * self.hdu.header['PSCAL1']
+                                   self.hdu.header['PZERO1']) *\
+            self.hdu.header['PSCAL1']
         _data_copy['uvw'][:, 1] = (_data_copy['uvw'][:, 1] +
-                                   self.hdu.header['PZERO2']) * self.hdu.header['PSCAL2']
+                                   self.hdu.header['PZERO2']) *\
+            self.hdu.header['PSCAL2']
         _data_copy['uvw'][:, 2] = (_data_copy['uvw'][:, 2] +
-                                   self.hdu.header['PZERO3']) * self.hdu.header['PSCAL3']
+                                   self.hdu.header['PZERO3']) *\
+            self.hdu.header['PSCAL3']
         _data_copy['time'] = (_data_copy['time'] +
-                              self.hdu.header['PZERO4']) * self.hdu.header['PSCAL4']
+                              self.hdu.header['PZERO4']) *\
+            self.hdu.header['PSCAL4']
         _data_copy['baseline'] = (_data_copy['baseline'] +
-                                  self.hdu.header['PZERO6']) * self.hdu.header['PSCAL6']
+                                  self.hdu.header['PZERO6']) *\
+            self.hdu.header['PSCAL6']
 
         # Now roll axis 0 (real,imag,weight) to 3rd position
         # (3, N, #if, #stokes) => (N, #if, #stokes, 3)
@@ -430,8 +444,9 @@ class Groups(PyFitsIO):
             # Now temp has shape (N, #if, #stokes, 3, 1, 1, 1)
 
         # Change dimensions to pyfits.hdu.data['DATA'] dimensions
-        temp = change_shape(temp, self.data_of__data, {key:
-                                                           self.data_of_data[key][0] for key in self.data_of_data.keys()})
+        temp = change_shape(temp, self.data_of__data,
+                            {key: self.data_of_data[key][0] for key in
+                             self.data_of_data.keys()})
         # => (N, 1, 1, #if, 1, #stokes, 3) as in 'DATA' part of pyfits recarray
 
         # Write regular array data (``temp``) and corresponding parameters to
@@ -446,7 +461,9 @@ class Groups(PyFitsIO):
                                             'VV---SIN', 'WW---SIN', 'DATE',
                                             'BASELINE')
             saving_data = np.dstack((np.array(np.hsplit(_data_copy['uvw'],
-                                                        3)).T, _data_copy['time'], _data_copy['baseline']))
+                                                        3)).T,
+                                     _data_copy['time'],
+                                     _data_copy['baseline']))
             saving_data = np.squeeze(saving_data)
             # TODO: this is funnest workaround:)
             par_indxs = np.hstack(index_of(saving_data.sum(axis=1),
@@ -463,7 +480,7 @@ class Groups(PyFitsIO):
         for name in parnames:
             par = self.hdu.data[name][par_indxs]
             par = (par - self.hdu.header['PZERO' + str(self.par_dict[name])]) /\
-                  self.hdu.header['PSCAL' + str(self.par_dict[name])]
+                self.hdu.header['PSCAL' + str(self.par_dict[name])]
             pardata.append(par)
 
         # If two parameters for one value (like ``DATE``)
@@ -557,7 +574,7 @@ class BinTable(PyFitsIO):
 
     def _HDU_to_data(self, hdu):
         # TODO: Need this when dealing with IDI UV_DATA extension binary table
-        #dtype = build_dtype_for_bintable_data(hdu.header)
+        # dtype = build_dtype_for_bintable_data(hdu.header)
         dtype = hdu.data.dtype
         _data = np.zeros(hdu.header['NAXIS2'], dtype=dtype)
         for name in _data.dtype.names:
@@ -600,8 +617,8 @@ class IDI(PyFitsIO):
         data_of_data.update({'GROUP': (0, hdu.header['GCOUNT'])})
         for i in range(2, hdu.header['NAXIS'] + 1):
             data_of_data.update({hdu.header['CTYPE' + str(i)]:
-                                     (hdu.header['NAXIS'] - i + 1,
-                                      hdu.header['NAXIS' + str(i)])})
+                                 (hdu.header['NAXIS'] - i + 1,
+                                  hdu.header['NAXIS' + str(i)])})
         nstokes = data_of_data['STOKES'][1]
         nif = data_of_data['IF'][1]
         self.nstokes = nstokes
@@ -654,8 +671,8 @@ class IDI(PyFitsIO):
         # ``DATE`` can have different number among parameters
         indx_date = par_dict['DATE']
         time = hdu.data[hdu.header['PTYPE' + str(indx_date)]] / \
-               hdu.header['PSCAL' + str(indx_date)] - hdu.header['PZERO' +
-                                                                 str(indx_date)]
+            hdu.header['PSCAL' + str(indx_date)] - hdu.header['PZERO' +
+                                                              str(indx_date)]
 
         # Filling structured array by fields
         _data['uvw'] = np.column_stack((u, v, w))

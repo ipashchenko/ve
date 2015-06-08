@@ -4,7 +4,7 @@ import scipy as sp
 from utils import degree_to_mas, gaussianBeam
 from image import Image, CleanImage
 from data_io import BinTable, get_fits_image_info
-#from from_fits import create_uvdata_from_fits_file
+from from_fits import create_uvdata_from_fits_file
 from stats import LnPost
 from components import DeltaComponent, CGComponent, EGComponent
 
@@ -16,6 +16,7 @@ except ImportError:
 
 # TODO: ``Model`` subclasses can't be convolved with anything! It is ``Image``
 # that can be convolved.
+# TODO: Keep components ordered by what?
 class Model(object):
     """
     Basic class that represents general functionality of models.
@@ -112,6 +113,7 @@ class Model(object):
             Instance of ``Image`` subclass.
         """
         for component in self._components:
+            print "Adding component " + str(component) + " to image"
             image.add_component(component)
 
     def make_image(self, fname=None, imsize=None, pixref=None, pixsize=None,
@@ -134,17 +136,20 @@ class Model(object):
         """
         # If we got fits-file then get parameters of image from it
         if fname:
-            imsize, pixref, (bmaj, bmin, bpa,), pixsize =\
+            # (512, 512,), (256, 257,), (rad, rad,), (rad, rad, rad), (rad, rad,)
+            imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize =\
                 get_fits_image_info(fname)
         if imsize is None or pixref is None or pixsize is None:
             raise Exception("Need image parameters to create Image instance!")
 
         # First create ``Image`` instance
         if bpa is None:
-            image = Image(imsize=imsize, pixref=pixref, pixsize=pixsize)
+            image = Image(imsize=imsize, pixref=pixref, pixrefval=pixrefval,
+                          pixsize=pixsize)
         else:
-            image = CleanImage(imsize=imsize, pixref=pixref, pixsize=pixsize,
-                               bmaj=bmaj, bmin=bmin, bpa=bpa)
+            image = CleanImage(imsize=imsize, pixref=pixref,
+                               pixrefval=pixrefval, pixsize=pixsize, bmaj=bmaj,
+                               bmin=bmin, bpa=bpa)
         # Putting model components to image grid
         self.add_to_image(image)
 

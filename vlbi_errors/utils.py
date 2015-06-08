@@ -30,8 +30,6 @@ class EmptyImageFtError(Exception):
 # TODO: convert utils to using arrays instead of lists
 
 
-
-
 # numpy.lib.recfunctions.append_fields
 def add_field(a, descr):
     """Return a new array that is like "a", but has additional fields.
@@ -388,6 +386,7 @@ def ants_2_baselines(ants):
 
     return baselines
 
+
 def get_triangles(antenna, antennas=None):
     """
     Find triangles of antennas.
@@ -431,6 +430,7 @@ def get_triangles(antenna, antennas=None):
                                                               k + 256 * j]})
 
     return triangle_baselines
+
 
 def time_frac_to_dhms(fractime):
     """Converts time in fraction of the day format to time in d:h:m:s
@@ -497,7 +497,7 @@ def gaussianBeam(size_x, bmaj, bmin, bpa, size_y=None):
 
     g = np.exp(-a * x ** 2. - b * x * y - c * y ** 2.)
     # FIXME: It is already normalized?
-    #return g/g.sum()
+    # return g/g.sum()
     return g
 
 
@@ -578,7 +578,8 @@ def mask_region(data, region):
     else:
         # Creating rectangular mask
         y, x = np.ogrid[0: data.shape[0], 0: data.shape[1]]
-        mask = (region[0] < x) & (x < region[2]) & (region[1] < y) & (y < region[3])
+        mask = (region[0] < x) & (x < region[2]) & (region[1] < y) & (y <
+                                                                      region[3])
         masked_array = np.ma.array(data, mask=mask)
 
     return masked_array
@@ -685,6 +686,7 @@ def get_uv_correlations(uv, models):
     model_dict.update({model.stokes: model for model in models})
     # Dictionary with keys - 'RR', 'LL', ... and values - correlations
     uv_correlations = dict()
+    # FIXME: Use exceptions (see next ``else``)
     if model_dict['I'] or model_dict['V']:
         if model_dict['I'] and model_dict['V']:
             RR = model_dict['I'].ft(uv) + model_dict['V'].ft(uv)
@@ -707,15 +709,14 @@ def get_uv_correlations(uv, models):
         if model_dict['RR'] or model_dict['LL']:
             try:
                 RR = model_dict['RR'].ft(uv)
-            except KeyError:
-                RR = None
+                uv_correlations.update({'RR': RR})
+            except AttributeError:
+                pass
             try:
                 LL = model_dict['LL'].ft(uv)
-            except KeyError:
-                LL = None
-            # Setting up parallel hands correlations
-            uv_correlations.update({'RR': RR})
-            uv_correlations.update({'LL': LL})
+                uv_correlations.update({'LL': LL})
+            except AttributeError:
+                pass
 
     if model_dict['Q'] or model_dict['U']:
         if model_dict['Q'] and model_dict['U']:
@@ -733,6 +734,26 @@ def get_uv_correlations(uv, models):
     return uv_correlations
 
 
+# FIXME: Seems it doesn't work for multimodal densities.
+def hdi_of_mcmc(sample_vec, cred_mass=0.95):
+    """
+    Highest density interval of sample.
+    """
+
+    assert len(sample_vec), 'need points to find HDI'
+    sorted_pts = np.sort(sample_vec)
+
+    ci_idx_inc = int(np.floor(cred_mass * len(sorted_pts)))
+    n_cis = len(sorted_pts) - ci_idx_inc
+    ci_width = sorted_pts[ci_idx_inc:] - sorted_pts[:n_cis]
+
+    min_idx = np.argmin(ci_width)
+    hdi_min = sorted_pts[min_idx]
+    hdi_max = sorted_pts[min_idx + ci_idx_inc]
+
+    return hdi_min, hdi_max
+
+
 if __name__ == '__main__':
     from uv_data import create_uvdata_from_fits_file
     from model import CCModel
@@ -744,4 +765,3 @@ if __name__ == '__main__':
     # Load clean components model
     ccmodel.add_cc_from_fits('1038+064.l22.2010_05_21.icn.fits')
     uv = uvdata.uvw[:, :2]
-

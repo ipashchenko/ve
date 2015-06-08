@@ -212,6 +212,7 @@ class CleanImage(Image):
                  bmaj=None, bmin=None, bpa=None):
         super(CleanImage, self).__init__(imsize, pixref, pixrefval, pixsize)
         # TODO: What if pixsize has different sizes???
+        # FIXME: Beam has image twice the imsize. It's bad for plotting...
         self.beam = CleanBeam(bmaj / abs(pixsize[0]), bmin / abs(pixsize[0]),
                               bpa, imsize)
 

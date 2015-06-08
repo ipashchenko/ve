@@ -12,7 +12,8 @@ def create_clean_beam_from_fits(fname):
     Create instance of ``CleanBeam`` from FITS-file of CLEAN image.
     """
     imsize, pixref, (bmaj, bmin, bpa), pixsize = get_fits_image_info(fname)
-    return CleanBeam(bmaj, bmin, bpa, imsize)
+    return CleanBeam(bmaj / abs(pixsize[0]), bmin / abs(pixsize[0]), bpa,
+                     imsize)
 
 
 class Beam(object):

@@ -4,7 +4,6 @@ from from_fits import (create_uvdata_from_fits_file,
                        create_ccmodel_from_fits_file)
 from bootstrap import CleanBootstrap
 
-# TODO: Create directory structure for keeping bootstrapped data.
 # TODO: We need to get RM map and it's uncertainty for each source.
 # Input: calibrated visibilities, CLEAN models in "naitive" resolution.
 # Maps on higher frequencies are made by:
@@ -233,17 +232,27 @@ def generate_boot_data(sources, epochs, bands, stokes, base_path=None):
         base_path = base_path + "/"
 
     curdir = os.getcwd()
+    print "Generating bootstrapped data..."
     for source in sources:
+        print " for source ", source
         for epoch in epochs:
+            print " for epoch ", epoch
             for band in bands:
-                uv_path = uv_fits_path(source, base_path, epoch,
-                                          base_path=base_path)
+                print " for band ", band
+                uv_path = uv_fits_path(source, band.upper(), epoch,
+                                       base_path=base_path)
                 uv_fname = uv_path + 'sc_uv.fits'
+                if not os.path.isfile(uv_fname):
+                    print "...skipping absent file ", uv_fname
+                    continue
+                print "  Using uv-file ", uv_fname
                 uvdata = create_uvdata_from_fits_file(uv_fname)
                 for stoke in stokes:
+                    print "  working with stokes parameter ", stoke
                     map_path = im_fits_path(source, band, epoch, stoke,
                                             base_path=base_path)
-                    map_fname = map_path + '/' + stoke.upper() + '/' + 'cc.fits'
+                    map_fname = map_path + 'cc.fits'
+                    print "  Using CC-model file ", map_fname
                     ccmodel = create_ccmodel_from_fits_file(map_fname,
                                                             stokes=stoke.upper())
                     boot = CleanBootstrap(ccmodel, uvdata)
@@ -258,11 +267,11 @@ if __name__ == '__main__':
     uv_data_dir = '/home/ilya/Dropbox/Zhenya/to_ilya/uv/'
     im_data_dir = '/home/ilya/Dropbox/Zhenya/to_ilya/clean_images/'
     # Path to project's root directory
-    path = '/home/ilya/code/vlbi_errors/vlbi_errors/test/'
+    base_path = '/home/ilya/code/vlbi_errors/vlbi_errors/test/'
 
-    create_dirtree(sources, epochs, bands, stokes, base_path=path)
-    put_uv_files_to_dirs(sources, epochs, bands, base_path=path, ext=".PINAL",
-                         uv_files_path=uv_data_dir)
-    put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=path,
-                         ext=".fits", im_files_path=im_data_dir)
-    generate_boot_data(sources, epochs, bands, stokes, base_path=path)
+    create_dirtree(sources, epochs, bands, stokes, base_path=base_path)
+    put_uv_files_to_dirs(sources, epochs, bands, base_path=base_path,
+                         ext="PINAL", uv_files_path=uv_data_dir)
+    put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=base_path,
+                         ext="fits", im_files_path=im_data_dir)
+    generate_boot_data(sources, epochs, bands, stokes, base_path=base_path)

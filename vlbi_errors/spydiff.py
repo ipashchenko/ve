@@ -17,16 +17,23 @@ def clean_difmap(fname, stokes, mapsize_clean, path=None, path_to_script=None,
         path = os.getcwd()
     elif not path.endswith("/"):
         path = path + "/"
+    if outpath is None:
+        outpath = os.getcwd()
+    elif not outpath.endswith("/"):
+        outpath = outpath + "/"
+
     difmapout = open("difmap_commands", "w")
     difmapout.write("observe " + path + fname + "\n")
-    difmapout.write("mapsize " + str(mapsize_clean) + "\n")
+    difmapout.write("mapsize " + str(mapsize_clean[0]) + ', ' +
+                    str(mapsize_clean[1]) + "\n")
     difmapout.write("@" + path_to_script + " " + stokes)
-    difmapout.write("mapsize " + str(mapsize_restore) + "\n")
+    difmapout.write("mapsize " + str(mapsize_restore[0]) + ', ' +
+                    str(mapsize_restore[1]) + "\n")
     if outpath is None:
         outpath = path
     elif not outpath.endswith("/"):
         outpath = outpath + "/"
-    difmapout.write("wmap ")
+    difmapout.write("wmap " + outpath + outfname)
 
 # DIFMAP_MAPPSR
 def difmap_mappsr(source, isll, centre_ra_deg, centre_dec_deg, uvweightstr,

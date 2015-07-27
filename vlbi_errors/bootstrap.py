@@ -12,16 +12,19 @@ class Bootstrap(object):
     """
     Basic class for bootstrapping data using specified model.
 
-    :param model:
-        Instance of ``Model`` class that represent model used for bootstrapping.
+    :param models:
+        Iterable of ``Model`` subclass instances that represent model used for
+        bootstrapping.. There should be only one (or zero) model for each stokes
+        parameter. If there are two, say I-stokes models, then sum them firstly
+        using ``Model.__add__``.
     :param data:
         Path to FITS-file with uv-data (self-calibrated or not).
     """
-    def __init__(self, model, data):
-        self.model = model
+    def __init__(self, models, data):
+        self.models = models
         self.data = data
         self.model_data = copy.deepcopy(self.data)
-        self.model_data.substitute([model])
+        self.model_data.substitute(models)
         self.residuals = self.get_residuals()
 
     def get_residuals(self):
@@ -66,8 +69,11 @@ class CleanBootstrap(Bootstrap):
     Class that implements bootstrapping of uv-data using model and residuals
     between data and model. Data are self-calibrated visibilities.
 
-    :param model:
-        Instance of ``Model`` class that represent model used for bootstrapping.
+    :param models:
+        Iterable of ``Model`` subclass instances that represent model used for
+        bootstrapping.. There should be only one (or zero) model for each stokes
+        parameter. If there are two, say I-stokes models, then sum them firstly
+        using ``Model.__add__``.
     :param data:
         Path to FITS-file with uv-data (self-calibrated or not).
     """
@@ -164,8 +170,11 @@ class SelfCalBootstrap(object):
     between data and model. Residuals are difference between un-selfcalibrated
     uv-data and model visibilities multiplied by gains.
 
-    :param model:
-        Instance of ``Model`` class that represent model used for bootstrapping.
+    :param models:
+        Iterable of ``Model`` subclass instances that represent model used for
+        bootstrapping.. There should be only one (or zero) model for each stokes
+        parameter. If there are two, say I-stokes models, then sum them firstly
+        using ``Model.__add__``.
 
     :param data:
         Path to FITS-file with uv-data (self-calibrated or not).
@@ -184,8 +193,8 @@ class SelfCalBootstrap(object):
         could be that first element of calibs argument is the same data.
     """
     # TODO: use super
-    def __init__(self, model, data, calibs):
-        self.model = model
+    def __init__(self, models, data, calibs):
+        self.models = models
         self.data = data
         self.calibs = calibs
         # Last self-calibrated data
@@ -193,7 +202,7 @@ class SelfCalBootstrap(object):
         self.last_calib = last_calib
 
         model_data = copy.deepcopy(self.data)
-        model_data.substitute(model)
+        model_data.substitute(models)
         self.model_data = model_data
         self.residuals = self.get_residuals()
 
@@ -205,12 +214,20 @@ class SelfCalBootstrap(object):
 
 if __name__ == "__main__":
     # Clean bootstrap
-    uv_data = create_uvdata_from_fits_file("1633+382.l22.2010_05_21.uvf")
+    import os
+    curdir = os.getcwd()
+    uv_data = create_uvdata_from_fits_file("/home/ilya/Dropbox/Zhenya/to_ilya/uv/0148+274.C1.2007_03_01.PINAL")
     from from_fits import create_ccmodel_from_fits_file
-    ccmodel = create_ccmodel_from_fits_file("1633+382.l22.2010_05_21.icn.fits",
+    ccmodeli = create_ccmodel_from_fits_file("/home/ilya/Dropbox/Zhenya/to_ilya/clean_images/0148+274.c1.2007_03_01.i.fits",
                                             stokes='I')
-    cbootstrap = CleanBootstrap(ccmodel, uv_data)
+    ccmodelq = create_ccmodel_from_fits_file("/home/ilya/Dropbox/Zhenya/to_ilya/clean_images/0148+274.c1.2007_03_01.q.fits",
+                                             stokes='Q')
+    ccmodelu = create_ccmodel_from_fits_file("/home/ilya/Dropbox/Zhenya/to_ilya/clean_images/0148+274.c1.2007_03_01.u.fits",
+                                             stokes='U')
+    os.chdir("/home/ilya/code/vlbi_errors/vlbi_errors/test/")
+    cbootstrap = CleanBootstrap([ccmodeli, ccmodelq, ccmodelu], uv_data)
     cbootstrap.run(10, outname=['DEL', '.FITS'])
+    os.chdir(curdir)
 
     # # Self-calibration bootstrap
     # sc_sequence_files = ["sc_1.fits", "sc_2.fits", "sc_final.fits"]

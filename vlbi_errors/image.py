@@ -94,6 +94,7 @@ class Image(object):
         self._image += rvs
 
     # TODO: Should i compare images before?
+    # TODO: Implement several regions to include for each image
     def cross_correlate(self, image, region1=None, region2=None):
         """
         Cross-correlates current instance of ``Image`` with another instance.

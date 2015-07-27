@@ -1,9 +1,6 @@
 import math
 #from model import Model
-from gains import Absorber
-from from_fits import create_uvdata_from_fits_file
 import glob
-import copy
 import numpy as np
 import scipy as sp
 from utils import is_sorted

@@ -152,7 +152,7 @@ class CleanBootstrap(Bootstrap):
 
         self.data.save(copy_of_model_data._data, outname)
 
-    def run(self, n, outname=['bootstrapped_data', '.FITS'], nonparametric=True,
+    def run(self, n, outname=['bootstrapped_data', '.fits'], nonparametric=True,
             split_scans=False, use_V=True):
         super(CleanBootstrap, self).run(n, outname, nonparametric,
                                         split_scans=split_scans, use_V=use_V)

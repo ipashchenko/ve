@@ -1,7 +1,7 @@
 import numpy as np
 import pyfits as pf
 # FIXME: w this import it diesn't work
-#from model import CCModel
+from model import CCModel
 from utils import degree_to_mas
 from components import DeltaComponent
 from data_io import Groups, IDI, BinTable, get_fits_image_info

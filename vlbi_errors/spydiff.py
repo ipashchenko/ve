@@ -1,6 +1,33 @@
 import os
 
 
+def clean_difmap(fname, stokes, mapsize_clean, path=None, path_to_script=None,
+                 mapsize_restore=None, outfname=None, outpath=None):
+    """
+    Map self-calibrated uv-data in difmap.
+    :param fname:
+        Path to file.
+    :param stokes:
+        Stokes parameter 'i', 'q', 'u' or 'v'.
+    :param mapsize_clean:
+        Tuple (mapsize_clean, pixsize [mas])
+
+    """
+    if path is None:
+        path = os.getcwd()
+    elif not path.endswith("/"):
+        path = path + "/"
+    difmapout = open("difmap_commands", "w")
+    difmapout.write("observe " + path + fname + "\n")
+    difmapout.write("mapsize " + str(mapsize_clean) + "\n")
+    difmapout.write("@" + path_to_script + " " + stokes)
+    difmapout.write("mapsize " + str(mapsize_restore) + "\n")
+    if outpath is None:
+        outpath = path
+    elif not outpath.endswith("/"):
+        outpath = outpath + "/"
+    difmapout.write("wmap ")
+
 # DIFMAP_MAPPSR
 def difmap_mappsr(source, isll, centre_ra_deg, centre_dec_deg, uvweightstr,
                   experiment, difmappath, uvprefix, uvsuffix, jmsuffix, \

@@ -1,10 +1,7 @@
-import numpy as np
-import pyfits as pf
-# FIXME: w this import it diesn't work
 from model import CCModel
 from utils import degree_to_mas
 from components import DeltaComponent
-from data_io import Groups, IDI, BinTable, get_fits_image_info
+from data_io import Groups, IDI, BinTable, get_hdu, get_fits_image_info
 from uv_data import UVData
 from image import Image, CleanImage
 
@@ -53,10 +50,12 @@ def create_clean_image_from_fits_file(fname, stokes='I', ver=1):
         Instance of ``CleanImage``.
     """
     ccmodel = create_ccmodel_from_fits_file(fname, stokes=stokes, ver=ver)
-    imsize, pixref, (bmaj, bmin, bpa,), pixsize = get_fits_image_info(fname)
+    imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize =\
+        get_fits_image_info(fname)
     if bmaj is None:
         raise Exception("Can't find Beam info!")
-    ccimage = CleanImage(imsize, pixref, pixsize, bmaj, bmin, bpa)
+    ccimage = CleanImage(imsize, pixref, pixrefval, pixsize, bmaj, bmin, bpa)
+    ccimage._fname = fname
     ccimage.add_model(ccmodel)
     return ccimage
 
@@ -70,9 +69,10 @@ def create_image_from_fits_file(fname):
     :return:
         Instance of ``CleanImage``.
     """
-    imsize, pixref, (bmaj, bmin, bpa,), pixsize = get_fits_image_info(fname)
-    image = Image(imsize, pixref, pixsize)
+    imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize =\
+        get_fits_image_info(fname)
+    image = Image(imsize, pixref, pixrefval, pixsize)
     # FIXME: THIS IS BAD!!!
-    image_hdu = pf.open(fname)[0]
+    image_hdu = get_hdu(fname)
     image._image = image_hdu.data.squeeze()
     return image

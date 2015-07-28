@@ -3,7 +3,10 @@
 
 import warnings
 import numpy as np
-import pyfits as pf
+try:
+    import pyfits as pf
+except ImportError:
+    import astropy.io.fits as pf
 from utils import AbsentHduExtensionError
 from utils import change_shape
 from utils import index_of

@@ -4,6 +4,7 @@ from scipy import signal
 from utils import create_grid, mask_region, fitgaussian, mas_to_rad
 from beam import CleanBeam
 from fft_routines import fft_convolve2d
+from from_fits import create_image_from_fits_file
 
 try:
     import pylab
@@ -49,11 +50,11 @@ class Image(object):
 
     def __eq__(self, image):
         """
-        Compares current instance of ``ImageModel`` class with other instance.
+        Compares current instance of ``Image`` class with other instance.
         """
         return (self.imsize == image.imsize and self.pixsize == image.pixsize)
 
-    def __sum__(self, image):
+    def __add__(self, image):
         """
         Sums current instance of ``Image`` class with other instance.
         """
@@ -216,6 +217,8 @@ class CleanImage(Image):
         # FIXME: Beam has image twice the imsize. It's bad for plotting...
         self.beam = CleanBeam(bmaj / abs(pixsize[0]), bmin / abs(pixsize[0]),
                               bpa, imsize)
+        self._residuals = None
+        self._fname = None
 
     @property
     def image(self):
@@ -223,6 +226,16 @@ class CleanImage(Image):
         Shorthand for CLEAN image.
         """
         return signal.fftconvolve(self._image, self.beam.image, mode='same')
+
+    @property
+    def residuals(self):
+        if self._residuals is None:
+            self._get_residuals(self._fname)
+        return self._residuals
+
+    def _get_residuals(self):
+        residuals = create_image_from_fits_file(self._fname)
+        self.residuals = residuals.image - self.image
 
 
 #class MemImage(Image, Model):

@@ -247,6 +247,7 @@ def generate_boot_data(sources, epochs, bands, stokes, base_path=None):
                     continue
                 print "  Using uv-file ", uv_fname
                 uvdata = create_uvdata_from_fits_file(uv_fname)
+                models = list()
                 for stoke in stokes:
                     print "  working with stokes parameter ", stoke
                     map_path = im_fits_path(source, band, epoch, stoke,
@@ -255,9 +256,10 @@ def generate_boot_data(sources, epochs, bands, stokes, base_path=None):
                     print "  Using CC-model file ", map_fname
                     ccmodel = create_ccmodel_from_fits_file(map_fname,
                                                             stokes=stoke.upper())
-                    boot = CleanBootstrap(ccmodel, uvdata)
-                    os.chdir(uv_path)
-                    boot.run(n=10, outname=['boot', ''])
+                    models.append(ccmodel)
+                boot = CleanBootstrap(models, uvdata)
+                os.chdir(uv_path)
+                boot.run(n=10, outname=['boot', ''])
     os.chdir(curdir)
 
 

@@ -16,7 +16,7 @@ from spydiff import clean_difmap
 # Then shift all low frequency CC-maps by specified shift.
 
 # TODO: Actually, this shift should be calculated between sets of resampled
-# imaged data to obtain the distribution of shifts. 
+# imaged data to obtain the distribution of shifts.
 
 
 # C - 4.6&5GHz, X - 8.11&8.43GHz, U - 15.4GHz
@@ -292,7 +292,7 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
     :param mapsize_restore: (optional)
         Parameters of map for restoring CC (map size, pixel size). If
         ``None`` then use ``mapsize_clean``. (default: ``None``)
-        
+
     """
     if base_path is None:
         base_path = os.getcwd()
@@ -337,7 +337,9 @@ if __name__ == '__main__':
 
     # Directories that contain data for loading in project
     uv_data_dir = '/home/ilya/Dropbox/Zhenya/to_ilya/uv/'
+    # uv_data_dir = '/home/ilya/code/vlbi_errors/data/zhenya/uv/'
     im_data_dir = '/home/ilya/Dropbox/Zhenya/to_ilya/clean_images/'
+    # im_data_dir = '/home/ilya/code/vlbi_errors/data/zhenya/clean_images/'
     # Path to project's root directory
     base_path = '/home/ilya/code/vlbi_errors/vlbi_errors/test/'
 

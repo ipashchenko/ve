@@ -4,18 +4,18 @@ from from_fits import (create_uvdata_from_fits_file,
                        create_ccmodel_from_fits_file)
 from bootstrap import CleanBootstrap
 
-# TODO: We need to get RM map and it's uncertainty for each source.
+# TODO: We need to get RM map and it's uncertainty for each source and epoch.
 # Input: calibrated visibilities, CLEAN models in "naitive" resolution.
 # Maps on higher frequencies are made by:
 #     1) convolving clean model with low-frequency beam
 #     2) cleaning uv-data using low-frequency beam and parameters of
 #         low-frequency CC-maps.
 # I think i should use 2) because output of bootstrap - set of resampled
-# uv-data - and i should use "naitive" CC-model for resampling.
+# uv-data that should be cleaned anyway.
 # Then shift all low frequency CC-maps by specified shift.
 
-# FIXME: Actually, this shift should be calculated between sets of resampled
-# imaged data to obtain the distribution of shifts.
+# TODO: Actually, this shift should be calculated between sets of resampled
+# imaged data to obtain the distribution of shifts. 
 
 
 # C - 4.6&5GHz, X - 8.11&8.43GHz, U - 15.4GHz

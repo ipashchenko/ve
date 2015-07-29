@@ -48,6 +48,7 @@ sources = ['0148+274',
            '2320+506']
 
 stokes = ['i', 'q', 'u']
+maps = ['ALPHA', 'IPOL', 'FPOL', 'RM']
 
 
 def im_fits_fname(source, band, epoch, stokes, ext='fits'):
@@ -119,7 +120,7 @@ def create_dirtree(sources, epochs, bands, stokes, base_path=None):
                 os.mkdir('uv')
                 os.mkdir('im')
                 os.chdir('im')
-                for dir in stokes + ['alpha', 'pol', 'fpol', 'rm']:
+                for dir in stokes + ['ALPHA', 'IPOL', 'FPOL', 'RM']:
                     os.mkdir(dir)
                 os.chdir(os.path.join(os.path.pardir, os.curdir))
                 os.chdir(os.path.join(os.path.pardir, os.curdir))
@@ -351,6 +352,68 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                                      mapsize_restore=None,
                                      outpath=map_path)
     os.chdir(curdir)
+
+
+def create_maps_from_boot_images(sources, epochs, bands, stokes,
+                                 base_path=None):
+    """
+    :param sources:
+        Iterable of sources names.
+    :param epochs:
+        Iterable of sources epochs.
+    :param bands:
+        Iterable of bands.
+    :param stokes:
+        Iterable of stokes parameters.
+    :param base_path: (optional)
+        Path to route of directory tree. If ``None`` then use current directory.
+        (default: ``None``)
+    """
+    if base_path is None:
+        base_path = os.getcwd()
+    elif not base_path.endswith("/"):
+        base_path += "/"
+
+    curdir = os.getcwd()
+    print "Stacking bootstrapped images..."
+    for source in sources:
+        print " for source ", source
+        for epoch in epochs:
+            print " for epoch ", epoch
+            for band in bands:
+                print " for band ", band
+                uv_path = uv_fits_path(source, band.upper(), epoch,
+                                       base_path=base_path)
+                n = len(glob.glob(uv_path + '*boot*_*.fits'))
+                for i in range(n):
+                    uv_fname = uv_path + 'boot_' + str(i + 1) + '.fits'
+                    if not os.path.isfile(uv_fname):
+                        print "...skipping absent file ", uv_fname
+                        continue
+                    # Sort stokes with ``I`` first and use it's beam
+                    stokes_dict = dict()
+                    for stoke in stokes:
+                        print "  fetching stokes parameter map ", stoke
+                        map_path = im_fits_path(source, band, epoch, stoke,
+                                                base_path=base_path)
+                        map_fname='cc_' + str(i + 1) + '.fits',
+                        stokes_dict.update({stoke: map_path + map_fname})
+                    for map_ in maps:
+                        outpath = im_fits_path(source, band, epoch, map_,
+                                               base_path=base_path)
+                        outname = 'boot_' + str(i + 1) + '.fits'
+                        create_map_from_stokes(stokes_dict, type=map_,
+                                               outpath=outpath,
+                                               outname=outname)
+
+
+def create_map_from_boot_images(source, epoch, band, type):
+    pass
+
+
+def create_map_from_stokes(i=None, q=None, u=None, v=None, type=None,
+                           outpath=None, outname=None):
+    pass
 
 
 if __name__ == '__main__':

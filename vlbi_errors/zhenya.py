@@ -1,9 +1,12 @@
+import glob
 import os
 import shutil
 from from_fits import (create_uvdata_from_fits_file,
-                       create_ccmodel_from_fits_file)
+                       create_ccmodel_from_fits_file,
+                       get_fits_image_info)
 from bootstrap import CleanBootstrap
 from spydiff import clean_difmap
+from utils import mas_to_rad
 
 # TODO: We need to get RM map and it's uncertainty for each source and epoch.
 # Input: calibrated visibilities, CLEAN models in "naitive" resolution.
@@ -20,6 +23,7 @@ from spydiff import clean_difmap
 
 
 # C - 4.6&5GHz, X - 8.11&8.43GHz, U - 15.4GHz
+# Bands must be sorted with lowest frequency first
 bands = ['c1', 'c2', 'x1', 'x2', 'u1']
 epochs = ['2007_03_01', '2007_04_30', '2007_05_03', '2007_06_01']
 sources = ['0148+274',
@@ -301,6 +305,9 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
     elif not path_to_script.endswith("/"):
         path_to_script += "/"
 
+    stokes = list(stokes)
+    # Now ``I`` goes first
+    stokes.sort()
 
     curdir = os.getcwd()
     print "Cleaning bootstrapped data..."
@@ -308,26 +315,41 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
         print " for source ", source
         for epoch in epochs:
             print " for epoch ", epoch
+            # Bands must be sorted in descending order - use beam of first band
+            beam_clean = None
+            mapsize_clean = None
             for band in bands:
                 print " for band ", band
                 uv_path = uv_fits_path(source, band.upper(), epoch,
                                        base_path=base_path)
+                n = len(glob.glob(uv_path + '*boot*_*.fits'))
                 for i in range(n):
                     uv_fname = uv_path + 'boot_' + str(i + 1) + '.fits'
                     if not os.path.isfile(uv_fname):
                         print "...skipping absent file ", uv_fname
                         continue
                     print "  Using uv-file ", uv_fname
+                    # Sort stokes with ``I`` first and use it's beam
                     for stoke in stokes:
                         print "  working with stokes parameter ", stoke
                         map_path = im_fits_path(source, band, epoch, stoke,
-                                            base_path=base_path)
-                        clean_difmap('boot_' + str(i + 1) + '.fits', stoke,
-                        mapsize_clean=mapsize_clean, path=uv_path,
-                        path_to_script=path_to_script,
-                        mapsize_restore=mapsize_restore,
-                        outfname='cc_' + str(i + 1) + '.fits',
-                        outpath=map_path)
+                                                base_path=base_path)
+                        # This should use stokes ``I`` beam and mapsize for
+                        # lowest frequency band
+                        if beam_clean is None:
+                            map_info = get_fits_image_info(map_path +
+                                                           'cc.fits')[3]
+                            beam_clean = map_info[3]
+                            mapsize_clean = (map_info[0][0],
+                                             map_info[-1][0] / mas_to_rad)
+                        clean_difmap(fname='boot_' + str(i + 1) + '.fits',
+                                     outfname='cc_' + str(i + 1) + '.fits',
+                                     stokes=stoke, mapsize_clean=mapsize_clean,
+                                     beam_clean=beam_clean,
+                                     path=uv_path,
+                                     path_to_script=path_to_script,
+                                     mapsize_restore=None,
+                                     outpath=map_path)
     os.chdir(curdir)
 
 

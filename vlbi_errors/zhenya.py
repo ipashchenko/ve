@@ -3,6 +3,7 @@ import shutil
 from from_fits import (create_uvdata_from_fits_file,
                        create_ccmodel_from_fits_file)
 from bootstrap import CleanBootstrap
+from spydiff import clean_difmap
 
 # TODO: We need to get RM map and it's uncertainty for each source and epoch.
 # Input: calibrated visibilities, CLEAN models in "naitive" resolution.
@@ -260,6 +261,51 @@ def generate_boot_data(sources, epochs, bands, stokes, base_path=None):
                 boot = CleanBootstrap(models, uvdata)
                 os.chdir(uv_path)
                 boot.run(n=10, outname=['boot', ''])
+    os.chdir(curdir)
+
+
+def clean_boot_data(sources, epochs, bands, stokes, base_path=None):
+    """
+    :param sources:
+        Iterable of sources names.
+    :param epochs:
+        Iterable of sources epochs.
+    :param bands:
+        Iterable of bands.
+    :param stokes:
+        Iterable of stokes parameters.
+    :param base_path: (optional)
+        Path to route of directory tree. If ``None`` then use current directory.
+
+    """
+    if base_path is None:
+        base_path = os.getcwd()
+    elif not base_path.endswith("/"):
+        base_path = base_path + "/"
+
+    curdir = os.getcwd()
+    print "Cleaning bootstrapped data..."
+    for source in sources:
+        print " for source ", source
+        for epoch in epochs:
+            print " for epoch ", epoch
+            for band in bands:
+                print " for band ", band
+                uv_path = uv_fits_path(source, band.upper(), epoch,
+                                       base_path=base_path)
+                for i in range(n):
+                    uv_fname = uv_path + 'boo_' + str(i + 1) + '.fits'
+                    if not os.path.isfile(uv_fname):
+                        print "...skipping absent file ", uv_fname
+                        continue
+                    print "  Using uv-file ", uv_fname
+                    for stoke in stokes:
+                        print "  working with stokes parameter ", stoke
+                        map_path = im_fits_path(source, band, epoch, stoke,
+                                            base_path=base_path)
+                        clean_difmap(uv_fname, stoke, mapsize_clean,
+                        path=None, path_to_script=None, mapsize_restore=None,
+                        outfname='cc_' + str(i + 1) + '.fits', outpath=map_path)
     os.chdir(curdir)
 
 

@@ -101,7 +101,7 @@ def create_dirtree(sources, epochs, bands, stokes, base_path=None):
     if base_path is None:
         base_path = os.getcwd()
     elif not base_path.endswith("/"):
-        base_path = base_path + "/"
+        base_path += "/"
     curdir = os.getcwd()
     os.chdir(base_path)
 
@@ -145,11 +145,11 @@ def put_uv_files_to_dirs(sources, epochs, bands, base_path=None, ext="PINAL",
     if base_path is None:
         base_path = os.getcwd()
     elif not base_path.endswith("/"):
-        base_path = base_path + "/"
+        base_path += "/"
     if uv_files_path is None:
         uv_files_path = os.getcwd()
     elif not uv_files_path.endswith("/"):
-        uv_files_path = uv_files_path + "/"
+        uv_files_path += "/"
 
     # Circle through sources, epochs and bands and copy files to directory tree.
     for source in sources:
@@ -190,11 +190,11 @@ def put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=None,
     if base_path is None:
         base_path = os.getcwd()
     elif not base_path.endswith("/"):
-        base_path = base_path + "/"
+        base_path += "/"
     if im_files_path is None:
         im_files_path = os.getcwd()
     elif not im_files_path.endswith("/"):
-        im_files_path = im_files_path + "/"
+        im_files_path += "/"
 
     # Circle through sources, epochs and bands and copy files to directory tree.
     for source in sources:
@@ -230,7 +230,7 @@ def generate_boot_data(sources, epochs, bands, stokes, base_path=None):
     if base_path is None:
         base_path = os.getcwd()
     elif not base_path.endswith("/"):
-        base_path = base_path + "/"
+        base_path += "/"
 
     curdir = os.getcwd()
     print "Generating bootstrapped data..."
@@ -297,7 +297,12 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
     if base_path is None:
         base_path = os.getcwd()
     elif not base_path.endswith("/"):
-        base_path = base_path + "/"
+        base_path += "/"
+    if path_to_script is None:
+        path_to_script = os.getcwd()
+    elif not path_to_script.endswith("/"):
+        path_to_script += "/"
+
 
     curdir = os.getcwd()
     print "Cleaning bootstrapped data..."
@@ -310,7 +315,7 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                 uv_path = uv_fits_path(source, band.upper(), epoch,
                                        base_path=base_path)
                 for i in range(n):
-                    uv_fname = uv_path + 'boo_' + str(i + 1) + '.fits'
+                    uv_fname = uv_path + 'boot_' + str(i + 1) + '.fits'
                     if not os.path.isfile(uv_fname):
                         print "...skipping absent file ", uv_fname
                         continue
@@ -319,9 +324,12 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                         print "  working with stokes parameter ", stoke
                         map_path = im_fits_path(source, band, epoch, stoke,
                                             base_path=base_path)
-                        clean_difmap(uv_fname, stoke, mapsize_clean,
-                        path=None, path_to_script=None, mapsize_restore=None,
-                        outfname='cc_' + str(i + 1) + '.fits', outpath=map_path)
+                        clean_difmap('boot_' + str(i + 1) + '.fits', stoke,
+                        mapsize_clean=mapsize_clean, path=uv_path,
+                        path_to_script=path_to_script,
+                        mapsize_restore=mapsize_restore,
+                        outfname='cc_' + str(i + 1) + '.fits',
+                        outpath=map_path)
     os.chdir(curdir)
 
 

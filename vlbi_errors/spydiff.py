@@ -1,16 +1,39 @@
 import os
 
 
-def clean_difmap(fname, stokes, mapsize_clean, path=None, path_to_script=None,
-                 mapsize_restore=None, outfname=None, outpath=None):
+def clean_difmap(fname, outfname, stokes, mapsize_clean, beam_clean=None,
+                 path=None, path_to_script=None, mapsize_restore=None,
+                 beam_restore=None, outpath=None):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
-        Path to file.
+        Filename of uv-data to clean.
+    :param outfname:
+        Path to file with CCs.
     :param stokes:
         Stokes parameter 'i', 'q', 'u' or 'v'.
-    :param mapsize_clean:
-        Tuple (mapsize_clean, pixsize [mas])
+    :param mapsize_clean: (optional)
+        Parameters of map for cleaning (map size, pixel size). If ``None``
+        then use those of map in map directory (not bootstrapped).
+        (default: ``None``)
+    :param beam_clean: (optional)
+        Beam parameter for cleaning (bmaj, bmin, bpa). If ``None`` then use
+        naitive beam. (default: ``None``)
+    :param path: (optional)
+        Path to uv-data to clean. If ``None`` then use current directory.
+        (default: ``None``)
+    :param path_to_script: (optional)
+        Path to ``clean`` difmap script. If ``None`` then use current directory.
+        (default: ``None``)
+    :param mapsize_restore: (optional)
+        Parameters of map for restoring CC (map size, pixel size). If
+        ``None`` then use ``mapsize_clean``. (default: ``None``)
+    :param beam_restore: (optional)
+        Beam parameter for restore map (bmaj, bmin, bpa). If ``None`` then use
+        ``beam_clean``. (default: ``None``)
+    :param outpath: (optional)
+        Path to file with CCs. If ``None`` then use ``path``.
+        (default: ``None``)
 
     """
     if path is None:

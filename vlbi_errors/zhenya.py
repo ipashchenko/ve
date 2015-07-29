@@ -264,7 +264,9 @@ def generate_boot_data(sources, epochs, bands, stokes, base_path=None):
     os.chdir(curdir)
 
 
-def clean_boot_data(sources, epochs, bands, stokes, base_path=None):
+def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
+                    path_to_script=None, beam=None, mapsize_clean=None,
+                    mapsize_restore=None):
     """
     :param sources:
         Iterable of sources names.
@@ -276,7 +278,21 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None):
         Iterable of stokes parameters.
     :param base_path: (optional)
         Path to route of directory tree. If ``None`` then use current directory.
-
+        (default: ``None``)
+    :param path_to_script: (optional)
+        Path to ``clean`` difmap script. If ``None`` then use current directory.
+        (default: ``None``)
+    :param beam: (optional)
+        Beam parameter for cleaning (bmaj, bmin, bpa). If ``None`` then use
+        naitive beam. (default: ``None``)
+    :param mapsize_clean: (optional)
+        Parameters of map for cleaning (map size, pixel size). If ``None``
+        then use those of map in map directory (not bootstrapped).
+        (default: ``None``)
+    :param mapsize_restore: (optional)
+        Parameters of map for restoring CC (map size, pixel size). If
+        ``None`` then use ``mapsize_clean``. (default: ``None``)
+        
     """
     if base_path is None:
         base_path = os.getcwd()

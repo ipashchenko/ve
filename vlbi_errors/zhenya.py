@@ -51,6 +51,25 @@ stokes = ['i', 'q', 'u']
 maps = ['ALPHA', 'IPOL', 'FPOL', 'RM']
 
 
+def alpha(stokes_dict):
+    pass
+
+
+def ipol(stokes_dict):
+    pass
+
+
+def fpol(stokes_dicts):
+    pass
+
+
+def rotm(stokes_dicts):
+    pass
+
+
+maps_functions = {'ALPHA': alpha, 'IPOL': ipol, 'FPOL': fpol, 'RM': rotm}
+
+
 def im_fits_fname(source, band, epoch, stokes, ext='fits'):
     return source + '.' + band + '.' + epoch + '.' + stokes + '.' + ext
 
@@ -380,6 +399,7 @@ def create_maps_from_boot_images(sources, epochs, bands, stokes,
         print " for source ", source
         for epoch in epochs:
             print " for epoch ", epoch
+            stokes_dicts = list()
             for band in bands:
                 print " for band ", band
                 uv_path = uv_fits_path(source, band.upper(), epoch,
@@ -398,22 +418,13 @@ def create_maps_from_boot_images(sources, epochs, bands, stokes,
                                                 base_path=base_path)
                         map_fname='cc_' + str(i + 1) + '.fits',
                         stokes_dict.update({stoke: map_path + map_fname})
+                    stokes_dicts.append(stokes_dict)
                     for map_ in maps:
                         outpath = im_fits_path(source, band, epoch, map_,
                                                base_path=base_path)
                         outname = 'boot_' + str(i + 1) + '.fits'
-                        create_map_from_stokes(stokes_dict, type=map_,
-                                               outpath=outpath,
-                                               outname=outname)
-
-
-def create_map_from_boot_images(source, epoch, band, type):
-    pass
-
-
-def create_map_from_stokes(i=None, q=None, u=None, v=None, type=None,
-                           outpath=None, outname=None):
-    pass
+                        maps_functions[map_](stokes_dicts, outpath=outpath,
+                                             outname=outname)
 
 
 if __name__ == '__main__':

@@ -10,12 +10,8 @@ from utils import mas_to_rad
 
 # TODO: We need to get RM map and it's uncertainty for each source and epoch.
 # Input: calibrated visibilities, CLEAN models in "naitive" resolution.
-# Maps on higher frequencies are made by:
-#     1) convolving clean model with low-frequency beam
-#     2) cleaning uv-data using low-frequency beam and parameters of
-#         low-frequency CC-maps.
-# I think i should use 2) because output of bootstrap - set of resampled
-# uv-data that should be cleaned anyway.
+# Maps on higher frequencies are made by convolving clean model with
+# low-frequency beam.
 # Then shift all low frequency CC-maps by specified shift.
 
 # TODO: Actually, this shift should be calculated between sets of resampled

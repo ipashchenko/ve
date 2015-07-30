@@ -361,7 +361,8 @@ class DeltaComponent(Component):
         y = y_c + y_coords - 2
         # Property ``image.image`` has setter that looks ``.image`` attribute of
         # ``flux`` object. So use ``_image``.
-        image._image[x, y] += flux
+        # [y, x] - to get coincidence with fits clean maps
+        image._image[y, x] += flux
 
 
 # TODO: I need to keep coordinates of pixels for FT! Should constructor accept

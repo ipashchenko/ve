@@ -336,7 +336,7 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
         for epoch in epochs:
             print " for epoch ", epoch
             # Bands must be sorted in descending order - use beam of first band
-            beam_clean = None
+            beam_restore = None
             mapsize_clean = None
             for band in bands:
                 print " for band ", band
@@ -356,19 +356,19 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                                                 base_path=base_path)
                         # This should use stokes ``I`` beam and mapsize for
                         # lowest frequency band
-                        if beam_clean is None:
+                        if beam_restore is None:
                             map_info = get_fits_image_info(map_path +
                                                            'cc.fits')[3]
-                            beam_clean = map_info[3]
+                            beam_restore = map_info[3]
                             mapsize_clean = (map_info[0][0],
                                              map_info[-1][0] / mas_to_rad)
                         clean_difmap(fname='boot_' + str(i + 1) + '.fits',
                                      outfname='cc_' + str(i + 1) + '.fits',
                                      stokes=stoke, mapsize_clean=mapsize_clean,
-                                     beam_clean=beam_clean,
                                      path=uv_path,
                                      path_to_script=path_to_script,
                                      mapsize_restore=None,
+                                     beam_restore=beam_restore,
                                      outpath=map_path)
     os.chdir(curdir)
 

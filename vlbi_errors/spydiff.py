@@ -1,9 +1,9 @@
 import os
 
 
-def clean_difmap(fname, outfname, stokes, mapsize_clean, beam_clean=None,
-                 path=None, path_to_script=None, mapsize_restore=None,
-                 beam_restore=None, outpath=None):
+def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
+                 path_to_script=None, mapsize_restore=None, beam_restore=None,
+                 outpath=None):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
@@ -16,9 +16,6 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, beam_clean=None,
         Parameters of map for cleaning (map size, pixel size). If ``None``
         then use those of map in map directory (not bootstrapped).
         (default: ``None``)
-    :param beam_clean: (optional)
-        Beam parameter for cleaning (bmaj, bmin, bpa). If ``None`` then use
-        naitive beam. (default: ``None``)
     :param path: (optional)
         Path to uv-data to clean. If ``None`` then use current directory.
         (default: ``None``)
@@ -30,7 +27,7 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, beam_clean=None,
         ``None`` then use ``mapsize_clean``. (default: ``None``)
     :param beam_restore: (optional)
         Beam parameter for restore map (bmaj, bmin, bpa). If ``None`` then use
-        ``beam_clean``. (default: ``None``)
+        the same beam as in cleaning. (default: ``None``)
     :param outpath: (optional)
         Path to file with CCs. If ``None`` then use ``path``.
         (default: ``None``)
@@ -52,6 +49,10 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, beam_clean=None,
     difmapout.write("observe " + path + fname + "\n")
     difmapout.write("mapsize " + str(mapsize_clean[0]) + ', ' +
                     str(mapsize_clean[1]) + "\n")
+    if beam_restore:
+        difmapout.write("restore " + str(beam_restore[0]) + ', ' +
+                        str(beam_restore[1]) + ', ' + str(beam_restore[2]) +
+                        "\n")
     difmapout.write("@" + path_to_script + " " + stokes + "\n")
     difmapout.write("mapsize " + str(mapsize_restore[0]) + ', ' +
                     str(mapsize_restore[1]) + "\n")

@@ -4,7 +4,8 @@ import scipy as sp
 from utils import degree_to_mas, gaussianBeam
 from image import Image, CleanImage
 from data_io import BinTable, get_fits_image_info
-# from from_fits import create_uvdata_from_fits_file
+# FIXME: problems whith this import
+from from_fits import create_uvdata_from_fits_file
 from stats import LnPost
 from components import DeltaComponent, CGComponent, EGComponent
 
@@ -25,6 +26,7 @@ class Model(object):
         self._components = list()
         self.stokes = stokes
 
+    # FIXME: Add only models with same stokes? Or implement multistokes models?
     def __add__(self, other):
         self._components.extend(other._components)
 

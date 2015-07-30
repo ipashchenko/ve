@@ -47,7 +47,10 @@ class Image(object):
     # TODO: Am i need it? Should i compare instances before setting?
     @image.setter
     def image(self, image):
-        self._image = image.image
+        if self == image:
+            self._image = image.image
+        else:
+            raise Exception("Images have incompatible parameters!")
 
     def __eq__(self, image):
         """
@@ -55,23 +58,51 @@ class Image(object):
         """
         return (self.imsize == image.imsize and self.pixsize == image.pixsize)
 
+    def __ne__(self, image):
+        """
+        Compares current instance of ``Image`` class with other instance.
+        """
+        return (self.imsize != image.imsize or self.pixsize != image.pixsize)
+
     def __add__(self, image):
         """
         Sums current instance of ``Image`` class with other instance.
         """
-        raise NotImplementedError
+        self.image += image.image
+        return self
 
-    def __sub__(self, image):
+    def __mul__(self, other):
         """
-        Substruct from current instance of ``Image`` class other instance.
+        Multiply current instance of ``Image`` class with other instance or
+        some number.
         """
-        raise NotImplementedError
+        if isinstance(other, Image):
+            self.image *= other.image
+        else:
+            self.image *= other
+        return self
 
-    def __div__(self, image):
+    def __sub__(self, other):
         """
-        Divide current instance of ``Image`` class on other instance.
+        Substruct from current instance of ``Image`` class other instance or
+        some number.
         """
-        raise NotImplementedError
+        if isinstance(other, Image):
+            self.image -= other.image
+        else:
+            self.image -= other
+        return self
+
+    def __div__(self, other):
+        """
+        Divide current instance of ``Image`` class on other instance or some
+        number.
+        """
+        if isinstance(other, Image):
+            self.image /= other.image
+        else:
+            self.image /= other
+        return self
 
     # Convolve with any object that has ``image`` attribute
     def convolve(self, image_like):
@@ -206,7 +237,11 @@ class Image(object):
             imgplot.set_clim(clim)
 
 
-# FIXME: THIS DOESN't KEEP RESIDUALS! ONLY CCs!
+# FIXME: THIS DOESN't KEEP RESIDUALS! ONLY CCs! Do i need them here? Usecases?
+# It is just visualization of CC model - don't need residuals here.
+# Residuals give insight on fidelity of the CC model.
+# Residuals should be distinct instance of ``Image`` class that can be added to
+# any other instance
 class CleanImage(Image):
     """
     Class that represents image made using CLEAN algorithm.
@@ -216,10 +251,21 @@ class CleanImage(Image):
         super(CleanImage, self).__init__(imsize, pixref, pixrefval, pixsize)
         # TODO: What if pixsize has different sizes???
         # FIXME: Beam has image twice the imsize. It's bad for plotting...
-        self.beam = CleanBeam(bmaj / abs(pixsize[0]), bmin / abs(pixsize[0]),
+        self._beam = CleanBeam(bmaj / abs(pixsize[0]), bmin / abs(pixsize[0]),
                               bpa, imsize)
-        self._residuals = None
-        self._fname = None
+        self._residuals = Image(imsize, pixref, pixrefval, pixsize)
+
+    @property
+    def beam(self):
+        """
+        Shorthand for beam image.
+        """
+        return self._beam.image
+
+    @beam.setter
+    def beam(self, bmaj, bmin, bpa):
+        self._beam = CleanBeam(bmaj / abs(self.pixsize[0]),
+                               bmin / abs(self.pixsize[0]), bpa, self.imsize)
 
     @property
     def image(self):
@@ -229,14 +275,23 @@ class CleanImage(Image):
         return signal.fftconvolve(self._image, self.beam.image, mode='same')
 
     @property
-    def residuals(self):
-        if self._residuals is None:
-            self._get_residuals(self._fname)
-        return self._residuals
+    def cc(self):
+        """
+        Shorthand for image of clean components.
+        """
+        return self._image
 
-    def _get_residuals(self):
-        residuals = create_image_from_fits_file(self._fname)
-        self.residuals = residuals.image - self.image
+    @property
+    def image_w_residuals(self):
+        """
+        Shorthand for CLEAN image with residuals added.
+        """
+        return self.image + self.residuals
+
+    # FIXME: Should be read-only as residuals have sense only for naitive clean
+    @property
+    def residuals(self):
+        return self._residuals.image
 
 
 #class MemImage(Image, Model):

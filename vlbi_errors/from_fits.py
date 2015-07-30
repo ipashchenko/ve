@@ -55,8 +55,9 @@ def create_clean_image_from_fits_file(fname, stokes='I', ver=1):
     if bmaj is None:
         raise Exception("Can't find Beam info!")
     ccimage = CleanImage(imsize, pixref, pixrefval, pixsize, bmaj, bmin, bpa)
-    ccimage._fname = fname
     ccimage.add_model(ccmodel)
+    image = create_image_from_fits_file(fname)
+    ccimage._residuals = image - ccimage
     return ccimage
 
 

@@ -236,6 +236,25 @@ class Image(object):
             # TODO: Warn if ``clim`` is out of range for image.
             imgplot.set_clim(clim)
 
+        # FIXME: use matplotlib.pyplot!
+        # if plt is not None:
+        #     plt.figure()
+        #     plt.matshow(self.values, aspect='auto')
+        #     plt.colorbar()
+        #     if not plot_indexes:
+        #         raise NotImplementedError("Ticks haven't implemented yet")
+        #         # plt.xticks(np.linspace(0, 999, 10, dtype=int),
+        #         # frame.t[np.linspace(0, 999, 10, dtype=int)])
+        #         # plt.yticks(np.linspace(0, len(dm_grid) - 10, 5, dtype=int),
+        #         #            vint(dm_grid[np.linspace(0, len(dm_grid) - 10, 5,
+        #         #            dtype=int)]))
+        #     plt.xlabel("time steps")
+        #     plt.ylabel("frequency ch. #")
+        #     plt.title('Dynamical spectra')
+        #     if savefig is not None:
+        #         plt.savefig(savefig, bbox_inches='tight')
+        #     plt.show()
+
 
 # FIXME: THIS DOESN't KEEP RESIDUALS! ONLY CCs! Do i need them here? Usecases?
 # It is just visualization of CC model - don't need residuals here.

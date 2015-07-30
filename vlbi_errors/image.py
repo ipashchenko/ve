@@ -4,6 +4,7 @@ from scipy import signal
 from utils import create_grid, mask_region, fitgaussian, mas_to_rad
 from beam import CleanBeam
 from fft_routines import fft_convolve2d
+# FIXME: w this import can't import anything from from_fits
 from from_fits import create_image_from_fits_file
 
 try:

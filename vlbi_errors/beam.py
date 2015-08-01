@@ -49,5 +49,5 @@ class CleanBeam(Beam):
         self.bmin = bmin
         self.bpa = bpa
         self.size = size
-        self.image = gaussianBeam(self.size[0], self.bmaj, self.bmin,
-                                  self.bpa + 90., self.size[1])
+        self.image = gaussianBeam(self.size[0] / 2, self.bmaj, self.bmin,
+                                  self.bpa + 90., self.size[1] / 2)

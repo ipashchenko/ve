@@ -4,13 +4,120 @@ from scipy import signal
 from utils import create_grid, mask_region, fitgaussian, mas_to_rad
 from beam import CleanBeam
 from fft_routines import fft_convolve2d
-# FIXME: w this import can't import anything from from_fits
-from from_fits import create_image_from_fits_file
 
 try:
     import pylab
 except ImportError:
     pylab = None
+
+
+# TODO: how plot coordinates in mas for -10, 0, 10 mas... if using matshow?
+def plot(image, x=None, y=None, blc=None, trc=None, clim=None, cmap=None,
+         abs_levels=None, rel_levels=None, min_abs_level=None,
+         min_rel_level=None, factor=2., plot_color=False, show_beam=False):
+    """
+    Plot image.
+
+    :param levels:
+        Iterable of levels.
+
+    :note:
+        ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
+        converted to python-like zero-indexing.
+    """
+    if not pylab:
+        raise Exception("Install matplotlib for plotting!")
+    if x is None:
+        x = np.arange(image.imsize[0])
+    if y is None:
+        y = np.arange(image.imsize[1])
+    if blc or trc:
+        blc = blc or (1, 1,)
+        trc = trc or image.imsize
+        part_to_plot = image[blc[0] - 1: trc[0], blc[1]- 1: trc[1]]
+        x = x[blc[0] - 1: trc[0], blc[0] - 1: trc[0]]
+        y = y[blc[1] - 1: trc[1], blc[1] - 1: trc[1]]
+    else:
+        part_to_plot = image
+        x = x
+        y = y
+
+    # Plot coordinates in milliarcseconds
+    x = x / mas_to_rad
+    y = y / mas_to_rad
+
+    # Plotting using color if told
+    if plot_color:
+        imgplot = pylab.matshow(part_to_plot, origin='lower')
+        #         # plt.xticks(np.linspace(0, 999, 10, dtype=int),
+        #         # frame.t[np.linspace(0, 999, 10, dtype=int)])
+        #         # plt.yticks(np.linspace(0, len(dm_grid) - 10, 5, dtype=int),
+        #         #            vint(dm_grid[np.linspace(0, len(dm_grid) - 10, 5,
+        #         #            dtype=int)]))
+        if show_beam:
+            raise NotImplementedError
+        pylab.colorbar()
+
+    # Or plot contours
+    elif abs_levels or rel_levels or min_abs_level or min_rel_level:
+        max_level = image.max()
+        # Build levels (pylab.contour takes only absolute values)
+        if abs_levels or rel_levels:
+            # If given both then ``abs_levels`` has a priority
+            if abs_levels:
+                rel_levels = None
+            else:
+                abs_levels = [max_level * i for i in rel_levels]
+        # If given only min_abs_level & increment factor (default is 2)
+        elif min_abs_level or min_rel_level:
+            if min_rel_level:
+                min_abs_level = min_rel_level * max_level / 100.
+            n_max = int(math.ceil(math.log(max_level / min_abs_level,
+                                           factor)))
+            abs_levels = [min_abs_level * factor ** k for k in range(n_max)]
+        # Plot contours
+        if abs_levels:
+            if plot_color:
+                # White levels on colored background
+                colors = 'w'
+            else:
+                # Black levels on white background
+                colors = 'b'
+            print "Plotting contours with levels: " + str(abs_levels)
+            imgplot = pylab.contour(x, y, part_to_plot, abs_levels,
+                                    colors=colors)
+    else:
+        raise Exception("Specify ``plot_color=True`` or choose some "
+                        "levels!")
+
+    if cmap:
+        try:
+            imgplot.set_cmap(cmap)
+        except:
+            # Show wo ``cmap`` set, print availbale ``cmap``s.
+            pass
+    if clim:
+        # TODO: Warn if ``clim`` is out of range for image.
+        imgplot.set_clim(clim)
+
+        # FIXME: use matplotlib.pyplot!
+        # if plt is not None:
+        #     plt.figure()
+        #     plt.matshow(self.values, aspect='auto')
+        #     plt.colorbar()
+        #     if not plot_indexes:
+        #         raise NotImplementedError("Ticks haven't implemented yet")
+        #         # plt.xticks(np.linspace(0, 999, 10, dtype=int),
+        #         # frame.t[np.linspace(0, 999, 10, dtype=int)])
+        #         # plt.yticks(np.linspace(0, len(dm_grid) - 10, 5, dtype=int),
+        #         #            vint(dm_grid[np.linspace(0, len(dm_grid) - 10, 5,
+        #         #            dtype=int)]))
+        #     plt.xlabel("time steps")
+        #     plt.ylabel("frequency ch. #")
+        #     plt.title('Dynamical spectra')
+        #     if savefig is not None:
+        #         plt.savefig(savefig, bbox_inches='tight')
+        #     plt.show()
 
 
 class Image(object):
@@ -19,6 +126,7 @@ class Image(object):
     """
     def __init__(self, imsize=None, pixref=None, pixrefval=None, pixsize=None):
         self.imsize = imsize
+        self.pixsize = pixsize
         self.dx, self.dy = pixsize
         self.x_c, self.y_c = pixref
         if pixrefval is None:
@@ -48,15 +156,15 @@ class Image(object):
     @image.setter
     def image(self, image):
         if self == image:
-            self._image = image.image
+            self._image = image.image.copy()
         else:
             raise Exception("Images have incompatible parameters!")
 
-    def __eq__(self, image):
+    def __eq__(self, other):
         """
         Compares current instance of ``Image`` class with other instance.
         """
-        return (self.imsize == image.imsize and self.pixsize == image.pixsize)
+        return (self.imsize == other.imsize and self.pixsize == other.pixsize)
 
     def __ne__(self, image):
         """
@@ -88,9 +196,9 @@ class Image(object):
         some number.
         """
         if isinstance(other, Image):
-            self.image -= other.image
+            self._image -= other.image
         else:
-            self.image -= other
+            self._image -= other
         return self
 
     def __div__(self, other):
@@ -155,100 +263,97 @@ class Image(object):
         params = fitgaussian(shift_array)
         return tuple(params[1: 3])
 
-    # TODO: fix BLC,TRC to display expected behavior. Or use blc/trc-ing after
-    # constructing x&y.
-    # TODO: plot beam in corner if called inside ``CCImage``. But any image can
-    # has beam... Check UML diagrams...
-    # TODO: how plot coordinates in mas if using matshow?
     def plot(self, blc=None, trc=None, clim=None, cmap=None, abs_levels=None,
              rel_levels=None, min_abs_level=None, min_rel_level=None, factor=2.,
              plot_color=False):
         """
         Plot image.
 
-        :param levels:
-            Iterable of levels.
-
         :note:
             ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
             converted to python-like zero-indexing.
+
         """
-        if not pylab:
-            raise Exception("Install matplotlib for plotting!")
-        if blc or trc:
-            blc = blc or (1, 1,)
-            trc = trc or self.imsize
-            part_to_plot = self.image[blc[0] - 1: trc[0], blc[1]- 1: trc[1]]
-            x = self.x[blc[0] - 1: trc[0], blc[0] - 1: trc[0]]
-            y = self.y[blc[1] - 1: trc[1], blc[1] - 1: trc[1]]
-        else:
-            part_to_plot = self.image
-            x = self.x
-            y = self.y
+        plot(self.image, x=self.x, y=self.y, blc=blc, trc=trc, clim=clim,
+             cmap=cmap, abs_levels=abs_levels, rel_levels=rel_levels,
+             min_abs_level=min_abs_level, min_rel_level=min_rel_level,
+             factor=factor, plot_color=plot_color)
+        # if not pylab:
+        #     raise Exception("Install matplotlib for plotting!")
+        # if blc or trc:
+        #     blc = blc or (1, 1,)
+        #     trc = trc or self.imsize
+        #     part_to_plot = self.image[blc[0] - 1: trc[0], blc[1]- 1: trc[1]]
+        #     x = self.x[blc[0] - 1: trc[0], blc[0] - 1: trc[0]]
+        #     y = self.y[blc[1] - 1: trc[1], blc[1] - 1: trc[1]]
+        # else:
+        #     part_to_plot = self.image
+        #     x = self.x
+        #     y = self.y
 
-        # Plot coordinates in milliarcseconds
-        x = x / mas_to_rad
-        y = y / mas_to_rad
+        # # Plot coordinates in milliarcseconds
+        # x = x / mas_to_rad
+        # y = y / mas_to_rad
 
-        # Plotting using color if told
-        if plot_color:
-            imgplot = pylab.matshow(part_to_plot, origin='lower')
-            pylab.colorbar()
+        # # Plotting using color if told
+        # if plot_color:
+        #     imgplot = pylab.matshow(part_to_plot, origin='lower')
+        #     pylab.colorbar()
 
-        # Or plot contours
-        elif abs_levels or rel_levels or min_abs_level or min_rel_level:
-            max_level = self.image.max()
-            # Build levels (pylab.contour takes only absolute values)
-            if abs_levels or rel_levels:
-                # If given both then ``abs_levels`` has a priority
-                if abs_levels:
-                    rel_levels = None
-                else:
-                    abs_levels = [max_level * i for i in rel_levels]
-            # If given only min_abs_level & increment factor (default is 2)
-            elif min_abs_level or min_rel_level:
-                if min_rel_level:
-                    min_abs_level = min_rel_level * max_level / 100.
-                n_max = int(math.ceil(math.log(max_level / min_abs_level, factor)))
-                abs_levels = [min_abs_level * factor ** k for k in range(n_max)]
-            # Plot contours
-            if abs_levels:
-                if plot_color:
-                    # White levels on colored background
-                    colors='w'
-                else:
-                    # Black levels on white background
-                    colors='b'
-                print "Plotting contours with levels: " + str(abs_levels)
-                imgplot = pylab.contour(x, y, part_to_plot, abs_levels,
-                                        colors=colors)
-        else:
-            raise Exception("Specify ``plot_color=True`` or choose some "
-                            "levels!")
+        # # Or plot contours
+        # elif abs_levels or rel_levels or min_abs_level or min_rel_level:
+        #     max_level = self.image.max()
+        #     # Build levels (pylab.contour takes only absolute values)
+        #     if abs_levels or rel_levels:
+        #         # If given both then ``abs_levels`` has a priority
+        #         if abs_levels:
+        #             rel_levels = None
+        #         else:
+        #             abs_levels = [max_level * i for i in rel_levels]
+        #     # If given only min_abs_level & increment factor (default is 2)
+        #     elif min_abs_level or min_rel_level:
+        #         if min_rel_level:
+        #             min_abs_level = min_rel_level * max_level / 100.
+        #         n_max = int(math.ceil(math.log(max_level / min_abs_level, factor)))
+        #         abs_levels = [min_abs_level * factor ** k for k in range(n_max)]
+        #     # Plot contours
+        #     if abs_levels:
+        #         if plot_color:
+        #             # White levels on colored background
+        #             colors='w'
+        #         else:
+        #             # Black levels on white background
+        #             colors='b'
+        #         print "Plotting contours with levels: " + str(abs_levels)
+        #         imgplot = pylab.contour(x, y, part_to_plot, abs_levels,
+        #                                 colors=colors)
+        # else:
+        #     raise Exception("Specify ``plot_color=True`` or choose some "
+        #                     "levels!")
 
-        if cmap:
-            try:
-                imgplot.set_cmap(cmap)
-            except:
-                # Show wo ``cmap`` set, print availbale ``cmap``s.
-                pass
-        if clim:
-            # TODO: Warn if ``clim`` is out of range for image.
-            imgplot.set_clim(clim)
+        # if cmap:
+        #     try:
+        #         imgplot.set_cmap(cmap)
+        #     except:
+        #         # Show wo ``cmap`` set, print availbale ``cmap``s.
+        #         pass
+        # if clim:
+        #     # TODO: Warn if ``clim`` is out of range for image.
+        #     imgplot.set_clim(clim)
 
-        # FIXME: use matplotlib.pyplot!
-        # if plt is not None:
-        #     plt.figure()
-        #     plt.matshow(self.values, aspect='auto')
-        #     plt.colorbar()
-        #     if not plot_indexes:
-        #         raise NotImplementedError("Ticks haven't implemented yet")
-        #         # plt.xticks(np.linspace(0, 999, 10, dtype=int),
-        #         # frame.t[np.linspace(0, 999, 10, dtype=int)])
-        #         # plt.yticks(np.linspace(0, len(dm_grid) - 10, 5, dtype=int),
-        #         #            vint(dm_grid[np.linspace(0, len(dm_grid) - 10, 5,
-        #         #            dtype=int)]))
-        #     plt.xlabel("time steps")
+        # # FIXME: use matplotlib.pyplot!
+        # # if plt is not None:
+        # #     plt.figure()
+        # #     plt.matshow(self.values, aspect='auto')
+        # #     plt.colorbar()
+        # #     if not plot_indexes:
+        # #         raise NotImplementedError("Ticks haven't implemented yet")
+        # #         # plt.xticks(np.linspace(0, 999, 10, dtype=int),
+        # #         # frame.t[np.linspace(0, 999, 10, dtype=int)])
+        # #         # plt.yticks(np.linspace(0, len(dm_grid) - 10, 5, dtype=int),
+        # #         #            vint(dm_grid[np.linspace(0, len(dm_grid) - 10, 5,
+        # #         #            dtype=int)]))
+        # #     plt.xlabel("time steps")
         #     plt.ylabel("frequency ch. #")
         #     plt.title('Dynamical spectra')
         #     if savefig is not None:
@@ -282,16 +387,23 @@ class CleanImage(Image):
         return self._beam.image
 
     @beam.setter
-    def beam(self, bmaj, bmin, bpa):
-        self._beam = CleanBeam(bmaj / abs(self.pixsize[0]),
-                               bmin / abs(self.pixsize[0]), bpa, self.imsize)
+    def beam(self, beam_pars):
+        """
+        Set beam parameters.
+
+        :param beam_pars:
+            Iterable of bmaj [pix], bmin [pix], bpa [deg].
+        """
+        self._beam = CleanBeam(beam_pars[0] / abs(self.pixsize[0]),
+                               beam_pars[1] / abs(self.pixsize[0]),
+                               beam_pars[2], self.imsize)
 
     @property
     def image(self):
         """
         Shorthand for CLEAN image.
         """
-        return signal.fftconvolve(self._image, self.beam.image, mode='same')
+        return signal.fftconvolve(self._image, self.beam, mode='same')
 
     @property
     def cc(self):
@@ -311,6 +423,29 @@ class CleanImage(Image):
     @property
     def residuals(self):
         return self._residuals.image
+
+
+    def plot(self, to_plot, blc=None, trc=None, clim=None, cmap=None,
+             abs_levels=None, rel_levels=None, min_abs_level=None,
+             min_rel_level=None, factor=2., plot_color=False):
+        """
+        Plot image.
+
+        :param to_plot:
+            "cc", "ccr", "ccrr" - to plot only CC, CC Restored with beam or CC
+            Restored with Residuals added.
+
+        :note:
+            ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
+            converted to python-like zero-indexing.
+
+        """
+        plot_dict = {"cc": self._image, "ccr": self.image, "ccrr":
+            self.image_w_residuals}
+        plot(plot_dict[to_plot], x=self.x, y=self.y, blc=blc, trc=trc,
+             clim=clim, cmap=cmap, abs_levels=abs_levels, rel_levels=rel_levels,
+             min_abs_level=min_abs_level, min_rel_level=min_rel_level,
+             factor=factor, plot_color=plot_color)
 
 
 #class MemImage(Image, Model):

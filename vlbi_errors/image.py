@@ -112,6 +112,11 @@ def plot(image, x=None, y=None, blc=None, trc=None, clim=None, cmap=None,
         #         # plt.yticks(np.linspace(0, len(dm_grid) - 10, 5, dtype=int),
         #         #            vint(dm_grid[np.linspace(0, len(dm_grid) - 10, 5,
         #         #            dtype=int)]))
+        # First find places where coordinates are ints and then label this
+        # places
+        # labelPositions = arange(len(D))
+        # newLabels = ['z','y','x','w','v','u','t','s','q','r']
+        # plt.xticks(labelPositions,newLabels)
         #     plt.xlabel("time steps")
         #     plt.ylabel("frequency ch. #")
         #     plt.title('Dynamical spectra')
@@ -432,8 +437,8 @@ class CleanImage(Image):
         Plot image.
 
         :param to_plot:
-            "cc", "ccr", "ccrr" - to plot only CC, CC Restored with beam or CC
-            Restored with Residuals added.
+            "cc", "ccr", "ccrr", "r" or "beam" - to plot only CC, CC Restored
+            with beam, CC Restored with Residuals added, Residuals only or Beam.
 
         :note:
             ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
@@ -441,7 +446,8 @@ class CleanImage(Image):
 
         """
         plot_dict = {"cc": self._image, "ccr": self.image, "ccrr":
-            self.image_w_residuals}
+            self.image_w_residuals, "r": self._residuals.image,
+                     "beam": self.beam}
         plot(plot_dict[to_plot], x=self.x, y=self.y, blc=blc, trc=trc,
              clim=clim, cmap=cmap, abs_levels=abs_levels, rel_levels=rel_levels,
              min_abs_level=min_abs_level, min_rel_level=min_rel_level,

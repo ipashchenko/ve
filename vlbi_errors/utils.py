@@ -485,7 +485,7 @@ def gaussianBeam(size_x, bmaj, bmin, bpa, size_y=None):
         Numpy.ndarray of size (``size_x``, ``size_y``,).
     """
     size_y = size_y or size_x
-    x, y = np.mgrid[-size_x: size_x + 1, -size_y: size_y + 1]
+    x, y = np.mgrid[-size_x: size_x, -size_y: size_y]
     # Constructing parameters of gaussian from ``bmaj``, ``bmin``, ``bpa``.
     a0 = 1. / (0.5 * bmaj) ** 2.
     c0 = 1. / (0.5 * bmin) ** 2.

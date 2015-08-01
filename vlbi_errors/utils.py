@@ -463,6 +463,7 @@ def time_dhms_to_frac(dhmses):
     return fractions
 
 
+# FIXME: Seems that size of beam here is not the same as in difmap.
 def gaussianBeam(size_x, bmaj, bmin, bpa, size_y=None):
     """
     Generate and return a 2D Gaussian function
@@ -488,6 +489,8 @@ def gaussianBeam(size_x, bmaj, bmin, bpa, size_y=None):
     # Constructing parameters of gaussian from ``bmaj``, ``bmin``, ``bpa``.
     a0 = 1. / (0.5 * bmaj) ** 2.
     c0 = 1. / (0.5 * bmin) ** 2.
+    # This brings PA to VLBI-convention (- = from North counter-clockwise)
+    bpa = -bpa
     theta = math.pi * (bpa + 90.) / 180.
     a = math.log(2) * (a0 * math.cos(theta) ** 2. +
                        c0 * math.sin(theta) ** 2.)
@@ -530,6 +533,8 @@ def gaussian(height, x0, y0, bmaj, e, bpa):
 
     """
     bmin = bmaj * e
+    # This brings PA to VLBI-convention (- = from NOrth counterclocwise)
+    bpa = -bpa
     a = math.cos(bpa) ** 2. / (2. * bmaj ** 2.) + \
         math.sin(bpa) ** 2. / (2. * bmin ** 2.)
     b = math.sin(2. * bpa) / (2. * bmaj ** 2.) - \

@@ -1,5 +1,5 @@
 from model import CCModel
-from utils import degree_to_mas
+from utils import degree_to_mas, degree_to_rad
 from components import DeltaComponent
 from data_io import Groups, IDI, BinTable, get_hdu, get_fits_image_info
 from uv_data import UVData
@@ -41,7 +41,6 @@ def create_ccmodel_from_fits_file(fname, stokes='I', ver=1):
     return ccmodel
 
 
-# TESTED w Petrov's data
 def create_clean_image_from_fits_file(fname, stokes='I', ver=1):
     """
     Create instance of ``CleanImage`` from FITS-file of CLEAN image.
@@ -54,7 +53,8 @@ def create_clean_image_from_fits_file(fname, stokes='I', ver=1):
         get_fits_image_info(fname)
     if bmaj is None:
         raise Exception("Can't find Beam info!")
-    ccimage = CleanImage(imsize, pixref, pixrefval, pixsize, bmaj, bmin, bpa)
+    ccimage = CleanImage(imsize, pixref, pixrefval, pixsize, bmaj, bmin,
+                         bpa / degree_to_rad)
     ccimage.add_model(ccmodel)
     image = create_image_from_fits_file(fname)
     ccimage._residuals = image - ccimage

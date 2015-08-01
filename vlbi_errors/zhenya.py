@@ -439,3 +439,4 @@ if __name__ == '__main__':
     put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=base_path,
                          ext="fits", im_files_path=im_data_dir)
     generate_boot_data(sources, epochs, bands, stokes, base_path=base_path)
+    clean_boot_data(sources, epochs, bands, stokes, base_path=base_path)

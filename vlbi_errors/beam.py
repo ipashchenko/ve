@@ -39,7 +39,7 @@ class DirtyBeam(Beam):
         pass
 
 
-# TODO: bmaj & bmin must be in pixels!!!
+# TODO: bmaj & bmin must be in pixels and bpa - in degrees!!!
 class CleanBeam(Beam):
     """
     Class that represents central part of point spread function.
@@ -49,5 +49,5 @@ class CleanBeam(Beam):
         self.bmin = bmin
         self.bpa = bpa
         self.size = size
-        self.image = gaussianBeam(self.size[0], self.bmaj, self.bmin, self.bpa,
-                                  self.size[1])
+        self.image = gaussianBeam(self.size[0], self.bmaj, self.bmin,
+                                  self.bpa + 90., self.size[1])

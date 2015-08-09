@@ -1,9 +1,12 @@
 import os
 
 
+# TODO: add ``shift`` argument, that shifts image before cleaning. It must be
+# more accurate to do this in difmap. Or add such method in ``UVData`` that
+# multiplies uv-data on exp(-1j * (u*x_shift + v*y_shift)).
 def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  path_to_script=None, mapsize_restore=None, beam_restore=None,
-                 outpath=None):
+                 outpath=None, shift=None):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
@@ -24,13 +27,16 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         (default: ``None``)
     :param mapsize_restore: (optional)
         Parameters of map for restoring CC (map size, pixel size). If
-        ``None`` then use ``mapsize_clean``. (default: ``None``)
+        ``None`` then use naitive. (default: ``None``)
     :param beam_restore: (optional)
         Beam parameter for restore map (bmaj, bmin, bpa). If ``None`` then use
         the same beam as in cleaning. (default: ``None``)
     :param outpath: (optional)
         Path to file with CCs. If ``None`` then use ``path``.
         (default: ``None``)
+    :param shift: (optional)
+        Iterable of 2 values - shifts in both directions [mas]. If ``None`` then
+        don't shift. (default: ``None``)
 
     """
     if path is None:
@@ -47,6 +53,8 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
 
     difmapout = open("difmap_commands", "w")
     difmapout.write("observe " + path + fname + "\n")
+    if shift is not None:
+        difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
     difmapout.write("mapsize " + str(mapsize_clean[0]) + ', ' +
                     str(mapsize_clean[1]) + "\n")
     if beam_restore:

@@ -357,7 +357,7 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                                                            'cc.fits')[3]
                             beam_restore = map_info[3]
                             mapsize_clean = (map_info[0][0],
-                                             map_info[-1][0] / mas_to_rad)
+                                             map_info[-3][0] / mas_to_rad)
                         clean_difmap(fname='boot_' + str(i + 1) + '.fits',
                                      outfname='cc_' + str(i + 1) + '.fits',
                                      stokes=stoke, mapsize_clean=mapsize_clean,

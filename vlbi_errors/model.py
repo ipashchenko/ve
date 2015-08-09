@@ -138,9 +138,8 @@ class Model(object):
         """
         # If we got fits-file then get parameters of image from it
         if fname:
-            # (512, 512,), (256, 257,), (rad, rad,), (rad, rad, rad), (rad, rad,)
-            imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize =\
-                get_fits_image_info(fname)
+            imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes,\
+                freq = get_fits_image_info(fname)
         if imsize is None or pixref is None or pixsize is None:
             raise Exception("Need image parameters to create Image instance!")
 

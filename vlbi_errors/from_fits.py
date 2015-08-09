@@ -49,7 +49,7 @@ def create_clean_image_from_fits_file(fname, stokes='I', ver=1):
         Instance of ``CleanImage``.
     """
     ccmodel = create_ccmodel_from_fits_file(fname, stokes=stokes, ver=ver)
-    imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize =\
+    imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes_, freq =\
         get_fits_image_info(fname)
     if bmaj is None:
         raise Exception("Can't find Beam info!")
@@ -70,7 +70,7 @@ def create_image_from_fits_file(fname):
     :return:
         Instance of ``CleanImage``.
     """
-    imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize =\
+    imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes, freq =\
         get_fits_image_info(fname)
     image = Image(imsize, pixref, pixrefval, pixsize)
     # FIXME: THIS IS BAD!!!

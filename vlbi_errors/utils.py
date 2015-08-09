@@ -16,6 +16,31 @@ degree_to_rad = 0.01745329
 degree_to_mas = 36. * 10 ** 5
 
 
+stokes_dict = {-4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR', 1: 'I', 2: 'Q', 3: 'U',
+               4: 'V'}
+
+
+def find_card_from_header(header, value=None, keyword=None,
+                          comment_contens=None):
+    if comment_contens is not None:
+        search = [card for card in header.cards if comment_contens in
+                  card.comment]
+    else:
+        search = header.cards
+
+    if value is not None and keyword is None:
+        result = [card for card in search if card.value==value]
+    elif value is None and keyword is not None:
+        result = [card for card in search if card.keyword==keyword]
+    elif value is not None and keyword is not None:
+        result = [card for card in search if (card.keyword==keyword and
+                  card.value==value)]
+    else:
+        result = search
+
+    return result
+
+
 class AbsentHduExtensionError(Exception):
     pass
 

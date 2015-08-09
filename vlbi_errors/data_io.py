@@ -13,6 +13,8 @@ from utils import index_of
 from utils import _to_one_ndarray
 from utils import build_dtype_for_bintable_data
 from utils import degree_to_rad
+from utils import stokes_dict
+from utils import find_card_from_header
 
 
 vec_int = np.vectorize(np.int)
@@ -33,8 +35,25 @@ def get_image(image_file, BLC=(0, 0), TRC=(0, 0)):
     return image
 
 
-# TODO: In Denise data on 1038 beam info only in history:)
 def get_fits_image_info(fname):
+    """
+    Returns fits-image information.
+
+    :param fname:
+        Fits-file name.
+    :return:
+        imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes, freq -
+        where
+        ``imsize`` [pix, pix] - size of image,
+        ``pixref`` [pix, pix] - reference pixel numbers,
+        ``pixrefval`` [rad, rad] - value of coordinates at reference pixels,
+        ``(bmaj, bmin, bpa,)`` [rad, rad, rad] - beam parameters (if any). If no
+        beam parameters found => ``(None, None, None,)``,
+        ``pixsize`` [rad, rad]- size of pixel dimensions,
+        ``stokes`` (I, Q, U or V) - stokes parameter that image does describe,
+        ``freq`` [Hz] - sky frequency.
+
+    """
     bmaj, bmin, bpa = None, None, None
     header = get_hdu(fname).header
     imsize = (header['NAXIS1'], header['NAXIS2'],)
@@ -43,6 +62,17 @@ def get_fits_image_info(fname):
                  header['CRVAL2'] * degree_to_rad,)
     pixsize = (header['CDELT1'] * degree_to_rad,
                header['CDELT2'] * degree_to_rad,)
+    # Find stokes info
+    stokes_card = find_card_from_header(header, value='STOKES')[0]
+    print stokes_card
+    indx = stokes_card.keyword[-1]
+    stokes = stokes_dict[header['CRVAL' + indx]]
+    # Find frequency info
+    freq_card = find_card_from_header(header, value='FREQ')[0]
+    print freq_card
+    indx = freq_card.keyword[-1]
+    freq = header['CRVAL' + indx]
+
     try:
         # BEAM info in ``AIPS CG`` table
         data = get_hdu(fname, extname='AIPS CG').data
@@ -66,7 +96,7 @@ def get_fits_image_info(fname):
                     bpa = float(line.split()[7]) * degree_to_rad
         if not (bmaj and bmin and bpa):
             warnings.warn("Beam info absent!")
-    return imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize
+    return imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes, freq
 
 
 def get_hdu(fname, extname=None, ver=1):

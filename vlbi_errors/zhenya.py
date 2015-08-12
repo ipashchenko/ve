@@ -1,12 +1,15 @@
+import copy
 import glob
 import os
 import shutil
 from from_fits import (create_uvdata_from_fits_file,
                        create_ccmodel_from_fits_file,
+                       create_clean_image_from_fits_file,
                        get_fits_image_info)
 from bootstrap import CleanBootstrap
 from spydiff import clean_difmap
-from utils import mas_to_rad
+from utils import mas_to_rad, degree_to_rad
+from image import CleanImage
 
 # TODO: We need to get RM map and it's uncertainty for each source and epoch.
 # Input: calibrated visibilities, CLEAN models in "naitive" resolution.
@@ -44,26 +47,6 @@ sources = ['0148+274',
            '2320+506']
 
 stokes = ['i', 'q', 'u']
-maps = ['ALPHA', 'IPOL', 'FPOL', 'RM']
-
-
-def alpha(stokes_dict):
-    pass
-
-
-def ipol(stokes_dict):
-    pass
-
-
-def fpol(stokes_dicts):
-    pass
-
-
-def rotm(stokes_dicts):
-    pass
-
-
-maps_functions = {'ALPHA': alpha, 'IPOL': ipol, 'FPOL': fpol, 'RM': rotm}
 
 
 def im_fits_fname(source, band, epoch, stokes, ext='fits'):
@@ -278,7 +261,7 @@ def generate_boot_data(sources, epochs, bands, stokes, base_path=None):
                     models.append(ccmodel)
                 boot = CleanBootstrap(models, uvdata)
                 os.chdir(uv_path)
-                boot.run(n=10, outname=['boot', ''])
+                boot.run(n=10, outname=['boot', '.fits'])
     os.chdir(curdir)
 
 
@@ -415,12 +398,35 @@ def create_maps_from_boot_images(sources, epochs, bands, stokes,
                         map_fname='cc_' + str(i + 1) + '.fits',
                         stokes_dict.update({stoke: map_path + map_fname})
                     stokes_dicts.append(stokes_dict)
-                    for map_ in maps:
-                        outpath = im_fits_path(source, band, epoch, map_,
-                                               base_path=base_path)
-                        outname = 'boot_' + str(i + 1) + '.fits'
-                        maps_functions[map_](stokes_dicts, outpath=outpath,
-                                             outname=outname)
+
+
+# FIXME: It isn't ``Unix way``. I should get parameters of map using one
+# function and use it for cleaning in another function.
+def to_other_freq(map_fname, uv_fname, outfname, shift=None, stokes='I'):
+    """
+    Function that cleans some uv-data fits-file on map with``mapsize``
+    parameter of some user-specified map fits-file and restore CCs with the beam
+    of that user-specified map fits-file.
+    :param map_fname:
+        Fits file with map which parameters will be used for cleaning.
+    :param uv_fname:
+    :param outfname:
+    :param stokes:
+    :return:
+    """
+    map_info = get_fits_image_info(map_fname)
+    # Create in difmap clean map (fits-file) with cleaned ``uv_fname1`` restored
+    # with beam of map2 and parameters of map2
+    beam_restore = map_info[3]
+    mapsize_clean = (map_info[0][0],
+                     map_info[-3][0] / mas_to_rad)
+    clean_difmap(uv_fname, outfname, stokes, mapsize_clean, path=None,
+                 path_to_script=None, mapsize_restore=None, shift=shift,
+                 beam_restore=beam_restore, outpath=None)
+
+
+def calc_shift():
+    pass
 
 
 if __name__ == '__main__':

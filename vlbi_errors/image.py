@@ -487,9 +487,3 @@ class CleanImage(Image):
 #    Class that represents image made using MEM algorithm.
 #    """
 #    pass
-
-
-if __name__ == '__main__':
-    from from_fits import create_clean_image_from_fits_file
-    ccimage = create_clean_image_from_fits_file('/home/ilya/code/vlbi_errors/vlbi_errors/cc.fits')
-    print

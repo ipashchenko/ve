@@ -3,41 +3,7 @@ import glob
 from from_fits import (create_image_from_fits_file,
                        create_clean_image_from_fits_file)
 from utils import (mask_region, mas_to_rad, hdi_of_mcmc)
-from data_io import get_fits_image_info
 from image import BasicImage, CleanImage
-
-# TODO: Should work with any ``BasicImage`` subclass instance
-# TODO: Use fixed ``alpha_low = 2.5``, ``nu_cut``, ``S_cut`` & ``alpha_high``
-# parameters. S_nu ~ nu ** alpha
-def alpha(add_residuals=True, *fnames):
-    if len(fnames) < 2:
-        raise Exception("Need at least 2 images")
-    mapsizes = list()
-    stokes = list()
-    beams = list()
-    freqs = list()
-    image_dict = dict()
-    for fname in fnames:
-        map_info = get_fits_image_info(fname)
-        beam = map_info[3]
-        beams.append(beam)
-        mapsize = (map_info[0][0], map_info[-3][0] / mas_to_rad)
-        mapsizes.append(mapsize)
-        freq = map_info[-1]
-        freqs.append(freq)
-        stoke = map_info[-2]
-        stokes.append(stoke)
-        # Assertions on consistency
-        assert (len(set(beams)) == 1)
-        assert (len(set(mapsizes)) == 1)
-        assert (len(set(stokes)) == 1)
-        assert (len(set(freqs)) == len(fnames))
-        ccimage = create_clean_image_from_fits_file(fname, stokes=stoke)
-        if add_residuals:
-            image = ccimage.image_w_residuals
-        else:
-            image = ccimage.image
-        image_dict.update({freq: image})
 
 
 class Images(object):
@@ -59,16 +25,18 @@ class Images(object):
     # TODO: Implement option for stacking only region(s) of images
     # TODO: Sort somehow by Stokes parameters & frequencies in methods that
     # need it (getting RM, apec. index maps)
-    def create_cube(self):
-        return np.dstack(tuple(image.image for image in self._images))
+    def _create_cube(self):
+        self._cube = np.dstack(tuple(image.image for image in self._images))
 
     def compare_images_by_param(self, param):
-        if param not in CleanImage.__dict__:
-            raise Exception("No", param, " attribute at Image instances!")
+        if param not in self._images[0].__dict__:
+            raise Exception("No " + param + " attribute at Image instance to"
+                                           " compare!")
         attr_values = list()
         for image in self._images:
             attr_values.append(image.__getattribute__(param))
-            assert(len(set(attr_values)) == 1, "Check ", param, " for ", image)
+            assert len(set(attr_values)) == 1, ("Check " + param + " for " +
+                                                image)
 
     def add_from_fits(self, fnames=None, wildcard=None):
         """
@@ -87,10 +55,11 @@ class Images(object):
 
         for fname in fnames:
             # FIXME: When use clean_image & when just image?
+            print "Processing ", fname
             image = create_image_from_fits_file(fname)
             if self._images:
-                assert(image == self._images[-1],
-                       "Adding image with different parameters!")
+                assert image == self._images[-1], "Adding image with different" \
+                                                  "parameters!"
             self._images.append(image)
 
     def create_error_map(self):
@@ -105,10 +74,14 @@ class Images(object):
         self.compare_images_by_param("stokes")
         self.compare_images_by_param("freq")
 
+        # Now can safely create cube
+        self._create_cube()
+
         img = self._images[0]
-        hdis = np.zeros(np.shape(self._cube[:,:,0]))
-        for (x,y), value in np.ndenumerate(hdis):
-            hdis[x,y] = hdi_of_mcmc(self._cube[x,y,:])
+        hdis = np.zeros(np.shape(self._cube[:, :, 0]))
+        for (x, y), value in np.ndenumerate(hdis):
+            hdi = hdi_of_mcmc(self._cube[x, y, :], cred_mass=0.68)
+            hdis[x, y] = hdi[1] - hdi[0]
         # Create basic image and add map of error
         image = BasicImage(imsize=img.imsize, pixref=img.pixref,
                            pixrefval=img.pixrefval, pixsize=img.pixsize)
@@ -131,4 +104,7 @@ class Images(object):
 
 
 if __name__ == '__main__':
-
+    boot_dir = '/home/ilya/code/vlbi_errors/data/zhenya/ccbots/'
+    images = Images()
+    images.add_from_fits(wildcard=boot_dir + "cc_*.fits")
+    error_map = images.create_error_map()

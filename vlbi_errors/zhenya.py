@@ -247,15 +247,15 @@ def generate_boot_data(sources, epochs, bands, stokes, base_path=None):
                 if not os.path.isfile(uv_fname):
                     print "...skipping absent file ", uv_fname
                     continue
-                print "  Using uv-file ", uv_fname
+                print "  Using uv-file (data): ", uv_fname
                 uvdata = create_uvdata_from_fits_file(uv_fname)
                 models = list()
                 for stoke in stokes:
-                    print "  working with stokes parameter ", stoke
+                    print "  Adding model with stokes parameter ", stoke
                     map_path = im_fits_path(source, band, epoch, stoke,
                                             base_path=base_path)
                     map_fname = map_path + 'cc.fits'
-                    print "  Using CC-model file ", map_fname
+                    print "  from CC-model file ", map_fname
                     ccmodel = create_ccmodel_from_fits_file(map_fname,
                                                             stokes=stoke.upper())
                     models.append(ccmodel)
@@ -299,10 +299,6 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
         base_path = os.getcwd()
     elif not base_path.endswith("/"):
         base_path += "/"
-    if path_to_script is None:
-        path_to_script = os.getcwd()
-    elif not path_to_script.endswith("/"):
-        path_to_script += "/"
 
     stokes = list(stokes)
     # Now ``I`` goes first
@@ -337,7 +333,7 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                         # lowest frequency band
                         if beam_restore is None:
                             map_info = get_fits_image_info(map_path +
-                                                           'cc.fits')[3]
+                                                           'cc.fits')
                             beam_restore = map_info[3]
                             mapsize_clean = (map_info[0][0],
                                              map_info[-3][0] / mas_to_rad)
@@ -438,6 +434,7 @@ if __name__ == '__main__':
     # im_data_dir = '/home/ilya/code/vlbi_errors/data/zhenya/clean_images/'
     # Path to project's root directory
     base_path = '/home/ilya/code/vlbi_errors/vlbi_errors/test/'
+    path_to_script = '/home/ilya/code/vlbi_errors/data/zhenya/clean/final_clean_nw'
 
     create_dirtree(sources, epochs, bands, stokes, base_path=base_path)
     put_uv_files_to_dirs(sources, epochs, bands, base_path=base_path,
@@ -446,3 +443,5 @@ if __name__ == '__main__':
                          ext="fits", im_files_path=im_data_dir)
     generate_boot_data(sources, epochs, bands, stokes, base_path=base_path)
     clean_boot_data(sources, epochs, bands, stokes, base_path=base_path)
+    clean_boot_data(sources, epochs, bands, stokes, base_path=base_path,
+                    path_to_script=path_to_script)

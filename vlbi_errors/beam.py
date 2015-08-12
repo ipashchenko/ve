@@ -4,7 +4,7 @@ from utils import gaussianBeam
 
 
 # * Resolution could depend on position in map or frequency. Should i associate
-# instance of ``Beam`` with each pixel in ``Image`` instance in such cases?
+# instance of ``Beam`` with each pixel in ``BasicImage`` instance in such cases?
 # * Beam is connected with ``CCModel`` instance naturally by deconvolution
 # process? NO! Delta functions can be used in modelling without CLEAN!
 def create_clean_beam_from_fits(fname):
@@ -52,3 +52,16 @@ class CleanBeam(Beam):
         self.size = size
         self.image = gaussianBeam(self.size[0], self.bmaj, self.bmin,
                                   self.bpa + 90., self.size[1])
+    def __eq__(self, other):
+        """
+        Compares current instance of ``CleanBeam`` class with other instance.
+        """
+        return (self.bmja == other.bmaj and self.bmin == other.bmin and
+                self.bpa == other.bpa)
+
+    def __ne__(self, other):
+        """
+        Compares current instance of ``CleanBeam`` class with other instance.
+        """
+        return (self.bmja != other.bmaj or self.bmin != other.bmin or
+                self.bpa != other.bpa)

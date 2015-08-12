@@ -2,7 +2,7 @@ import math
 import numpy as np
 import scipy as sp
 from utils import degree_to_mas, gaussianBeam
-from image import Image, CleanImage
+from image import BasicImage, CleanImage
 from data_io import BinTable, get_fits_image_info
 # FIXME: problems whith this import
 # from from_fits import create_uvdata_from_fits_file
@@ -15,7 +15,7 @@ except ImportError:
     pylab = None
 
 
-# TODO: ``Model`` subclasses can't be convolved with anything! It is ``Image``
+# TODO: ``Model`` subclasses can't be convolved with anything! It is ``BasicImage``
 # that can be convolved.
 # TODO: Keep components ordered by what?
 class Model(object):
@@ -143,9 +143,9 @@ class Model(object):
         if imsize is None or pixref is None or pixsize is None:
             raise Exception("Need image parameters to create Image instance!")
 
-        # First create ``Image`` instance
+        # First create ``BasicImage`` instance
         if bpa is None:
-            image = Image(imsize=imsize, pixref=pixref, pixrefval=pixrefval,
+            image = BasicImage(imsize=imsize, pixref=pixref, pixrefval=pixrefval,
                           pixsize=pixsize)
         else:
             image = CleanImage(imsize=imsize, pixref=pixref,

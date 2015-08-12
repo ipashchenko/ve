@@ -366,7 +366,7 @@ class DeltaComponent(Component):
 
 
 # TODO: I need to keep coordinates of pixels for FT! Should constructor accept
-# ``Image`` instance?
+# ``BasicImage`` instance?
 class MemComponent(Component):
     """
     Class that implements MEM algorithm component (2D-array of flux values).

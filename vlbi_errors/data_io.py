@@ -64,12 +64,10 @@ def get_fits_image_info(fname):
                header['CDELT2'] * degree_to_rad,)
     # Find stokes info
     stokes_card = find_card_from_header(header, value='STOKES')[0]
-    print stokes_card
     indx = stokes_card.keyword[-1]
     stokes = stokes_dict[header['CRVAL' + indx]]
     # Find frequency info
     freq_card = find_card_from_header(header, value='FREQ')[0]
-    print freq_card
     indx = freq_card.keyword[-1]
     freq = header['CRVAL' + indx]
 

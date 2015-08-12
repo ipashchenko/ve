@@ -177,25 +177,19 @@ def change_shape(_array, _dict1, _dict2):
     array = _array.copy()
 
     for key in dict1:
-        print "check " + str(key)
         if key not in dict2:
             # Don't alter position of this dimension directly (but it could
             # change it's position because of other dimensions).
             pass
         else:
             if not dict1[key] == dict2[key]:
-                print "positin of axis " + str(key) + " has changed"
-                print "from " + str(dict1[key]) + " to " + str(dict2[key])
                 array = np.swapaxes(array, dict1[key], dict2[key])
                 # Updated values for 2 changed keys in dict1
                 dict1[key] = dict2[key]
                 for item in dict1.items():
                     # If found other key in dict1 with the same value
                     if (item[1] == dict2[key]) and (item[0] != key):
-                        print "Found item : " + str(item)
                         dict1[item[0]] = dict1[key]
-                print "Updated dict1 is :"
-                print dict1
 
     # Assert that altered dict1 (it's part with shapes from dict2) coincide
     # with dict2

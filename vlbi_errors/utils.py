@@ -5,6 +5,13 @@ import numpy as np
 import string
 from math import floor
 from scipy import optimize
+try:
+    # Python 3 moved reduce to the functools module
+    from functools import reduce
+except ImportError:
+    # Python 2 reduce is a built-in
+    pass
+
 
 
 vcomplex = np.vectorize(complex)
@@ -776,3 +783,15 @@ def hdi_of_mcmc(sample_vec, cred_mass=0.95):
     hdi_max = sorted_pts[min_idx + ci_idx_inc]
 
     return hdi_min, hdi_max
+
+
+def getFromDict(dataDict, mapList):
+    return reduce(lambda d, k: d[k], mapList, dataDict)
+
+
+def setInDict(dataDict, mapList, value):
+    getFromDict(dataDict, mapList[:-1])[mapList[-1]] = value
+
+
+def delInDict(dataDict, mapList):
+    del getFromDict(dataDict, mapList[:-1])[mapList[-1]]

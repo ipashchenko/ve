@@ -50,7 +50,6 @@ def create_clean_image_from_fits_file(fname, ver=1):
     """
     imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes, freq = \
         get_fits_image_info(fname)
-    print imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes, freq
     ccmodel = create_ccmodel_from_fits_file(fname, stokes=stokes, ver=ver)
     if bmaj is None:
         raise Exception("Can't find Beam info!")

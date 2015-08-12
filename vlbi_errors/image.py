@@ -132,11 +132,13 @@ class BasicImage(object):
     def __init__(self, imsize=None, pixref=None, pixrefval=None, pixsize=None):
         self.imsize = imsize
         self.pixsize = pixsize
+        self.pixref = pixref
         self.dx, self.dy = pixsize
         self.x_c, self.y_c = pixref
         if pixrefval is None:
             pixrefval = (0., 0.,)
         self.x_c_val, self.y_c_val = pixrefval
+        self.pixrefval = pixrefval
         # Create flux array
         self._image = np.zeros(self.imsize, dtype=float)
         # Create coordinate arrays
@@ -160,10 +162,14 @@ class BasicImage(object):
     # TODO: Am i need it? Should i compare instances before setting?
     @image.setter
     def image(self, image):
-        if self == image:
-            self._image = image.image.copy()
+        if isinstance(image, BasicImage):
+            if self == image:
+                self._image = image.image.copy()
+            else:
+                raise Exception("Images have incompatible parameters!")
+        # If ``image`` is array-like
         else:
-            raise Exception("Images have incompatible parameters!")
+            self._image = np.atleast_2d(image).copy()
 
     def __eq__(self, other):
         """

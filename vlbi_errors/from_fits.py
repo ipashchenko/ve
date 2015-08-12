@@ -41,20 +41,22 @@ def create_ccmodel_from_fits_file(fname, stokes='I', ver=1):
     return ccmodel
 
 
-def create_clean_image_from_fits_file(fname, stokes='I', ver=1):
+def create_clean_image_from_fits_file(fname, ver=1):
     """
     Create instance of ``CleanImage`` from FITS-file of CLEAN image.
     :param fname:
     :return:
         Instance of ``CleanImage``.
     """
-    ccmodel = create_ccmodel_from_fits_file(fname, stokes=stokes, ver=ver)
-    imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes_, freq =\
+    imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes, freq = \
         get_fits_image_info(fname)
+    print imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes, freq
+    ccmodel = create_ccmodel_from_fits_file(fname, stokes=stokes, ver=ver)
     if bmaj is None:
         raise Exception("Can't find Beam info!")
-    ccimage = CleanImage(imsize, pixref, pixrefval, pixsize, bmaj, bmin,
-                         bpa / degree_to_rad)
+    ccimage = CleanImage(imsize=imsize, pixref=pixref, pixrefval=pixrefval,
+                         pixsize=pixsize, bmaj=bmaj, bmin=bmin,
+                         bpa=bpa/degree_to_rad, stokes=stokes, freq=freq)
     ccimage.add_model(ccmodel)
     image = create_image_from_fits_file(fname)
     ccimage._residuals = image - ccimage
@@ -72,8 +74,10 @@ def create_image_from_fits_file(fname):
     """
     imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes, freq =\
         get_fits_image_info(fname)
-    image = Image(imsize, pixref, pixrefval, pixsize)
+    image = Image(imsize, pixref, pixrefval, pixsize, stokes, freq)
     # FIXME: THIS IS BAD!!!
     image_hdu = get_hdu(fname)
+    # FIXME: Check that orientation coincides with other ways of ``Image``
+    # instance construction
     image._image = image_hdu.data.squeeze()
     return image

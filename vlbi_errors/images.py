@@ -15,6 +15,16 @@ class Images(object):
         stacked - that is images with equal ``imsize``, ``pixsize``. It is
         responsibility of user to supply it images that have same resolution
         (``CleanImage`` instances), Stokes parameters, etc.
+
+        Use cases:
+            - create error map from images of bootstrapped uv-data (single
+            Stokes parameter, single frequency)
+            - create map of complex polarization (I, Q & U Stokes parameters,
+            single frequency)
+            - create map of spectral index (I Stokes parameter, several
+            frequencies)
+            - create rotation measure map (Q & U Stokes parameters, several
+            frequencies)
     """
     def __init__(self):
         # Container of ``Image`` instances
@@ -29,12 +39,14 @@ class Images(object):
         self._cube = np.dstack(tuple(image.image for image in self._images))
 
     def compare_images_by_param(self, param):
-        if param not in self._images[0].__dict__:
-            raise Exception("No " + param + " attribute at Image instance to"
-                                           " compare!")
         attr_values = list()
         for image in self._images:
-            attr_values.append(image.__getattribute__(param))
+            try:
+                attr_values.append(image.__getattribute__(param))
+            except AttributeError:
+                raise Exception("No " + param + " attribute at Image instance"
+                                                " to compare!")
+
             assert len(set(attr_values)) == 1, ("Check " + param + " for " +
                                                 image)
 
@@ -58,8 +70,8 @@ class Images(object):
             print "Processing ", fname
             image = create_image_from_fits_file(fname)
             if self._images:
-                assert image == self._images[-1], "Adding image with different" \
-                                                  "parameters!"
+                assert image == self._images[-1], "Adding image with " \
+                                                  "different parameters!"
             self._images.append(image)
 
     def create_error_map(self):

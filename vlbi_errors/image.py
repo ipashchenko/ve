@@ -125,7 +125,7 @@ def plot(image, x=None, y=None, blc=None, trc=None, clim=None, cmap=None,
         #     plt.show()
 
 
-class Image(object):
+class BasicImage(object):
     """
     Class that represents images.
     """
@@ -189,7 +189,7 @@ class Image(object):
         Multiply current instance of ``Image`` class with other instance or
         some number.
         """
-        if isinstance(other, Image):
+        if isinstance(other, BasicImage):
             self.image *= other.image
         else:
             self.image *= other
@@ -200,7 +200,7 @@ class Image(object):
         Substruct from current instance of ``Image`` class other instance or
         some number.
         """
-        if isinstance(other, Image):
+        if isinstance(other, BasicImage):
             self._image -= other.image
         else:
             self._image -= other
@@ -211,7 +211,7 @@ class Image(object):
         Divide current instance of ``Image`` class on other instance or some
         number.
         """
-        if isinstance(other, Image):
+        if isinstance(other, BasicImage):
             self.image /= other.image
         else:
             self.image /= other
@@ -227,9 +227,11 @@ class Image(object):
     def add_component(self, component):
         component.add_to_image(self)
 
+    # TODO: Should i compare stokes of ``Image`` and ``Model`` instances?
     def add_model(self, model):
         model.add_to_image(self)
 
+    # TODO: Implement Rayleigh (Rice) distributed noise for stokes I
     def add_noise(self, std, df=None):
         size = self.imsize[0] * self.imsize[1]
         if df is None:
@@ -366,23 +368,49 @@ class Image(object):
         #     plt.show()
 
 
-# FIXME: THIS DOESN't KEEP RESIDUALS! ONLY CCs! Do i need them here? Usecases?
-# It is just visualization of CC model - don't need residuals here.
-# Residuals give insight on fidelity of the CC model.
-# Residuals should be distinct instance of ``Image`` class that can be added to
-# any other instance
+class Image(BasicImage):
+    """
+    Class that represents images obtained using radio interferometry.
+    """
+    def __init__(self, imsize=None, pixref=None, pixrefval=None, pixsize=None,
+                 stokes=None, freq=None):
+        super(Image, self).__init__(imsize=imsize, pixref=pixref,
+                                         pixrefval=pixrefval, pixsize=pixsize)
+        self.stokes = stokes
+        self.freq = freq
+
+
+
+# TODO: Add method ``shift`` that shifts image (CCs and residulas)
+# FIXME: Better shift in uv-domain
+# TODO: Should i extend ``__eq__`` by comparing beams too?
 class CleanImage(Image):
     """
     Class that represents image made using CLEAN algorithm.
     """
     def __init__(self, imsize=None, pixref=None, pixrefval=None, pixsize=None,
-                 bmaj=None, bmin=None, bpa=None):
-        super(CleanImage, self).__init__(imsize, pixref, pixrefval, pixsize)
+                 stokes=None, freq=None, bmaj=None, bmin=None, bpa=None):
+        super(CleanImage, self).__init__(imsize, pixref, pixrefval, pixsize,
+                                         stokes, freq)
         # TODO: What if pixsize has different sizes???
         # FIXME: Beam has image twice the imsize. It's bad for plotting...
         self._beam = CleanBeam(bmaj / abs(pixsize[0]), bmin / abs(pixsize[0]),
                               bpa, imsize)
-        self._residuals = Image(imsize, pixref, pixrefval, pixsize)
+        self._residuals = BasicImage(imsize, pixref, pixrefval, pixsize)
+
+    def __eq__(self, other):
+        """
+        Compares current instance of ``Image`` class with other instance.
+        """
+        return (super(CleanImage, self).__eq__(other) and
+                self._beam.__eq__(other._beam))
+
+    def __ne__(self, other):
+        """
+        Compares current instance of ``Image`` class with other instance.
+        """
+        return (super(CleanImage, self).__ne__(other) or
+                self._beam.__ne__(other._beam))
 
     @property
     def beam(self):
@@ -454,8 +482,14 @@ class CleanImage(Image):
              factor=factor, plot_color=plot_color)
 
 
-#class MemImage(Image, Model):
+#class MemImage(BasicImage, Model):
 #    """
 #    Class that represents image made using MEM algorithm.
 #    """
 #    pass
+
+
+if __name__ == '__main__':
+    from from_fits import create_clean_image_from_fits_file
+    ccimage = create_clean_image_from_fits_file('/home/ilya/code/vlbi_errors/vlbi_errors/cc.fits')
+    print

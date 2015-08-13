@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import glob
 from from_fits import (create_image_from_fits_file,
@@ -175,6 +176,7 @@ class Images(object):
     def rotm(self):
         pass
 
+
 def rotm_map(freqs, chis, s_chis):
     """
     Function that calculates Rotation Measure map.
@@ -187,19 +189,26 @@ def rotm_map(freqs, chis, s_chis):
         Iterable of 2D numpy arrays with polarization positional angles
         uncertainties estimates [rad].
     :return:
-        2D numpy array with values of Rotation Measure [rad/m**2].
+        Tuple of 2D numpy array with values of Rotation Measure [rad/m**2] and
+        2D numpy array with uncertainties map [rad/m**2].
+
     """
     chi_cube = np.dstack(chis)
     s_chi_cube = np.dstack(s_chis)
     rotm_array = np.zeros(np.shape(chi_cube[:, :, 0]))
-    for (x, y), value in np.ndenumerate(rotm_map):
-        rotm_array[x, y] = rotm(freqs, chi_cube[x, y, :], s_chi_cube[x, y, :])
-    return rotm_array
+    s_rotm_array = np.zeros(np.shape(chi_cube[:, :, 0]))
+    for (x, y), value in np.ndenumerate(rotm_array):
+        p, pcov = rotm(freqs, chi_cube[x, y, :], s_chi_cube[x, y, :])
+        rotm_array[x, y] = p[0]
+        s_rotm_array[x, y] = math.sqrt(pcov[0, 0])
+
+    return rotm_array, s_rotm_array
 
 
 def rotm(freqs, chis, s_chis, p0=None):
     """
     Function that calculates Rotation Measure.
+
     :param freqs:
         Iterable of frequencies [Hz].
     :param chis:
@@ -212,6 +221,7 @@ def rotm(freqs, chis, s_chis, p0=None):
     :return:
         Tuple of numpy array of (RM [rad/m**2], PA_zero_lambda [rad]) and 2D
         numpy array of covariance matrix.
+
     """
 
     if p0 is None:
@@ -219,7 +229,7 @@ def rotm(freqs, chis, s_chis, p0=None):
 
     p0 = np.array(p0)
     freqs = np.array(freqs)
-    chis = np.array(freqs)
+    chis = np.array(chis)
     s_chis = np.array(s_chis)
 
     def rm_model(p, freqs):

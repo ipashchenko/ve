@@ -6,6 +6,7 @@ from utils import (mask_region, mas_to_rad, hdi_of_mcmc, flatten,
                    nested_dict_itervalue)
 from image import BasicImage, CleanImage
 from collections import defaultdict
+from scipy.optimize import leastsq
 
 
 class Images(object):
@@ -173,6 +174,77 @@ class Images(object):
 
     def rotm(self):
         pass
+
+def rotm_map(freqs, chis, s_chis):
+    """
+    Function that calculates Rotation Measure map.
+
+    :param freqs:
+        Iterable of frequencies [Hz].
+    :param chis:
+        Iterable of 2D numpy arrays with polarization positional angles [rad].
+    :param s_chis:
+        Iterable of 2D numpy arrays with polarization positional angles
+        uncertainties estimates [rad].
+    :return:
+        2D numpy array with values of Rotation Measure [rad/m**2].
+    """
+    chi_cube = np.dstack(chis)
+    s_chi_cube = np.dstack(s_chis)
+    rotm_array = np.zeros(np.shape(chi_cube[:, :, 0]))
+    for (x, y), value in np.ndenumerate(rotm_map):
+        rotm_array[x, y] = rotm(freqs, chi_cube[x, y, :], s_chi_cube[x, y, :])
+    return rotm_array
+
+
+def rotm(freqs, chis, s_chis, p0=None):
+    """
+    Function that calculates Rotation Measure.
+    :param freqs:
+        Iterable of frequencies [Hz].
+    :param chis:
+        Iterable of polarization positional angles [rad].
+    :param s_chis:
+        Iterable of polarization positional angles uncertainties estimates
+        [rad].
+    :param p0:
+        Starting value for minimization (RM [rad/m**2], PA_zero_lambda [rad]).
+    :return:
+        Tuple of numpy array of (RM [rad/m**2], PA_zero_lambda [rad]) and 2D
+        numpy array of covariance matrix.
+    """
+
+    if p0 is None:
+        p0 = [0., 0.]
+
+    p0 = np.array(p0)
+    freqs = np.array(freqs)
+    chis = np.array(freqs)
+    s_chis = np.array(s_chis)
+
+    def rm_model(p, freqs):
+        lambdasq = (3. * 10 ** 8 / freqs) ** 2
+        return p[0] * lambdasq + p[1]
+
+    def weighted_residuals(p, freqs, chis, s_chis):
+        return (chis - rm_model(p, freqs)) / s_chis
+
+    func, args = weighted_residuals, (freqs, chis, s_chis,)
+    fit = leastsq(func, p0, args=args, full_output=True)
+    (p, pcov, infodict, errmsg, ier) = fit
+
+    if ier not in [1, 2, 3, 4]:
+        msg = "Optimal parameters not found: " + errmsg
+        raise RuntimeError(msg)
+
+    if (len(chis) > len(p0)) and pcov is not None:
+        # Residual variance
+        s_sq = (func(p, *args) ** 2.).sum() / (len(chis) - len(p0))
+        pcov *= s_sq
+    else:
+        pcov = np.nan
+
+    return p, pcov
 
 
 if __name__ == '__main__':

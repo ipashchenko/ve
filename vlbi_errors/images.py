@@ -162,17 +162,6 @@ class Images(object):
         image.image = hdis
         return image
 
-    def pixels_histogram(self, region=None):
-        """
-        :param region (optional):
-            Region where to calculate histograms. Or (blc[0], blc[1], trc[0],
-            trc[1],) or (center[0], center[1], r, None,).
-        :param sum (optional):
-            Calculate sum of pixels in region?
-        """
-        # First, create mask
-        pass
-
     def rotm(self):
         pass
 

@@ -252,6 +252,16 @@ def rotm(freqs, chis, s_chis, p0=None):
 
 if __name__ == '__main__':
     boot_dir = '/home/ilya/code/vlbi_errors/data/zhenya/ccbots/'
+    # Test making error-map
     images = Images()
     images.add_from_fits(wildcard=boot_dir + "cc_*.fits")
     error_map = images.create_error_map()
+    # Test rm-creating functions
+    chis = [np.zeros(100, dtype=float).reshape((10, 10)) + 2.3,
+            np.zeros(100, dtype=float).reshape((10, 10)) + 1.3,
+            np.zeros(100, dtype=float).reshape((10, 10)) + 0.8]
+    s_chis = [np.zeros(100, dtype=float).reshape((10, 10)) + 0.3,
+              np.zeros(100, dtype=float).reshape((10, 10)) + 0.3,
+              np.zeros(100, dtype=float).reshape((10, 10)) + 0.3]
+    freqs = np.array([1.4 * 10 ** 9, 5. * 10 ** 9, 8.4 * 10 ** 9])
+    rotm_array, s_rotm_array = rotm_map(freqs, chis, s_chis)

@@ -2,8 +2,10 @@ import numpy as np
 import glob
 from from_fits import (create_image_from_fits_file,
                        create_clean_image_from_fits_file)
-from utils import (mask_region, mas_to_rad, hdi_of_mcmc)
+from utils import (mask_region, mas_to_rad, hdi_of_mcmc, flatten,
+                   nested_dict_itervalue)
 from image import BasicImage, CleanImage
+from collections import defaultdict
 
 
 class Images(object):
@@ -28,19 +30,56 @@ class Images(object):
     """
     def __init__(self):
         # Container of ``Image`` instances
-        self._images = list()
+        self._images_dict = defaultdict(lambda: defaultdict(list))
+        # Pickleable solution:
+        # from functools import partial
+        # self._images_dict = defaultdict(partial(defaultdict, list))
         # Stacked images
-        self._cube = None
+        self._images_cube = None
 
-    # TODO: Implement option for stacking only region(s) of images
-    # TODO: Sort somehow by Stokes parameters & frequencies in methods that
-    # need it (getting RM, apec. index maps)
-    def _create_cube(self):
-        self._cube = np.dstack(tuple(image.image for image in self._images))
+    @property
+    def images(self):
+        return list(flatten(nested_dict_itervalue(self._images_dict)))
 
-    def compare_images_by_param(self, param):
+    @property
+    def freqs(self):
+        return self._images_dict.keys()
+
+    def stokeses(self, freq):
+        return self._images_dict[freq].keys()
+
+    def _create_cube(self, stokes=None, freq=None):
+        self._images_cube = np.dstack(tuple(image.image for image in
+                                      self._images_dict[freq][stokes]))
+
+    def compare_images_by_param(self, param, freq_stokes_dict=None):
+        """
+        Method that compares images in ``self._images_dict`` by value of
+        user-specified parameter.
+
+        :param param:
+            Parameter to compare.
+        :param freq_stokes_dict:
+            Dictionary with {frequency: Stokes parameters} which select what
+            images to compare.
+
+        """
+        # If no frequencies are supplied => use all available
+        if freq_stokes_dict is None:
+            freqs = self.freqs
+        else:
+            freqs = freq_stokes_dict.keys()
+        images = list()
+        for freq in freqs:
+            # If no Stokes parameters are supplied => use all available for each
+            # available frequency
+            if freq_stokes_dict is None:
+                stokeses = self._images_dict[freq].keys()
+            for stokes in stokeses:
+                images.extend(self._images_dict[freq][stokes])
+
         attr_values = list()
-        for image in self._images:
+        for image in images:
             try:
                 attr_values.append(image.__getattribute__(param))
             except AttributeError:
@@ -65,34 +104,55 @@ class Images(object):
         if len(fnames) < 2:
             raise Exception("Need at least 2 images")
 
+        # Here we check that images we are collecting are equal
+        previous_image = None
         for fname in fnames:
             # FIXME: When use clean_image & when just image?
             print "Processing ", fname
             image = create_image_from_fits_file(fname)
-            if self._images:
-                assert image == self._images[-1], "Adding image with " \
-                                                  "different parameters!"
-            self._images.append(image)
+            if previous_image:
+                assert image == previous_image, "Adding image with different " \
+                                                "basic parameters!"
+            freq = image.freq
+            stokes = image.stokes
+            self._images_dict[freq][stokes].append(image)
 
-    def create_error_map(self):
+    def create_error_map(self, freq=None, stokes=None, cred_mass=0.68):
         """
         Method that creates an error map for current collection of instances.
         """
         # Check that collection of images isn't empty
-        if not self._images:
+        if not self.images:
             raise Exception("First, add some images to instance!")
-        # Check additionally, that images has the same Stokes parameters and
-        # frequency
-        self.compare_images_by_param("stokes")
-        self.compare_images_by_param("freq")
+
+        # If no frequency is supplied => check that instance contains images of
+        # only one frequency and use it. Otherwise - raise Exception
+        if freq is None:
+            freqs = self.freqs
+            if len(freqs) > 1:
+                raise Exception("Choose what frequency images to use!")
+            else:
+                freq = freqs[0]
+        # If no Stokes parameter is specified => check that chosen frequency
+        # contains images of only one Stokes parameter. Otherwise - raise
+        # Exception
+        if stokes is None:
+            stokeses = self.stokeses(freq)
+            if len(stokeses) > 1:
+                raise Exception("Choose what Stokes parameter images to use!")
+            else:
+                stokes = stokeses[0]
 
         # Now can safely create cube
-        self._create_cube()
+        self._create_cube(stokes, freq)
 
-        img = self._images[0]
-        hdis = np.zeros(np.shape(self._cube[:, :, 0]))
+        # Get some image from stacked to use it parameters for saving output. It
+        # doesn't matter what image - they all are checked to have the same
+        # basic parameters
+        img = self._images_dict[freq][stokes][0]
+        hdis = np.zeros(np.shape(self._images_cube[:, :, 0]))
         for (x, y), value in np.ndenumerate(hdis):
-            hdi = hdi_of_mcmc(self._cube[x, y, :], cred_mass=0.68)
+            hdi = hdi_of_mcmc(self._images_cube[x, y, :], cred_mass=cred_mass)
             hdis[x, y] = hdi[1] - hdi[0]
         # Create basic image and add map of error
         image = BasicImage(imsize=img.imsize, pixref=img.pixref,

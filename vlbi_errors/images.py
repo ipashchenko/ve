@@ -182,6 +182,8 @@ def rotm_map(freqs, chis, s_chis):
         2D numpy array with uncertainties map [rad/m**2].
 
     """
+    assert len(freqs) == len(chis) == len(s_chis)
+
     chi_cube = np.dstack(chis)
     s_chi_cube = np.dstack(s_chis)
     rotm_array = np.zeros(np.shape(chi_cube[:, :, 0]))
@@ -215,6 +217,8 @@ def rotm(freqs, chis, s_chis, p0=None):
 
     if p0 is None:
         p0 = [0., 0.]
+
+    assert len(freqs) == len(chis) == len(s_chis)
 
     p0 = np.array(p0)
     freqs = np.array(freqs)

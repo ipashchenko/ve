@@ -257,6 +257,7 @@ def rotm(freqs, chis, s_chis, p0=None):
         [rad].
     :param p0:
         Starting value for minimization (RM [rad/m**2], PA_zero_lambda [rad]).
+
     :return:
         Tuple of numpy array of (RM [rad/m**2], PA_zero_lambda [rad]) and 2D
         numpy array of covariance matrix.
@@ -300,11 +301,15 @@ def rotm(freqs, chis, s_chis, p0=None):
 
 if __name__ == '__main__':
     boot_dir = '/home/ilya/code/vlbi_errors/data/zhenya/ccbots/'
+
     # Test making error-map
+    print "Testing error-map method..."
     images = Images()
     images.add_from_fits(wildcard=boot_dir + "cc_*.fits")
     error_map = images.create_error_map()
+
     # Test rm-creating functions
+    print "Testing rm-map functions..."
     chis = [np.zeros(100, dtype=float).reshape((10, 10)) + 2.3,
             np.zeros(100, dtype=float).reshape((10, 10)) + 1.3,
             np.zeros(100, dtype=float).reshape((10, 10)) + 0.8]
@@ -313,3 +318,17 @@ if __name__ == '__main__':
               np.zeros(100, dtype=float).reshape((10, 10)) + 0.3]
     freqs = np.array([1.4 * 10 ** 9, 5. * 10 ** 9, 8.4 * 10 ** 9])
     rotm_array, s_rotm_array = rotm_map(freqs, chis, s_chis)
+
+    mask = np.zeros(100).reshape((10, 10))
+    mask[3, 3] = 1
+    ma_rotm_array, ma_s_rotm_array = rotm_map(freqs, chis, s_chis, mask=mask)
+
+    # Testing pang_map function
+    print "Testing pang-map functions..."
+    q_array = np.zeros(100, dtype=float).reshape((10, 10)) + 2.3
+    u_array = np.zeros(100, dtype=float).reshape((10, 10)) + 0.3
+    chi_array = pang_map(q_array, u_array)
+
+    mask = np.zeros(100).reshape((10, 10))
+    mask[3, 3] = 1
+    ma_chi_array = pang_map(q_array, u_array, mask=mask)

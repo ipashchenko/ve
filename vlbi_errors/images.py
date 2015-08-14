@@ -177,6 +177,11 @@ def rotm_map(freqs, chis, s_chis):
     :param s_chis:
         Iterable of 2D numpy arrays with polarization positional angles
         uncertainties estimates [rad].
+    :param mask: (optional)
+        Mask to be applied to arrays before calculation. If ``None`` then don't
+        apply mask. Note that ``mask`` must have dimensions of only one image,
+        that is it should be 2D array.
+
     :return:
         Tuple of 2D numpy array with values of Rotation Measure [rad/m**2] and
         2D numpy array with uncertainties map [rad/m**2].

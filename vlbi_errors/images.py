@@ -191,12 +191,25 @@ def rotm_map(freqs, chis, s_chis):
 
     chi_cube = np.dstack(chis)
     s_chi_cube = np.dstack(s_chis)
-    rotm_array = np.zeros(np.shape(chi_cube[:, :, 0]))
-    s_rotm_array = np.zeros(np.shape(chi_cube[:, :, 0]))
+    rotm_array = np.empty(np.shape(chi_cube[:, :, 0]))
+    s_rotm_array = np.empty(np.shape(chi_cube[:, :, 0]))
+    rotm_array[:] = np.nan
+    s_rotm_array[:] = np.nan
+
+    if mask is None:
+        mask = np.zeros(rotm_array.shape)
+
     for (x, y), value in np.ndenumerate(rotm_array):
+        # If pixel should be masked then just pass by and leave NaN as value
+        if mask[x, y]:
+            continue
         p, pcov = rotm(freqs, chi_cube[x, y, :], s_chi_cube[x, y, :])
-        rotm_array[x, y] = p[0]
-        s_rotm_array[x, y] = math.sqrt(pcov[0, 0])
+        if pcov is not np.nan:
+            rotm_array[x, y] = p[0]
+            s_rotm_array[x, y] = math.sqrt(pcov[0, 0])
+        else:
+            rotm_array[x, y] = np.nan
+            s_rotm_array[x, y] = np.nan
 
     return rotm_array, s_rotm_array
 

@@ -166,7 +166,7 @@ class Images(object):
         pass
 
 
-def rotm_map(freqs, chis, s_chis):
+def rotm_map(freqs, chis, s_chis, mask=None):
     """
     Function that calculates Rotation Measure map.
 

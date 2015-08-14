@@ -119,7 +119,7 @@ class Images(object):
             stokes = image.stokes
             self._images_dict[freq][stokes].append(image)
 
-    def create_error_map(self, freq=None, stokes=None, cred_mass=0.68):
+    def create_error_image(self, freq=None, stokes=None, cred_mass=0.68):
         """
         Method that creates an error map for current collection of instances.
         """
@@ -162,8 +162,157 @@ class Images(object):
         image.image = hdis
         return image
 
-    def rotm(self):
-        pass
+    # FIXME: Implement option for many (equal number) of Q & U images for each
+    # frequency like in ``Images.create_pang_images``
+    def create_rotm_image(self, s_pang_arrays, freqs=None, mask=None, n=0):
+        """
+        Method that creates image of Rotation Measure for current collection of
+        instances.
+
+        :param s_pang_arrays:
+            Iterable of 2D numpy arrays with uncertainty estimates of
+            Polarization Angle. Number of arrays must be equal to number of
+            frequencies used in rotm calculation.
+        :param freqs: (optional)
+             What frequences to use. If ``None`` then use all available in
+             instance's containter. (default: ``None``)
+        :param s_pang_arrays:
+            Iterable of 2D numpy arrays with uncertainty estimates of
+            Polarization Angle. Number of arrays must be equal to number of
+            frequencies used in rotm calculation.
+        :param mask: (optional)
+            Mask to be applied to arrays before calculation. If ``None`` then
+            don't apply mask. Note that ``mask`` must have dimensions of only
+            one image, that is it should be 2D array.
+        :param n: (optional)
+            Sequence number of Q & U images to use for each frequency. (default:
+            ``0``)
+
+        :return:
+           Tuple of two ``BasicImage`` instances with Rotation Measure values
+           and it's uncertainties estimates.
+
+        """
+        required_stokeses = ('Q', 'U')
+
+        # Check that collection of images isn't empty
+        if not self.images:
+            raise Exception("First, add some images to instance!")
+
+        # Choose frequencies
+        if freqs is None:
+            freqs = self.freqs
+        if len(freqs) < 2:
+            raise Exception("Not enough frequencies for RM calculation!")
+
+        # Check that all frequencies have Q & U maps
+        for freq in freqs:
+            stokeses = self.stokeses(freq)
+            for stokes in required_stokeses:
+                if stokes not in stokeses:
+                    raise Exception("No stokes " + stokes + " parameter for " +
+                                    freq + " frequency!")
+
+        # Get some image from stacked to use it parameters for saving output. It
+        # doesn't matter what image - they all are checked to have the same
+        # basic parameters
+        img = self._images_dict[freq][stokes][0]
+
+        # Create container for Polarization Angle maps
+        pang_arrays = list()
+        # Fill it with pang arrays - one array for each frequency
+        print "freqs :", freqs
+        for freq in freqs:
+            q_images = self._images_dict[freq]['Q']
+            u_images = self._images_dict[freq]['U']
+            # Check that we got the same number of ``Q`` and ``U`` images
+            if len(q_images) != len(u_images):
+                raise Exception("Different # of Q & U images for " + str(freq) +
+                                " MHz!")
+            pang_arrays.append(pang_map(q_images[n].image, u_images[n].image,
+                                        mask=mask))
+
+        # Calculate Rotation Measure array and write it to ``BasicImage``
+        # isntance
+        rotm_array, s_rotm_array = rotm_map(freqs, pang_arrays, s_pang_arrays,
+                                            mask=mask)
+        rotm_image = BasicImage(imsize=img.imsize, pixref=img.pixref,
+                                pixrefval=img.pixrefval,
+                                pixsize=img.pixsize)
+        rotm_image.image = rotm_array
+        s_rotm_image = BasicImage(imsize=img.imsize, pixref=img.pixref,
+                                 pixrefval=img.pixrefval,
+                                 pixsize=img.pixsize)
+        s_rotm_image.image = s_rotm_array
+
+        return rotm_image, s_rotm_image
+
+    def create_pang_images(self, freq=None, mask=None):
+        """
+        Method that creates Polarization Angle map for current collection of
+        instances.
+
+        :param freq: (optional)
+             What frequency to use. If ``None`` then assume that only one
+             frequency is present in instance. (default: ``None``)
+        :param mask: (optional)
+            Mask to be applied to arrays before calculation. If ``None`` then
+            don't apply mask. Note that ``mask`` must have dimensions of only
+            one image, that is it should be 2D array.
+
+        :return:
+            List of ``BasicImage`` instances with Polarization Angle maps.
+
+        """
+        required_stokeses = ('Q', 'U')
+
+        # Check that collection of images isn't empty
+        if not self.images:
+            raise Exception("First, add some images to instance!")
+
+        # If no frequency is supplied => check that instance contains images of
+        # only one frequency and use it. Otherwise - raise Exception
+        if freq is None:
+            freqs = self.freqs
+            if len(freqs) > 1:
+                raise Exception("Choose what frequency images to use!")
+            else:
+                freq = freqs[0]
+
+        # Check that used frequency has Q & U maps
+        stokeses = self.stokeses(freq)
+        for stokes in required_stokeses:
+            if stokes not in stokeses:
+                raise Exception("No stokes " + stokes + " parameter for " +
+                                freq + " frequency!")
+
+        # Get some image from stacked to use it parameters for saving output. It
+        # doesn't matter what image - they all are checked to have the same
+        # basic parameters
+        # FIXME: What to do if at some frequency there are many images of ``Q``
+        # and ``U``?
+        q_images = self._images_dict[freq]['Q']
+        u_images = self._images_dict[freq]['U']
+        # Check that we got the same number of ``Q`` and ``U`` images
+        if len(q_images) != len(u_images):
+            raise Exception("Number of Q & U images for " + str(freq) +
+                            " differs!")
+        # Get some image from stacked to use it parameters for saving output. It
+        # doesn't matter what image - they all are checked to have the same
+        # basic parameters
+        img = self._images_dict[freq][stokes][0]
+        # Create container for pang-images
+        pang_images = list()
+        for q_image, u_image in zip(q_images, u_images):
+            pang_array = pang_map(q_image.image, u_image.image, mask=mask)
+            # Create basic image and add ``pang_array``
+            pang_image = BasicImage(imsize=img.imsize, pixref=img.pixref,
+                                    pixrefval=img.pixrefval,
+                                    pixsize=img.pixsize)
+            pang_image.image = pang_array
+            pang_images.append(pang_image)
+
+        return pang_images
 
 
 def rotm_map(freqs, chis, s_chis, mask=None):
@@ -208,7 +357,7 @@ def rotm_map(freqs, chis, s_chis, mask=None):
             rotm_array[x, y] = p[0]
             s_rotm_array[x, y] = math.sqrt(pcov[0, 0])
         else:
-            rotm_array[x, y] = np.nan
+            rotm_array[x, y] = p[0]
             s_rotm_array[x, y] = np.nan
 
     return rotm_array, s_rotm_array
@@ -274,12 +423,12 @@ def rotm(freqs, chis, s_chis, p0=None):
     chis = np.array(chis)
     s_chis = np.array(s_chis)
 
-    def rm_model(p, freqs):
+    def rotm_model(p, freqs):
         lambdasq = (3. * 10 ** 8 / freqs) ** 2
         return p[0] * lambdasq + p[1]
 
     def weighted_residuals(p, freqs, chis, s_chis):
-        return (chis - rm_model(p, freqs)) / s_chis
+        return (chis - rotm_model(p, freqs)) / s_chis
 
     func, args = weighted_residuals, (freqs, chis, s_chis,)
     fit = leastsq(func, p0, args=args, full_output=True)
@@ -296,20 +445,34 @@ def rotm(freqs, chis, s_chis, p0=None):
     else:
         pcov = np.nan
 
+    print p, pcov
     return p, pcov
 
 
 if __name__ == '__main__':
+    import os
+    # Directory with fits-images of bootstrapped data
     boot_dir = '/home/ilya/code/vlbi_errors/data/zhenya/ccbots/'
+    # Directory with Q & U fits-images for pang-tests
+    qu_dir = '/home/ilya/code/vlbi_errors/data/zhenya/'
+    q_fits_file = '0425+048.c1.2007_04_30.q.fits'
+    u_fits_file = '0425+048.c1.2007_04_30.u.fits'
+    i_fits_file = '0425+048.c1.2007_04_30.i.fits'
+    # Directories with Q & U fits-images for rotm-test
+    rotm_dir_c1_q = '/home/ilya/code/vlbi_errors/data/zhenya/data/0425+048/2007_04_30/C1/im/Q/'
+    rotm_dir_c1_u = '/home/ilya/code/vlbi_errors/data/zhenya/data/0425+048/2007_04_30/C1/im/U/'
+    rotm_dir_c2_q = '/home/ilya/code/vlbi_errors/data/zhenya/data/0425+048/2007_04_30/C2/im/Q/'
+    rotm_dir_c2_u = '/home/ilya/code/vlbi_errors/data/zhenya/data/0425+048/2007_04_30/C2/im/U/'
+    fits_file = 'cc.fits'
 
-    # Test making error-map
-    print "Testing error-map method..."
+    # Testing ``Images.create_error_image``
+    print "Testing ``Images.create_error_image`` method..."
     images = Images()
     images.add_from_fits(wildcard=boot_dir + "cc_*.fits")
-    error_map = images.create_error_map()
+    error_map = images.create_error_image()
 
     # Test rm-creating functions
-    print "Testing rm-map functions..."
+    print "Testing rm-creating functions..."
     chis = [np.zeros(100, dtype=float).reshape((10, 10)) + 2.3,
             np.zeros(100, dtype=float).reshape((10, 10)) + 1.3,
             np.zeros(100, dtype=float).reshape((10, 10)) + 0.8]
@@ -323,8 +486,8 @@ if __name__ == '__main__':
     mask[3, 3] = 1
     ma_rotm_array, ma_s_rotm_array = rotm_map(freqs, chis, s_chis, mask=mask)
 
-    # Testing pang_map function
-    print "Testing pang-map functions..."
+    # Testing ``pang_map`` function
+    print "Testing ``pang-map`` function..."
     q_array = np.zeros(100, dtype=float).reshape((10, 10)) + 2.3
     u_array = np.zeros(100, dtype=float).reshape((10, 10)) + 0.3
     chi_array = pang_map(q_array, u_array)
@@ -332,3 +495,34 @@ if __name__ == '__main__':
     mask = np.zeros(100).reshape((10, 10))
     mask[3, 3] = 1
     ma_chi_array = pang_map(q_array, u_array, mask=mask)
+
+    # Testing ``Images.create_pang_images``
+    print "Testing ``Images.create_pang_images``..."
+    # Testing one pair of Q & U images
+    images = Images()
+    images.add_from_fits(fnames=[os.path.join(qu_dir, q_fits_file),
+                         os.path.join(qu_dir, u_fits_file)])
+    pang_images = images.create_pang_images()
+    # Testing two pairs of Q & U images
+    images = Images()
+    images.add_from_fits(fnames=[os.path.join(qu_dir, q_fits_file),
+                                 os.path.join(qu_dir, q_fits_file),
+                                 os.path.join(qu_dir, u_fits_file),
+                                 os.path.join(qu_dir, u_fits_file)])
+    pang_images_2 = images.create_pang_images()
+
+    # Testing ``Images.create_rotm_image``
+    print "Testing ``Images.create_rotm_image``..."
+    images = Images()
+    s_pang_arrays = [np.zeros(512 * 512, dtype=float).reshape((512, 512)) + 0.1]
+    s_pang_arrays *= 2
+    # Only one of Q & U at each frequency
+    images.add_from_fits(fnames=[os.path.join(rotm_dir_c1_q, fits_file),
+                                 os.path.join(rotm_dir_c1_u, fits_file),
+                                 os.path.join(rotm_dir_c2_q, fits_file),
+                                 os.path.join(rotm_dir_c2_u, fits_file)])
+
+    mask = np.ones(512 * 512).reshape((512, 512))
+    mask[200:300, 200:300] = 0
+    rotm_image, s_rotm_image = images.create_rotm_image(s_pang_arrays,
+                                                        mask=mask)

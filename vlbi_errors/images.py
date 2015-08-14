@@ -214,6 +214,36 @@ def rotm_map(freqs, chis, s_chis):
     return rotm_array, s_rotm_array
 
 
+def pang_map(q_array, u_array, mask=None):
+    """
+    Function that calculates Polarization Angle map.
+
+    :param q_array:
+        Numpy 2D array of Stokes Q values.
+    :param u_array:
+        Numpy 2D array of Stokes U values.
+    :param mask: (optional)
+        Mask to be applied to arrays before calculation. If ``None`` then don't
+        apply mask.
+
+    :return:
+        Numpy 2D array of Polarization Angle values [rad].
+
+    :note:
+        ``q_array`` & ``u_array`` must have the same units (e.g. [Jy/beam])
+
+    """
+    q_array = np.atleast_2d(q_array)
+    u_array = np.atleast_2d(u_array)
+    assert q_array.shape == u_array.shape
+
+    if mask is not None:
+        q_array = np.ma.array(q_array, mask=mask, fill_value=np.nan)
+        u_array = np.ma.array(u_array, mask=mask, fill_value=np.nan)
+
+    return 0.5 * np.arctan2(q_array, u_array)
+
+
 def rotm(freqs, chis, s_chis, p0=None):
     """
     Function that calculates Rotation Measure.

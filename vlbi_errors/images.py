@@ -221,7 +221,6 @@ class Images(object):
         # Create container for Polarization Angle maps
         pang_arrays = list()
         # Fill it with pang arrays - one array for each frequency
-        print "freqs :", freqs
         for freq in freqs:
             q_images = self._images_dict[freq]['Q']
             u_images = self._images_dict[freq]['U']
@@ -249,8 +248,8 @@ class Images(object):
 
     def create_pang_images(self, freq=None, mask=None):
         """
-        Method that creates Polarization Angle map for current collection of
-        instances.
+        Method that creates Polarization Angle image for current collection of
+        image instances.
 
         :param freq: (optional)
              What frequency to use. If ``None`` then assume that only one
@@ -289,8 +288,6 @@ class Images(object):
         # Get some image from stacked to use it parameters for saving output. It
         # doesn't matter what image - they all are checked to have the same
         # basic parameters
-        # FIXME: What to do if at some frequency there are many images of ``Q``
-        # and ``U``?
         q_images = self._images_dict[freq]['Q']
         u_images = self._images_dict[freq]['U']
         # Check that we got the same number of ``Q`` and ``U`` images
@@ -393,6 +390,63 @@ def pang_map(q_array, u_array, mask=None):
     return 0.5 * np.arctan2(q_array, u_array)
 
 
+def cpol_map(q_array, u_array, mask=None):
+    """
+    Function that calculates Complex Polarization map.
+
+    :param q_array:
+        Numpy 2D array of Stokes Q values.
+    :param u_array:
+        Numpy 2D array of Stokes U values.
+    :param mask: (optional)
+        Mask to be applied to arrays before calculation. If ``None`` then don't
+        apply mask.
+
+    :return:
+        Numpy 2D array of Complex Polarization values.
+
+    :note:
+        ``q_array`` & ``u_array`` must have the same units (e.g. [Jy/beam]),
+        then output array will have the same units.
+
+    """
+    q_array = np.atleast_2d(q_array)
+    u_array = np.atleast_2d(u_array)
+    assert q_array.shape == u_array.shape
+
+    if mask is not None:
+        q_array = np.ma.array(q_array, mask=mask, fill_value=np.nan)
+        u_array = np.ma.array(u_array, mask=mask, fill_value=np.nan)
+
+    return q_array  + 1j * u_array
+
+
+def fpol_map(q_array, u_array, i_array, mask=None):
+    """
+    Function that calculates Fractional Polarization map.
+
+    :param q_array:
+        Numpy 2D array of Stokes Q values.
+    :param u_array:
+        Numpy 2D array of Stokes U values.
+    :param i_array:
+        Numpy 2D array of Stokes I values.
+    :param mask: (optional)
+        Mask to be applied to arrays before calculation. If ``None`` then don't
+        apply mask.
+
+    :return:
+        Numpy 2D array of Fractional Polarization values.
+
+    :note:
+        ``q_array``, ``u_array`` & ``i_array`` must have the same units (e.g.
+        [Jy/beam])
+
+    """
+    cpol_array = cpol_map(q_array, u_array, mask=mask)
+    return np.sqrt(cpol_array * cpol_array.conj()).real / i_array
+
+
 def rotm(freqs, chis, s_chis, p0=None):
     """
     Function that calculates Rotation Measure.
@@ -445,30 +499,31 @@ def rotm(freqs, chis, s_chis, p0=None):
     else:
         pcov = np.nan
 
-    print p, pcov
     return p, pcov
 
 
 if __name__ == '__main__':
     import os
     # Directory with fits-images of bootstrapped data
-    boot_dir = '/home/ilya/code/vlbi_errors/data/zhenya/ccbots/'
+    i_dir = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C1/im/I/'
     # Directory with Q & U fits-images for pang-tests
-    qu_dir = '/home/ilya/code/vlbi_errors/data/zhenya/'
-    q_fits_file = '0425+048.c1.2007_04_30.q.fits'
-    u_fits_file = '0425+048.c1.2007_04_30.u.fits'
-    i_fits_file = '0425+048.c1.2007_04_30.i.fits'
+    q_dir = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C1/im/Q/'
+    u_dir = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C1/im/U/'
     # Directories with Q & U fits-images for rotm-test
-    rotm_dir_c1_q = '/home/ilya/code/vlbi_errors/data/zhenya/data/0425+048/2007_04_30/C1/im/Q/'
-    rotm_dir_c1_u = '/home/ilya/code/vlbi_errors/data/zhenya/data/0425+048/2007_04_30/C1/im/U/'
-    rotm_dir_c2_q = '/home/ilya/code/vlbi_errors/data/zhenya/data/0425+048/2007_04_30/C2/im/Q/'
-    rotm_dir_c2_u = '/home/ilya/code/vlbi_errors/data/zhenya/data/0425+048/2007_04_30/C2/im/U/'
+    rotm_dir_c1_q = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C1/im/Q/'
+    rotm_dir_c1_u = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C1/im/U/'
+    rotm_dir_c2_q = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C2/im/Q/'
+    rotm_dir_c2_u = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C2/im/U/'
+    rotm_dir_x1_q = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/X1/im/Q/'
+    rotm_dir_x1_u = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/X1/im/U/'
+    rotm_dir_x2_q = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/X2/im/Q/'
+    rotm_dir_x2_u = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/X2/im/U/'
     fits_file = 'cc.fits'
 
     # Testing ``Images.create_error_image``
     print "Testing ``Images.create_error_image`` method..."
     images = Images()
-    images.add_from_fits(wildcard=boot_dir + "cc_*.fits")
+    images.add_from_fits(wildcard=i_dir + "cc_*.fits")
     error_map = images.create_error_image()
 
     # Test rm-creating functions
@@ -487,7 +542,7 @@ if __name__ == '__main__':
     ma_rotm_array, ma_s_rotm_array = rotm_map(freqs, chis, s_chis, mask=mask)
 
     # Testing ``pang_map`` function
-    print "Testing ``pang-map`` function..."
+    print "Testing ``pang_map`` function..."
     q_array = np.zeros(100, dtype=float).reshape((10, 10)) + 2.3
     u_array = np.zeros(100, dtype=float).reshape((10, 10)) + 0.3
     chi_array = pang_map(q_array, u_array)
@@ -496,33 +551,58 @@ if __name__ == '__main__':
     mask[3, 3] = 1
     ma_chi_array = pang_map(q_array, u_array, mask=mask)
 
+    # Testing ``cpol_map`` function
+    print "Testing ``cpol_map`` function..."
+    q_array = np.zeros(100, dtype=float).reshape((10, 10)) + 2.3
+    u_array = np.zeros(100, dtype=float).reshape((10, 10)) + 0.3
+    cpol_array = cpol_map(q_array, u_array)
+
+    mask = np.zeros(100).reshape((10, 10))
+    mask[3, 3] = 1
+    ma_cpol_array = cpol_map(q_array, u_array, mask=mask)
+
+    # Testing ``fpol_map`` function
+    print "Testing ``fpol_map`` function..."
+    q_array = np.zeros(100, dtype=float).reshape((10, 10)) + 2.3
+    u_array = np.zeros(100, dtype=float).reshape((10, 10)) + 0.3
+    i_array = np.zeros(100, dtype=float).reshape((10, 10)) + 5.3
+    fpol_array = fpol_map(q_array, u_array, i_array)
+
+    mask = np.zeros(100).reshape((10, 10))
+    mask[3, 3] = 1
+    ma_fpol_array = fpol_map(q_array, u_array, i_array, mask=mask)
+
     # Testing ``Images.create_pang_images``
     print "Testing ``Images.create_pang_images``..."
     # Testing one pair of Q & U images
     images = Images()
-    images.add_from_fits(fnames=[os.path.join(qu_dir, q_fits_file),
-                         os.path.join(qu_dir, u_fits_file)])
+    images.add_from_fits(fnames=[os.path.join(q_dir, 'cc.fits'),
+                         os.path.join(u_dir, 'cc.fits')])
     pang_images = images.create_pang_images()
     # Testing two pairs of Q & U images
     images = Images()
-    images.add_from_fits(fnames=[os.path.join(qu_dir, q_fits_file),
-                                 os.path.join(qu_dir, q_fits_file),
-                                 os.path.join(qu_dir, u_fits_file),
-                                 os.path.join(qu_dir, u_fits_file)])
+    images.add_from_fits(fnames=[os.path.join(q_dir, 'cc.fits'),
+                                 os.path.join(q_dir, 'cc.fits'),
+                                 os.path.join(u_dir, 'cc.fits'),
+                                 os.path.join(u_dir, 'cc.fits')])
     pang_images_2 = images.create_pang_images()
 
     # Testing ``Images.create_rotm_image``
     print "Testing ``Images.create_rotm_image``..."
     images = Images()
     s_pang_arrays = [np.zeros(512 * 512, dtype=float).reshape((512, 512)) + 0.1]
-    s_pang_arrays *= 2
+    s_pang_arrays *= 4
     # Only one of Q & U at each frequency
     images.add_from_fits(fnames=[os.path.join(rotm_dir_c1_q, fits_file),
                                  os.path.join(rotm_dir_c1_u, fits_file),
                                  os.path.join(rotm_dir_c2_q, fits_file),
-                                 os.path.join(rotm_dir_c2_u, fits_file)])
+                                 os.path.join(rotm_dir_c2_u, fits_file),
+                                 os.path.join(rotm_dir_x1_q, fits_file),
+                                 os.path.join(rotm_dir_x1_u, fits_file),
+                                 os.path.join(rotm_dir_x2_q, fits_file),
+                                 os.path.join(rotm_dir_x2_u, fits_file)])
 
     mask = np.ones(512 * 512).reshape((512, 512))
-    mask[200:300, 200:300] = 0
+    mask[200:400, 200:400] = 0
     rotm_image, s_rotm_image = images.create_rotm_image(s_pang_arrays,
                                                         mask=mask)

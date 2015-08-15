@@ -214,7 +214,8 @@ def put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=None,
                         print "No such file ", fname, " in ", im_files_path
 
 
-def generate_boot_data(sources, epochs, bands, stokes, base_path=None):
+def generate_boot_data(sources, epochs, bands, stokes, n_boot=10,
+                       base_path=None):
     """
     :param sources:
         Iterable of sources names.
@@ -224,6 +225,8 @@ def generate_boot_data(sources, epochs, bands, stokes, base_path=None):
         Iterable of bands.
     :param stokes:
         Iterable of stokes parameters.
+    :param n_boot: (optional)
+        Number of bootstrap replications to create. (default: ``10``)
     :param base_path: (optional)
         Path to route of directory tree. If ``None`` then use current directory.
 
@@ -261,7 +264,7 @@ def generate_boot_data(sources, epochs, bands, stokes, base_path=None):
                     models.append(ccmodel)
                 boot = CleanBootstrap(models, uvdata)
                 os.chdir(uv_path)
-                boot.run(n=10, outname=['boot', '.fits'])
+                boot.run(n=n_boot, outname=['boot', '.fits'])
     os.chdir(curdir)
 
 
@@ -441,6 +444,7 @@ if __name__ == '__main__':
                          ext="PINAL", uv_files_path=uv_data_dir)
     put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=base_path,
                          ext="fits", im_files_path=im_data_dir)
-    generate_boot_data(sources, epochs, bands, stokes, base_path=base_path)
+    generate_boot_data(sources, epochs, bands, stokes, n_boot=100,
+                       base_path=base_path)
     clean_boot_data(sources, epochs, bands, stokes, base_path=base_path,
                     path_to_script=path_to_script)

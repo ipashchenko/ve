@@ -112,12 +112,40 @@ class Images(object):
             # FIXME: When use clean_image & when just image?
             print "Processing ", fname
             image = create_image_from_fits_file(fname)
+            print image.imsize, image.pixsize
             if previous_image:
                 assert image == previous_image, "Adding image with different " \
                                                 "basic parameters!"
             freq = image.freq
             stokes = image.stokes
             self._images_dict[freq][stokes].append(image)
+            previous_image = self._images_dict[freq][stokes][-1]
+
+    def add_image(self, image):
+        """
+        Method that adds instance of ``Image`` class to self.
+
+        :param image:
+            Instance of ``Image`` class.
+        """
+        freq = image.freq
+        stokes = image.stokes
+        # Check that if any images are already in they have same parameters
+        try:
+            assert image == self._images_dict[freq][stokes][-1]
+        except IndexError:
+            pass
+        self._images_dict[freq][stokes].append(image)
+
+    def add_images(self, images):
+        """
+        Method that adds instances of ``Image`` class to self.
+
+        :param images:
+            Iterable of ``Image`` class instances.
+        """
+        for image in images:
+            self.add_image(image)
 
     def create_error_image(self, freq=None, stokes=None, cred_mass=0.68):
         """
@@ -249,7 +277,7 @@ class Images(object):
 
     def create_pang_images(self, freq=None, mask=None):
         """
-        Method that creates Polarization Angle image for current collection of
+        Method that creates Polarization Angle images for current collection of
         image instances.
 
         :param freq: (optional)
@@ -311,6 +339,72 @@ class Images(object):
             pang_images.append(pang_image)
 
         return pang_images
+
+
+    def create_pol_images(self, freq=None, mask=None):
+        """
+        Method that creates Polarization Flux images for current collection of
+        image instances.
+
+        :param freq: (optional)
+             What frequency to use. If ``None`` then assume that only one
+             frequency is present in instance. (default: ``None``)
+        :param mask: (optional)
+            Mask to be applied to arrays before calculation. If ``None`` then
+            don't apply mask. Note that ``mask`` must have dimensions of only
+            one image, that is it should be 2D array.
+
+        :return:
+            List of ``BasicImage`` instances with Polarization Flux maps.
+
+        """
+        required_stokeses = ('Q', 'U')
+
+        # Check that collection of images isn't empty
+        if not self.images:
+            raise Exception("First, add some images to instance!")
+
+        # If no frequency is supplied => check that instance contains images of
+        # only one frequency and use it. Otherwise - raise Exception
+        if freq is None:
+            freqs = self.freqs
+            if len(freqs) > 1:
+                raise Exception("Choose what frequency images to use!")
+            else:
+                freq = freqs[0]
+
+        # Check that used frequency has Q & U maps
+        stokeses = self.stokeses(freq)
+        for stokes in required_stokeses:
+            if stokes not in stokeses:
+                raise Exception("No stokes " + stokes + " parameter for " +
+                                freq + " frequency!")
+
+        # Get some image from stacked to use it parameters for saving output. It
+        # doesn't matter what image - they all are checked to have the same
+        # basic parameters
+        q_images = self._images_dict[freq]['Q']
+        u_images = self._images_dict[freq]['U']
+        # Check that we got the same number of ``Q`` and ``U`` images
+        if len(q_images) != len(u_images):
+            raise Exception("Number of Q & U images for " + str(freq) +
+                            " differs!")
+        # Get some image from stacked to use it parameters for saving output. It
+        # doesn't matter what image - they all are checked to have the same
+        # basic parameters
+        img = self._images_dict[freq][stokes][0]
+        # Create container for pang-images
+        pol_images = list()
+        for q_image, u_image in zip(q_images, u_images):
+            pol_array = pol_map(q_image.image, u_image.image, mask=mask)
+            # Create basic image and add ``pang_array``
+            pol_image = BasicImage(imsize=img.imsize, pixref=img.pixref,
+                                   pixrefval=img.pixrefval,
+                                   pixsize=img.pixsize)
+            pol_image.image = pol_array
+            pol_images.append(pol_image)
+
+        return pol_images
 
 
 def rotm_map(freqs, chis, s_chis=None, mask=None):
@@ -431,6 +525,29 @@ def cpol_map(q_array, u_array, mask=None):
     return q_array  + 1j * u_array
 
 
+def pol_map(q_array, u_array, mask=None):
+    """
+    Function that calculates Polarization Flux map.
+
+    :param q_array:
+        Numpy 2D array of Stokes Q values.
+    :param u_array:
+        Numpy 2D array of Stokes U values.
+    :param mask: (optional)
+        Mask to be applied to arrays before calculation. If ``None`` then don't
+        apply mask.
+
+    :return:
+        Numpy 2D array of Polarization Flux values.
+
+    :note:
+        ``q_array`` & ``u_array`` must have the same units (e.g. [Jy/beam])
+
+    """
+    cpol_array = cpol_map(q_array, u_array, mask=mask)
+    return np.sqrt(cpol_array * cpol_array.conj()).real
+
+
 def fpol_map(q_array, u_array, i_array, mask=None):
     """
     Function that calculates Fractional Polarization map.
@@ -522,6 +639,29 @@ def rotm(freqs, chis, s_chis=None, p0=None):
     return p, pcov
 
 
+def hdi_of_images(images, cred_mass=0.68):
+    """
+    Function that calculates a width of highest density interval for each pixel
+    using user supplied images.
+    :param images:
+        Iterable of images.
+    :param cred_mass: (optional)
+        Credibility mass. (default: ``0.68``)
+    :return:
+        Numpy 2D array with
+    """
+    images = [np.atleast_2d(image) for image in images]
+    # Check that images have the same shape
+    assert len(set([image.shape for image in images])) == 1
+
+    images_cube = np.dstack(tuple(image for image in images))
+    hdis = np.zeros(np.shape(images_cube[:, :, 0]))
+    for (x, y), value in np.ndenumerate(hdis):
+        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=cred_mass)
+        hdis[x, y] = hdi[1] - hdi[0]
+    return hdis
+
+
 if __name__ == '__main__':
     import os
     # Directory with fits-images of bootstrapped data
@@ -603,11 +743,26 @@ if __name__ == '__main__':
     pang_images = images.create_pang_images()
     # Testing two pairs of Q & U images
     images = Images()
+    fnames = [os.path.join(q_dir, 'cc_{}.fits'.format(i)) for i in range(1, 11)]
+    fnames += [os.path.join(u_dir, 'cc_{}.fits'.format(i)) for i in
+               range(1, 11)]
+    images.add_from_fits(fnames)
+    pang_images_10 = images.create_pang_images()
+
+    # Testing ``Images.create_pol_images``
+    print "Testing ``Images.create_pol_images``..."
+    # Testing one pair of Q & U images
+    images = Images()
     images.add_from_fits(fnames=[os.path.join(q_dir, 'cc.fits'),
-                                 os.path.join(q_dir, 'cc.fits'),
-                                 os.path.join(u_dir, 'cc.fits'),
                                  os.path.join(u_dir, 'cc.fits')])
-    pang_images_2 = images.create_pang_images()
+    pol_images = images.create_pol_images()
+    # Testing ten pairs of Q & U images
+    images = Images()
+    fnames = [os.path.join(q_dir, 'cc_{}.fits'.format(i)) for i in range(1, 11)]
+    fnames += [os.path.join(u_dir, 'cc_{}.fits'.format(i)) for i in
+               range(1, 11)]
+    images.add_from_fits(fnames)
+    pol_images_10 = images.create_pol_images()
 
     # Testing ``Images.create_rotm_image``
     print "Testing ``Images.create_rotm_image``..."
@@ -615,17 +770,37 @@ if __name__ == '__main__':
     s_pang_arrays = [np.zeros(512 * 512, dtype=float).reshape((512, 512)) + 0.1]
     s_pang_arrays *= 4
     # Only one of Q & U at each frequency
-    images.add_from_fits(fnames=[os.path.join(rotm_dir_c1_q, fits_file),
-                                 os.path.join(rotm_dir_c1_u, fits_file),
-                                 os.path.join(rotm_dir_c2_q, fits_file),
-                                 os.path.join(rotm_dir_c2_u, fits_file),
-                                 os.path.join(rotm_dir_x1_q, fits_file),
-                                 os.path.join(rotm_dir_x1_u, fits_file),
-                                 os.path.join(rotm_dir_x2_q, fits_file),
-                                 os.path.join(rotm_dir_x2_u, fits_file)])
+    images.add_from_fits(fnames=[os.path.join(rotm_dir_c1_q, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_c1_u, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_c2_q, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_c2_u, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_x1_q, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_x1_u, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_x2_q, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_x2_u, 'cc_1.fits')])
 
     mask = np.ones(512 * 512).reshape((512, 512))
     mask[200:400, 200:400] = 0
     rotm_image, s_rotm_image = images.create_rotm_image(s_pang_arrays,
                                                         mask=mask)
     rotm_image_no_s, s_rotm_image_no_s = images.create_rotm_image(mask=mask)
+
+    # Testing blanking ROTM images...
+    print "Testing blanking of ROTM images..."
+    # Blanking mask should be based on polarization flux. One should create
+    # bootstrapped realization of polarization flux images and find error on it.
+    # Then when calculating ROTM use only pixels with POL > error.
+
+
+    # Testing uncertainties estimates for ROTM maps
+    print "Testing uncertainties estimates for ROTM images..."
+    # Error on ROTM can be calculated in several ways. First, create Q, U images
+    # from bootstrapped uv-data and make ROTM image for each. Then stack them
+    # and find error in each pixel or find ``p-value`` of any feature. Second,
+    # it can be created using uncertainties of PANG images created from
+    # bootstrapped uv-data.
+    # Concerning error of PANG-calibration. It can be used in both ways. In
+    # first approach - just add random number from PARN error distribution to
+    # each PANG map, made from bootstrapped uv-data. In second approach - just
+    # add in quadrature estimated PA-calibration error to PANG error images at
+    # each frequency.

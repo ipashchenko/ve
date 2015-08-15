@@ -164,7 +164,7 @@ class Images(object):
 
     # FIXME: Implement option for many (equal number) of Q & U images for each
     # frequency like in ``Images.create_pang_images``
-    def create_rotm_image(self, s_pang_arrays, freqs=None, mask=None, n=0):
+    def create_rotm_image(self, s_pang_arrays=None, freqs=None, mask=None, n=0):
         """
         Method that creates image of Rotation Measure for current collection of
         instances.
@@ -176,10 +176,11 @@ class Images(object):
         :param freqs: (optional)
              What frequences to use. If ``None`` then use all available in
              instance's containter. (default: ``None``)
-        :param s_pang_arrays:
+        :param s_pang_arrays: (optional)
             Iterable of 2D numpy arrays with uncertainty estimates of
             Polarization Angle. Number of arrays must be equal to number of
-            frequencies used in rotm calculation.
+            frequencies used in rotm calculation. If ``None`` then don't use
+            errors in minimization. (default: ``None``)
         :param mask: (optional)
             Mask to be applied to arrays before calculation. If ``None`` then
             don't apply mask. Note that ``mask`` must have dimensions of only
@@ -312,7 +313,7 @@ class Images(object):
         return pang_images
 
 
-def rotm_map(freqs, chis, s_chis, mask=None):
+def rotm_map(freqs, chis, s_chis=None, mask=None):
     """
     Function that calculates Rotation Measure map.
 
@@ -320,7 +321,7 @@ def rotm_map(freqs, chis, s_chis, mask=None):
         Iterable of frequencies [Hz].
     :param chis:
         Iterable of 2D numpy arrays with polarization positional angles [rad].
-    :param s_chis:
+    :param s_chis: (optional)
         Iterable of 2D numpy arrays with polarization positional angles
         uncertainties estimates [rad].
     :param mask: (optional)
@@ -333,10 +334,14 @@ def rotm_map(freqs, chis, s_chis, mask=None):
         2D numpy array with uncertainties map [rad/m**2].
 
     """
-    assert len(freqs) == len(chis) == len(s_chis)
+    if s_chis is not None:
+        assert len(freqs) == len(chis) == len(s_chis)
+    else:
+        assert len(freqs) == len(chis)
 
     chi_cube = np.dstack(chis)
-    s_chi_cube = np.dstack(s_chis)
+    if s_chis is not None:
+        s_chi_cube = np.dstack(s_chis)
     rotm_array = np.empty(np.shape(chi_cube[:, :, 0]))
     s_rotm_array = np.empty(np.shape(chi_cube[:, :, 0]))
     rotm_array[:] = np.nan
@@ -349,7 +354,12 @@ def rotm_map(freqs, chis, s_chis, mask=None):
         # If pixel should be masked then just pass by and leave NaN as value
         if mask[x, y]:
             continue
-        p, pcov = rotm(freqs, chi_cube[x, y, :], s_chi_cube[x, y, :])
+
+        if s_chis is not None:
+            p, pcov = rotm(freqs, chi_cube[x, y, :], s_chi_cube[x, y, :])
+        else:
+            p, pcov = rotm(freqs, chi_cube[x, y, :])
+
         if pcov is not np.nan:
             rotm_array[x, y] = p[0]
             s_rotm_array[x, y] = math.sqrt(pcov[0, 0])
@@ -447,7 +457,7 @@ def fpol_map(q_array, u_array, i_array, mask=None):
     return np.sqrt(cpol_array * cpol_array.conj()).real / i_array
 
 
-def rotm(freqs, chis, s_chis, p0=None):
+def rotm(freqs, chis, s_chis=None, p0=None):
     """
     Function that calculates Rotation Measure.
 
@@ -455,7 +465,7 @@ def rotm(freqs, chis, s_chis, p0=None):
         Iterable of frequencies [Hz].
     :param chis:
         Iterable of polarization positional angles [rad].
-    :param s_chis:
+    :param s_chis: (optional)
         Iterable of polarization positional angles uncertainties estimates
         [rad].
     :param p0:
@@ -470,12 +480,16 @@ def rotm(freqs, chis, s_chis, p0=None):
     if p0 is None:
         p0 = [0., 0.]
 
-    assert len(freqs) == len(chis) == len(s_chis)
+    if s_chis is not None:
+        assert len(freqs) == len(chis) == len(s_chis)
+    else:
+        assert len(freqs) == len(chis)
 
     p0 = np.array(p0)
     freqs = np.array(freqs)
     chis = np.array(chis)
-    s_chis = np.array(s_chis)
+    if s_chis is not None:
+        s_chis = np.array(s_chis)
 
     def rotm_model(p, freqs):
         lambdasq = (3. * 10 ** 8 / freqs) ** 2
@@ -484,7 +498,13 @@ def rotm(freqs, chis, s_chis, p0=None):
     def weighted_residuals(p, freqs, chis, s_chis):
         return (chis - rotm_model(p, freqs)) / s_chis
 
-    func, args = weighted_residuals, (freqs, chis, s_chis,)
+    def residuals(p, freqs, chis):
+        return chis - rotm_model(p, freqs)
+
+    if s_chis is None:
+        func, args = residuals, (freqs, chis,)
+    else:
+        func, args = weighted_residuals, (freqs, chis, s_chis,)
     fit = leastsq(func, p0, args=args, full_output=True)
     (p, pcov, infodict, errmsg, ier) = fit
 
@@ -535,10 +555,12 @@ if __name__ == '__main__':
               np.zeros(100, dtype=float).reshape((10, 10)) + 0.3,
               np.zeros(100, dtype=float).reshape((10, 10)) + 0.3]
     freqs = np.array([1.4 * 10 ** 9, 5. * 10 ** 9, 8.4 * 10 ** 9])
+    rotm_array_no_s, s_rotm_array_no_s = rotm_map(freqs, chis)
     rotm_array, s_rotm_array = rotm_map(freqs, chis, s_chis)
 
     mask = np.zeros(100).reshape((10, 10))
     mask[3, 3] = 1
+    ma_rotm_array_no_s, ma_s_rotm_array_no_s = rotm_map(freqs, chis, mask=mask)
     ma_rotm_array, ma_s_rotm_array = rotm_map(freqs, chis, s_chis, mask=mask)
 
     # Testing ``pang_map`` function
@@ -606,3 +628,4 @@ if __name__ == '__main__':
     mask[200:400, 200:400] = 0
     rotm_image, s_rotm_image = images.create_rotm_image(s_pang_arrays,
                                                         mask=mask)
+    rotm_image_no_s, s_rotm_image_no_s = images.create_rotm_image(mask=mask)

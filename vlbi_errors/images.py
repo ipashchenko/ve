@@ -5,7 +5,7 @@ from from_fits import (create_image_from_fits_file,
                        create_clean_image_from_fits_file)
 from utils import (mask_region, mas_to_rad, hdi_of_mcmc, flatten,
                    nested_dict_itervalue)
-from image import BasicImage, CleanImage
+from image import BasicImage, Image
 from collections import defaultdict
 from scipy.optimize import leastsq
 
@@ -112,7 +112,6 @@ class Images(object):
             # FIXME: When use clean_image & when just image?
             print "Processing ", fname
             image = create_image_from_fits_file(fname)
-            print image.imsize, image.pixsize
             if previous_image:
                 assert image == previous_image, "Adding image with different " \
                                                 "basic parameters!"
@@ -218,8 +217,8 @@ class Images(object):
             ``0``)
 
         :return:
-           Tuple of two ``BasicImage`` instances with Rotation Measure values
-           and it's uncertainties estimates.
+           Tuple of two ``Image`` instances with Rotation Measure values and
+           it's uncertainties estimates.
 
         """
         required_stokeses = ('Q', 'U')
@@ -264,13 +263,13 @@ class Images(object):
         # isntance
         rotm_array, s_rotm_array = rotm_map(freqs, pang_arrays, s_pang_arrays,
                                             mask=mask)
-        rotm_image = BasicImage(imsize=img.imsize, pixref=img.pixref,
-                                pixrefval=img.pixrefval,
-                                pixsize=img.pixsize)
+        rotm_image = Image(imsize=img.imsize, pixref=img.pixref,
+                           pixrefval=img.pixrefval, pixsize=img.pixsize,
+                           freq=freqs, stokes='ROTM')
         rotm_image.image = rotm_array
-        s_rotm_image = BasicImage(imsize=img.imsize, pixref=img.pixref,
-                                 pixrefval=img.pixrefval,
-                                 pixsize=img.pixsize)
+        s_rotm_image = Image(imsize=img.imsize, pixref=img.pixref,
+                             pixrefval=img.pixrefval, pixsize=img.pixsize,
+                             freq=freqs, stokes='ROTM')
         s_rotm_image.image = s_rotm_array
 
         return rotm_image, s_rotm_image
@@ -289,7 +288,7 @@ class Images(object):
             one image, that is it should be 2D array.
 
         :return:
-            List of ``BasicImage`` instances with Polarization Angle maps.
+            List of ``Image`` instances with Polarization Angle maps.
 
         """
         required_stokeses = ('Q', 'U')
@@ -332,9 +331,9 @@ class Images(object):
         for q_image, u_image in zip(q_images, u_images):
             pang_array = pang_map(q_image.image, u_image.image, mask=mask)
             # Create basic image and add ``pang_array``
-            pang_image = BasicImage(imsize=img.imsize, pixref=img.pixref,
-                                    pixrefval=img.pixrefval,
-                                    pixsize=img.pixsize)
+            pang_image = Image(imsize=img.imsize, pixref=img.pixref,
+                               pixrefval=img.pixrefval, pixsize=img.pixsize,
+                               freq=img.freq, stokes='PANG')
             pang_image.image = pang_array
             pang_images.append(pang_image)
 
@@ -355,7 +354,7 @@ class Images(object):
             one image, that is it should be 2D array.
 
         :return:
-            List of ``BasicImage`` instances with Polarization Flux maps.
+            List of ``Image`` instances with Polarization Flux maps.
 
         """
         required_stokeses = ('Q', 'U')
@@ -398,9 +397,9 @@ class Images(object):
         for q_image, u_image in zip(q_images, u_images):
             pol_array = pol_map(q_image.image, u_image.image, mask=mask)
             # Create basic image and add ``pang_array``
-            pol_image = BasicImage(imsize=img.imsize, pixref=img.pixref,
-                                   pixrefval=img.pixrefval,
-                                   pixsize=img.pixsize)
+            pol_image = Image(imsize=img.imsize, pixref=img.pixref,
+                              pixrefval=img.pixrefval, pixsize=img.pixsize,
+                              freq=img.freq, stokes='PPOL')
             pol_image.image = pol_array
             pol_images.append(pol_image)
 
@@ -664,27 +663,34 @@ def hdi_of_images(images, cred_mass=0.68):
 
 if __name__ == '__main__':
     import os
+    data_dir = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/'
     # Directory with fits-images of bootstrapped data
-    i_dir = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C1/im/I/'
+    i_dir = data_dir + 'C1/im/I/'
     # Directory with Q & U fits-images for pang-tests
-    q_dir = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C1/im/Q/'
-    u_dir = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C1/im/U/'
+    q_dir = data_dir + 'C1/im/Q/'
+    u_dir = data_dir + 'C1/im/U/'
     # Directories with Q & U fits-images for rotm-test
-    rotm_dir_c1_q = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C1/im/Q/'
-    rotm_dir_c1_u = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C1/im/U/'
-    rotm_dir_c2_q = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C2/im/Q/'
-    rotm_dir_c2_u = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/C2/im/U/'
-    rotm_dir_x1_q = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/X1/im/Q/'
-    rotm_dir_x1_u = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/X1/im/U/'
-    rotm_dir_x2_q = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/X2/im/Q/'
-    rotm_dir_x2_u = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/X2/im/U/'
+    rotm_dir_c1_q = data_dir + 'C1/im/Q/'
+    rotm_dir_c1_u = data_dir + 'C1/im/U/'
+    rotm_dir_c2_q = data_dir + 'C2/im/Q/'
+    rotm_dir_c2_u = data_dir + 'C2/im/U/'
+    rotm_dir_x1_q = data_dir + 'X1/im/Q/'
+    rotm_dir_x1_u = data_dir + 'X1/im/U/'
+    rotm_dir_x2_q = data_dir + 'X2/im/Q/'
+    rotm_dir_x2_u = data_dir + 'X2/im/U/'
     fits_file = 'cc.fits'
 
     # Testing ``Images.create_error_image``
     print "Testing ``Images.create_error_image`` method..."
     images = Images()
     images.add_from_fits(wildcard=i_dir + "cc_*.fits")
-    error_map = images.create_error_image()
+    i_error_map = images.create_error_image()
+    images = Images()
+    images.add_from_fits(wildcard=q_dir + "cc_*.fits")
+    q_error_map = images.create_error_image()
+    images = Images()
+    images.add_from_fits(wildcard=u_dir + "cc_*.fits")
+    u_error_map = images.create_error_image()
 
     # Test rm-creating functions
     print "Testing rm-creating functions..."
@@ -764,6 +770,12 @@ if __name__ == '__main__':
     images.add_from_fits(fnames)
     pol_images_10 = images.create_pol_images()
 
+    # Testing making error-map for polarization flux images
+    print "Testing making error-map for polarization flux images..."
+    images = Images()
+    images.add_images(pol_images_10)
+    pol_error_image = images.create_error_image()
+
     # Testing ``Images.create_rotm_image``
     print "Testing ``Images.create_rotm_image``..."
     images = Images()
@@ -791,6 +803,39 @@ if __name__ == '__main__':
     # bootstrapped realization of polarization flux images and find error on it.
     # Then when calculating ROTM use only pixels with POL > error.
 
+    # First, create polarization flux (PPOL) error image using high frequency
+    # data
+    images = Images()
+    fnames = [os.path.join(rotm_dir_x2_q, 'cc_{}.fits'.format(i)) for i in
+              range(1, 11)]
+    fnames += [os.path.join(rotm_dir_x2_u, 'cc_{}.fits'.format(i)) for i in
+               range(1, 11)]
+    images.add_from_fits(fnames)
+    pol_images_x2_10 = images.create_pol_images()
+    images = Images()
+    images.add_images(pol_images_x2_10)
+    pol_error_image = images.create_error_image(cred_mass=0.95)
+    # Now create mask using model PPOL image and error PPOL image on highest
+    # frequency
+    images = Images()
+    q_dir_ = data_dir + 'X2/im/Q/'
+    u_dir_ = data_dir + 'X2/im/U/'
+    images.add_from_fits(fnames=[os.path.join(q_dir, 'cc.fits'),
+                                 os.path.join(u_dir, 'cc.fits')])
+    pol_image = images.create_pol_images()[0]
+    mask = pol_image.image < pol_error_image.image
+    # Now make ROTM image with this mask
+    images = Images()
+    images.add_from_fits(fnames=[os.path.join(rotm_dir_c1_q, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_c1_u, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_c2_q, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_c2_u, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_x1_q, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_x1_u, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_x2_q, 'cc_1.fits'),
+                                 os.path.join(rotm_dir_x2_u, 'cc_1.fits')])
+    x2masked_rotm_image_no_s, x2masked_s_rotm_image_no_s =\
+        images.create_rotm_image(mask=mask)
 
     # Testing uncertainties estimates for ROTM maps
     print "Testing uncertainties estimates for ROTM images..."

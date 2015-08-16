@@ -730,182 +730,181 @@ def hdi_of_images(images, cred_mass=0.68):
 
 if __name__ == '__main__':
     import os
-    data_dir = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0148+274/2007_03_01/'
+    data_dir = '/home/ilya/vlbi_errors/0148+274/2007_03_01/'
     # Directory with fits-images of bootstrapped data
-    i_dir = data_dir + 'C1/im/I/'
-    # Directory with Q & U fits-images for pang-tests
-    q_dir = data_dir + 'C1/im/Q/'
-    u_dir = data_dir + 'C1/im/U/'
-    # Directories with Q & U fits-images for rotm-test
-    rotm_dir_c1_q = data_dir + 'C1/im/Q/'
-    rotm_dir_c1_u = data_dir + 'C1/im/U/'
-    rotm_dir_c2_q = data_dir + 'C2/im/Q/'
-    rotm_dir_c2_u = data_dir + 'C2/im/U/'
-    rotm_dir_x1_q = data_dir + 'X1/im/Q/'
-    rotm_dir_x1_u = data_dir + 'X1/im/U/'
-    rotm_dir_x2_q = data_dir + 'X2/im/Q/'
-    rotm_dir_x2_u = data_dir + 'X2/im/U/'
-    fits_file = 'cc.fits'
+    i_dir_c1 = data_dir + 'C1/im/I/'
+    q_dir_c1 = data_dir + 'C1/im/Q/'
+    u_dir_c1 = data_dir + 'C1/im/U/'
+    q_dir_c2 = data_dir + 'C2/im/Q/'
+    u_dir_c2 = data_dir + 'C2/im/U/'
+    q_dir_x1 = data_dir + 'X1/im/Q/'
+    u_dir_x1 = data_dir + 'X1/im/U/'
+    q_dir_x2 = data_dir + 'X2/im/Q/'
+    u_dir_x2 = data_dir + 'X2/im/U/'
+    original_cc_fits_file = 'cc.fits'
 
-    # Testing ``Images.create_error_image``
-    print "Testing ``Images.create_error_image`` method..."
+    # # Testing ``Images.create_error_image``
+    # print "Testing ``Images.create_error_image`` method..."
     images = Images()
-    images.add_from_fits(wildcard=i_dir + "cc_*.fits")
+    images.add_from_fits(wildcard=i_dir_c1 + "cc_*.fits")
     i_error_map = images.create_error_image()
-    images = Images()
-    images.add_from_fits(wildcard=q_dir + "cc_*.fits")
-    q_error_map = images.create_error_image()
-    images = Images()
-    images.add_from_fits(wildcard=u_dir + "cc_*.fits")
-    u_error_map = images.create_error_image()
+    # images = Images()
+    # images.add_from_fits(wildcard=q_dir_c1 + "cc_*.fits")
+    # q_error_map = images.create_error_image()
+    # images = Images()
+    # images.add_from_fits(wildcard=u_dir_c1 + "cc_*.fits")
+    # u_error_map = images.create_error_image()
 
-    # Test rm-creating functions
-    print "Testing rm-creating functions..."
-    chis = [np.zeros(100, dtype=float).reshape((10, 10)) + 2.3,
-            np.zeros(100, dtype=float).reshape((10, 10)) + 1.3,
-            np.zeros(100, dtype=float).reshape((10, 10)) + 0.8]
-    s_chis = [np.zeros(100, dtype=float).reshape((10, 10)) + 0.3,
-              np.zeros(100, dtype=float).reshape((10, 10)) + 0.3,
-              np.zeros(100, dtype=float).reshape((10, 10)) + 0.3]
-    freqs = np.array([1.4 * 10 ** 9, 5. * 10 ** 9, 8.4 * 10 ** 9])
-    rotm_array_no_s, s_rotm_array_no_s = rotm_map(freqs, chis)
-    rotm_array, s_rotm_array = rotm_map(freqs, chis, s_chis)
+    # # Test rm-creating functions
+    # print "Testing rm-creating functions..."
+    # chis = [np.zeros(100, dtype=float).reshape((10, 10)) + 2.3,
+    #         np.zeros(100, dtype=float).reshape((10, 10)) + 1.3,
+    #         np.zeros(100, dtype=float).reshape((10, 10)) + 0.8]
+    # s_chis = [np.zeros(100, dtype=float).reshape((10, 10)) + 0.3,
+    #           np.zeros(100, dtype=float).reshape((10, 10)) + 0.3,
+    #           np.zeros(100, dtype=float).reshape((10, 10)) + 0.3]
+    # freqs = np.array([1.4 * 10 ** 9, 5. * 10 ** 9, 8.4 * 10 ** 9])
+    # rotm_array_no_s, s_rotm_array_no_s = rotm_map(freqs, chis)
+    # rotm_array, s_rotm_array = rotm_map(freqs, chis, s_chis)
 
-    mask = np.zeros(100).reshape((10, 10))
-    mask[3, 3] = 1
-    ma_rotm_array_no_s, ma_s_rotm_array_no_s = rotm_map(freqs, chis, mask=mask)
-    ma_rotm_array, ma_s_rotm_array = rotm_map(freqs, chis, s_chis, mask=mask)
+    # mask = np.zeros(100).reshape((10, 10))
+    # mask[3, 3] = 1
+    # ma_rotm_array_no_s, ma_s_rotm_array_no_s = rotm_map(freqs, chis, mask=mask)
+    # ma_rotm_array, ma_s_rotm_array = rotm_map(freqs, chis, s_chis, mask=mask)
 
-    # Testing ``pang_map`` function
-    print "Testing ``pang_map`` function..."
-    q_array = np.zeros(100, dtype=float).reshape((10, 10)) + 2.3
-    u_array = np.zeros(100, dtype=float).reshape((10, 10)) + 0.3
-    chi_array = pang_map(q_array, u_array)
+    # # Testing ``pang_map`` function
+    # print "Testing ``pang_map`` function..."
+    # q_array = np.zeros(100, dtype=float).reshape((10, 10)) + 2.3
+    # u_array = np.zeros(100, dtype=float).reshape((10, 10)) + 0.3
+    # chi_array = pang_map(q_array, u_array)
 
-    mask = np.zeros(100).reshape((10, 10))
-    mask[3, 3] = 1
-    ma_chi_array = pang_map(q_array, u_array, mask=mask)
+    # mask = np.zeros(100).reshape((10, 10))
+    # mask[3, 3] = 1
+    # ma_chi_array = pang_map(q_array, u_array, mask=mask)
 
-    # Testing ``cpol_map`` function
-    print "Testing ``cpol_map`` function..."
-    q_array = np.zeros(100, dtype=float).reshape((10, 10)) + 2.3
-    u_array = np.zeros(100, dtype=float).reshape((10, 10)) + 0.3
-    cpol_array = cpol_map(q_array, u_array)
+    # # Testing ``cpol_map`` function
+    # print "Testing ``cpol_map`` function..."
+    # q_array = np.zeros(100, dtype=float).reshape((10, 10)) + 2.3
+    # u_array = np.zeros(100, dtype=float).reshape((10, 10)) + 0.3
+    # cpol_array = cpol_map(q_array, u_array)
 
-    mask = np.zeros(100).reshape((10, 10))
-    mask[3, 3] = 1
-    ma_cpol_array = cpol_map(q_array, u_array, mask=mask)
+    # mask = np.zeros(100).reshape((10, 10))
+    # mask[3, 3] = 1
+    # ma_cpol_array = cpol_map(q_array, u_array, mask=mask)
 
-    # Testing ``fpol_map`` function
-    print "Testing ``fpol_map`` function..."
-    q_array = np.zeros(100, dtype=float).reshape((10, 10)) + 2.3
-    u_array = np.zeros(100, dtype=float).reshape((10, 10)) + 0.3
-    i_array = np.zeros(100, dtype=float).reshape((10, 10)) + 5.3
-    fpol_array = fpol_map(q_array, u_array, i_array)
+    # # Testing ``fpol_map`` function
+    # print "Testing ``fpol_map`` function..."
+    # q_array = np.zeros(100, dtype=float).reshape((10, 10)) + 2.3
+    # u_array = np.zeros(100, dtype=float).reshape((10, 10)) + 0.3
+    # i_array = np.zeros(100, dtype=float).reshape((10, 10)) + 5.3
+    # fpol_array = fpol_map(q_array, u_array, i_array)
 
-    mask = np.zeros(100).reshape((10, 10))
-    mask[3, 3] = 1
-    ma_fpol_array = fpol_map(q_array, u_array, i_array, mask=mask)
+    # mask = np.zeros(100).reshape((10, 10))
+    # mask[3, 3] = 1
+    # ma_fpol_array = fpol_map(q_array, u_array, i_array, mask=mask)
 
-    # Testing ``Images.create_pang_images``
-    print "Testing ``Images.create_pang_images``..."
-    # Testing one pair of Q & U images
-    images = Images()
-    images.add_from_fits(fnames=[os.path.join(q_dir, 'cc.fits'),
-                         os.path.join(u_dir, 'cc.fits')])
-    pang_images = images.create_pang_images()
-    # Testing two pairs of Q & U images
-    images = Images()
-    fnames = [os.path.join(q_dir, 'cc_{}.fits'.format(i)) for i in range(1, 11)]
-    fnames += [os.path.join(u_dir, 'cc_{}.fits'.format(i)) for i in
-               range(1, 11)]
-    images.add_from_fits(fnames)
-    pang_images_10 = images.create_pang_images()
+    # # Testing ``Images.create_pang_images``
+    # print "Testing ``Images.create_pang_images``..."
+    # # Testing one pair of Q & U images
+    # images = Images()
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
+    #                      os.path.join(u_dir_c1, 'cc.fits')])
+    # pang_images = images.create_pang_images()
+    # # Testing two pairs of Q & U images
+    # images = Images()
+    # fnames = [os.path.join(q_dir_c1, 'cc_{}.fits'.format(i)) for i in range(1, 11)]
+    # fnames += [os.path.join(u_dir_c1, 'cc_{}.fits'.format(i)) for i in
+    #            range(1, 11)]
+    # images.add_from_fits(fnames)
+    # pang_images_10 = images.create_pang_images()
 
-    # Testing ``Images.create_pol_images``
-    print "Testing ``Images.create_pol_images``..."
-    # Testing one pair of Q & U images
-    images = Images()
-    images.add_from_fits(fnames=[os.path.join(q_dir, 'cc.fits'),
-                                 os.path.join(u_dir, 'cc.fits')])
-    pol_images = images.create_pol_images()
-    # Testing ten pairs of Q & U images
-    images = Images()
-    fnames = [os.path.join(q_dir, 'cc_{}.fits'.format(i)) for i in range(1, 11)]
-    fnames += [os.path.join(u_dir, 'cc_{}.fits'.format(i)) for i in
-               range(1, 11)]
-    images.add_from_fits(fnames)
-    pol_images_10 = images.create_pol_images()
+    # # Testing ``Images.create_pol_images``
+    # print "Testing ``Images.create_pol_images``..."
+    # # Testing one pair of Q & U images
+    # images = Images()
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
+    #                              os.path.join(u_dir_c1, 'cc.fits')])
+    # pol_images = images.create_pol_images()
+    # # Testing ten pairs of Q & U images
+    # images = Images()
+    # fnames = [os.path.join(q_dir_c1, 'cc_{}.fits'.format(i)) for i in range(1, 11)]
+    # fnames += [os.path.join(u_dir_c1, 'cc_{}.fits'.format(i)) for i in
+    #            range(1, 11)]
+    # images.add_from_fits(fnames)
+    # pol_images_10 = images.create_pol_images()
 
-    # Testing making error-map for polarization flux images
-    print "Testing making error-map for polarization flux images..."
-    images = Images()
-    images.add_images(pol_images_10)
-    pol_error_image = images.create_error_image()
+    # # Testing making error-map for polarization flux images
+    # print "Testing making error-map for polarization flux images..."
+    # images = Images()
+    # images.add_images(pol_images_10)
+    # pol_error_image = images.create_error_image()
 
-    # Testing ``Images.create_rotm_image``
-    print "Testing ``Images.create_rotm_image``..."
-    images = Images()
-    s_pang_arrays = [np.zeros(512 * 512, dtype=float).reshape((512, 512)) + 0.1]
-    s_pang_arrays *= 4
-    # Only one of Q & U at each frequency
-    images.add_from_fits(fnames=[os.path.join(rotm_dir_c1_q, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_c1_u, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_c2_q, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_c2_u, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_x1_q, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_x1_u, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_x2_q, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_x2_u, 'cc_1.fits')])
+    # # Testing ``Images.create_rotm_image``
+    # print "Testing ``Images.create_rotm_image``..."
+    # images = Images()
+    # s_pang_arrays = [np.zeros(512 * 512, dtype=float).reshape((512, 512)) + 0.1]
+    # s_pang_arrays *= 4
+    # # Only one of Q & U at each frequency
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_1.fits'),
+    #                              os.path.join(u_dir_c1, 'cc_1.fits'),
+    #                              os.path.join(q_dir_c2, 'cc_1.fits'),
+    #                              os.path.join(u_dir_c2, 'cc_1.fits'),
+    #                              os.path.join(q_dir_x1, 'cc_1.fits'),
+    #                              os.path.join(u_dir_x1, 'cc_1.fits'),
+    #                              os.path.join(q_dir_x2, 'cc_1.fits'),
+    #                              os.path.join(u_dir_x2, 'cc_1.fits')])
 
-    mask = np.ones(512 * 512).reshape((512, 512))
-    mask[200:400, 200:400] = 0
-    rotm_image, s_rotm_image = images.create_rotm_image(s_pang_arrays,
-                                                        mask=mask)
-    rotm_image_no_s, s_rotm_image_no_s = images.create_rotm_image(mask=mask)
+    # mask = np.ones(512 * 512).reshape((512, 512))
+    # mask[200:400, 200:400] = 0
+    # rotm_image, s_rotm_image = images.create_rotm_image(s_pang_arrays,
+    #                                                     mask=mask)
+    # rotm_image_no_s, s_rotm_image_no_s = images.create_rotm_image(mask=mask)
 
-    # Testing blanking ROTM images...
-    print "Testing blanking of ROTM images..."
-    # Blanking mask should be based on polarization flux. One should create
-    # bootstrapped realization of polarization flux images and find error on it.
-    # Then when calculating ROTM use only pixels with POL > error.
+    # # Testing blanking ROTM images...
+    # print "Testing blanking of ROTM images..."
+    # # Blanking mask should be based on polarization flux. One should create
+    # # bootstrapped realization of polarization flux images and find error on it.
+    # # Then when calculating ROTM use only pixels with POL > error.
 
-    # First, create polarization flux (PPOL) error image using high frequency
-    # data
-    images = Images()
-    fnames = [os.path.join(rotm_dir_x2_q, 'cc_{}.fits'.format(i)) for i in
-              range(1, 11)]
-    fnames += [os.path.join(rotm_dir_x2_u, 'cc_{}.fits'.format(i)) for i in
-               range(1, 11)]
-    images.add_from_fits(fnames)
-    pol_images_x2_10 = images.create_pol_images()
-    images = Images()
-    images.add_images(pol_images_x2_10)
-    pol_error_image = images.create_error_image(cred_mass=0.95)
-    # Now create mask using model PPOL image and error PPOL image on highest
-    # frequency
-    images = Images()
-    q_dir_ = data_dir + 'X2/im/Q/'
-    u_dir_ = data_dir + 'X2/im/U/'
-    images.add_from_fits(fnames=[os.path.join(q_dir, 'cc.fits'),
-                                 os.path.join(u_dir, 'cc.fits')])
-    pol_image = images.create_pol_images()[0]
-    mask = pol_image.image < pol_error_image.image
-    # Now make ROTM image with this mask
-    images = Images()
-    images.add_from_fits(fnames=[os.path.join(rotm_dir_c1_q, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_c1_u, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_c2_q, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_c2_u, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_x1_q, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_x1_u, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_x2_q, 'cc_1.fits'),
-                                 os.path.join(rotm_dir_x2_u, 'cc_1.fits')])
-    x2masked_rotm_image_no_s, x2masked_s_rotm_image_no_s =\
-        images.create_rotm_image(mask=mask)
+    # # TODO: Create mask stacking masks from all bands
+    # # First, create polarization flux (PPOL) error image using high frequency
+    # # data
+    # images = Images()
+    # fnames = [os.path.join(q_dir_x2, 'cc_{}.fits'.format(i)) for i in
+    #           range(1, 101)]
+    # fnames += [os.path.join(u_dir_x2, 'cc_{}.fits'.format(i)) for i in
+    #            range(1, 101)]
+    # images.add_from_fits(fnames)
+    # pol_images_x2_100 = images.create_pol_images()
+    # images = Images()
+    # images.add_images(pol_images_x2_100)
+    # pol_error_image = images.create_error_image(cred_mass=0.99)
+    # # Now create mask using model PPOL image and error PPOL image on highest
+    # # frequency
+    # images = Images()
+    # q_dir_ = data_dir + 'X2/im/Q/'
+    # u_dir_ = data_dir + 'X2/im/U/'
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
+    #                              os.path.join(u_dir_c1, 'cc.fits')])
+    # pol_image = images.create_pol_images()[0]
+    # mask = pol_image.image < pol_error_image.image
+    # # Now make ROTM image with this mask
+    # images = Images()
+    # # FIXME: Must be imaged of Q&U with the same parameters from original
+    # # uv-data
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_1.fits'),
+    #                              os.path.join(u_dir_c1, 'cc_1.fits'),
+    #                              os.path.join(q_dir_c2, 'cc_1.fits'),
+    #                              os.path.join(u_dir_c2, 'cc_1.fits'),
+    #                              os.path.join(q_dir_x1, 'cc_1.fits'),
+    #                              os.path.join(u_dir_x1, 'cc_1.fits'),
+    #                              os.path.join(q_dir_x2, 'cc_1.fits'),
+    #                              os.path.join(u_dir_x2, 'cc_1.fits')])
+    # x2masked_rotm_image_no_s, x2masked_s_rotm_image_no_s =\
+    #     images.create_rotm_image(mask=mask)
 
-    # Testing uncertainties estimates for ROTM maps
-    print "Testing uncertainties estimates for ROTM images..."
+    # # Testing uncertainties estimates for ROTM maps
+    # print "Testing uncertainties estimates for ROTM images..."
     # Error on ROTM can be calculated in several ways. First, create Q, U images
     # from bootstrapped uv-data and make ROTM image for each. Then stack them
     # and find error in each pixel or find ``p-value`` of any feature. Second,

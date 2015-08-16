@@ -4,10 +4,11 @@ import glob
 from from_fits import (create_image_from_fits_file,
                        create_clean_image_from_fits_file)
 from utils import (mask_region, mas_to_rad, hdi_of_mcmc, flatten,
-                   nested_dict_itervalue)
+                   nested_dict_itervalue, mask_region)
 from image import BasicImage, Image
 from collections import defaultdict
 from scipy.optimize import leastsq
+from matplotlib.pyplot import hist, bar, show
 
 
 class Images(object):
@@ -53,6 +54,72 @@ class Images(object):
     def _create_cube(self, stokes=None, freq=None):
         self._images_cube = np.dstack(tuple(image.image for image in
                                       self._images_dict[freq][stokes]))
+
+    def pixels_histogram(self, stokes=None, freq=None, region=None, mask=None,
+                         mode='mean'):
+        """
+        Method that creates histogram of pixel values for use-specified pixel or
+        region of pixels.
+
+        :param region (optional):
+            Region where to calculate histograms. Or (blc[0], blc[1], trc[0],
+            trc[1],) or (center[0], center[1], r, None,).
+        :param mask: (optional)
+            2D numpy array that can be converted to boolen. Mask that specifies
+            what pixel to use.
+        :param mode: (optional)
+            Operation on selected region - 'mean' or 'sum'. (default: 'mean')
+
+        """
+        mode_dict = {'mean': np.mean, 'sum': np.sum}
+        if mode not in mode_dict:
+            raise Exception("Use mean, median or sum for ``mode``!")
+        # If ``_image_cube`` haven't created yet - create it now
+        if self._images_cube is None:
+            # Check that collection of images isn't empty
+            if not self.images:
+                raise Exception("First, add some images to instance!")
+
+            # If no frequency is supplied => check that instance contains images
+            # of only one frequency and use it. Otherwise - raise Exception
+            if freq is None:
+                freqs = self.freqs
+                if len(freqs) > 1:
+                    raise Exception("Choose what frequency images to use!")
+                else:
+                    freq = freqs[0]
+            # If no Stokes parameter is specified => check that chosen frequency
+            # contains images of only one Stokes parameter. Otherwise - raise
+            # Exception
+            if stokes is None:
+                stokeses = self.stokeses(freq)
+                if len(stokeses) > 1:
+                    raise Exception("Choose what Stokes parameter images to"
+                                    " use!")
+                else:
+                    stokes = stokeses[0]
+
+            # Now can safely create cube
+            self._create_cube(stokes, freq)
+
+        cube = self._images_cube
+        if mask is None:
+            mask = np.ones(cube[:, :, 0].shape)
+            if region is not None:
+                mask[mask_region(mask, region).mask] = 0
+            else:
+                mask = np.zeros(cube[:, :, 0].shape)
+
+        mask = np.resize(mask, (cube.shape[2], mask.shape[0], mask.shape[1]))
+        mask = mask.T
+        values = np.ma.array(cube, mask=mask)
+        values = values.reshape((cube.shape[0] * cube.shape[1], cube.shape[2]))
+        values = mode_dict[mode](values, axis=0)
+        from knuth_hist import histogram
+        counts, edges = histogram(values)
+        lower_d = np.resize(edges, len(edges) - 1)
+        bar(lower_d, counts, width=np.diff(lower_d)[0], linewidth=2, color='w')
+        show()
 
     def compare_images_by_param(self, param, freq_stokes_dict=None):
         """

@@ -308,7 +308,7 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
     stokes.sort()
 
     curdir = os.getcwd()
-    print "Cleaning bootstrapped data..."
+    print "Cleaning bootstrapped and original data..."
     for source in sources:
         print " for source ", source
         for epoch in epochs:
@@ -348,6 +348,19 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                                      mapsize_restore=None,
                                      beam_restore=beam_restore,
                                      outpath=map_path)
+                # Cleaning original data with low_freq resolution
+                for stoke in stokes:
+                    print "  working with stokes parameter ", stoke
+                    map_path = im_fits_path(source, band, epoch, stoke,
+                                            base_path=base_path)
+                    clean_difmap(fname='sc_uv.fits',
+                                 outfname='cc_orig.fits',
+                                 stokes=stoke, mapsize_clean=mapsize_clean,
+                                 path=uv_path,
+                                 path_to_script=path_to_script,
+                                 mapsize_restore=None,
+                                 beam_restore=beam_restore,
+                                 outpath=map_path)
     os.chdir(curdir)
 
 

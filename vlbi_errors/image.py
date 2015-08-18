@@ -10,6 +10,20 @@ try:
 except ImportError:
     pylab = None
 
+    # if plt is not None:
+    #     plt.figure()
+    #     plt.matshow(self.values, aspect='auto')
+    #     plt.colorbar()
+    #     if not plot_indexes:
+    #         raise NotImplementedError("Ticks haven't implemented yet")
+    #         # plt.xticks(np.linspace(0, 999, 10, dtype=int),
+    #         # frame.t[np.linspace(0, 999, 10, dtype=int)])
+    #     plt.xlabel("time steps")
+    #     plt.ylabel("frequency ch. #")
+    #     plt.title('Dynamical spectra')
+    #     if savefig is not None:
+    #         plt.savefig(savefig, bbox_inches='tight')
+    #     plt.show()
 
 # TODO: how plot coordinates in mas for -10, 0, 10 mas... if using matshow?
 def plot(image, x=None, y=None, blc=None, trc=None, clim=None, cmap=None,
@@ -125,6 +139,7 @@ def plot(image, x=None, y=None, blc=None, trc=None, clim=None, cmap=None,
         #     plt.show()
 
 
+# TODO: Option for saving ``Image`` instance
 class BasicImage(object):
     """
     Class that represents images.
@@ -493,3 +508,23 @@ class CleanImage(Image):
 #    Class that represents image made using MEM algorithm.
 #    """
 #    pass
+
+if __name__ == '__main__':
+    data_dir = '/home/ilya/vlbi_errors/0148+274/2007_03_01/'
+    # Directory with fits-images of bootstrapped data
+    i_dir_c1 = data_dir + 'C1/im/I/'
+    i_dir_c2 = data_dir + 'C2/im/I/'
+    i_dir_x1 = data_dir + 'X1/im/I/'
+    i_dir_x2 = data_dir + 'X2/im/I/'
+    q_dir_c1 = data_dir + 'C1/im/Q/'
+    u_dir_c1 = data_dir + 'C1/im/U/'
+    q_dir_c2 = data_dir + 'C2/im/Q/'
+    u_dir_c2 = data_dir + 'C2/im/U/'
+    q_dir_x1 = data_dir + 'X1/im/Q/'
+    u_dir_x1 = data_dir + 'X1/im/U/'
+    q_dir_x2 = data_dir + 'X2/im/Q/'
+    u_dir_x2 = data_dir + 'X2/im/U/'
+    i_cc_file = '/home/ilya/vlbi_errors/0148+274/2007_03_01/X2/im/I/orig_cc.fits'
+    from from_fits import create_clean_image_from_fits_file
+    ccimage = create_clean_image_from_fits_file(i_cc_file)
+

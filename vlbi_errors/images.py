@@ -538,6 +538,75 @@ class Images(object):
 
         return pol_images
 
+    # TODO: Implement ``create_pol_image`` & use it to implement this method as
+    # in ``create_rotm_images``
+    def create_fpol_images(self, freq=None, mask=None):
+        """
+        Method that creates Fractional Polarization images for current
+        collection of image instances.
+
+        :param freq: (optional)
+             What frequency to use. If ``None`` then assume that only one
+             frequency is present in instance. (default: ``None``)
+        :param mask: (optional)
+            Mask to be applied to arrays before calculation. If ``None`` then
+            don't apply mask. Note that ``mask`` must have dimensions of only
+            one image, that is it should be 2D array.
+
+        :return:
+            List of ``Image`` instances with Fractional Polarization maps.
+
+        """
+        required_stokeses = ('I', 'Q', 'U')
+
+        # Check that collection of images isn't empty
+        if not self.images:
+            raise Exception("First, add some images to instance!")
+
+        # If no frequency is supplied => check that instance contains images of
+        # only one frequency and use it. Otherwise - raise Exception
+        if freq is None:
+            freqs = self.freqs
+            if len(freqs) > 1:
+                raise Exception("Choose what frequency images to use!")
+            else:
+                freq = freqs[0]
+
+        # Check that used frequency has I, Q & U maps
+        stokeses = self.stokeses(freq)
+        for stokes in required_stokeses:
+            if stokes not in stokeses:
+                raise Exception("No stokes " + stokes + " parameter for " +
+                                freq + " frequency!")
+
+        # Get some image from stacked to use it parameters for saving output. It
+        # doesn't matter what image - they all are checked to have the same
+        # basic parameters
+        i_images = self._images_dict[freq]['I']
+        q_images = self._images_dict[freq]['Q']
+        u_images = self._images_dict[freq]['U']
+        # Check that we got the same number of I, Q & U images
+        if len(i_images) != len(q_images) or len(q_images) != len(u_images):
+            raise Exception("Number of I, Q & U images for " + str(freq) +
+                            " differs!")
+        # Get some image from stacked to use it parameters for saving output. It
+        # doesn't matter what image - they all are checked to have the same
+        # basic parameters
+        img = self._images_dict[freq][stokes][0]
+        # Create container for fpol-images
+        fpol_images = list()
+        for i_image, q_image, u_image in zip(i_images, q_images, u_images):
+            fpol_array = fpol_map(i_image.image, q_image.image, u_image.image,
+                                  mask=mask)
+            # Create basic image and add ``fpol_array``
+            fpol_image = Image(imsize=img.imsize, pixref=img.pixref,
+                               pixrefval=img.pixrefval, pixsize=img.pixsize,
+                               freq=img.freq, stokes='FPOL')
+            fpol_image.image = fpol_array
+            fpol_images.append(fpol_image)
+
+        return fpol_images
+
 
 def rotm_map(freqs, chis, s_chis=None, mask=None):
     """

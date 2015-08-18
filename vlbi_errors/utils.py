@@ -1,4 +1,5 @@
-from itertools import combinations
+from itertools import combinations, chain
+import collections
 import re
 import math
 import numpy as np
@@ -795,3 +796,44 @@ def setInDict(dataDict, mapList, value):
 
 def delInDict(dataDict, mapList):
     del getFromDict(dataDict, mapList[:-1])[mapList[-1]]
+
+
+def nested_dict_itervalue(nested):
+    """
+    http://stackoverflow.com/questions/10756427/loop-through-all-nested-dictionary-values
+
+    :param nested:
+        Nested dictionary.
+    :return:
+        Iteratoer of values.
+
+    >>> list(nested_dict_iter({'a': {'b': {'c': 1, 'd': 2},
+                                     'e': {'f': 3, 'g': 4}
+                                     },
+                               'h': {'i': 5, 'j': 6}
+                               }))
+    [1, 2, 3, 4, 5, 6]
+
+    """
+    for value in nested.itervalues():
+        if isinstance(value, collections.Mapping):
+            for inner_value in nested_dict_itervalue(value):
+                yield inner_value
+        else:
+            yield value
+
+
+def flatten(iterable, ltypes=collections.Iterable):
+    """
+    http://stackoverflow.com/questions/2158395/flatten-an-irregular-list-of-lists-in-python/2158532#2158532
+    :param iterable:
+    :param ltypes:
+    :return:
+    """
+    remainder = iter(iterable)
+    while True:
+        first = next(remainder)
+        if isinstance(first, ltypes) and not isinstance(first, basestring):
+            remainder = chain(first, remainder)
+        else:
+            yield first

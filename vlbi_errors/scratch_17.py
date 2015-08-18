@@ -1,7 +1,7 @@
 import math
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, Ellipse
+from matplotlib.patches import Ellipse
 
 
 def gaussian(height, x0, y0, bmaj, e=0.3, bpa=0, size_x=100):
@@ -32,39 +32,75 @@ def gaussian(height, x0, y0, bmaj, e=0.3, bpa=0, size_x=100):
 
 if __name__ == '__main__':
 
+    # Create picture with contours - I, color - fpol and vectors - direction and
+    # value of Linear Polarization
+    import os
+    from images import Images
+    data_dir = '/home/ilya/vlbi_errors/0148+274/2007_03_01/'
+    i_dir_c1 = data_dir + 'C1/im/I/'
+    q_dir_c1 = data_dir + 'C1/im/Q/'
+    u_dir_c1 = data_dir + 'C1/im/U/'
+    print "Creating PANG image..."
+    images = Images()
+    images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
+                         os.path.join(u_dir_c1, 'cc.fits')])
+    pang_image = images.create_pang_images()[0]
+
+    print "Creating PPOL image..."
+    images = Images()
+    images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
+                                 os.path.join(u_dir_c1, 'cc.fits')])
+    ppol_image = images.create_pol_images()[0]
+
+    print "Creating I image..."
+    from from_fits import create_clean_image_from_fits_file
+    i_image = create_clean_image_from_fits_file(os.path.join(i_dir_c1,
+                                                             'cc.fits'))
+    print "Creating FPOL image..."
+    images = Images()
+    images.add_from_fits(fnames=[os.path.join(i_dir_c1, 'cc.fits'),
+                                 os.path.join(q_dir_c1, 'cc.fits'),
+                                 os.path.join(u_dir_c1, 'cc.fits')])
+    fpol_image = images.create_fpol_images()[0]
+
     beam_place = 'ul'
-    pixsize = 2.908881604153578e-09
-    imsize = 100
+    pixsize = abs(i_image.pixsize[0])
+    imsize = i_image.imsize[0]
     factor = 206264806.719150
+    arc_length = pixsize * imsize * factor
     x_, y_ = np.mgrid[-imsize/2: imsize/2, -imsize/2: imsize/2]
     x_ *= pixsize * factor
     y_ *= pixsize * factor
-    u = np.ones((imsize, imsize)) * 3
-    v = np.ones((imsize, imsize)) * 3
+    u = ppol_image.image * np.cos(pang_image.image)
+    v = ppol_image.image * np.sin(pang_image.image)
     arc_length = pixsize * imsize * factor
     x = y = np.linspace(-arc_length/2, arc_length/2, imsize)
-    data = np.random.normal(0, 1, (100,100))
-    data += gaussian(50, 60, 60, 40, 0.3, 0, size_x=imsize)
-    data += gaussian(30, 40, 20, 10, 0.5, 0, size_x=imsize)
-    mask = np.zeros((imsize, imsize))
-    mask_ = np.zeros((imsize, imsize))
-    mask[data < 10] = 1
-    mask_[data < 3] = 1
-    data_masked = np.ma.array(data, mask=mask)
-    data_masked_ = np.ma.array(data, mask=mask_)
+    i_array = i_image.image
+    ppol_array = ppol_image.image
+    fpol_array = fpol_image.image
+    # Creating masks
+    i_mask = np.zeros((imsize, imsize))
+    ppol_mask = np.zeros((imsize, imsize))
+    i_mask[i_array < 0.000125] = 1
+    ppol_mask[ppol_array < 0.003] = 1
+    fpol_mask = np.logical_or(i_mask, ppol_mask)
+    # Masking data
+    i_array_masked = np.ma.array(i_array, mask=i_mask)
+    fpol_array_masked = np.ma.array(fpol_array, mask=ppol_mask)
+    ppol_array_masked = np.ma.array(ppol_array, mask=ppol_mask)
     fig = plt.figure()
     ax = fig.add_axes([0.1,0.1,0.6,0.8])
-    i = ax.imshow(data_masked, interpolation='none', aspect='auto', label='RM',
-                  extent=[-arc_length/2, arc_length/2, -arc_length/2,
-                          arc_length/2], origin='lower')
-    co = ax.contour(x, y, data_masked_, colors='k', label='I')
+    i = ax.imshow(fpol_array_masked, interpolation='none', aspect='auto',
+                  label='FPOL', extent=[-arc_length/2, arc_length/2,
+                                        -arc_length/2, arc_length/2],
+                  origin='lower')
+    co = ax.contour(x, y, i_array_masked, colors='k', label='I')
     m = np.zeros(u.shape)
-    m[data < 10] = 1
-    u = np.ma.array(u, mask=m)
-    v = np.ma.array(v, mask=m)
-    vec = ax.quiver(y_[::2], x_[::2], u[::2], v[::2],
+    u = np.ma.array(u, mask=ppol_mask)
+    v = np.ma.array(v, mask=ppol_mask)
+    vec = ax.quiver(x[::2], y[::2], u[::2, ::2], v[::2, ::2],
                     angles='uv', units='xy', headwidth=0, headlength=0,
-                    headaxislength=0)
+                    headaxislength=0, scale=0.005, width=0.05)
     # Doesn't show anything
     ax.legend()
     # c = Circle((5, 5), radius=4,
@@ -93,5 +129,6 @@ if __name__ == '__main__':
     title = ax.set_title("My plot", fontsize='large')
     colorbar_ax = fig.add_axes([0.7, 0.1, 0.05, 0.8])
     fig.colorbar(i, cax=colorbar_ax)
+    fig.show()
 
 

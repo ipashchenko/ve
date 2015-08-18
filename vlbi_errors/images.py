@@ -5,12 +5,16 @@ from from_fits import (create_image_from_fits_file,
                        create_clean_image_from_fits_file)
 from utils import (mask_region, mas_to_rad, hdi_of_mcmc, flatten,
                    nested_dict_itervalue, mask_region)
-from image import BasicImage, Image
+from image import BasicImage, Image, CleanImage
 from collections import defaultdict
 from scipy.optimize import leastsq
 from matplotlib.pyplot import hist, bar, show
 
 
+# TODO: Option for using only CCc w/o residuals for building images
+# TODO: Option for saving ``Images`` instance. One freq/stokes images can be
+# saved in multidimensional data part of ``ImageHDU``. If many stokes/freqs =>
+# use several ``HDUs``.
 class Images(object):
     """
     Class that handle set of images that can be stacked.
@@ -258,6 +262,7 @@ class Images(object):
 
     # FIXME: Implement option for many (equal number) of Q & U images for each
     # frequency like in ``Images.create_pang_images``
+    # TODO: Option for plotting PANG vs. wavelength squared for pixels
     def create_rotm_image(self, s_pang_arrays=None, freqs=None, mask=None, n=0):
         """
         Method that creates image of Rotation Measure for current collection of
@@ -341,6 +346,65 @@ class Images(object):
 
         return rotm_image, s_rotm_image
 
+    def create_rotm_images(self, s_pang_arrays=None, freqs=None, mask=None):
+        """
+        Method that creates ROTM images from series of bootstrapped data.
+
+        :param s_pang_arrays:
+        :param freqs:
+        :param mask:
+        :return:
+            Instance of ``Images`` class with calculated ROTM images.
+        """
+        required_stokeses = ('Q', 'U')
+
+        # Check that collection of images isn't empty
+        if not self.images:
+            raise Exception("First, add some images to instance!")
+
+        # Choose frequencies
+        if freqs is None:
+            freqs = self.freqs
+        if len(freqs) < 2:
+            raise Exception("Not enough frequencies for RM calculation!")
+
+        # Check that all frequencies have Q & U maps
+        for freq in freqs:
+            stokeses = self.stokeses(freq)
+            for stokes in required_stokeses:
+                if stokes not in stokeses:
+                    raise Exception("No stokes " + stokes + " parameter for " +
+                                    freq + " frequency!")
+        # FIXME: Determine number of replications (Q & U images at each
+        # frequency) and check that it is equal for all frequencies chosen.
+        n_replications = None
+        for freq in freqs:
+            q_images = self._images_dict[freq]['Q']
+            u_images = self._images_dict[freq]['U']
+            # Check that we got the same number of ``Q`` and ``U`` images
+            if len(q_images) != len(u_images):
+                raise Exception("Different # of Q & U images for " + str(freq) +
+                                " MHz!")
+            if n_replications is None:
+                n_replications = len(q_images)
+            else:
+                if n_replications != len(q_images):
+                    raise Exception("Each frequency must contains the same # of"
+                                    " Q & U images!")
+
+        # For each replication create ROTM map and add it to ``Images`` instance
+        images = Images()
+        for i in range(n_replications):
+            rotm_image, s_rotm_image = self.create_rotm_image(s_pang_arrays,
+                                                              freqs, mask, i)
+            images.add_image(rotm_image)
+
+        return images
+
+    # TODO: Implement ``create_pang_image`` & use it to implement this method as
+    # in ``create_rotm_images``
+    # ``Images`` instance can be easily obtained from list of ``Image``
+    # instances
     def create_pang_images(self, freq=None, mask=None):
         """
         Method that creates Polarization Angle images for current collection of
@@ -407,6 +471,8 @@ class Images(object):
         return pang_images
 
 
+    # TODO: Implement ``create_pol_image`` & use it to implement this method as
+    # in ``create_rotm_images``
     def create_pol_images(self, freq=None, mask=None):
         """
         Method that creates Polarization Flux images for current collection of
@@ -733,6 +799,9 @@ if __name__ == '__main__':
     data_dir = '/home/ilya/vlbi_errors/0148+274/2007_03_01/'
     # Directory with fits-images of bootstrapped data
     i_dir_c1 = data_dir + 'C1/im/I/'
+    i_dir_c2 = data_dir + 'C2/im/I/'
+    i_dir_x1 = data_dir + 'X1/im/I/'
+    i_dir_x2 = data_dir + 'X2/im/I/'
     q_dir_c1 = data_dir + 'C1/im/Q/'
     u_dir_c1 = data_dir + 'C1/im/U/'
     q_dir_c2 = data_dir + 'C2/im/Q/'
@@ -745,9 +814,9 @@ if __name__ == '__main__':
 
     # # Testing ``Images.create_error_image``
     # print "Testing ``Images.create_error_image`` method..."
-    images = Images()
-    images.add_from_fits(wildcard=i_dir_c1 + "cc_*.fits")
-    i_error_map = images.create_error_image()
+    # images = Images()
+    # images.add_from_fits(wildcard=i_dir_c1 + "cc_*.fits")
+    # i_error_map = images.create_error_image()
     # images = Images()
     # images.add_from_fits(wildcard=q_dir_c1 + "cc_*.fits")
     # q_error_map = images.create_error_image()
@@ -809,14 +878,15 @@ if __name__ == '__main__':
     # images = Images()
     # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
     #                      os.path.join(u_dir_c1, 'cc.fits')])
-    # pang_images = images.create_pang_images()
-    # # Testing two pairs of Q & U images
+    # pang_image = images.create_pang_images()[0]
+    # # Testing many of Q & U images
     # images = Images()
-    # fnames = [os.path.join(q_dir_c1, 'cc_{}.fits'.format(i)) for i in range(1, 11)]
+    # fnames = [os.path.join(q_dir_c1, 'cc_{}.fits'.format(i)) for i in
+    #           range(1, 201)]
     # fnames += [os.path.join(u_dir_c1, 'cc_{}.fits'.format(i)) for i in
-    #            range(1, 11)]
+    #            range(1, 201)]
     # images.add_from_fits(fnames)
-    # pang_images_10 = images.create_pang_images()
+    # pang_images_list_200 = images.create_pang_images()
 
     # # Testing ``Images.create_pol_images``
     # print "Testing ``Images.create_pol_images``..."
@@ -845,14 +915,14 @@ if __name__ == '__main__':
     # s_pang_arrays = [np.zeros(512 * 512, dtype=float).reshape((512, 512)) + 0.1]
     # s_pang_arrays *= 4
     # # Only one of Q & U at each frequency
-    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_1.fits'),
-    #                              os.path.join(u_dir_c1, 'cc_1.fits'),
-    #                              os.path.join(q_dir_c2, 'cc_1.fits'),
-    #                              os.path.join(u_dir_c2, 'cc_1.fits'),
-    #                              os.path.join(q_dir_x1, 'cc_1.fits'),
-    #                              os.path.join(u_dir_x1, 'cc_1.fits'),
-    #                              os.path.join(q_dir_x2, 'cc_1.fits'),
-    #                              os.path.join(u_dir_x2, 'cc_1.fits')])
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_c1, 'cc_orig.fits'),
+    #                              os.path.join(q_dir_c2, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_c2, 'cc_orig.fits'),
+    #                              os.path.join(q_dir_x1, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_x1, 'cc_orig.fits'),
+    #                              os.path.join(q_dir_x2, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_x2, 'cc_orig.fits')])
 
     # mask = np.ones(512 * 512).reshape((512, 512))
     # mask[200:400, 200:400] = 0
@@ -860,48 +930,66 @@ if __name__ == '__main__':
     #                                                     mask=mask)
     # rotm_image_no_s, s_rotm_image_no_s = images.create_rotm_image(mask=mask)
 
-    # # Testing blanking ROTM images...
-    # print "Testing blanking of ROTM images..."
-    # # Blanking mask should be based on polarization flux. One should create
-    # # bootstrapped realization of polarization flux images and find error on it.
-    # # Then when calculating ROTM use only pixels with POL > error.
+    # Testing ``Images.create_rotm_image`` from bootstrapped data
+    print "Testing ``Images.create_rotm_image`` from bootstrapped data..."
 
-    # # TODO: Create mask stacking masks from all bands
-    # # First, create polarization flux (PPOL) error image using high frequency
-    # # data
-    # images = Images()
-    # fnames = [os.path.join(q_dir_x2, 'cc_{}.fits'.format(i)) for i in
-    #           range(1, 101)]
-    # fnames += [os.path.join(u_dir_x2, 'cc_{}.fits'.format(i)) for i in
-    #            range(1, 101)]
-    # images.add_from_fits(fnames)
-    # pol_images_x2_100 = images.create_pol_images()
-    # images = Images()
-    # images.add_images(pol_images_x2_100)
-    # pol_error_image = images.create_error_image(cred_mass=0.99)
-    # # Now create mask using model PPOL image and error PPOL image on highest
-    # # frequency
-    # images = Images()
-    # q_dir_ = data_dir + 'X2/im/Q/'
-    # u_dir_ = data_dir + 'X2/im/U/'
-    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
-    #                              os.path.join(u_dir_c1, 'cc.fits')])
-    # pol_image = images.create_pol_images()[0]
-    # mask = pol_image.image < pol_error_image.image
-    # # Now make ROTM image with this mask
-    # images = Images()
-    # # FIXME: Must be imaged of Q&U with the same parameters from original
-    # # uv-data
-    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_1.fits'),
-    #                              os.path.join(u_dir_c1, 'cc_1.fits'),
-    #                              os.path.join(q_dir_c2, 'cc_1.fits'),
-    #                              os.path.join(u_dir_c2, 'cc_1.fits'),
-    #                              os.path.join(q_dir_x1, 'cc_1.fits'),
-    #                              os.path.join(u_dir_x1, 'cc_1.fits'),
-    #                              os.path.join(q_dir_x2, 'cc_1.fits'),
-    #                              os.path.join(u_dir_x2, 'cc_1.fits')])
-    # x2masked_rotm_image_no_s, x2masked_s_rotm_image_no_s =\
-    #     images.create_rotm_image(mask=mask)
+    # Testing blanking ROTM images...
+    print "Testing blanking of ROTM images..."
+    # Blanking mask should be based on polarization flux. One should create
+    # bootstrapped realization of polarization flux images and find error on it.
+    # Then when calculating ROTM use only pixels with POL > error.
+
+    # First, create polarization flux (PPOL) error image for each frequency
+    # data
+    band_dir = {'c1': {'i': i_dir_c1, 'q': q_dir_c1, 'u': u_dir_c1},
+                'c2': {'i': i_dir_c2, 'q': q_dir_c2, 'u': u_dir_c2},
+                'x1': {'i': i_dir_x1, 'q': q_dir_x1, 'u': u_dir_x1},
+                'x2': {'i': i_dir_x2, 'q': q_dir_x2, 'u': u_dir_x2}}
+    mask_last = None
+    for band in ('c1', 'c2', 'x1', 'x2'):
+        print "Creating mask for {} PPOL and I image".format(band)
+        images = Images()
+        fnames = [os.path.join(band_dir[band]['q'], 'cc_{}.fits'.format(i)) for
+                  i in range(1, 201)]
+        fnames += [os.path.join(band_dir[band]['u'], 'cc_{}.fits'.format(i)) for
+                   i in range(1, 201)]
+        fnames += [os.path.join(band_dir[band]['i'], 'cc_{}.fits'.format(i)) for
+                   i in range(1, 201)]
+        images.add_from_fits(fnames)
+        i_error_image = images.create_error_image(stokes='I', cred_mass=0.95)
+        pol_images_200 = images.create_pol_images()
+        images = Images()
+        images.add_images(pol_images_200)
+        pol_error_image = images.create_error_image(cred_mass=0.95)
+        images = Images()
+        images.add_from_fits(fnames=[os.path.join(band_dir[band]['q'],
+                                                  'cc_orig.fits'),
+                                     os.path.join(band_dir[band]['u'],
+                                                  'cc_orig.fits')])
+        pol_image = images.create_pol_images()[0]
+        i_image = create_clean_image_from_fits_file(os.path.join(band_dir[band]['i'],
+                                                                 'cc_orig.fits'))
+        mask_pol = pol_image.image < pol_error_image.image
+        mask_i = i_image.image < i_error_image.image
+        mask = np.logical_or(mask_pol, mask_i)
+        if mask_last is not None:
+            mask = np.logical_or(mask, mask_last)
+        mask_last = mask.copy()
+
+    # Now make ROTM image with this mask
+    images = Images()
+    # FIXME: Must be imaged of Q&U with the same parameters from original
+    # uv-data
+    images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_orig.fits'),
+                                 os.path.join(u_dir_c1, 'cc_orig.fits'),
+                                 os.path.join(q_dir_c2, 'cc_orig.fits'),
+                                 os.path.join(u_dir_c2, 'cc_orig.fits'),
+                                 os.path.join(q_dir_x1, 'cc_orig.fits'),
+                                 os.path.join(u_dir_x1, 'cc_orig.fits'),
+                                 os.path.join(q_dir_x2, 'cc_orig.fits'),
+                                 os.path.join(u_dir_x2, 'cc_orig.fits')])
+    masked_rotm_image_no_s, masked_s_rotm_image_no_s =\
+        images.create_rotm_image(mask=mask)
 
     # # Testing uncertainties estimates for ROTM maps
     # print "Testing uncertainties estimates for ROTM images..."

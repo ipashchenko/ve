@@ -375,8 +375,6 @@ class Images(object):
                 if stokes not in stokeses:
                     raise Exception("No stokes " + stokes + " parameter for " +
                                     freq + " frequency!")
-        # FIXME: Determine number of replications (Q & U images at each
-        # frequency) and check that it is equal for all frequencies chosen.
         n_replications = None
         for freq in freqs:
             q_images = self._images_dict[freq]['Q']
@@ -1047,8 +1045,6 @@ if __name__ == '__main__':
 
     # Now make ROTM image with this mask
     images = Images()
-    # FIXME: Must be imaged of Q&U with the same parameters from original
-    # uv-data
     images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_orig.fits'),
                                  os.path.join(u_dir_c1, 'cc_orig.fits'),
                                  os.path.join(q_dir_c2, 'cc_orig.fits'),

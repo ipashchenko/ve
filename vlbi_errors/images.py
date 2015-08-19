@@ -596,7 +596,7 @@ class Images(object):
         # Create container for fpol-images
         fpol_images = list()
         for i_image, q_image, u_image in zip(i_images, q_images, u_images):
-            fpol_array = fpol_map(i_image.image, q_image.image, u_image.image,
+            fpol_array = fpol_map(q_image.image, u_image.image, i_image.image,
                                   mask=mask)
             # Create basic image and add ``fpol_array``
             fpol_image = Image(imsize=img.imsize, pixref=img.pixref,

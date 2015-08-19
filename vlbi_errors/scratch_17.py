@@ -75,13 +75,13 @@ if __name__ == '__main__':
     v = ppol_image.image * np.sin(pang_image.image)
     arc_length = pixsize * imsize * factor
     x = y = np.linspace(-arc_length/2, arc_length/2, imsize)
-    i_array = i_image.image
+    i_array = i_image.image_w_residuals
     ppol_array = ppol_image.image
     fpol_array = fpol_image.image
     # Creating masks
     i_mask = np.zeros((imsize, imsize))
     ppol_mask = np.zeros((imsize, imsize))
-    i_mask[i_array < 0.000125] = 1
+    # i_mask[abs(i_array) < 0.0001] = 1
     ppol_mask[ppol_array < 0.003] = 1
     fpol_mask = np.logical_or(i_mask, ppol_mask)
     # Masking data
@@ -89,7 +89,7 @@ if __name__ == '__main__':
     fpol_array_masked = np.ma.array(fpol_array, mask=ppol_mask)
     ppol_array_masked = np.ma.array(ppol_array, mask=ppol_mask)
     fig = plt.figure()
-    ax = fig.add_axes([0.1,0.1,0.6,0.8])
+    ax = fig.add_axes([0.1, 0.1, 0.6, 0.8])
     i = ax.imshow(fpol_array_masked, interpolation='none', aspect='auto',
                   label='FPOL', extent=[-arc_length/2, arc_length/2,
                                         -arc_length/2, arc_length/2],

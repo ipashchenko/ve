@@ -50,7 +50,7 @@ class Images(object):
 
     @property
     def freqs(self):
-        return self._images_dict.keys()
+        return sorted(self._images_dict.keys())
 
     def stokeses(self, freq):
         return self._images_dict[freq].keys()
@@ -120,9 +120,9 @@ class Images(object):
         values = values.reshape((cube.shape[0] * cube.shape[1], cube.shape[2]))
         values = mode_dict[mode](values, axis=0)
         from knuth_hist import histogram
-        counts, edges = histogram(values)
+        probs, edges = histogram(values, density=True)
         lower_d = np.resize(edges, len(edges) - 1)
-        bar(lower_d, counts, width=np.diff(lower_d)[0], linewidth=2, color='w')
+        bar(lower_d, probs, width=np.diff(lower_d)[0], linewidth=2, color='w')
         show()
 
     def compare_images_by_param(self, param, freq_stokes_dict=None):
@@ -337,11 +337,12 @@ class Images(object):
                                             mask=mask)
         rotm_image = Image(imsize=img.imsize, pixref=img.pixref,
                            pixrefval=img.pixrefval, pixsize=img.pixsize,
-                           freq=freqs, stokes='ROTM')
+                           freq=tuple(freqs), stokes='ROTM')
         rotm_image.image = rotm_array
+        # FIXME: use ``tuple`` for frequency container cause it is hashable
         s_rotm_image = Image(imsize=img.imsize, pixref=img.pixref,
                              pixrefval=img.pixrefval, pixsize=img.pixsize,
-                             freq=freqs, stokes='ROTM')
+                             freq=tuple(freqs), stokes='ROTM')
         s_rotm_image.image = s_rotm_array
 
         return rotm_image, s_rotm_image
@@ -393,6 +394,8 @@ class Images(object):
         # For each replication create ROTM map and add it to ``Images`` instance
         images = Images()
         for i in range(n_replications):
+            print "Creating {} image of {} replications".format(i,
+                                                                n_replications)
             rotm_image, s_rotm_image = self.create_rotm_image(s_pang_arrays,
                                                               freqs, mask, i)
             images.add_image(rotm_image)
@@ -998,10 +1001,10 @@ if __name__ == '__main__':
     # rotm_image_no_s, s_rotm_image_no_s = images.create_rotm_image(mask=mask)
 
     # Testing ``Images.create_rotm_image`` from bootstrapped data
-    print "Testing ``Images.create_rotm_image`` from bootstrapped data..."
+    # print "Testing ``Images.create_rotm_image`` from bootstrapped data..."
 
     # Testing blanking ROTM images...
-    print "Testing blanking of ROTM images..."
+    # print "Testing blanking of ROTM images..."
     # Blanking mask should be based on polarization flux. One should create
     # bootstrapped realization of polarization flux images and find error on it.
     # Then when calculating ROTM use only pixels with POL > error.
@@ -1013,20 +1016,28 @@ if __name__ == '__main__':
                 'x1': {'i': i_dir_x1, 'q': q_dir_x1, 'u': u_dir_x1},
                 'x2': {'i': i_dir_x2, 'q': q_dir_x2, 'u': u_dir_x2}}
     mask_last = None
+    fnames = list()
+    images_allbands_50 = Images()
+    print "Constructing Images instance for all bands for all bootstrapped" \
+          " data..."
     for band in ('c1', 'c2', 'x1', 'x2'):
-        print "Creating mask for {} PPOL and I image".format(band)
-        images = Images()
+        print ""
         fnames = [os.path.join(band_dir[band]['q'], 'cc_{}.fits'.format(i)) for
-                  i in range(1, 201)]
+                  i in range(1, 50)]
         fnames += [os.path.join(band_dir[band]['u'], 'cc_{}.fits'.format(i)) for
-                   i in range(1, 201)]
+                   i in range(1, 50)]
         fnames += [os.path.join(band_dir[band]['i'], 'cc_{}.fits'.format(i)) for
-                   i in range(1, 201)]
-        images.add_from_fits(fnames)
-        i_error_image = images.create_error_image(stokes='I', cred_mass=0.95)
-        pol_images_200 = images.create_pol_images()
+                   i in range(1, 50)]
+        images_allbands_50.add_from_fits(fnames)
+
+    for i, band in enumerate(('c1', 'c2', 'x1', 'x2')):
+        print "Creating mask for {}-band PPOL and I image".format(band)
+        i_error_image = images_allbands_50.create_error_image(stokes='I',
+                                                               freq=images_allbands_50.freqs[i],
+                                                               cred_mass=0.95)
+        pol_images_50 = images_allbands_50.create_pol_images(freq=images_allbands_50.freqs[i])
         images = Images()
-        images.add_images(pol_images_200)
+        images.add_images(pol_images_50)
         pol_error_image = images.create_error_image(cred_mass=0.95)
         images = Images()
         images.add_from_fits(fnames=[os.path.join(band_dir[band]['q'],
@@ -1044,6 +1055,7 @@ if __name__ == '__main__':
         mask_last = mask.copy()
 
     # Now make ROTM image with this mask
+    print "Constructing Images instance with original data..."
     images = Images()
     images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_orig.fits'),
                                  os.path.join(u_dir_c1, 'cc_orig.fits'),
@@ -1053,6 +1065,7 @@ if __name__ == '__main__':
                                  os.path.join(u_dir_x1, 'cc_orig.fits'),
                                  os.path.join(q_dir_x2, 'cc_orig.fits'),
                                  os.path.join(u_dir_x2, 'cc_orig.fits')])
+    print "Creating original ROTM image with constructed mask..."
     masked_rotm_image_no_s, masked_s_rotm_image_no_s =\
         images.create_rotm_image(mask=mask)
 
@@ -1064,7 +1077,12 @@ if __name__ == '__main__':
     # it can be created using uncertainties of PANG images created from
     # bootstrapped uv-data.
     # Concerning error of PANG-calibration. It can be used in both ways. In
-    # first approach - just add random number from PARN error distribution to
+    # first approach - just add random number from PANG error distribution to
     # each PANG map, made from bootstrapped uv-data. In second approach - just
     # add in quadrature estimated PA-calibration error to PANG error images at
     # each frequency.
+
+    # Create ROTM image for each of the bootstrapped Q & U image
+    print "Creating ROTM images of bootstrapped data with constructed mask..."
+    # Now create 200 ROTM images with mask basked on PPOL & I bootstrapped data
+    rotm_images_50 = images_allbands_50.create_rotm_images(mask=mask)

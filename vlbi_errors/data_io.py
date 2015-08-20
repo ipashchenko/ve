@@ -130,6 +130,9 @@ def get_hdu(fname, extname=None, ver=1):
     else:
         hdu = hdulist[0]
 
+    # # Close associated FITS-file
+    # hdulist.close()
+
     return hdu
 
 

@@ -728,7 +728,7 @@ def pang_map(q_array, u_array, mask=None):
         q_array = np.ma.array(q_array, mask=mask, fill_value=np.nan)
         u_array = np.ma.array(u_array, mask=mask, fill_value=np.nan)
 
-    return 0.5 * np.arctan2(q_array, u_array)
+    return 0.5 * np.arctan2(u_array, q_array)
 
 
 def cpol_map(q_array, u_array, mask=None):

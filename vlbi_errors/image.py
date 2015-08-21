@@ -291,6 +291,21 @@ class BasicImage(object):
         params = fitgaussian(shift_array)
         return tuple(params[1: 3])
 
+    def slice(self, pix1, pix2):
+        """
+        Method that returns slice of image.
+
+        :param x1:
+            Iterable of cordinates of first pixel.
+        :param x2:
+            Iterable of cordinates of second pixel.
+        :return:
+            Numpy array of image values for given slice.
+        """
+        x, y = (np.linspace(pix1[0], pix2[0], pix2[0] - pix1[0] + 1),
+                np.linspace(pix1[1], pix2[1], pix2[0] - pix1[0] + 1))
+        return self.image[x.astype(np.int), y.astype(np.int)]
+
     def plot(self, blc=None, trc=None, clim=None, cmap=None, abs_levels=None,
              rel_levels=None, min_abs_level=None, min_rel_level=None, factor=2.,
              plot_color=False):

@@ -293,7 +293,7 @@ class BasicImage(object):
 
     def slice(self, pix1, pix2):
         """
-        Method that returns slice of image.
+        Method that returns slice of image along line.
 
         :param x1:
             Iterable of cordinates of first pixel.
@@ -302,8 +302,15 @@ class BasicImage(object):
         :return:
             Numpy array of image values for given slice.
         """
-        x, y = (np.linspace(pix1[0], pix2[0], pix2[0] - pix1[0] + 1),
-                np.linspace(pix1[1], pix2[1], pix2[0] - pix1[0] + 1))
+        if pix2[0] < pix1[0]:
+            x = np.linspace(pix2[0], pix1[0], pix1[0] - pix2[0] + 1)[::-1]
+        else:
+            x = np.linspace(pix1[0], pix2[0], pix2[0] - pix1[0] + 1)
+        if pix2[1] < pix1[1]:
+            y = np.linspace(pix2[1], pix1[1], pix1[1] - pix2[1] + 1)[::-1]
+        else:
+            y = np.linspace(pix1[1], pix2[1], pix2[1] - pix1[1] + 1)
+
         return self.image[x.astype(np.int), y.astype(np.int)]
 
     def plot(self, blc=None, trc=None, clim=None, cmap=None, abs_levels=None,

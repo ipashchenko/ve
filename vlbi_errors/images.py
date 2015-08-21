@@ -59,6 +59,41 @@ class Images(object):
         self._images_cube = np.dstack(tuple(image.image for image in
                                       self._images_dict[freq][stokes]))
 
+    def slice(self, pix1, pix2, stokes=None, freq=None):
+        """
+        Method that returns slice of images along line.
+
+        :param x1:
+            Iterable of cordinates of first pixel.
+        :param x2:
+            Iterable of cordinates of second pixel.
+        :return:
+            Numpy array of image values for given slice.
+        """
+        # If no frequency is supplied => check that instance contains images
+        # of only one frequency and use it. Otherwise - raise Exception
+        if freq is None:
+            freqs = self.freqs
+            if len(freqs) > 1:
+                raise Exception("Choose what frequency images to use!")
+            else:
+                freq = freqs[0]
+        # If no Stokes parameter is specified => check that chosen frequency
+        # contains images of only one Stokes parameter. Otherwise - raise
+        # Exception
+        if stokes is None:
+            stokeses = self.stokeses(freq)
+            if len(stokeses) > 1:
+                raise Exception("Choose what Stokes parameter images to"
+                                " use!")
+            else:
+                stokes = stokeses[0]
+        # Make slice for each image in ``self`` and stack it
+        slices = list()
+        for image in self._images_dict[freq][stokes]:
+            slices.append(image.slice(pix1, pix2))
+        return np.vstack(slices).T
+
     def pixels_histogram(self, stokes=None, freq=None, region=None, mask=None,
                          mode='mean'):
         """

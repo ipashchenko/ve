@@ -1,7 +1,7 @@
 import math
 import numpy as np
 from scipy import signal
-from utils import create_grid, mask_region, fitgaussian, mas_to_rad
+from utils import (create_grid, mask_region, fitgaussian, mas_to_rad, v_round)
 from beam import CleanBeam
 from fft_routines import fft_convolve2d
 
@@ -302,16 +302,17 @@ class BasicImage(object):
         :return:
             Numpy array of image values for given slice.
         """
+        length = int(round(np.hypot(pix2[0] - pix1[0], pix2[1] - pix1[1])))
         if pix2[0] < pix1[0]:
-            x = np.linspace(pix2[0], pix1[0], pix1[0] - pix2[0] + 1)[::-1]
+            x = np.linspace(pix2[0], pix1[0], length)[::-1]
         else:
-            x = np.linspace(pix1[0], pix2[0], pix2[0] - pix1[0] + 1)
+            x = np.linspace(pix1[0], pix2[0], length)
         if pix2[1] < pix1[1]:
-            y = np.linspace(pix2[1], pix1[1], pix1[1] - pix2[1] + 1)[::-1]
+            y = np.linspace(pix2[1], pix1[1], length)[::-1]
         else:
-            y = np.linspace(pix1[1], pix2[1], pix2[1] - pix1[1] + 1)
+            y = np.linspace(pix1[1], pix2[1], length)
 
-        return self.image[x.astype(np.int), y.astype(np.int)]
+        return self.image[v_round(x).astype(np.int), v_round(y).astype(np.int)]
 
     def plot(self, blc=None, trc=None, clim=None, cmap=None, abs_levels=None,
              rel_levels=None, min_abs_level=None, min_rel_level=None, factor=2.,

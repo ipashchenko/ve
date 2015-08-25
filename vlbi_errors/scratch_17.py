@@ -33,9 +33,9 @@ def gaussian(height, x0, y0, bmaj, e=0.3, bpa=0, size_x=100):
 if __name__ == '__main__':
 
     # Plot every k-th pol.vector
-    k = 3
-    blc = (240, 200)
-    trc = (300, 350)
+    k = 2
+    blc = (240, 230)
+    trc = (300, 370)
     # Pixels
     x_center = blc[1] + (trc[1] - blc[1]) / 2. - 256
     y_center = blc[0] + (trc[0] - blc[0]) / 2. - 256
@@ -84,9 +84,9 @@ if __name__ == '__main__':
     # mas
     x_ = i_image.x[0, :][x_slice] * factor
     y_ = i_image.y[:, 0][y_slice] * factor
-    u = ppol_image.image[x_slice, y_slice] * np.cos(pang_image.image[x_slice,
-                                                    y_slice])
-    v = ppol_image.image[x_slice, y_slice] * np.sin(pang_image.image[x_slice,
+    u = -ppol_image.image[x_slice, y_slice] * np.sin(pang_image.image[x_slice,
+                                                                     y_slice])
+    v = ppol_image.image[x_slice, y_slice] * np.cos(pang_image.image[x_slice,
                                                                      y_slice])
     # arc_length = pixsize * imsize * factor
     # x = y = np.linspace(-arc_length/2, arc_length/2, imsize)
@@ -100,7 +100,7 @@ if __name__ == '__main__':
     i_mask = np.zeros((imsize_x, imsize_y))
     ppol_mask = np.zeros((imsize_x, imsize_y))
     # i_mask[abs(i_array) < 0.0001] = 1
-    ppol_mask[ppol_array < 0.003] = 1
+    ppol_mask[ppol_array < 0.00125] = 1
     fpol_mask = np.logical_or(i_mask, ppol_mask)
     # Masking data
     i_array_masked = np.ma.array(i_array, mask=i_mask)
@@ -109,9 +109,13 @@ if __name__ == '__main__':
     fig = plt.figure()
     ax = fig.add_axes([0.1, 0.1, 0.6, 0.8])
     # FIXME: wrong zero location
-    i = ax.imshow(fpol_array_masked, interpolation='none', aspect='auto',
-                  label='FPOL', extent=[y[0], y[-1], x[0], x[-1]], origin='lower')
-    co = ax.contour(y, x, i_array_masked, colors='k', label='I')
+    # aspect='auto' is bad for VLBI images
+    i = ax.imshow(fpol_array_masked, interpolation='none', label='FPOL',
+                  extent=[y[0], y[-1], x[0], x[-1]], origin='lower',
+                  cmap=plt.get_cmap('spectral'))
+    co = ax.contour(y, x, i_array_masked, [-0.00018 * 2] + [2 ** (j) * 2 * 0.00018 for
+                                                        j in range(12)],
+                    colors='k', label='I')
     m = np.zeros(u.shape)
     u = np.ma.array(u, mask=ppol_mask)
     v = np.ma.array(v, mask=ppol_mask)
@@ -121,7 +125,7 @@ if __name__ == '__main__':
     # Doesn't show anything
     ax.legend()
     # c = Circle((5, 5), radius=4,
-    #            edgecolor='red', facecolor='blue', alpha=0.5)
+    #            edgecolor='red', facecolor='blue', alpha=
     e_height = 10 * pixsize * factor
     e_width = 5 * pixsize * factor
     r_min = e_height / 2

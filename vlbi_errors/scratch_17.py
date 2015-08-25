@@ -84,6 +84,8 @@ if __name__ == '__main__':
     # mas
     x_ = i_image.x[0, :][x_slice] * factor
     y_ = i_image.y[:, 0][y_slice] * factor
+    # TODO: Does "-" sign because of RA increases to the left actually? VLBIers
+    # do count angles from North to negative RA.
     u = -ppol_image.image[x_slice, y_slice] * np.sin(pang_image.image[x_slice,
                                                                      y_slice])
     v = ppol_image.image[x_slice, y_slice] * np.cos(pang_image.image[x_slice,
@@ -112,7 +114,7 @@ if __name__ == '__main__':
     # aspect='auto' is bad for VLBI images
     i = ax.imshow(fpol_array_masked, interpolation='none', label='FPOL',
                   extent=[y[0], y[-1], x[0], x[-1]], origin='lower',
-                  cmap=plt.get_cmap('spectral'))
+                  cmap=plt.get_cmap('hsv'))
     co = ax.contour(y, x, i_array_masked, [-0.00018 * 2] + [2 ** (j) * 2 * 0.00018 for
                                                         j in range(12)],
                     colors='k', label='I')

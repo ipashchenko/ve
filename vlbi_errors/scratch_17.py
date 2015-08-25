@@ -32,16 +32,21 @@ def gaussian(height, x0, y0, bmaj, e=0.3, bpa=0, size_x=100):
 
 if __name__ == '__main__':
 
+    beam_place = 'ul'
+    # Reference pixels
+    # pixref_x = 256
+    # pixref_y = 257
     # Plot every k-th pol.vector
     k = 2
     blc = (240, 230)
     trc = (300, 370)
     # Pixels
-    x_center = blc[1] + (trc[1] - blc[1]) / 2. - 256
-    y_center = blc[0] + (trc[0] - blc[0]) / 2. - 256
-    # Pixsels
+    # x_center = blc[1] + (trc[1] - blc[1]) / 2. - pixref_x
+    # y_center = blc[0] + (trc[0] - blc[0]) / 2. - pixref_y
+    # Pixels
     x_slice = slice(blc[1], trc[1], None)
     y_slice = slice(blc[0], trc[0],  None)
+
     # Create picture with contours - I, color - fpol and vectors - direction and
     # value of Linear Polarization
     import os
@@ -73,17 +78,16 @@ if __name__ == '__main__':
                                  os.path.join(u_dir_c1, 'cc.fits')])
     fpol_image = images.create_fpol_images()[0]
 
-    beam_place = 'ul'
     pixsize = abs(i_image.pixsize[0])
     imsize_x = x_slice.stop - x_slice.start
     imsize_y = y_slice.stop - y_slice.start
     factor = 206264806.719150
     # mas
-    arc_length_x = pixsize * imsize_x * factor
-    arc_length_y = pixsize * imsize_y * factor
-    # mas
     x_ = i_image.x[0, :][x_slice] * factor
     y_ = i_image.y[:, 0][y_slice] * factor
+    # With this coordinates are plotted as in Zhenya's map
+    x_ *= -1.
+    y_ *= -1.
     # TODO: Does "-" sign because of RA increases to the left actually? VLBIers
     # do count angles from North to negative RA.
     u = -ppol_image.image[x_slice, y_slice] * np.sin(pang_image.image[x_slice,
@@ -92,7 +96,6 @@ if __name__ == '__main__':
                                                                      y_slice])
     # arc_length = pixsize * imsize * factor
     # x = y = np.linspace(-arc_length/2, arc_length/2, imsize)
-    # FIXME: wrong zero location
     x = np.linspace(x_[0], x_[-1], imsize_x)
     y = np.linspace(y_[0], y_[-1], imsize_y)
     i_array = i_image.image_w_residuals[x_slice, y_slice]
@@ -146,7 +149,7 @@ if __name__ == '__main__':
     else:
         raise Exception
 
-    e = Ellipse((x_c, y_c), e_height, e_width, angle=-30, edgecolor='black',
+    e = Ellipse((y_c, x_c), e_height, e_width, angle=-30, edgecolor='black',
                 facecolor='none', alpha=1)
     ax.add_patch(e)
     title = ax.set_title("My plot", fontsize='large')

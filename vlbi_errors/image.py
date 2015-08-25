@@ -10,30 +10,184 @@ try:
 except ImportError:
     pylab = None
 
-    # if plt is not None:
-    #     plt.figure()
-    #     plt.matshow(self.values, aspect='auto')
-    #     plt.colorbar()
-    #     if not plot_indexes:
-    #         raise NotImplementedError("Ticks haven't implemented yet")
-    #         # plt.xticks(np.linspace(0, 999, 10, dtype=int),
-    #         # frame.t[np.linspace(0, 999, 10, dtype=int)])
-    #     plt.xlabel("time steps")
-    #     plt.ylabel("frequency ch. #")
-    #     plt.title('Dynamical spectra')
-    #     if savefig is not None:
-    #         plt.savefig(savefig, bbox_inches='tight')
-    #     plt.show()
+    # # Plot every k-th pol.vector
+    # k = 2
+    # blc = (240, 230)
+    # trc = (300, 370)
+    # # Pixels
+    # x_center = blc[1] + (trc[1] - blc[1]) / 2. - 256
+    # y_center = blc[0] + (trc[0] - blc[0]) / 2. - 256
+    # # Pixsels
+    # x_slice = slice(blc[1], trc[1], None)
+    # y_slice = slice(blc[0], trc[0],  None)
+    # # Create picture with contours - I, color - fpol and vectors - direction and
+    # # value of Linear Polarization
+    # import os
+    # from images import Images
+    # data_dir = '/home/ilya/vlbi_errors/0148+274/2007_03_01/'
+    # i_dir_c1 = data_dir + 'C1/im/I/'
+    # q_dir_c1 = data_dir + 'C1/im/Q/'
+    # u_dir_c1 = data_dir + 'C1/im/U/'
+    # print "Creating PANG image..."
+    # images = Images()
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
+    #                              os.path.join(u_dir_c1, 'cc.fits')])
+    # pang_image = images.create_pang_images()[0]
+
+    # print "Creating PPOL image..."
+    # images = Images()
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
+    #                              os.path.join(u_dir_c1, 'cc.fits')])
+    # ppol_image = images.create_pol_images()[0]
+
+    # print "Creating I image..."
+    # from from_fits import create_clean_image_from_fits_file
+    # i_image = create_clean_image_from_fits_file(os.path.join(i_dir_c1,
+    #                                                          'cc.fits'))
+    # print "Creating FPOL image..."
+    # images = Images()
+    # images.add_from_fits(fnames=[os.path.join(i_dir_c1, 'cc.fits'),
+    #                              os.path.join(q_dir_c1, 'cc.fits'),
+    #                              os.path.join(u_dir_c1, 'cc.fits')])
+    # fpol_image = images.create_fpol_images()[0]
+
+    # beam_place = 'ul'
+    # pixsize = abs(i_image.pixsize[0])
+    # imsize_x = x_slice.stop - x_slice.start
+    # imsize_y = y_slice.stop - y_slice.start
+    # factor = 206264806.719150
+    # # mas
+    # arc_length_x = pixsize * imsize_x * factor
+    # arc_length_y = pixsize * imsize_y * factor
+    # # mas
+    # x_ = i_image.x[0, :][x_slice] * factor
+    # y_ = i_image.y[:, 0][y_slice] * factor
+    # # TODO: Does "-" sign because of RA increases to the left actually? VLBIers
+    # # do count angles from North to negative RA.
+    # u = -ppol_image.image[x_slice, y_slice] * np.sin(pang_image.image[x_slice,
+    #                                                                   y_slice])
+    # v = ppol_image.image[x_slice, y_slice] * np.cos(pang_image.image[x_slice,
+    #                                                                  y_slice])
+    # # arc_length = pixsize * imsize * factor
+    # # x = y = np.linspace(-arc_length/2, arc_length/2, imsize)
+    # # FIXME: wrong zero location
+    # x = np.linspace(x_[0], x_[-1], imsize_x)
+    # y = np.linspace(y_[0], y_[-1], imsize_y)
+    # i_array = i_image.image_w_residuals[x_slice, y_slice]
+    # ppol_array = ppol_image.image[x_slice, y_slice]
+    # fpol_array = fpol_image.image[x_slice, y_slice]
+    # # Creating masks
+    # i_mask = np.zeros((imsize_x, imsize_y))
+    # ppol_mask = np.zeros((imsize_x, imsize_y))
+    # # i_mask[abs(i_array) < 0.0001] = 1
+    # ppol_mask[ppol_array < 0.00125] = 1
+    # fpol_mask = np.logical_or(i_mask, ppol_mask)
+    # # Masking data
+    # i_array_masked = np.ma.array(i_array, mask=i_mask)
+    # fpol_array_masked = np.ma.array(fpol_array, mask=ppol_mask)
+    # ppol_array_masked = np.ma.array(ppol_array, mask=ppol_mask)
+    # fig = plt.figure()
+    # ax = fig.add_axes([0.1, 0.1, 0.6, 0.8])
+    # # FIXME: wrong zero location
+    # # aspect='auto' is bad for VLBI images
+    # i = ax.imshow(fpol_array_masked, interpolation='none', label='FPOL',
+    #               extent=[y[0], y[-1], x[0], x[-1]], origin='lower',
+    #               cmap=plt.get_cmap('hsv'))
+    # co = ax.contour(y, x, i_array_masked, [-0.00018 * 2] + [2 ** (j) * 2 * 0.00018 for
+    #                                                         j in range(12)],
+    #                 colors='k', label='I')
+    # m = np.zeros(u.shape)
+    # u = np.ma.array(u, mask=ppol_mask)
+    # v = np.ma.array(v, mask=ppol_mask)
+    # vec = ax.quiver(y[::k], x[::k], u[::k, ::k], v[::k, ::k],
+    #                 angles='uv', units='xy', headwidth=0, headlength=0,
+    #                 headaxislength=0, scale=0.005, width=0.05)
+    # # Doesn't show anything
+    # ax.legend()
+    # # c = Circle((5, 5), radius=4,
+    # #            edgecolor='red', facecolor='blue', alpha=
+    # e_height = 10 * pixsize * factor
+    # e_width = 5 * pixsize * factor
+    # r_min = e_height / 2
+    # if beam_place == 'lr':
+    #     y_c = y[0] + r_min
+    #     x_c = x[-1] - r_min
+    # elif beam_place == 'll':
+    #     y_c = y[0] + r_min
+    #     x_c = x[0] + r_min
+    # elif beam_place == 'ul':
+    #     y_c = y[-1] - r_min
+    #     x_c = x[0] + r_min
+    # elif beam_place == 'ur':
+    #     y_c = y[-1] - r_min
+    #     x_c = x[-1] - r_min
+    # else:
+    #     raise Exception
+
+    # e = Ellipse((x_c, y_c), e_height, e_width, angle=-30, edgecolor='black',
+    #             facecolor='none', alpha=1)
+    # ax.add_patch(e)
+    # title = ax.set_title("My plot", fontsize='large')
+    # colorbar_ax = fig.add_axes([0.7, 0.1, 0.05, 0.8])
+    # fig.colorbar(i, cax=colorbar_ax)
+    # fig.show()
 
 # TODO: how plot coordinates in mas for -10, 0, 10 mas... if using matshow?
 def plot(image, x=None, y=None, blc=None, trc=None, clim=None, cmap=None,
          abs_levels=None, rel_levels=None, min_abs_level=None,
-         min_rel_level=None, factor=2., plot_color=False, show_beam=False):
+         min_rel_level=None, factor=2., plot_color=False, show_beam=False,
+         beam_corner='ll'):
     """
     Plot image.
 
-    :param levels:
-        Iterable of levels.
+    :param x: (optional)
+        Iterable of x-coordinates. It's length must be comparable to that part
+        of image to display. If ``None`` then don't plot coordinates - just
+        pixel numbers. (default=``None``)
+    :param y: (optional)
+        Iterable of y-coordinates. It's length must be comparable to that part
+        of image to display. If ``None`` then don't plot coordinates - just
+        pixel numbers. (default=``None``)
+    :param blc: (optional)
+        Iterable of two values for Bottom Left Corner (in pixels). Must be in
+        range ``[1, image_size]``. If ``None`` then use ``(1, 1)``. (default:
+        ``None``)
+    :param trc: (optional)
+        Iterable of two values for Top Right Corner (in pixels). Must be in
+        range ``[1, image_size]``. If ``None`` then use ``(1, 1)``. (default:
+        ``None``)
+    :param clim: (optional)
+        Iterable of limits for image values to display. If ``None`` the display
+        all values. (default: ``None``)
+    :param cmap: (optional)
+        Colormap to use for plotting colors. Available color maps could be
+        printed using ``sorted(m for m in plt.cm.datad if not
+        m.endswith("_r"))`` where ``plt`` is imported ``matplotlib.pyplot``.
+        For further details on plotting available colormaps see
+        http://matplotlib.org/1.2.1/examples/pylab_examples/show_colormaps.html
+    :param abs_levels: (optional)
+        Iterable of absolute levels. If ``None`` then construct levels in other
+        way. (default: ``None``)
+    :param min_abs_level: (optional)
+        Values of minimal absolute level. Used with conjunction of ``factor``
+        argument for building sequence of absolute levels. If ``None`` then
+        construct levels in other way. (default: ``None``)
+    :param rel_levels: (optional)
+        Iterable of relative levels. If ``None`` then construct levels in other
+        way. (default: ``None``)
+    :param min_rel_level: (optional)
+        Values of minimal relative level. Used with conjunction of ``factor``
+        argument for building sequence of relative levels. If ``None`` then
+        construct levels in other way. (default: ``None``)
+    :param factor: (optional)
+        Factor of incrementation for levels. (default: ``2.0``)
+    :param show_beam: (optional)
+        Convertable to boolean. Should we plot beam in corner? (default:
+        ``False``)
+    :param beam_corner: (optional)
+        Place (corner) where to plot beam on map. One of ('ll', 'lr', 'ul',
+        'ur') where first letter means lower/upper and second - left/right.
+        (default: ``ll'')
 
     :note:
         ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
@@ -113,6 +267,86 @@ def plot(image, x=None, y=None, blc=None, trc=None, clim=None, cmap=None,
     if clim:
         # TODO: Warn if ``clim`` is out of range for image.
         imgplot.set_clim(clim)
+
+    pylab.show()
+
+
+# TODO: Implement plotting w/o coordinates - in pixels. Use pixel numbers as
+# coordinates.
+def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
+         y=None, blc=None, trc=None, cmap='hsv', abs_levels=None,
+         rel_levels=None, min_abs_level=None, min_rel_level=None, factor=2.,
+         show_beam=False, beam_corner='ll', beam=None):
+    """
+    Plot image(s).
+
+    :param contours: (optional)
+        Numpy 2D array (possibly masked) that should be plotted using contours.
+    :param colors: (optional)
+        Numpy 2D array (possibly masked) that should be plotted using colors.
+    :param vectors: (optional)
+        Numpy 2D array (possibly masked) that should be plotted using vectors.
+    :param vectors_values: (optional)
+        Numpy 2D array (possibly masked) that should be used as vector's lengths
+        when plotting ``vectors`` array.
+    :param x: (optional)
+        Iterable of x-coordinates. It's length must be comparable to that part
+        of image to display. If ``None`` then don't plot coordinates - just
+        pixel numbers. (default=``None``)
+    :param y: (optional)
+        Iterable of y-coordinates. It's length must be comparable to that part
+        of image to display. If ``None`` then don't plot coordinates - just
+        pixel numbers. (default=``None``)
+    :param blc: (optional)
+        Iterable of two values for Bottom Left Corner (in pixels). Must be in
+        range ``[1, image_size]``. If ``None`` then use ``(1, 1)``. (default:
+        ``None``)
+    :param trc: (optional)
+        Iterable of two values for Top Right Corner (in pixels). Must be in
+        range ``[1, image_size]``. If ``None`` then use ``(image_size,
+        image_size)``. (default: ``None``)
+    :param cmap: (optional)
+        Colormap to use for plotting colors. Available color maps could be
+        printed using ``sorted(m for m in plt.cm.datad if not
+        m.endswith("_r"))`` where ``plt`` is imported ``matplotlib.pyplot``.
+        For further details on plotting available colormaps see
+        http://matplotlib.org/1.2.1/examples/pylab_examples/show_colormaps.html.
+        (default: ``hsv``)
+    :param abs_levels: (optional)
+        Iterable of absolute levels. If ``None`` then construct levels in other
+        way. (default: ``None``)
+    :param min_abs_level: (optional)
+        Values of minimal absolute level. Used with conjunction of ``factor``
+        argument for building sequence of absolute levels. If ``None`` then
+        construct levels in other way. (default: ``None``)
+    :param rel_levels: (optional)
+        Iterable of relative levels. If ``None`` then construct levels in other
+        way. (default: ``None``)
+    :param min_rel_level: (optional)
+        Values of minimal relative level. Used with conjunction of ``factor``
+        argument for building sequence of relative levels. If ``None`` then
+        construct levels in other way. (default: ``None``)
+    :param factor: (optional)
+        Factor of incrementation for levels. (default: ``2.0``)
+    :param show_beam: (optional)
+        Convertable to boolean. Should we plot beam in corner? (default:
+        ``False``)
+    :param beam_corner: (optional)
+        Place (corner) where to plot beam on map. One of ('ll', 'lr', 'ul',
+        'ur') where first letter means lower/upper and second - left/right.
+        (default: ``ll'')
+    :param beam: (optional)
+        If ``show_beam`` is True then ``beam`` should be iterable of major axis,
+        minor axis [pix] and beam positional angle [deg]. If no coordinats are
+        supplied then beam parameters must be in pixels.
+
+    :note:
+        ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
+        converted to python-like zero-indexing. If none are specified then use
+        default values. In that case all images must have the same shape.
+    """
+    pass
+
 
         # FIXME: use matplotlib.pyplot!
         # if plt is not None:
@@ -533,21 +767,43 @@ class CleanImage(Image):
 #    pass
 
 if __name__ == '__main__':
+
+    # Importing stuff
+    import os
+    from images import Images
+    from from_fits import create_clean_image_from_fits_file
+
+    abs_levels = [-0.0004]+[0.0004 * 2**(j) for j in range(15)]
+
     data_dir = '/home/ilya/vlbi_errors/0148+274/2007_03_01/'
-    # Directory with fits-images of bootstrapped data
     i_dir_c1 = data_dir + 'C1/im/I/'
-    i_dir_c2 = data_dir + 'C2/im/I/'
-    i_dir_x1 = data_dir + 'X1/im/I/'
-    i_dir_x2 = data_dir + 'X2/im/I/'
     q_dir_c1 = data_dir + 'C1/im/Q/'
     u_dir_c1 = data_dir + 'C1/im/U/'
-    q_dir_c2 = data_dir + 'C2/im/Q/'
-    u_dir_c2 = data_dir + 'C2/im/U/'
-    q_dir_x1 = data_dir + 'X1/im/Q/'
-    u_dir_x1 = data_dir + 'X1/im/U/'
-    q_dir_x2 = data_dir + 'X2/im/Q/'
-    u_dir_x2 = data_dir + 'X2/im/U/'
-    i_cc_file = '/home/ilya/vlbi_errors/0148+274/2007_03_01/X2/im/I/orig_cc.fits'
-    from from_fits import create_clean_image_from_fits_file
-    ccimage = create_clean_image_from_fits_file(i_cc_file)
+    print "Creating PANG image..."
+    images = Images()
+    images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
+                                 os.path.join(u_dir_c1, 'cc.fits')])
+    pang_image = images.create_pang_images()[0]
 
+    print "Creating PPOL image..."
+    images = Images()
+    images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
+                                 os.path.join(u_dir_c1, 'cc.fits')])
+    ppol_image = images.create_pol_images()[0]
+
+    print "Creating I image..."
+    i_image = create_clean_image_from_fits_file(os.path.join(i_dir_c1,
+                                                             'cc.fits'))
+    print "Creating FPOL image..."
+    images = Images()
+    images.add_from_fits(fnames=[os.path.join(i_dir_c1, 'cc.fits'),
+                                 os.path.join(q_dir_c1, 'cc.fits'),
+                                 os.path.join(u_dir_c1, 'cc.fits')])
+    fpol_image = images.create_fpol_images()[0]
+
+    # plot(image, x=None, y=None, blc=None, trc=None, clim=None, cmap=None,
+    #      abs_levels=None, rel_levels=None, min_abs_level=None,
+    #      min_rel_level=None, factor=2., plot_color=False, show_beam=False):
+    plot(i_image.image_w_residuals, x=i_image.x, y=i_image.y, blc=(230, 230),
+         trc=(400, 400), abs_levels=abs_levels)
+    # plot(contour_array, color_array, vec_array)

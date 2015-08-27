@@ -5,9 +5,10 @@ from from_fits import (create_image_from_fits_file,
                        create_clean_image_from_fits_file)
 from utils import (mask_region, mas_to_rad, hdi_of_mcmc, flatten,
                    nested_dict_itervalue, mask_region)
-from image import BasicImage, Image, CleanImage
+from image import BasicImage, Image, CleanImage, plot
 from collections import defaultdict
 from scipy.optimize import leastsq
+from matplotlib import pyplot as plt
 from matplotlib.pyplot import hist, bar, show
 
 
@@ -644,7 +645,8 @@ class Images(object):
         return fpol_images
 
 
-def rotm_map(freqs, chis, s_chis=None, mask=None):
+def rotm_map(freqs, chis, s_chis=None, mask=None, outfile=None, outdir=None,
+             ext='png'):
     """
     Function that calculates Rotation Measure map.
 
@@ -665,6 +667,7 @@ def rotm_map(freqs, chis, s_chis=None, mask=None):
         2D numpy array with uncertainties map [rad/m**2].
 
     """
+    freqs = np.array(freqs)
     if s_chis is not None:
         assert len(freqs) == len(chis) == len(s_chis)
     else:
@@ -680,6 +683,32 @@ def rotm_map(freqs, chis, s_chis=None, mask=None):
 
     if mask is None:
         mask = np.zeros(rotm_array.shape)
+
+    # If saving output
+    if outfile:
+
+        # Function for plotting lines
+        def rotm_model(p, freqs):
+            lambdasq = (3. * 10 ** 8 / freqs) ** 2
+            return p[0] * lambdasq + p[1]
+
+        if outdir is None:
+            outdir = '.'
+        # If the directory does not exist, create it
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+
+        # Calculate how many pixels there should be
+        npixels = np.count_nonzero(~mask)
+        print "{} pixels with fit will be plotted".format(npixels)
+        nrows = int(np.sqrt(npixels) + 1)
+        print "Plot will have dims: {} by {}".format(nrows, nrows)
+
+        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, sharex=True,
+                                 sharey=True)
+        fig.set_size_inches(18.5, 18.5)
+        plt.rcParams.update({'axes.titlesize': 'small'})
+        i, j = 0, 0
 
     for (x, y), value in np.ndenumerate(rotm_array):
         # If pixel should be masked then just pass by and leave NaN as value
@@ -697,6 +726,45 @@ def rotm_map(freqs, chis, s_chis=None, mask=None):
         else:
             rotm_array[x, y] = p[0]
             s_rotm_array[x, y] = np.nan
+
+        # Plot to file
+        if outfile:
+            lambdasq = (3. * 10 ** 8 / freqs) ** 2
+            if s_chis is not None:
+                axes[i, j].errorbar(lambdasq, chi_cube[x, y, :],
+                                    s_chi_cube[x, y, :], fmt='.k')
+            else:
+                axes[i, j].plot(lambdasq, chi_cube[x, y, :], '.k')
+            lambdasq_ = np.linspace(lambdasq[0], lambdasq[-1], 10)
+            axes[i, j].plot(lambdasq_,
+                            rotm_model(p, 3. * 10 ** 8 / np.sqrt(lambdasq_)),
+                            'r', lw=2, label="RM={0:.1f}".format(p[0]))
+            axes[i, j].set_title("{}-{}".format(x, y))
+            axes[i, j].legend(prop={'size': 6}, loc='best', fancybox=True,
+                              framealpha=0.5)
+            # Check this text box
+            # ax.hist(x, 50)
+            # # these are matplotlib.patch.Patch properties
+            # props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+
+            # # place a text box in upper left in axes coords
+            # ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14,
+            # verticalalignment='top', bbox=props)
+
+            axes[i, j].set_xticks([lambdasq[0], lambdasq[-1]])
+            axes[i, j].set_ylim(-np.pi, np.pi)
+            j += 1
+            # Plot first row first
+            if j // nrows > 0:
+                # Then second row, etc...
+                i += 1
+                j = 0
+
+    if outfile:
+        path = os.path.join(outdir, outfile)
+        print "Saving linear fits to {}.{}".format(path, ext)
+        fig.show()
+        fig.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=200)
 
     return rotm_array, s_rotm_array
 
@@ -845,6 +913,16 @@ def rotm(freqs, chis, s_chis=None, p0=None):
     if s_chis is not None:
         s_chis = np.array(s_chis)
 
+    def unwrap(values):
+        d = (np.diff(values) / np.pi).astype("Int8")
+        out = np.empty_like(values)
+        out[0] = values[0]
+        out[1:] = values[1:] - np.cumsum(d) * np.pi
+        return out
+
+    # Try to unwrap angles
+    chis = unwrap(chis)
+
     def rotm_model(p, freqs):
         lambdasq = (3. * 10 ** 8 / freqs) ** 2
         return p[0] * lambdasq + p[1]
@@ -901,7 +979,8 @@ def hdi_of_images(images, cred_mass=0.68):
 
 if __name__ == '__main__':
     import os
-    data_dir = '/home/ilya/vlbi_errors/0148+274/2007_03_01/'
+    # data_dir = '/home/ilya/vlbi_errors/0148+274/2007_03_01/'
+    data_dir = '/home/ilya/vlbi_errors/0952+179/2007_04_30/'
     # Directory with fits-images of bootstrapped data
     i_dir_c1 = data_dir + 'C1/im/I/'
     i_dir_c2 = data_dir + 'C2/im/I/'
@@ -915,7 +994,7 @@ if __name__ == '__main__':
     u_dir_x1 = data_dir + 'X1/im/U/'
     q_dir_x2 = data_dir + 'X2/im/Q/'
     u_dir_x2 = data_dir + 'X2/im/U/'
-    original_cc_fits_file = 'cc.fits'
+    # original_cc_fits_file = 'cc.fits'
 
     # # Testing ``Images.create_error_image``
     # print "Testing ``Images.create_error_image`` method..."
@@ -1058,11 +1137,11 @@ if __name__ == '__main__':
     for band in ('c1', 'c2', 'x1', 'x2'):
         print ""
         fnames = [os.path.join(band_dir[band]['q'], 'cc_{}.fits'.format(i)) for
-                  i in range(1, 50)]
+                  i in range(1, 51)]
         fnames += [os.path.join(band_dir[band]['u'], 'cc_{}.fits'.format(i)) for
-                   i in range(1, 50)]
+                   i in range(1, 51)]
         fnames += [os.path.join(band_dir[band]['i'], 'cc_{}.fits'.format(i)) for
-                   i in range(1, 50)]
+                   i in range(1, 51)]
         images_allbands_50.add_from_fits(fnames)
 
     for i, band in enumerate(('c1', 'c2', 'x1', 'x2')):
@@ -1119,5 +1198,58 @@ if __name__ == '__main__':
 
     # Create ROTM image for each of the bootstrapped Q & U image
     print "Creating ROTM images of bootstrapped data with constructed mask..."
-    # Now create 200 ROTM images with mask basked on PPOL & I bootstrapped data
+    # Now create 50 ROTM images with mask basked on PPOL & I bootstrapped data
     rotm_images_50 = images_allbands_50.create_rotm_images(mask=mask)
+    print "Creating ERROR ROTM image from bootstrapped ROTM images..."
+    rotm_error_50 = rotm_images_50.create_error_image()
+
+    print "Creating ONE ROTM image from original data + bootstrapped PANG" \
+          "errors"
+    # Now create 50 PANG images with mask basked on PPOL & I bootstrapped data
+    bands = ['c1', 'c2', 'x1', 'x2']
+    pang_50_bands = dict()
+    for i, freq in enumerate(images_allbands_50.freqs):
+        images = Images()
+        print "Creating boot PANG images for band {}".format(bands[i])
+        images.add_images(images_allbands_50.create_pang_images(freq=freq,
+                                                                mask=mask))
+        pang_50_bands.update({bands[i]: images})
+
+    pang_error_maps = dict()
+    # Create PANG error maps for each band
+    for band, pang_images in pang_50_bands.iteritems():
+        print "Creating PANG error image for band {}".format(band)
+        pang_error_maps.update({band: pang_images.create_error_image()})
+
+    images = Images()
+    images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_orig.fits'),
+                                 os.path.join(u_dir_c1, 'cc_orig.fits'),
+                                 os.path.join(q_dir_c2, 'cc_orig.fits'),
+                                 os.path.join(u_dir_c2, 'cc_orig.fits'),
+                                 os.path.join(q_dir_x1, 'cc_orig.fits'),
+                                 os.path.join(u_dir_x1, 'cc_orig.fits'),
+                                 os.path.join(q_dir_x2, 'cc_orig.fits'),
+                                 os.path.join(u_dir_x2, 'cc_orig.fits')])
+    print "Creating original ROTM image with constructed mask..."
+    masked_rotm_image_w_s, masked_s_rotm_image_w_s = \
+        images.create_rotm_image(s_pang_arrays=[pang_error_maps[band].image for
+                                                band in bands],
+                                 mask=mask)
+
+    # Creating original C1 image w new resolution
+    i_image = create_clean_image_from_fits_file(os.path.join(band_dir['c1']['i'],
+                                                             'cc_orig.fits'))
+
+    print "Average BOOTSTRAPPED ROTM  images..."
+    average_ROTM = np.mean(np.dstack(tuple(image.image for image in
+                                           rotm_images_50.images)), axis=2)
+    # Plot original ROTM (LSQ fit w/o errors)
+    plot(contours=i_image.image_w_residuals,
+         colors=masked_rotm_image_w_s.image,
+         x=i_image.x[0, :], y=i_image.y[:, 0], blc=(245, 245), trc=(280, 315),
+         min_abs_level=0.0005, colors_mask=mask,
+         plot_title="0952+179 ROTM",
+         color_clim=[-1000, 1000])
+         # color_clim=[0, 120])
+         # outfile='0952+179_ROTM_BOOT_range',
+         # outdir='/home/ilya/vlbi_errors/')

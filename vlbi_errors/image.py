@@ -1,3 +1,4 @@
+import os
 import math
 import numpy as np
 from scipy import signal
@@ -14,142 +15,142 @@ except ImportError:
 
 
 # TODO: how plot coordinates in mas for -10, 0, 10 mas... if using matshow?
-def plot(image, x=None, y=None, blc=None, trc=None, clim=None, cmap=None,
-         abs_levels=None, rel_levels=None, min_abs_level=None,
-         min_rel_level=None, factor=2., plot_color=False, show_beam=False,
-         beam_corner='ll'):
-    """
-    Plot image.
-
-    :param x: (optional)
-        Iterable of x-coordinates. It's length must be comparable to that part
-        of image to display. If ``None`` then don't plot coordinates - just
-        pixel numbers. (default=``None``)
-    :param y: (optional)
-        Iterable of y-coordinates. It's length must be comparable to that part
-        of image to display. If ``None`` then don't plot coordinates - just
-        pixel numbers. (default=``None``)
-    :param blc: (optional)
-        Iterable of two values for Bottom Left Corner (in pixels). Must be in
-        range ``[1, image_size]``. If ``None`` then use ``(1, 1)``. (default:
-        ``None``)
-    :param trc: (optional)
-        Iterable of two values for Top Right Corner (in pixels). Must be in
-        range ``[1, image_size]``. If ``None`` then use ``(1, 1)``. (default:
-        ``None``)
-    :param clim: (optional)
-        Iterable of limits for image values to display. If ``None`` the display
-        all values. (default: ``None``)
-    :param cmap: (optional)
-        Colormap to use for plotting colors. Available color maps could be
-        printed using ``sorted(m for m in plt.cm.datad if not
-        m.endswith("_r"))`` where ``plt`` is imported ``matplotlib.pyplot``.
-        For further details on plotting available colormaps see
-        http://matplotlib.org/1.2.1/examples/pylab_examples/show_colormaps.html
-    :param abs_levels: (optional)
-        Iterable of absolute levels. If ``None`` then construct levels in other
-        way. (default: ``None``)
-    :param min_abs_level: (optional)
-        Values of minimal absolute level. Used with conjunction of ``factor``
-        argument for building sequence of absolute levels. If ``None`` then
-        construct levels in other way. (default: ``None``)
-    :param rel_levels: (optional)
-        Iterable of relative levels. If ``None`` then construct levels in other
-        way. (default: ``None``)
-    :param min_rel_level: (optional)
-        Values of minimal relative level. Used with conjunction of ``factor``
-        argument for building sequence of relative levels. If ``None`` then
-        construct levels in other way. (default: ``None``)
-    :param factor: (optional)
-        Factor of incrementation for levels. (default: ``2.0``)
-    :param show_beam: (optional)
-        Convertable to boolean. Should we plot beam in corner? (default:
-        ``False``)
-    :param beam_corner: (optional)
-        Place (corner) where to plot beam on map. One of ('ll', 'lr', 'ul',
-        'ur') where first letter means lower/upper and second - left/right.
-        (default: ``ll'')
-
-    :note:
-        ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
-        converted to python-like zero-indexing.
-    """
-    if not pylab:
-        raise Exception("Install matplotlib for plotting!")
-    if x is None:
-        x = np.arange(image.imsize[0])
-    if y is None:
-        y = np.arange(image.imsize[1])
-    if blc or trc:
-        blc = blc or (1, 1,)
-        trc = trc or image.imsize
-        part_to_plot = image[blc[0] - 1: trc[0], blc[1]- 1: trc[1]]
-        x = x[blc[0] - 1: trc[0], blc[0] - 1: trc[0]]
-        y = y[blc[1] - 1: trc[1], blc[1] - 1: trc[1]]
-    else:
-        part_to_plot = image
-        x = x
-        y = y
-
-    # Plot coordinates in milliarcseconds
-    x = x / mas_to_rad
-    y = y / mas_to_rad
-
-    # Plotting using color if told
-    if plot_color:
-        imgplot = pylab.matshow(part_to_plot, origin='lower')
-        #         # plt.xticks(np.linspace(0, 999, 10, dtype=int),
-        #         # frame.t[np.linspace(0, 999, 10, dtype=int)])
-        #         # plt.yticks(np.linspace(0, len(dm_grid) - 10, 5, dtype=int),
-        #         #            vint(dm_grid[np.linspace(0, len(dm_grid) - 10, 5,
-        #         #            dtype=int)]))
-        if show_beam:
-            raise NotImplementedError
-        pylab.colorbar()
-
-    # Or plot contours
-    elif abs_levels or rel_levels or min_abs_level or min_rel_level:
-        max_level = image.max()
-        # Build levels (pylab.contour takes only absolute values)
-        if abs_levels or rel_levels:
-            # If given both then ``abs_levels`` has a priority
-            if abs_levels:
-                rel_levels = None
-            else:
-                abs_levels = [max_level * i for i in rel_levels]
-        # If given only min_abs_level & increment factor (default is 2)
-        elif min_abs_level or min_rel_level:
-            if min_rel_level:
-                min_abs_level = min_rel_level * max_level / 100.
-            n_max = int(math.ceil(math.log(max_level / min_abs_level,
-                                           factor)))
-            abs_levels = [min_abs_level * factor ** k for k in range(n_max)]
-        # Plot contours
-        if abs_levels:
-            if plot_color:
-                # White levels on colored background
-                colors = 'w'
-            else:
-                # Black levels on white background
-                colors = 'b'
-            print "Plotting contours with levels: " + str(abs_levels)
-            imgplot = pylab.contour(x, y, part_to_plot, abs_levels,
-                                    colors=colors)
-    else:
-        raise Exception("Specify ``plot_color=True`` or choose some "
-                        "levels!")
-
-    if cmap:
-        try:
-            imgplot.set_cmap(cmap)
-        except:
-            # Show wo ``cmap`` set, print availbale ``cmap``s.
-            pass
-    if clim:
-        # TODO: Warn if ``clim`` is out of range for image.
-        imgplot.set_clim(clim)
-
-    pylab.show()
+# def plot(image, x=None, y=None, blc=None, trc=None, clim=None, cmap=None,
+#          abs_levels=None, rel_levels=None, min_abs_level=None,
+#          min_rel_level=None, factor=2., plot_color=False, show_beam=False,
+#          beam_corner='ll'):
+#     """
+#     Plot image.
+#
+#     :param x: (optional)
+#         Iterable of x-coordinates. It's length must be comparable to that part
+#         of image to display. If ``None`` then don't plot coordinates - just
+#         pixel numbers. (default=``None``)
+#     :param y: (optional)
+#         Iterable of y-coordinates. It's length must be comparable to that part
+#         of image to display. If ``None`` then don't plot coordinates - just
+#         pixel numbers. (default=``None``)
+#     :param blc: (optional)
+#         Iterable of two values for Bottom Left Corner (in pixels). Must be in
+#         range ``[1, image_size]``. If ``None`` then use ``(1, 1)``. (default:
+#         ``None``)
+#     :param trc: (optional)
+#         Iterable of two values for Top Right Corner (in pixels). Must be in
+#         range ``[1, image_size]``. If ``None`` then use ``(1, 1)``. (default:
+#         ``None``)
+#     :param clim: (optional)
+#         Iterable of limits for image values to display. If ``None`` the display
+#         all values. (default: ``None``)
+#     :param cmap: (optional)
+#         Colormap to use for plotting colors. Available color maps could be
+#         printed using ``sorted(m for m in plt.cm.datad if not
+#         m.endswith("_r"))`` where ``plt`` is imported ``matplotlib.pyplot``.
+#         For further details on plotting available colormaps see
+#         http://matplotlib.org/1.2.1/examples/pylab_examples/show_colormaps.html
+#     :param abs_levels: (optional)
+#         Iterable of absolute levels. If ``None`` then construct levels in other
+#         way. (default: ``None``)
+#     :param min_abs_level: (optional)
+#         Values of minimal absolute level. Used with conjunction of ``factor``
+#         argument for building sequence of absolute levels. If ``None`` then
+#         construct levels in other way. (default: ``None``)
+#     :param rel_levels: (optional)
+#         Iterable of relative levels. If ``None`` then construct levels in other
+#         way. (default: ``None``)
+#     :param min_rel_level: (optional)
+#         Values of minimal relative level. Used with conjunction of ``factor``
+#         argument for building sequence of relative levels. If ``None`` then
+#         construct levels in other way. (default: ``None``)
+#     :param factor: (optional)
+#         Factor of incrementation for levels. (default: ``2.0``)
+#     :param show_beam: (optional)
+#         Convertable to boolean. Should we plot beam in corner? (default:
+#         ``False``)
+#     :param beam_corner: (optional)
+#         Place (corner) where to plot beam on map. One of ('ll', 'lr', 'ul',
+#         'ur') where first letter means lower/upper and second - left/right.
+#         (default: ``ll'')
+#
+#     :note:
+#         ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
+#         converted to python-like zero-indexing.
+#     """
+#     if not pylab:
+#         raise Exception("Install matplotlib for plotting!")
+#     if x is None:
+#         x = np.arange(image.imsize[0])
+#     if y is None:
+#         y = np.arange(image.imsize[1])
+#     if blc or trc:
+#         blc = blc or (1, 1,)
+#         trc = trc or image.imsize
+#         part_to_plot = image[blc[0] - 1: trc[0], blc[1]- 1: trc[1]]
+#         x = x[blc[0] - 1: trc[0], blc[0] - 1: trc[0]]
+#         y = y[blc[1] - 1: trc[1], blc[1] - 1: trc[1]]
+#     else:
+#         part_to_plot = image
+#         x = x
+#         y = y
+#
+#     # Plot coordinates in milliarcseconds
+#     x = x / mas_to_rad
+#     y = y / mas_to_rad
+#
+#     # Plotting using color if told
+#     if plot_color:
+#         imgplot = pylab.matshow(part_to_plot, origin='lower')
+#         #         # plt.xticks(np.linspace(0, 999, 10, dtype=int),
+#         #         # frame.t[np.linspace(0, 999, 10, dtype=int)])
+#         #         # plt.yticks(np.linspace(0, len(dm_grid) - 10, 5, dtype=int),
+#         #         #            vint(dm_grid[np.linspace(0, len(dm_grid) - 10, 5,
+#         #         #            dtype=int)]))
+#         if show_beam:
+#             raise NotImplementedError
+#         pylab.colorbar()
+#
+#     # Or plot contours
+#     elif abs_levels or rel_levels or min_abs_level or min_rel_level:
+#         max_level = image.max()
+#         # Build levels (pylab.contour takes only absolute values)
+#         if abs_levels or rel_levels:
+#             # If given both then ``abs_levels`` has a priority
+#             if abs_levels:
+#                 rel_levels = None
+#             else:
+#                 abs_levels = [max_level * i for i in rel_levels]
+#         # If given only min_abs_level & increment factor (default is 2)
+#         elif min_abs_level or min_rel_level:
+#             if min_rel_level:
+#                 min_abs_level = min_rel_level * max_level / 100.
+#             n_max = int(math.ceil(math.log(max_level / min_abs_level,
+#                                            factor)))
+#             abs_levels = [min_abs_level * factor ** k for k in range(n_max)]
+#         # Plot contours
+#         if abs_levels:
+#             if plot_color:
+#                 # White levels on colored background
+#                 colors = 'w'
+#             else:
+#                 # Black levels on white background
+#                 colors = 'b'
+#             print "Plotting contours with levels: " + str(abs_levels)
+#             imgplot = pylab.contour(x, y, part_to_plot, abs_levels,
+#                                     colors=colors)
+#     else:
+#         raise Exception("Specify ``plot_color=True`` or choose some "
+#                         "levels!")
+#
+#     if cmap:
+#         try:
+#             imgplot.set_cmap(cmap)
+#         except:
+#             # Show wo ``cmap`` set, print availbale ``cmap``s.
+#             pass
+#     if clim:
+#         # TODO: Warn if ``clim`` is out of range for image.
+#         imgplot.set_clim(clim)
+#
+#     pylab.show()
 
 
 # TODO: Implement plotting w/o coordinates - in pixels. Use pixel numbers as
@@ -158,7 +159,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          y=None, blc=None, trc=None, cmap='hsv', abs_levels=None,
          rel_levels=None, min_abs_level=None, min_rel_level=None, k=2.,
          show_beam=False, beam_corner='ll', beam=None, contours_mask=None,
-         colors_mask=None, vectors_mask=None):
+         colors_mask=None, vectors_mask=None, plot_title=None, color_clim=None,
+         outfile=None, outdir=None, ext='png', close=False):
     """
     Plot image(s).
 
@@ -284,30 +286,34 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
 
     # Plot contours
     if contours is not None:
-        # # Construct absolute levels
-        # if abs_levels or rel_levels or min_abs_level or min_rel_level:
-        #     max_level = contours.max()
-        #     # Build levels (``pyplot.contour`` takes only absolute values)
-        #     if abs_levels or rel_levels:
-        #         # If given both then ``abs_levels`` has a priority
-        #         if abs_levels:
-        #             rel_levels = None
-        #         else:
-        #             abs_levels = [max_level * i for i in rel_levels]
-        #     # If given only min_abs_level & increment factor ``k``
-        #     elif min_abs_level or min_rel_level:
-        #         if min_rel_level:
-        #             min_abs_level = min_rel_level * max_level / 100.
-        #         n_max = int(math.ceil(math.log(max_level / min_abs_level,
-        #                                        k)))
-        #         abs_levels = [min_abs_level * k ** i for i in range(n_max)]
-        print len(x), len(y), np.shape(contours)
-        co = ax.contour(y, x, contours[x_slice, y_slice], [-0.00018 * 2] +
-                        [2 ** j * 2 * 0.00018 for j in range(12)], colors='k')
+        # If no absolute levels are supplied then construct them
+        if abs_levels is None:
+            print "constructing absolute levels for contours..."
+            max_level = contours[x_slice, y_slice].max()
+            # from given relative levels
+            if rel_levels is not None:
+                print "from relative levels..."
+                # Build levels (``pyplot.contour`` takes only absolute values)
+                abs_levels = [-max_level] + [max_level * i for i in rel_levels]
+                # If given only min_abs_level & increment factor ``k``
+            # from given minimal absolute level
+            elif min_abs_level is not None:
+                print "from minimal absolute level..."
+                n_max = int(math.ceil(math.log(max_level / min_abs_level, k)))
+            # from given minimal relative level
+            elif min_rel_level is not None:
+                print "from minimal relative level..."
+                min_abs_level = min_rel_level * max_level / 100.
+                n_max = int(math.ceil(math.log(max_level / min_abs_level, k)))
+            abs_levels = [-min_abs_level] + [min_abs_level * k ** i for i in
+                                             range(n_max)]
+            print "Constructed absolute levels are: ", abs_levels
+        co = ax.contour(y, x, contours[x_slice, y_slice], abs_levels,
+                        colors='k')
     if colors is not None:
         im = ax.imshow(colors[x_slice, y_slice], interpolation='none',
                        origin='lower', extent=[y[0], y[-1], x[0], x[-1]],
-                      cmap=plt.get_cmap('hsv'))
+                       cmap=plt.get_cmap('hsv'), clim=color_clim)
     if vectors is not None:
         if vectors_values is not None:
             # TODO: Does "-" sign because of RA increases to the left actually?
@@ -323,15 +329,31 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         u = np.ma.array(u, mask=vectors_mask[x_slice, y_slice])
         v = np.ma.array(v, mask=vectors_mask[x_slice, y_slice])
         vec = ax.quiver(y[::k], x[::k], u[::k, ::k], v[::k, ::k], angles='uv',
-                        units='xy', headwidth=0, headlength=0, scale=0.005,
-                        width=0.05, headaxislength=0)
+                        units='xy', headwidth=0., headlength=0., scale=0.005,
+                        width=0.05, headaxislength=0.)
 
-    title = ax.set_title("My plot", fontsize='large')
+    if plot_title:
+        title = ax.set_title(plot_title, fontsize='large')
     # Add colorbar if plotting colors
     if colors is not None:
         colorbar_ax = fig.add_axes([0.7, 0.1, 0.05, 0.8])
         fig.colorbar(im, cax=colorbar_ax)
     fig.show()
+
+    # Saving output
+    if outfile:
+        if outdir is None:
+            outdir = '.'
+        # If the directory does not exist, create it
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+
+        path = os.path.join(outdir, outfile)
+        print "Saving to {}.{}".format(path, ext)
+        plt.savefig("{}.{}".format(path, ext), bbox_inches='tight')
+
+    if close:
+        plt.close()
 
 
 # TODO: Option for saving ``Image`` instance
@@ -736,7 +758,7 @@ if __name__ == '__main__':
 
     abs_levels = [-0.0004]+[0.0004 * 2**(j) for j in range(15)]
 
-    data_dir = '/home/ilya/vlbi_errors/0148+274/2007_03_01/'
+    data_dir = '/home/ilya/vlbi_errors/0952+179/2007_04_30/'
     i_dir_c1 = data_dir + 'C1/im/I/'
     q_dir_c1 = data_dir + 'C1/im/Q/'
     u_dir_c1 = data_dir + 'C1/im/U/'
@@ -764,9 +786,11 @@ if __name__ == '__main__':
 
     # Creating masks
     ppol_mask = np.zeros(ppol_image.imsize)
-    ppol_mask[ppol_image.image < 0.00125] = 1
+    ppol_mask[ppol_image.image < 0.001] = 1
 
     plot(contours=i_image.image_w_residuals, colors=fpol_image.image,
          vectors=pang_image.image, vectors_values=ppol_image.image,
-         x=i_image.x[0, :], y=i_image.y[:, 0], blc=(230, 230), trc=(400, 400),
-         colors_mask=ppol_mask, vectors_mask=ppol_mask)
+         x=i_image.x[0, :], y=i_image.y[:, 0], blc=(240, 235), trc=(300, 370),
+         colors_mask=ppol_mask, vectors_mask=ppol_mask, min_abs_level=0.0005)
+         # plot_title="0952+179 C1",
+         # outdir='/home/ilya/vlbi_errors/', outfile='0952+179_C1')

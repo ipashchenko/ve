@@ -10,6 +10,7 @@ from collections import defaultdict
 from scipy.optimize import leastsq
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import hist, bar, show
+from sklearn.linear_model import Ridge
 
 
 # TODO: Option for using only CCc w/o residuals for building images
@@ -920,8 +921,28 @@ def rotm(freqs, chis, s_chis=None, p0=None):
         out[1:] = values[1:] - np.cumsum(d) * np.pi
         return out
 
+    def unwrap_(phases):
+        """
+        Function that bring phases that are subject to +/-pi*N closer.
+         """
+        # Bring first value to [-pi/2, pi/2] interval
+        values = np.array(phases)
+        if values[0] > np.pi / 2:
+            values[0] -= np.pi
+        elif values[0] < -np.pi / 2:
+            values[0] += np.pi
+        for i, value in enumerate(values[1:]):
+            diff = value - values[i]
+            # 0 => 0, 1 => -pi, 2 => +pi
+            diff_array = np.array([abs(diff), abs(diff - np.pi),
+                                   abs(diff + np.pi)])
+            add_dict = {0: 0, 1: -np.pi, 2: np.pi}
+            values[i+1] += add_dict[np.argmin(diff_array)]
+
+        return values
+
     # Try to unwrap angles
-    chis = unwrap(chis)
+    chis = unwrap_(chis)
 
     def rotm_model(p, freqs):
         lambdasq = (3. * 10 ** 8 / freqs) ** 2
@@ -1240,16 +1261,48 @@ if __name__ == '__main__':
     i_image = create_clean_image_from_fits_file(os.path.join(band_dir['c1']['i'],
                                                              'cc_orig.fits'))
 
+    # Testing RM +/-pi*n stuff
+    c1_q_image = images._images_dict[4608458750.0]['Q'][0]
+    c1_u_image = images._images_dict[4608458750.0]['U'][0]
+    c2_q_image = images._images_dict[5003458750.0]['Q'][0]
+    c2_u_image = images._images_dict[5003458750.0]['U'][0]
+    x1_q_image = images._images_dict[8108458750.0]['Q'][0]
+    x1_u_image = images._images_dict[8108458750.0]['U'][0]
+    x2_q_image = images._images_dict[8429458750.0]['Q'][0]
+    x2_u_image = images._images_dict[8429458750.0]['U'][0]
+
+    c1_pang_array = pang_map(c1_q_image.image, c1_u_image.image, mask=mask)
+    c2_pang_array = pang_map(c2_q_image.image, c2_u_image.image, mask=mask)
+    x1_pang_array = pang_map(x1_q_image.image, x1_u_image.image, mask=mask)
+    x2_pang_array = pang_map(x2_q_image.image, x2_u_image.image, mask=mask)
+
+    c1_pang_error_array = pang_error_maps['c1'].image
+    c2_pang_error_array = pang_error_maps['c2'].image
+    x1_pang_error_array = pang_error_maps['x1'].image
+    x2_pang_error_array = pang_error_maps['x2'].image
+
+    rotm_array, s_rotm_array = rotm_map(images.freqs, [c1_pang_array,
+                                                       c2_pang_array,
+                                                       x1_pang_array,
+                                                       x2_pang_array],
+                                        s_chis=[c1_pang_error_array,
+                                                c2_pang_error_array,
+                                                x1_pang_error_array,
+                                                x2_pang_error_array],
+                                        mask=mask,
+                                        outfile='LinearFit',
+                                        outdir='/home/ilya/vlbi_errors/')
+
+
     print "Average BOOTSTRAPPED ROTM  images..."
     average_ROTM = np.mean(np.dstack(tuple(image.image for image in
                                            rotm_images_50.images)), axis=2)
     # Plot original ROTM (LSQ fit w/o errors)
     plot(contours=i_image.image_w_residuals,
-         colors=masked_rotm_image_w_s.image,
+         colors=rotm_error_50.image,
          x=i_image.x[0, :], y=i_image.y[:, 0], blc=(245, 245), trc=(280, 315),
          min_abs_level=0.0005, colors_mask=mask,
-         plot_title="0952+179 ROTM",
-         color_clim=[-1000, 1000])
+         plot_title="0952+179 SIGMA ROTM BOOT",
          # color_clim=[0, 120])
-         # outfile='0952+179_ROTM_BOOT_range',
-         # outdir='/home/ilya/vlbi_errors/')
+         outfile='0952+179_SIGMA_ROTM_BOOT',
+         outdir='/home/ilya/vlbi_errors/')

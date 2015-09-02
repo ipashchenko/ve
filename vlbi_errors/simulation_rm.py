@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from data_io import get_fits_image_info
 from image import BasicImage, CleanImage, plot
@@ -5,12 +6,17 @@ from images import Images
 from utils import mask_region, mas_to_rad
 from model import Model
 from components import DeltaComponent
+from from_fits import create_uvdata_from_fits_file
 
 
 highest_freq_ccimage =\
     '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/im/I/cc.fits'
 lowest_freq_ccimage =\
     '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/im/I/cc.fits'
+lowest_freq_uvdata = \
+    '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/uv/sc_uv.fits'
+highest_freq_uvdata = \
+    '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/uv/sc_uv.fits'
 # Calculate common image parameters
 # Parameters of the original lowest frequency map. For constructing simulated
 # data we need models with that size (in rad) and increased number of pixels
@@ -117,4 +123,55 @@ plot(contours=ppol_image.image, colors=ppol_image.image,
      vectors=pang_image.image, vectors_values=ppol_image.image,
      x=image_u.x[0, :], y=image_u.y[:, 0], min_rel_level=0.01,
      vectors_mask=mask, contours_mask=mask, colors_mask=mask, vinc=20)
+
+# Substitute our Q & U model
+uvdata_l = create_uvdata_from_fits_file(highest_freq_uvdata)
+noise = uvdata_l.noise(average_freq=True)
+uvdata_l.substitute([model_q, model_u])
+uvdata_l.noise_add(noise)
+
+uv_files_dirs = {'x2': '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/uv/',
+                 'x1': '/home/ilya/vlbi_errors/0952+179/2007_04_30/X1/uv/',
+                 'c2': '/home/ilya/vlbi_errors/0952+179/2007_04_30/C2/uv/',
+                 'c1': '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/uv/'}
+lambda_sq_bands = {'x2': 0.00126661, 'x1': 0.00136888, 'c2': 0.00359502,
+                   'c1': 0.00423771}
+freq_bands = {'x2': 8429458750.0, 'x1': 8108458750.0, 'c2': 5003458750.0,
+              'c1': 4608458750.0}
+# Now circle for bands with lower frequencies
+for band in ('c1', 'x1', 'c2', 'c1'):
+    # Rotate PANG by multiplying polarized intensity on cos/sin
+    q_array = ppol_image._image * np.cos(2. * (1. + 2. * image_rm._image *
+                                               lambda_sq_bands[band]))
+    u_array = ppol_image._image * np.sin(2. * (1. + 2. * image_rm._image *
+                                               lambda_sq_bands[band]))
+    image_q = CleanImage(imsize=imsize, pixsize=pixsize, pixref=pixref,
+                         stokes='Q', freq=freq_bands[band], bmaj=bmaj,
+                         bmin=bmin, bpa=0)
+    image_u = CleanImage(imsize=imsize, pixsize=pixsize, pixref=pixref,
+                         stokes='U', freq=freq_bands[band], bmaj=bmaj,
+                         bmin=bmin, bpa=0)
+
+    model_q = Model(stokes='Q')
+    model_u = Model(stokes='U')
+    comps_q = [DeltaComponent(image_q._image[x, y],
+                              image.x[x, y]/mas_to_rad,
+                              image.y[x, y]/mas_to_rad) for (x, y), value in
+               np.ndenumerate(jet_region) if not jet_region.mask[x, y]]
+    comps_u = [DeltaComponent(image_u._image[x, y],
+                              image.x[x, y]/mas_to_rad,
+                              image.y[x, y]/mas_to_rad) for (x, y), value in
+               np.ndenumerate(jet_region) if not jet_region.mask[x, y]]
+    model_q.add_components(*comps_q)
+    model_u.add_components(*comps_u)
+
+    # Substitute Q&U models to uv-data and add noise
+    uv_file = os.path.join(uv_files_dirs[band], 'sc_uv.fits')
+    uvdata = create_uvdata_from_fits_file(uv_file)
+    noise = uvdata.noise(average_freq=True)
+    uvdata.substitute([model_q, model_u])
+    uvdata.noise_add(noise)
+    # Save uv-data to file
+    uvdata.save(uvdata.data, os.path.join(uv_files_dirs[band], 'simul_uv.fits'))
+
 

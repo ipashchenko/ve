@@ -13,6 +13,27 @@ from matplotlib.pyplot import hist, bar, show
 from sklearn.linear_model import Ridge
 
 
+def unwrap_(phases):
+    """
+    Function that bring phases that are subject to +/-pi*N closer.
+     """
+    # Bring first value to [-pi/2, pi/2] interval
+    values = np.array(phases)
+    if values[0] > np.pi / 2:
+        values[0] -= np.pi
+    elif values[0] < -np.pi / 2:
+        values[0] += np.pi
+    for i, value in enumerate(values[1:]):
+        diff = value - values[i]
+        # 0 => 0, 1 => -pi, 2 => +pi
+        diff_array = np.array([abs(diff), abs(diff - np.pi),
+                               abs(diff + np.pi)])
+        add_dict = {0: 0, 1: -np.pi, 2: np.pi}
+        values[i+1] += add_dict[np.argmin(diff_array)]
+
+    return values
+
+
 # TODO: Option for using only CCc w/o residuals for building images
 # TODO: Option for saving ``Images`` instance. One freq/stokes images can be
 # saved in multidimensional data part of ``ImageHDU``. If many stokes/freqs =>
@@ -61,6 +82,16 @@ class Images(object):
         self._images_cube = np.dstack(tuple(image.image for image in
                                       self._images_dict[freq][stokes]))
 
+    def _save_cube(self, stokes=None, freq=None):
+        """
+        Method that saves optionally modified images cube back to image
+        instances.
+        """
+        if self._images_cube is None:
+            raise Exception("No available images cube to save!")
+        for i, array in enumerate(self._images_cube.T):
+            self._images_dict[freq][stokes][i].image = array
+
     def slice(self, pix1, pix2, stokes=None, freq=None):
         """
         Method that returns slice of images along line.
@@ -95,6 +126,20 @@ class Images(object):
         for image in self._images_dict[freq][stokes]:
             slices.append(image.slice(pix1, pix2))
         return np.vstack(slices).T
+
+    def apply_pixelwise(self, func, stokes=None, freq=None):
+        """
+        Method that applies user specified callable to each pixel of stacked
+        image pixel by pixel.
+
+        :param func:
+            Callable that accept slice of stacked images along image's number
+            axis and return optionally modified slice.
+        """
+        self._create_cube(stokes=stokes, freq=freq)
+        for (x, y), value in self._images_cube[..., 0]:
+            self._images_cube[x, y, ...] = func(self._images_cube[x, y, ...])
+        self._save_cube(stokes=stokes, freq=freq)
 
     def pixels_histogram(self, stokes=None, freq=None, region=None, mask=None,
                          mode='mean'):
@@ -254,6 +299,8 @@ class Images(object):
         for image in images:
             self.add_image(image)
 
+    # FIXME: If ``create_cube`` is ``False`` then we don't nee ``freq`` &
+    # ``stokes``
     def create_error_image(self, freq=None, stokes=None, cred_mass=0.68):
         """
         Method that creates an error map for current collection of instances.
@@ -282,6 +329,10 @@ class Images(object):
 
         # Now can safely create cube
         self._create_cube(stokes, freq)
+
+        # For PANG images pre-process angles
+        if stokes == 'PANG':
+            self.apply_pixelwise(unwrap_, stokes='PANG', freq=freq)
 
         # Get some image from stacked to use it parameters for saving output. It
         # doesn't matter what image - they all are checked to have the same
@@ -443,7 +494,7 @@ class Images(object):
     # in ``create_rotm_images``
     # ``Images`` instance can be easily obtained from list of ``Image``
     # instances
-    def create_pang_images(self, freq=None, mask=None):
+    def create_pang_images(self, freq=None, mask=None, convolved=True):
         """
         Method that creates Polarization Angle images for current collection of
         image instances.
@@ -498,12 +549,19 @@ class Images(object):
         # Create container for pang-images
         pang_images = list()
         for q_image, u_image in zip(q_images, u_images):
-            pang_array = pang_map(q_image.image, u_image.image, mask=mask)
+            if convolved:
+                pang_array = pang_map(q_image.image, u_image.image, mask=mask)
+            else:
+                pang_array = pang_map(q_image._image, u_image._image, mask=mask)
+
             # Create basic image and add ``pang_array``
             pang_image = Image(imsize=img.imsize, pixref=img.pixref,
                                pixrefval=img.pixrefval, pixsize=img.pixsize,
                                freq=img.freq, stokes='PANG')
-            pang_image.image = pang_array
+            if convolved:
+                pang_image.image = pang_array
+            else:
+                pang_image._image = pang_array
             pang_images.append(pang_image)
 
         return pang_images
@@ -511,7 +569,7 @@ class Images(object):
 
     # TODO: Implement ``create_pol_image`` & use it to implement this method as
     # in ``create_rotm_images``
-    def create_pol_images(self, freq=None, mask=None):
+    def create_pol_images(self, freq=None, mask=None, convolved=True):
         """
         Method that creates Polarization Flux images for current collection of
         image instances.
@@ -566,12 +624,18 @@ class Images(object):
         # Create container for pang-images
         pol_images = list()
         for q_image, u_image in zip(q_images, u_images):
-            pol_array = pol_map(q_image.image, u_image.image, mask=mask)
+            if convolved:
+                pol_array = pol_map(q_image.image, u_image.image, mask=mask)
+            else:
+                pol_array = pol_map(q_image._image, u_image._image, mask=mask)
             # Create basic image and add ``pang_array``
             pol_image = Image(imsize=img.imsize, pixref=img.pixref,
                               pixrefval=img.pixrefval, pixsize=img.pixsize,
                               freq=img.freq, stokes='PPOL')
-            pol_image.image = pol_array
+            if convolved:
+                pol_image.image = pol_array
+            else:
+                pol_image._image = pol_array
             pol_images.append(pol_image)
 
         return pol_images
@@ -944,6 +1008,31 @@ def rotm(freqs, chis, s_chis=None, p0=None):
     # Try to unwrap angles
     chis = unwrap_(chis)
 
+    # # Using ``Ridge`` cause OLS doesn't have weights of samples in ``fit``
+    # model = Ridge(alpha=10**(-8))
+    # lambdasq = (3. * 10 ** 8 / freqs) ** 2.
+    # x = np.atleast_2d(lambdasq).T
+    # y = chis
+    # sy = s_chis
+
+    def cook_dist(x, y, s_y=None):
+        """Vectorized version of Cook's distance."""
+        model = Ridge(alpha=10**(-8.))
+        n = len(x)
+        if s_y is None:
+            model.fit(x, y)
+        else:
+            model.fit(x, y, sample_weight=1./s_y ** 2)
+        yhat = model.predict(x)
+        n_p = 2
+
+        mse = np.sum((yhat - y)**2.0)/n
+        denom = n_p * mse
+        idx = np.arange(n)
+        return np.array([np.sum((yhat-model.fit(x[idx!=i],y[idx!=i],
+                                                sample_weight=1./s_y[idx!=i]**2).predict(x)) ** 2.0) for
+                         i in range(n)])/denom
+
     def rotm_model(p, freqs):
         lambdasq = (3. * 10 ** 8 / freqs) ** 2
         return p[0] * lambdasq + p[1]
@@ -1238,6 +1327,7 @@ if __name__ == '__main__':
 
     pang_error_maps = dict()
     # Create PANG error maps for each band
+    #TODO: Use Q&U error images for creating PANG error maps
     for band, pang_images in pang_50_bands.iteritems():
         print "Creating PANG error image for band {}".format(band)
         pang_error_maps.update({band: pang_images.create_error_image()})
@@ -1281,28 +1371,28 @@ if __name__ == '__main__':
     x1_pang_error_array = pang_error_maps['x1'].image
     x2_pang_error_array = pang_error_maps['x2'].image
 
-    rotm_array, s_rotm_array = rotm_map(images.freqs, [c1_pang_array,
-                                                       c2_pang_array,
-                                                       x1_pang_array,
-                                                       x2_pang_array],
-                                        s_chis=[c1_pang_error_array,
-                                                c2_pang_error_array,
-                                                x1_pang_error_array,
-                                                x2_pang_error_array],
-                                        mask=mask,
-                                        outfile='LinearFit',
-                                        outdir='/home/ilya/vlbi_errors/')
+    # rotm_array, s_rotm_array = rotm_map(images.freqs, [c1_pang_array,
+    #                                                    c2_pang_array,
+    #                                                    x1_pang_array,
+    #                                                    x2_pang_array],
+    #                                     s_chis=[c1_pang_error_array,
+    #                                             c2_pang_error_array,
+    #                                             x1_pang_error_array,
+    #                                             x2_pang_error_array],
+    #                                     mask=mask,
+    #                                     outfile='LinearFit',
+    #                                     outdir='/home/ilya/vlbi_errors/')
 
 
     print "Average BOOTSTRAPPED ROTM  images..."
     average_ROTM = np.mean(np.dstack(tuple(image.image for image in
                                            rotm_images_50.images)), axis=2)
     # Plot original ROTM (LSQ fit w/o errors)
-    plot(contours=i_image.image_w_residuals,
-         colors=rotm_error_50.image,
-         x=i_image.x[0, :], y=i_image.y[:, 0], blc=(245, 245), trc=(280, 315),
-         min_abs_level=0.0005, colors_mask=mask,
-         plot_title="0952+179 SIGMA ROTM BOOT",
-         # color_clim=[0, 120])
-         outfile='0952+179_SIGMA_ROTM_BOOT',
-         outdir='/home/ilya/vlbi_errors/')
+    # plot(contours=i_image.image_w_residuals,
+    #      colors=masked_rotm_image_w_s.image,
+    #      x=i_image.x[0, :], y=i_image.y[:, 0], blc=(245, 245), trc=(280, 315),
+    #      min_abs_level=0.0005, colors_mask=mask,
+    #      plot_title="0952+179 ROTM w s",
+    #      # color_clim=[0, 120])
+    #      outfile='0952+179_ROTM_w_s',
+    #      outdir='/home/ilya/vlbi_errors/')

@@ -1,6 +1,7 @@
 import numpy as np
 from data_io import get_fits_image_info
-from image import BasicImage, CleanImage
+from image import BasicImage, CleanImage, plot
+from images import Images
 from utils import mask_region, mas_to_rad
 from model import Model
 from components import DeltaComponent
@@ -58,9 +59,6 @@ jet_region = mask_region(image._image, region=(pixref[0] - int(beam_width // 2),
                                                pixref[1] + jet_length))
 jet_region = np.ma.array(image._image, mask=~jet_region.mask)
 
-# Create model instance and fill it with components
-model = Model(stokes='Q')
-
 
 # Flux should decline with x (or y) by linear law
 def flux(x, y, max_flux, length):
@@ -73,14 +71,44 @@ def rm(x, y, max_rm, width):
     return k * (y - pixref[1])
 
 
+# Create model instance and fill it with components
+model_q = Model(stokes='Q')
+model_u = Model(stokes='U')
+
+
 # Could i use full polarization flux from original CC model, but split it to
-# Q & U components to create uniform angles?
-comps = [DeltaComponent(flux(x, y, 0.1, jet_length), image.x[x, y]/mas_to_rad,
-                        image.y[x, y]/mas_to_rad) for (x, y), value in
-         np.ndenumerate(jet_region) if not jet_region.mask[x, y]]
-model.add_components(*comps)
+# Q & U components to create uniform angles? I can create image with new pixsize
+# & imsize of Q, U (PANG) at highest frequency. Use CCs in pixels as model.
+# Then Q = P * cos(2*(chi_0 + RM * lambda^2)), U = P * sin(...). But straight
+# jets are easy to analyze.
+max_flux = 0.1 / (np.pi * beam_width ** 2)
+comps_q = [DeltaComponent(flux(x, y, max_flux, jet_length),
+                          image.x[x, y]/mas_to_rad,
+                          image.y[x, y]/mas_to_rad) for (x, y), value in
+           np.ndenumerate(jet_region) if not jet_region.mask[x, y]]
+comps_u = [DeltaComponent(flux(x, y, max_flux, jet_length),
+                          image.x[x, y]/mas_to_rad,
+                          image.y[x, y]/mas_to_rad) for (x, y), value in
+           np.ndenumerate(jet_region) if not jet_region.mask[x, y]]
+model_q.add_components(*comps_q)
+model_u.add_components(*comps_u)
 # Actually - i don't need CleanImage - just model to FT
-image = CleanImage(imsize=imsize, pixsize=pixsize, pixref=pixref, stokes='Q',
-                   freq=freq_l, bmaj=bmaj, bmin=bmin, bpa=0)
-image.add_model(model)
+image_q = CleanImage(imsize=imsize, pixsize=pixsize, pixref=pixref, stokes='Q',
+                     freq=freq_l, bmaj=bmaj, bmin=bmin, bpa=0)
+image_u = CleanImage(imsize=imsize, pixsize=pixsize, pixref=pixref, stokes='U',
+                     freq=freq_l, bmaj=bmaj, bmin=bmin, bpa=0)
+image_q.add_model(model_q)
+image_u.add_model(model_u)
+
+# Create PANG map & plot it
+images = Images()
+images.add_images([image_q, image_u])
+pang_image = images.create_pang_images()[0]
+ppol_image = images.create_pol_images()[0]
+mask = ppol_image.image < 0.01
+# PANG = 0.5 * pi/4 = 0.39
+plot(contours=ppol_image.image, colors=ppol_image.image,
+     vectors=pang_image.image, vectors_values=ppol_image.image,
+     x=image_u.x[0, :], y=image_u.y[:, 0], min_rel_level=0.01,
+     vectors_mask=mask, contours_mask=mask, colors_mask=mask, vinc=20)
 

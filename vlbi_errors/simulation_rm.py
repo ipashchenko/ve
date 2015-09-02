@@ -68,13 +68,19 @@ def flux(x, y, max_flux, length):
 # Zero Rm in center and constant gradient ``2 * max_rm/width``.
 def rm(x, y, max_rm, width):
     k = max_rm / (width / 2.)
-    return k * (y - pixref[1])
+    return k * abs(x)
+
+
+# Create map of ROTM
+max_rm = 200.
+image_rm = BasicImage(imsize=imsize, pixsize=pixsize, pixref=pixref)
+image_rm._image = rm(image.x/abs(pixsize[0]), image.y/abs(pixsize[1]), max_rm,
+                     jet_width)
 
 
 # Create model instance and fill it with components
 model_q = Model(stokes='Q')
 model_u = Model(stokes='U')
-
 
 # Could i use full polarization flux from original CC model, but split it to
 # Q & U components to create uniform angles? I can create image with new pixsize

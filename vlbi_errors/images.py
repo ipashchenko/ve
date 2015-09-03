@@ -330,9 +330,10 @@ class Images(object):
         # Now can safely create cube
         self._create_cube(stokes, freq)
 
-        # For PANG images pre-process angles
-        if stokes == 'PANG':
-            self.apply_pixelwise(unwrap_, stokes='PANG', freq=freq)
+        # FIXME: raise ValueError in apply...
+        # # For PANG images pre-process angles
+        # if stokes == 'PANG':
+        #     self.apply_pixelwise(unwrap_, stokes='PANG', freq=freq)
 
         # Get some image from stacked to use it parameters for saving output. It
         # doesn't matter what image - they all are checked to have the same

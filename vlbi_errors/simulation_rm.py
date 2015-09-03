@@ -13,12 +13,16 @@ from spydiff import clean_difmap
 print "Constructing model image parameters..."
 highest_freq_ccimage =\
     '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/im/I/cc.fits'
+    # '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/X2/im/I/cc.fits'
 lowest_freq_ccimage =\
     '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/im/I/cc.fits'
+    # '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/C1/im/I/cc.fits'
 lowest_freq_uvdata = \
     '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/uv/sc_uv.fits'
+    # '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/C1/uv/sc_uv.fits'
 highest_freq_uvdata = \
     '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/uv/sc_uv.fits'
+    # '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/X2/uv/sc_uv.fits'
 # Calculate common image parameters
 # Parameters of the original lowest frequency map. For constructing simulated
 # data we need models with that size (in rad) and increased number of pixels
@@ -130,6 +134,7 @@ mask = ppol_image.image < 0.01
 #      vectors_mask=mask, contours_mask=mask, colors_mask=mask, vinc=20)
 
 data_dir = '/home/ilya/vlbi_errors/0952+179/2007_04_30/'
+# data_dir = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/'
 i_dir_c1 = data_dir + 'C1/im/I/'
 i_dir_c2 = data_dir + 'C2/im/I/'
 i_dir_x1 = data_dir + 'X1/im/I/'

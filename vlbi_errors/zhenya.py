@@ -314,6 +314,7 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
         for epoch in epochs:
             print " for epoch ", epoch
             # Bands must be sorted in descending order - use beam of first band
+            # FIXME: but pixsize of highest frequency map
             beam_restore = None
             mapsize_clean = None
             for band in bands:

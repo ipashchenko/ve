@@ -213,7 +213,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
 
         path = os.path.join(outdir, outfile)
         print "Saving to {}.{}".format(path, ext)
-        plt.savefig("{}.{}".format(path, ext), bbox_inches='tight')
+        plt.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=200)
 
     if close:
         plt.close()

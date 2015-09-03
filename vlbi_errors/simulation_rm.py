@@ -76,7 +76,7 @@ def flux(x, y, max_flux, length):
 # Zero Rm in center and constant gradient ``2 * max_rm/width``.
 def rm(x, y, max_rm, width):
     k = max_rm / (width / 2.)
-    return k * abs(x)
+    return k * (x - imsize[0] / 2) + k * imsize[0] / 2
 
 
 # Create map of ROTM

@@ -115,7 +115,6 @@ class Model(object):
             Instance of ``Image`` subclass.
         """
         for component in self._components:
-            print "Adding component " + str(component) + " to image"
             image.add_component(component)
 
     def make_image(self, fname=None, imsize=None, pixref=None, pixsize=None,

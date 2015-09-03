@@ -10,7 +10,7 @@ from collections import defaultdict
 from scipy.optimize import leastsq
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import hist, bar, show
-from sklearn.linear_model import Ridge
+# from sklearn.linear_model import Ridge
 
 
 def unwrap_(phases):
@@ -567,7 +567,6 @@ class Images(object):
 
         return pang_images
 
-
     # TODO: Implement ``create_pol_image`` & use it to implement this method as
     # in ``create_rotm_images``
     def create_pol_images(self, freq=None, mask=None, convolved=True):
@@ -1016,23 +1015,23 @@ def rotm(freqs, chis, s_chis=None, p0=None):
     # y = chis
     # sy = s_chis
 
-    def cook_dist(x, y, s_y=None):
-        """Vectorized version of Cook's distance."""
-        model = Ridge(alpha=10**(-8.))
-        n = len(x)
-        if s_y is None:
-            model.fit(x, y)
-        else:
-            model.fit(x, y, sample_weight=1./s_y ** 2)
-        yhat = model.predict(x)
-        n_p = 2
+    # def cook_dist(x, y, s_y=None):
+    #     """Vectorized version of Cook's distance."""
+    #     model = Ridge(alpha=10**(-8.))
+    #     n = len(x)
+    #     if s_y is None:
+    #         model.fit(x, y)
+    #     else:
+    #         model.fit(x, y, sample_weight=1./s_y ** 2)
+    #     yhat = model.predict(x)
+    #     n_p = 2
 
-        mse = np.sum((yhat - y)**2.0)/n
-        denom = n_p * mse
-        idx = np.arange(n)
-        return np.array([np.sum((yhat-model.fit(x[idx!=i],y[idx!=i],
-                                                sample_weight=1./s_y[idx!=i]**2).predict(x)) ** 2.0) for
-                         i in range(n)])/denom
+    #     mse = np.sum((yhat - y)**2.0)/n
+    #     denom = n_p * mse
+    #     idx = np.arange(n)
+    #     return np.array([np.sum((yhat-model.fit(x[idx!=i],y[idx!=i],
+    #                                             sample_weight=1./s_y[idx!=i]**2).predict(x)) ** 2.0) for
+    #                      i in range(n)])/denom
 
     def rotm_model(p, freqs):
         lambdasq = (3. * 10 ** 8 / freqs) ** 2

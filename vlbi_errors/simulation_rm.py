@@ -12,17 +12,17 @@ from spydiff import clean_difmap
 
 print "Constructing model image parameters..."
 highest_freq_ccimage =\
-    '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/im/I/cc.fits'
-    # '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/X2/im/I/cc.fits'
+    '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/X2/im/I/cc.fits'
+    # '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/im/I/cc.fits'
 lowest_freq_ccimage =\
-    '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/im/I/cc.fits'
-    # '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/C1/im/I/cc.fits'
+    '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/C1/im/I/cc.fits'
+    # '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/im/I/cc.fits'
 lowest_freq_uvdata = \
-    '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/uv/sc_uv.fits'
-    # '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/C1/uv/sc_uv.fits'
+    '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/C1/uv/sc_uv.fits'
+    # '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/uv/sc_uv.fits'
 highest_freq_uvdata = \
-    '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/uv/sc_uv.fits'
-    # '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/X2/uv/sc_uv.fits'
+    '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/X2/uv/sc_uv.fits'
+    # '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/uv/sc_uv.fits'
 # Calculate common image parameters
 # Parameters of the original lowest frequency map. For constructing simulated
 # data we need models with that size (in rad) and increased number of pixels
@@ -133,8 +133,8 @@ mask = ppol_image.image < 0.01
 #      x=image_u.x[0, :], y=image_u.y[:, 0], min_rel_level=1.,
 #      vectors_mask=mask, contours_mask=mask, colors_mask=mask, vinc=20)
 
-data_dir = '/home/ilya/vlbi_errors/0952+179/2007_04_30/'
-# data_dir = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/'
+# data_dir = '/home/ilya/vlbi_errors/0952+179/2007_04_30/'
+data_dir = '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/'
 i_dir_c1 = data_dir + 'C1/im/I/'
 i_dir_c2 = data_dir + 'C2/im/I/'
 i_dir_x1 = data_dir + 'X1/im/I/'
@@ -202,7 +202,11 @@ for band in ('x2', 'x1', 'c2', 'c1'):
     uvdata.substitute([model_q, model_u])
     uvdata.noise_add(noise)
     # Save uv-data to file
-    uvdata.save(uvdata.data, os.path.join(uv_files_dirs[band], 'simul_uv.fits'))
+    uv_save_fname = os.path.join(uv_files_dirs[band], 'simul_uv.fits')
+    if os.path.exists(uv_save_fname):
+        print "Deleting existing file: {}".format(uv_save_fname)
+        os.remove(uv_save_fname)
+    uvdata.save(uvdata.data, uv_save_fname)
 
 # Now clean simulated uv-data with parameters of lowest frequency map
 path_to_script = '/home/ilya/code/vlbi_errors/data/zhenya/clean/final_clean_nw'
@@ -225,3 +229,6 @@ for band in bands:
         cc_fname = os.path.join(band_dir[band][stoke], 'cc_sim.fits')
         cc_fnames.append(cc_fname)
 images.add_from_fits(cc_fnames)
+ppol_image = images.create_pol_images(freq=images.freqs[0])[0]
+mask = ppol_image.image < 0.0005
+rm_image = images.create_rotm_image(mask=mask)

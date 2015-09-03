@@ -56,14 +56,14 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     if shift is not None:
         difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
     difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
-                    str(mapsize_clean[1] * 2) + "\n")
+                    str(mapsize_clean[1]) + "\n")
     if beam_restore:
         difmapout.write("restore " + str(beam_restore[0]) + ', ' +
                         str(beam_restore[1]) + ', ' + str(beam_restore[2]) +
                         "\n")
     difmapout.write("@" + path_to_script + " " + stokes + "\n")
     difmapout.write("mapsize " + str(mapsize_restore[0] * 2) + ', ' +
-                    str(mapsize_restore[1] * 2) + "\n")
+                    str(mapsize_restore[1]) + "\n")
     if outpath is None:
         outpath = path
     elif not outpath.endswith("/"):

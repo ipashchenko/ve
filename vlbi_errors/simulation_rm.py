@@ -147,10 +147,10 @@ band_dir = {'c1': {'i': i_dir_c1, 'q': q_dir_c1, 'u': u_dir_c1},
             'x1': {'i': i_dir_x1, 'q': q_dir_x1, 'u': u_dir_x1},
             'x2': {'i': i_dir_x2, 'q': q_dir_x2, 'u': u_dir_x2}}
 
-uv_files_dirs = {'x2': '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/uv/',
-                 'x1': '/home/ilya/vlbi_errors/0952+179/2007_04_30/X1/uv/',
-                 'c2': '/home/ilya/vlbi_errors/0952+179/2007_04_30/C2/uv/',
-                 'c1': '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/uv/'}
+uv_files_dirs = {'x2': os.path.join(data_dir, 'X2/uv/'),
+                 'x1': os.path.join(data_dir, 'X1/uv/'),
+                 'c2': os.path.join(data_dir, 'C2/uv/'),
+                 'c1': os.path.join(data_dir, 'C1/uv/')}
 lambda_sq_bands = {'x2': 0.00126661, 'x1': 0.00136888, 'c2': 0.00359502,
                    'c1': 0.00423771}
 freq_bands = {'x2': 8429458750.0, 'x1': 8108458750.0, 'c2': 5003458750.0,
@@ -203,6 +203,7 @@ for band in ('x2', 'x1', 'c2', 'c1'):
 path_to_script = '/home/ilya/code/vlbi_errors/data/zhenya/clean/final_clean_nw'
 map_info = get_fits_image_info(band_dir['c1']['i'] + 'cc.fits')
 beam_restore = map_info[3]
+map_info = get_fits_image_info(band_dir['x2']['i'] + 'cc.fits')
 mapsize_clean = (map_info[0][0], map_info[-3][0] / mas_to_rad)
 for band in bands:
     for stoke in ('i', 'q', 'u'):
@@ -212,4 +213,10 @@ for band in bands:
                      mapsize_restore=None, beam_restore=beam_restore,
                      outpath=band_dir[band][stoke])
 
-
+images = Images()
+cc_fnames = list()
+for band in bands:
+    for stoke in ('i', 'q', 'u'):
+        cc_fname = os.path.join(band_dir[band][stoke], 'cc_sim.fits')
+        cc_fnames.append(cc_fname)
+images.add_from_fits(cc_fnames)

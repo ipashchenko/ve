@@ -1,3 +1,4 @@
+import triangle
 import numpy as np
 from pymc3 import (Model, Normal, Categorical, Dirichlet, Metropolis, sample,
                    constant, ElemwiseCategoricalStep, NUTS)
@@ -27,6 +28,40 @@ with Model() as model:
 
 # Fitting model
 with model:
+    length = 10000
     step1 = Metropolis(vars=[alpha, beta])
     step2 = ElemwiseCategoricalStep(var=j, values=[0, 1, 2])
-    tr = sample(10000, step=[step1, step2])
+    tr = sample(length, step=[step1, step2])
+
+# Find what points should be moved if any and move them
+points = y.copy()
+for n, point in enumerate(points):
+    indxs = np.zeros(3)
+    for i in range(3):
+        indxs[i] = np.count_nonzero(tr.get_values('j')[:, n] == i)
+    move_indx = np.argmax(indxs)
+    if move_indx != 1:
+        print "Moving point #{} on {} pi".format(n + 1, move_indx - 1)
+    points[n] += np.pi * (move_indx - 1)
+
+triangle.corner(np.vstack((tr.get_values('alpha'), tr.get_values('beta'))).T,
+                labels=["PA at zero wavelength, [rad]", "ROTM, [rad/m/m]"])
+
+
+with Model() as model:
+    alpha = Normal('alpha', mu=0., sd=np.pi)
+    beta = Normal('beta', mu=0., sd=500.)
+
+    mu = alpha + beta * x
+
+    Y_obs = Normal('Y_obs', mu=mu, sd=sy, observed=points)
+
+# Fitting model
+with model:
+    length = 10000
+    step = Metropolis(vars=[alpha, beta])
+    tr = sample(length, step=[step])
+
+
+triangle.corner(np.vstack((tr.get_values('alpha'), tr.get_values('beta'))).T,
+                labels=["PA at zero wavelength, [rad]", "ROTM, [rad/m/m]"])

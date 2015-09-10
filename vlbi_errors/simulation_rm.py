@@ -10,6 +10,7 @@ from from_fits import create_uvdata_from_fits_file
 from spydiff import clean_difmap
 
 
+# TODO: Create function for simulation or module with cli arguments
 print "Constructing model image parameters..."
 highest_freq_ccimage =\
     '/home/ilya/code/vlbi_errors/vlbi_errors/test/0952+179/2007_04_30/X2/im/I/cc.fits'
@@ -41,7 +42,7 @@ w = 0.75
 l = 3.
 # Parameters of beam in rad
 bmaj = bmaj_l
-bmin = bmaj
+bmin = bmin_l
 bpa = 0
 
 # new pixsize
@@ -65,9 +66,9 @@ image = BasicImage(imsize=imsize, pixsize=pixsize, pixref=pixref)
 
 # Construct region with emission
 # TODO: Construct cone region
-jet_region = mask_region(image._image, region=(pixref[0] - int(beam_width // 2),
+jet_region = mask_region(image._image, region=(pixref[0] - int(jet_width // 2),
                                                pixref[1],
-                                               pixref[0] + int(beam_width // 2),
+                                               pixref[0] + int(jet_width // 2),
                                                pixref[1] + jet_length))
 jet_region = np.ma.array(image._image, mask=~jet_region.mask)
 
@@ -86,7 +87,8 @@ def rm(x, y, max_rm, width):
 # Create map of ROTM
 print "Creating ROTM image with gradient..."
 max_rm = 200.
-image_rm = BasicImage(imsize=imsize, pixsize=pixsize, pixref=pixref)
+image_rm = CleanImage(imsize=imsize, pixsize=pixsize, pixref=pixref, bmaj=bmaj,
+                      bmin=bmin, bpa=bpa)
 image_rm._image = rm(image.x/abs(pixsize[0]), image.y/abs(pixsize[1]), max_rm,
                      jet_width)
 

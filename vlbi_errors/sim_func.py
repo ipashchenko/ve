@@ -220,8 +220,8 @@ if __name__ == '__main__':
     beam_restore = map_info_l[3]
     mapsize_clean = (map_info_h[0][0],
                      map_info_h[-3][0] / mas_to_rad)
-    uvfiles = os.path.join(outpath, "simul_uv_*")
-    for uvfile in glob.glob(outpath):
+    uvfiles_wc = os.path.join(outpath, "simul_uv_*")
+    for uvfile in glob.glob(uvfiles_wc):
         print "Cleaning uv file {}".format(uvfile)
         uvdata = create_uvdata_from_fits_file(uvfile)
         freq_card = find_card_from_header(uvdata._io.hdu.header,

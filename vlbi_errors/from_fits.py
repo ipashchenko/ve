@@ -29,6 +29,7 @@ def create_uvdata_from_fits_file(fname, structure='UV'):
     return uvdata
 
 
+# FIXME: I can infer ``stokes`` from ``PrimaryHDU``!
 def create_ccmodel_from_fits_file(fname, stokes='I', ver=1):
     ccmodel = CCModel(stokes=stokes)
     cc = BinTable(fname, extname='AIPS CC', ver=ver)

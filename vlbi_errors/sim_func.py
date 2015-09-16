@@ -2,7 +2,8 @@ import os
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
-from from_fits import (get_fits_image_info, create_uvdata_from_fits_file)
+from from_fits import (get_fits_image_info, create_uvdata_from_fits_file,
+                       create_ccmodel_from_fits_file)
 from image import (BasicImage, Image, CleanImage)
 from utils import (mask_region, mas_to_rad, find_card_from_header)
 from model import Model
@@ -10,6 +11,7 @@ from components import DeltaComponent
 from images import Images
 from spydiff import clean_difmap
 from images import Images
+from bootstrap import CleanBootstrap
 
 
 def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
@@ -218,71 +220,121 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
         uvdata.save(uvdata.data, uv_save_fname)
 
 
+def bootstrap_uv_fits(uv_fits_fname, cc_fits_fnames, n, uvpath=None,
+                      ccpath=None, outpath=None, outname=None):
+    """
+    Function that bootstraps UV-data in user-specified UV-FITS files and FITS
+    files with CC-models.
+    :param uv_fits_fname:
+    :param cc_fits_fnames:
+        Iterable of file names with CC models.
+    :param uvpath:
+    :param ccpath:
+    :param outpath:
+    :param boot_kwargs:
+    """
+    if ccpath is not None:
+        if len(ccpath) > 1:
+            assert len(cc_fits_fnames) == len(ccpath)
+    else:
+        ccpath = list(ccpath) * len(cc_fits_fnames)
+
+    if uvpath is not None:
+        uv_fits_fname = os.path.join(uvpath, uv_fits_fname)
+    uvdata = create_uvdata_from_fits_file(uv_fits_fname)
+
+    models = list()
+    for cc_fits_fname, ccpath_ in zip(cc_fits_fnames, ccpath):
+        if ccpath_ is not None:
+            cc_fits_fname = os.path.join(ccpath_, cc_fits_fname)
+        # FIXME: I can infer ``stokes`` from FITS-file!
+        stokes = get_fits_image_info(cc_fits_fname)[-2].upper()
+        ccmodel = create_ccmodel_from_fits_file(cc_fits_fname, stokes=stokes)
+        models.append(ccmodel)
+
+    boot = CleanBootstrap(models, uvdata)
+    if outpath is not None:
+        if not os.path.exists(outpath):
+            os.makedirs(outpath)
+    curdir = os.getcwd()
+    os.chdir(uvpath)
+    boot.run(n=n, outname=[outname, '.fits'])
+    os.chdir(curdir)
+
+
 if __name__ == '__main__':
-    noise_factor = 1.5
-    grad_value = 20.
-    high_freq_map =\
-        '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/im/I/cc.fits'
-    low_freq_map =\
-        '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/im/I/cc.fits'
-    uvdata_files =\
-        ['/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/uv/sc_uv.fits',
-         '/home/ilya/vlbi_errors/0952+179/2007_04_30/C2/uv/sc_uv.fits',
-         '/home/ilya/vlbi_errors/0952+179/2007_04_30/X1/uv/sc_uv.fits',
-         '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/uv/sc_uv.fits']
-    cc_flux = 0.05
-    outpath = '/home/ilya/vlbi_errors/simdata_{}/'.format(noise_factor)
-    if not os.path.exists(outpath):
-        os.makedirs(outpath)
-    width = 0.5
-    length = 3.
-    k = 3
-    simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux, outpath,
-                  grad_value, width, length, k, noise_factor=noise_factor)
+    # noise_factor = 1.5
+    # grad_value = 15.
+    # high_freq_map =\
+    #     '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/im/I/cc.fits'
+    # low_freq_map =\
+    #     '/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/im/I/cc.fits'
+    cc_fits_fnames = ['simul_i_4604458750.0_cc.fits',
+                      'simul_q_4604458750.0_cc.fits',
+                      'simul_u_4604458750.0_cc.fits']
+    ccpath = ['/home/ilya/vlbi_errors/simdata_1.5']
+    uv_fits_fname = 'simul_uv_4604458750.0_Hz.fits'
+    uvpath = '/home/ilya/vlbi_errors/simdata_1.5'
+    bootstrap_uv_fits(uv_fits_fname, cc_fits_fnames, 10, uvpath=uvpath,
+                      ccpath=ccpath, outpath=uvpath, outname='test')
+    # uvdata_files =\
+    #     ['/home/ilya/vlbi_errors/0952+179/2007_04_30/C1/uv/sc_uv.fits',
+    #      '/home/ilya/vlbi_errors/0952+179/2007_04_30/C2/uv/sc_uv.fits',
+    #      '/home/ilya/vlbi_errors/0952+179/2007_04_30/X1/uv/sc_uv.fits',
+    #      '/home/ilya/vlbi_errors/0952+179/2007_04_30/X2/uv/sc_uv.fits']
+    # cc_flux = 0.05
+    # outpath = '/home/ilya/vlbi_errors/simdata_{}/'.format(noise_factor)
+    # if not os.path.exists(outpath):
+    #     os.makedirs(outpath)
+    # width = 0.5
+    # length = 3.
+    # k = 3
+    # simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux, outpath,
+    #               grad_value, width, length, k, noise_factor=noise_factor)
 
-    # Now calculate ROTM image using simulated data
-    path_to_script = '/home/ilya/Dropbox/Zhenya/to_ilya/clean/final_clean_nw'
-    map_info_l = get_fits_image_info(low_freq_map)
-    map_info_h = get_fits_image_info(high_freq_map)
-    beam_restore = map_info_l[3]
-    mapsize_clean = (map_info_h[0][0],
-                     map_info_h[-3][0] / mas_to_rad)
-    for uvpath in glob.glob(os.path.join(outpath, "simul_uv_*")):
-        uvdir, uvfile = os.path.split(uvpath)
-        print "Cleaning uv file {}".format(uvpath)
-        uvdata = create_uvdata_from_fits_file(uvpath)
-        freq_card = find_card_from_header(uvdata._io.hdu.header,
-                                          value='FREQ')[0]
-        # Frequency in Hz
-        freq = uvdata._io.hdu.header['CRVAL{}'.format(freq_card[0][-1])]
-        for stoke in ('i', 'q', 'u'):
-            print "Stokes {}".format(stoke)
-            clean_difmap(uvfile, "simul_{}_{}_cc.fits".format(stoke, freq),
-                         stoke, mapsize_clean, path=uvdir,
-                         path_to_script=path_to_script,
-                         beam_restore=beam_restore, outpath=uvdir)
+    # # Now calculate ROTM image using simulated data
+    # path_to_script = '/home/ilya/Dropbox/Zhenya/to_ilya/clean/final_clean_nw'
+    # map_info_l = get_fits_image_info(low_freq_map)
+    # map_info_h = get_fits_image_info(high_freq_map)
+    # beam_restore = map_info_l[3]
+    # mapsize_clean = (map_info_h[0][0],
+    #                  map_info_h[-3][0] / mas_to_rad)
+    # for uvpath in glob.glob(os.path.join(outpath, "simul_uv_*")):
+    #     uvdir, uvfile = os.path.split(uvpath)
+    #     print "Cleaning uv file {}".format(uvpath)
+    #     uvdata = create_uvdata_from_fits_file(uvpath)
+    #     freq_card = find_card_from_header(uvdata._io.hdu.header,
+    #                                       value='FREQ')[0]
+    #     # Frequency in Hz
+    #     freq = uvdata._io.hdu.header['CRVAL{}'.format(freq_card[0][-1])]
+    #     for stoke in ('i', 'q', 'u'):
+    #         print "Stokes {}".format(stoke)
+    #         clean_difmap(uvfile, "simul_{}_{}_cc.fits".format(stoke, freq),
+    #                      stoke, mapsize_clean, path=uvdir,
+    #                      path_to_script=path_to_script,
+    #                      beam_restore=beam_restore, outpath=uvdir)
 
-    # Create image of ROTM
-    print "Creating image of simulated ROTM"
-    images = Images()
-    images.add_from_fits(wildcard=os.path.join(outpath, "simul_*_cc.fits"))
-    rotm_image, s_rotm_image = images.create_rotm_image()
-    # Plot slice
-    plt.errorbar(np.arange(240, 272, 1),
-                 rotm_image.slice((270, 240), (270,272)),
-                 s_rotm_image.slice((270,240), (270,272)), fmt='.k')
-    # Plot real ROTM grad values
-    (imsize_l, pixref_l, pixrefval_l, (bmaj_l, bmin_l, bpa_l,), pixsize_l,
-     stokes_l, freq_l) = get_fits_image_info(low_freq_map)
-    # Jet width in pixels
-    jet_width = width * bmaj_l / abs(rotm_image.pixsize[0])
+    # # Create image of ROTM
+    # print "Creating image of simulated ROTM"
+    # images = Images()
+    # images.add_from_fits(wildcard=os.path.join(outpath, "simul_*_cc.fits"))
+    # rotm_image, s_rotm_image = images.create_rotm_image()
+    # # Plot slice
+    # plt.errorbar(np.arange(240, 272, 1),
+    #              rotm_image.slice((270, 240), (270,272)),
+    #              s_rotm_image.slice((270,240), (270,272)), fmt='.k')
+    # # Plot real ROTM grad values
+    # (imsize_l, pixref_l, pixrefval_l, (bmaj_l, bmin_l, bpa_l,), pixsize_l,
+    #  stokes_l, freq_l) = get_fits_image_info(low_freq_map)
+    # # Jet width in pixels
+    # jet_width = width * bmaj_l / abs(rotm_image.pixsize[0])
 
-    # Analytical gradient in real image (didn't convolved)
-    def rm_(x, grad_value, imsize_x):
-        return -grad_value * (x - imsize_x / 2)
+    # # Analytical gradient in real image (didn't convolved)
+    # def rm_(x, grad_value, imsize_x):
+    #     return -grad_value * (x - imsize_x / 2)
 
-    plt.plot(np.arange(240, 272, 1), rm_(np.arange(240, 272, 1), grad_value,
-                                         rotm_image.imsize[0]))
-    plt.axvline(rotm_image.pixref[1] - jet_width / 2.)
-    plt.axvline(rotm_image.pixref[1] + jet_width / 2.)
+    # plt.plot(np.arange(240, 272, 1), rm_(np.arange(240, 272, 1), grad_value,
+    #                                      rotm_image.imsize[0]))
+    # plt.axvline(rotm_image.pixref[1] - jet_width / 2.)
+    # plt.axvline(rotm_image.pixref[1] + jet_width / 2.)
 

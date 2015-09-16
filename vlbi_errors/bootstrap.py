@@ -52,6 +52,7 @@ class Bootstrap(object):
         """
         raise NotImplementedError
 
+    # FIXME: Implement arbitrary output directory for bootstrapped data
     def run(self, n, outname=['bootstrapped_data', '.FITS'], nonparametric=True,
             **kwargs):
         """

@@ -591,6 +591,7 @@ class Groups(PyFitsIO):
         return scans
 
 
+# TODO: Check ``new_io`` branch - for BinTables i need the same implementation!
 # TODO: Seems that this methods just create structured array from record - but
 # really if one is working with FITS IDI then _HDU_to_data must account for
 # data array in table.

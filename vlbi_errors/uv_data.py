@@ -39,6 +39,17 @@ class UVData(object):
         self._data = None
         self._error = None
 
+    def multiply(self, x):
+        """
+        Multiply visibilities on number.
+        :param x:
+        :return:
+        """
+        self_copy = copy.deepcopy(self)
+        self_copy.uvdata = x * self.uvdata
+
+        return self_copy
+
     # TODO: should i use ``_data['hands']`` attribute instead of ``uvdata``?
     def __add__(self, other):
         """

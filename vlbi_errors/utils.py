@@ -837,3 +837,27 @@ def flatten(iterable, ltypes=collections.Iterable):
             remainder = chain(first, remainder)
         else:
             yield first
+
+
+def slice_2darray(array, pix1, pix2):
+    """
+    Method that returns slice of image along line.
+
+    :param x1:
+        Iterable of cordinates of first pixel.
+    :param x2:
+        Iterable of cordinates of second pixel.
+    :return:
+        Numpy array of image values for given slice.
+    """
+    length = int(round(np.hypot(pix2[0] - pix1[0], pix2[1] - pix1[1])))
+    if pix2[0] < pix1[0]:
+        x = np.linspace(pix2[0], pix1[0], length)[::-1]
+    else:
+        x = np.linspace(pix1[0], pix2[0], length)
+    if pix2[1] < pix1[1]:
+        y = np.linspace(pix2[1], pix1[1], length)[::-1]
+    else:
+        y = np.linspace(pix1[1], pix2[1], length)
+
+    return array[v_round(x).astype(np.int), v_round(y).astype(np.int)]

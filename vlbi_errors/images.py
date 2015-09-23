@@ -1,3 +1,4 @@
+import os
 import math
 import numpy as np
 import glob
@@ -256,8 +257,8 @@ class Images(object):
         """
         if fnames is None:
             fnames = glob.glob(wildcard)
-        if len(fnames) < 2:
-            raise Exception("Need at least 2 images")
+        if len(fnames) < 1:
+            raise Exception("Need at least 1 image")
 
         # Here we check that images we are collecting are equal
         previous_image = None
@@ -352,7 +353,8 @@ class Images(object):
     # FIXME: Implement option for many (equal number) of Q & U images for each
     # frequency like in ``Images.create_pang_images``
     # TODO: Option for plotting PANG vs. wavelength squared for pixels
-    def create_rotm_image(self, s_pang_arrays=None, freqs=None, mask=None, n=0):
+    def create_rotm_image(self, s_pang_arrays=None, freqs=None, mask=None, n=0,
+                          outfile=None, outdir=None, ext='png'):
         """
         Method that creates image of Rotation Measure for current collection of
         instances.
@@ -423,7 +425,8 @@ class Images(object):
         # Calculate Rotation Measure array and write it to ``BasicImage``
         # isntance
         rotm_array, s_rotm_array = rotm_map(freqs, pang_arrays, s_pang_arrays,
-                                            mask=mask)
+                                            mask=mask, outfile=outfile,
+                                            outdir=outdir, ext=ext)
         rotm_image = Image(imsize=img.imsize, pixref=img.pixref,
                            pixrefval=img.pixrefval, pixsize=img.pixsize,
                            freq=tuple(freqs), stokes='ROTM')
@@ -581,6 +584,8 @@ class Images(object):
             Mask to be applied to arrays before calculation. If ``None`` then
             don't apply mask. Note that ``mask`` must have dimensions of only
             one image, that is it should be 2D array.
+        :param convolved: (optional)
+            Use convolved images in construction? (default: ``True``)
 
         :return:
             List of ``Image`` instances with Polarization Flux maps.
@@ -747,7 +752,7 @@ def rotm_map(freqs, chis, s_chis=None, mask=None, outfile=None, outdir=None,
     s_rotm_array[:] = np.nan
 
     if mask is None:
-        mask = np.zeros(rotm_array.shape)
+        mask = np.zeros(rotm_array.shape, dtype=int)
 
     # If saving output
     if outfile:
@@ -764,7 +769,7 @@ def rotm_map(freqs, chis, s_chis=None, mask=None, outfile=None, outdir=None,
             os.makedirs(outdir)
 
         # Calculate how many pixels there should be
-        npixels = np.count_nonzero(~mask)
+        npixels = len(np.where(mask.ravel() == 0)[0])
         print "{} pixels with fit will be plotted".format(npixels)
         nrows = int(np.sqrt(npixels) + 1)
         print "Plot will have dims: {} by {}".format(nrows, nrows)
@@ -892,7 +897,7 @@ def cpol_map(q_array, u_array, mask=None):
         q_array = np.ma.array(q_array, mask=mask, fill_value=np.nan)
         u_array = np.ma.array(u_array, mask=mask, fill_value=np.nan)
 
-    return q_array  + 1j * u_array
+    return q_array + 1j * u_array
 
 
 def pol_map(q_array, u_array, mask=None):

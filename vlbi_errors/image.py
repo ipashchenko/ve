@@ -71,7 +71,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         Values of minimal relative level. Used with conjunction of ``factor``
         argument for building sequence of relative levels. If ``None`` then
         construct levels in other way. (default: ``None``)
-    :param factor: (optional)
+    :param k: (optional)
         Factor of incrementation for levels. (default: ``2.0``)
     :param show_beam: (optional)
         Convertable to boolean. Should we plot beam in corner? (default:
@@ -117,8 +117,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     blc = blc or (1, 1,)
     trc = trc or image.shape
     # Use ``-1`` because user expect AIPS-like behaivior of ``blc`` & ``trc``
-    x_slice = slice(blc[1] - 1, trc[1] - 1, None)
-    y_slice = slice(blc[0] - 1, trc[0] - 1,  None)
+    x_slice = slice(blc[1] - 1, trc[1], None)
+    y_slice = slice(blc[0] - 1, trc[0],  None)
 
     # Create coordinates
     imsize_x = x_slice.stop - x_slice.start
@@ -131,8 +131,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     x_ *= -1.
     y_ *= -1.
     # Coordinates for plotting
-    x = np.linspace(x_[0], x_[-1], imsize_x)
-    y = np.linspace(y_[0], y_[-1], imsize_y)
+    x = np.linspace(x_[0, 0], x_[0, -1], imsize_x)
+    y = np.linspace(y_[0, 0], y_[-1, 0], imsize_y)
 
     # Optionally mask arrays
     if contours is not None and contours_mask is not None:
@@ -502,7 +502,7 @@ class CleanImage(Image):
         return self._residuals.image
 
 
-    def plot(self, to_plot, blc=None, trc=None, clim=None, cmap=None,
+    def plot(self, to_plot, blc=None, trc=None, color_clim=None, cmap=None,
              abs_levels=None, rel_levels=None, min_abs_level=None,
              min_rel_level=None, factor=2., plot_color=False):
         """
@@ -520,10 +520,16 @@ class CleanImage(Image):
         plot_dict = {"cc": self._image, "ccr": self.image, "ccrr":
             self.image_w_residuals, "r": self._residuals.image,
                      "beam": self.beam}
-        plot(plot_dict[to_plot], x=self.x, y=self.y, blc=blc, trc=trc,
-             clim=clim, cmap=cmap, abs_levels=abs_levels, rel_levels=rel_levels,
-             min_abs_level=min_abs_level, min_rel_level=min_rel_level,
-             factor=factor, plot_color=plot_color)
+        if plot_color:
+            colors = plot_dict[to_plot]
+            contours = None
+        else:
+            colors = None
+            contours = plot_dict[to_plot]
+        plot(contours, colors, x=self.x, y=self.y, blc=blc, trc=trc,
+             color_clim=color_clim, cmap=cmap, abs_levels=abs_levels,
+             rel_levels=rel_levels, min_abs_level=min_abs_level,
+             min_rel_level=min_rel_level, k=factor)
 
 
 #class MemImage(BasicImage, Model):

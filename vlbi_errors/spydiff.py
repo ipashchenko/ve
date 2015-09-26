@@ -1,4 +1,7 @@
 import os
+import numpy as np
+from components import DeltaComponent, CGComponent
+from utils import mas_to_rad
 
 
 # TODO: add ``shift`` argument, that shifts image before cleaning. It must be
@@ -12,7 +15,7 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     :param fname:
         Filename of uv-data to clean.
     :param outfname:
-        Path to file with CCs.
+        Filename with CCs.
     :param stokes:
         Stokes parameter 'i', 'q', 'u' or 'v'.
     :param mapsize_clean: (optional)
@@ -41,18 +44,14 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     """
     if path is None:
         path = os.getcwd()
-    elif not path.endswith("/"):
-        path = path + "/"
     if outpath is None:
         outpath = os.getcwd()
-    elif not outpath.endswith("/"):
-        outpath = outpath + "/"
 
     if not mapsize_restore:
         mapsize_restore = mapsize_clean
 
     difmapout = open("difmap_commands", "w")
-    difmapout.write("observe " + path + fname + "\n")
+    difmapout.write("observe " + os.path.join(path, fname) + "\n")
     if shift is not None:
         difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
     difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
@@ -68,10 +67,83 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         outpath = path
     elif not outpath.endswith("/"):
         outpath = outpath + "/"
-    difmapout.write("wmap " + outpath + outfname + "\n")
+    difmapout.write("wmap " + os.path.join(outpath, outfname) + "\n")
     difmapout.write("exit\n")
     difmapout.close()
     os.system("difmap < difmap_commands")
+
+
+def import_difmap_model(mdl_fname, model_dir):
+    """
+    Function that reads difmap-format model and returns list of ``Components``
+    instances,
+
+    :param mdl_fname:
+    :param model_dir:
+    :return:
+    """
+    mdl = os.path.join(model_dir, mdl_fname)
+    mdlo = open(mdl, 'r')
+    lines = mdlo.readlines()
+    comps = list()
+    for line in lines:
+        if line.startswith('!'):
+            continue
+        line = line.strip('\n ')
+        flux, radius, theta, major, axial, phi, type_, freq, spec = line.split()
+        x = float(radius[:-1]) * np.sin(np.deg2rad(float(theta[:-1])))
+        y = float(radius[:-1]) * np.sin(np.deg2rad(float(theta[:-1])))
+        flux = float(flux[:-1])
+        if int(type_) == 0:
+            comp = DeltaComponent(flux, mas_to_rad * x, mas_to_rad * y)
+        if int(type_) == 1:
+            bmaj = mas_to_rad * float(major[:-1])
+            comp = CGComponent(flux, mas_to_rad * x, mas_to_rad * y, bmaj)
+        comps.append(comp)
+
+    return comps
+
+
+def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
+                    path=None, mdl_path=None, out_path=None):
+    """
+    Modelfit self-calibrated uv-data in difmap.
+
+    :param fname:
+        Filename of uv-data to modelfit.
+    :param mdl_fname:
+        Filename with model.
+    :param out_fname:
+        Filename with output file with model.
+    :param stokes: (optional)
+        Stokes parameter 'i', 'q', 'u' or 'v'. (default: ``i``)
+    :param path: (optional)
+        Path to uv-data to modelfit. If ``None`` then use current directory.
+        (default: ``None``)
+    :param mdl_path: (optional)
+        Path file with model. If ``None`` then use current directory.
+        (default: ``None``)
+    :param out_path: (optional)
+        Path to file with CCs. If ``None`` then use ``path``.
+        (default: ``None``)
+    """
+    if path is None:
+        path = os.getcwd()
+    if mdl_path is None:
+        mdl_path = os.getcwd()
+    if out_path is None:
+        out_path = os.getcwd()
+
+    difmapout = open("difmap_commands", "w")
+    difmapout.write("observe " + os.path.join(path, fname) + "\n")
+    difmapout.write("select " + stokes + "\n")
+    difmapout.write("rmodel " + os.path.join(mdl_path, mdl_fname) + "\n")
+    difmapout.write("modelfit " + str(niter) + "\n")
+    difmapout.write("wmodel " + os.path.join(out_path, out_fname) + "\n")
+    difmapout.write("exit\n")
+    difmapout.close()
+    os.system("difmap < difmap_commands")
+
 
 ## DIFMAP_MAPPSR
 #def difmap_mappsr(source, isll, centre_ra_deg, centre_dec_deg, uvweightstr,

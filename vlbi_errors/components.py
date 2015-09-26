@@ -199,8 +199,8 @@ class EGComponent(Component):
         u = uv[:, 0]
         v = uv[:, 1]
         # Construct parameter of gaussian function (1)
-        std_x = bmaj
-        std_y = e * bmaj
+        std_x = bmaj / (2. * np.sqrt(2. * np.log(2)))
+        std_y = e * bmaj / (2. * np.sqrt(2. * np.log(2)))
         a = math.cos(bpa) ** 2. / (2. * std_x ** 2.) + \
             math.sin(bpa) ** 2. / (2. * std_y ** 2.)
         b = math.sin(2. * bpa) / (2. * std_x ** 2.) - \
@@ -215,6 +215,7 @@ class EGComponent(Component):
         # If x0=!0 or y0=!0 then shift phase accordingly
         if x0 or y0:
             ft *= np.exp(-2. * math.pi * 1j * (u * x0 + v * y0))
+        print flux, x0, y0, bmaj
         return ft
 
     def add_to_image(self, image):
@@ -336,7 +337,7 @@ class DeltaComponent(Component):
 
         u = uv[:, 0]
         v = uv[:, 1]
-        visibilities = (flux * np.exp(2.0 * math.pi * 1j *
+        visibilities = (flux * np.exp(-2.0 * math.pi * 1j *
                                       (u[:, np.newaxis] * x0 +
                                        v[:, np.newaxis] * y0))).sum(axis=1)
         return visibilities

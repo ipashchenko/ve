@@ -451,7 +451,7 @@ if __name__ == '__main__':
     # im_data_dir = '/home/ilya/code/vlbi_errors/data/zhenya/clean_images/'
     # Path to project's root directory
     base_path = '/home/ilya/code/vlbi_errors/vlbi_errors/test/'
-    path_to_script = '/home/ilya/code/vlbi_errors/data/zhenya/clean/final_clean_nw'
+    path_to_script = '/home/ilya/Dropbox/Zhenya/to_ilya/clean/final_clean_nw'
 
     create_dirtree(sources, epochs, bands, stokes, base_path=base_path)
     put_uv_files_to_dirs(sources, epochs, bands, base_path=base_path,

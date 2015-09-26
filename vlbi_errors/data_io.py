@@ -368,8 +368,9 @@ class Groups(PyFitsIO):
         self.par_dict = par_dict
 
         # Number of axis with ndim = 1.
-        self.ndim_ones = sum([value[1] for value in data_of_data.values() if
-                              value[1] == 1])
+        self.ndim_ones = len([(key,value) for key, value in
+                              self.data_of_data.items() if (key != 'IF' and
+                                                            value[1] == 1)])
 
         _data = np.zeros(hdu.header['GCOUNT'], dtype=[('uvw', '<f8', (3,)),
                                                       ('time', '<f8'),
@@ -506,7 +507,7 @@ class Groups(PyFitsIO):
             raise Exception('There must be equal or less visibilities to\
                             save!')
         else:
-            print "Saving data - number of groups haven't changed"
+            print "Saving uvdata - number of groups hasn't changed..."
             par_indxs = np.arange(len(self.hdu.data))
 
         parnames = self.hdu.data.parnames

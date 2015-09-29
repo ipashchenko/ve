@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from components import DeltaComponent, CGComponent
+from components import DeltaComponent, CGComponent, EGComponent
 
 
 # TODO: add ``shift`` argument, that shifts image before cleaning. It must be
@@ -85,7 +85,7 @@ def import_difmap_model(mdl_fname, mdl_dir):
         List of ``Components`` instances.
     """
     mdl = os.path.join(mdl_dir, mdl_fname)
-    mdlo = open(mdl, 'r')
+    mdlo = open(mdl)
     lines = mdlo.readlines()
     comps = list()
     for line in lines:
@@ -99,10 +99,24 @@ def import_difmap_model(mdl_fname, mdl_dir):
         if int(type_) == 0:
             comp = DeltaComponent(flux, x, y)
         elif int(type_) == 1:
-            bmaj = float(major[:-1])
-            comp = CGComponent(flux, x, y, bmaj)
+            try:
+                bmaj = float(major)
+            except ValueError:
+                bmaj = float(major[:-1])
+            if float(axial[:-1]) == 1:
+                comp = CGComponent(flux, x, y, bmaj)
+            else:
+                try:
+                    e = float(axial)
+                except ValueError:
+                    e = float(axial[:-1])
+                try:
+                    bpa = -np.deg2rad(float(phi)) + np.pi / 2.
+                except ValueError:
+                    bpa = -np.deg2rad(float(phi[:-1])) + np.pi / 2.
+                comp = EGComponent(flux, x, y, bmaj, e, bpa)
         else:
-            raise NotImplementedError("Only CC and CG are implemented")
+            raise NotImplementedError("Only CC, CG & EG are implemented")
         comps.append(comp)
     return comps
 

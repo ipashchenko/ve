@@ -2,11 +2,12 @@ import os
 import math
 import numpy as np
 from scipy import signal
-from utils import (create_grid, mask_region, fitgaussian, mas_to_rad, v_round)
+from utils import (create_grid, create_mask, mask_region, fitgaussian,
+                   mas_to_rad, v_round)
 from beam import CleanBeam
-from fft_routines import fft_convolve2d
+from skimage.feature import register_translation
 import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse
+# from matplotlib.patches import Ellipse
 
 try:
     import pylab
@@ -345,11 +346,13 @@ class BasicImage(object):
 
     # TODO: Should i compare images before?
     # TODO: Implement several regions to include for each image
-    def cross_correlate(self, image, region1=None, region2=None):
+    # TODO: One should somehow choose what to cross-corelate
+    # for ``CleanImages``
+    def cross_correlate(self, image, region1=None, region2=None,
+                        upsample_factor=100, mask_cc=False):
         """
-        Cross-correlates current instance of ``Image`` with another instance.
-
-        Computes normalized cross-correlation of images.
+        Cross-correlates current instance of ``Image`` with another instance
+        using phase correlation.
 
         :param image:
             Instance of image class.
@@ -360,17 +363,35 @@ class BasicImage(object):
         :param region2 (optional):
             Region to EXCLUDE in ``image``. Or (blc[0], blc[1], trc[0], trc[1],)
             or (center[0], center[1], r, None,). Default ``None``.
+        :param upsample_factor: (optional)
+            Upsampling factor. Images will be registered to within
+            ``1 / upsample_factor`` of a pixel. For example
+            ``upsample_factor == 20`` means the images will be registered
+            within 1/20th of a pixel. If ``1`` then no upsampling.
+            (default: ``1``)
+        :param mask_cc: (optional)
+            If some of images is instance of ``CleanImage`` class - should we
+            mask clean components instead of image array? (default: ``False``)
+
         :return:
-            (dx, dy,) tuple of shifts (subpixeled) in each direction.
+            Array of shifts (subpixeled) in each direction.
         """
         if region1 is not None:
-            image1 = mask_region(self.image, region1)
+            mask1 = create_mask(self.image.shape, region1)
+            if mask_cc and isinstance(self, CleanImage):
+                raise NotImplementedError()
+            image1 = self.image.copy()
+            image1[mask1] = 0.
         if region2 is not None:
-            image2 = mask_region(image.image, region2)
+            mask2 = create_mask(image.image.shape, region2)
+            if mask_cc and isinstance(image, CleanImage):
+                raise NotImplementedError()
+            image2 = image.image.copy()
+            image2[mask2] = 0.
         # Cross-correlate images
-        shift_array = fft_convolve2d(image1, image2)
-        params = fitgaussian(shift_array)
-        return tuple(params[1: 3])
+        shift, error, diffphase = register_translation(image1, image2,
+                                                       upsample_factor)
+        return shift
 
     def slice(self, pix1, pix2):
         """
@@ -475,6 +496,8 @@ class CleanImage(Image):
                                beam_pars[1] / abs(self.pixsize[0]),
                                beam_pars[2], self.imsize)
 
+    # TODO: Add ``masked`` decorator that returns the same as ``image``, ``cc``,
+    # ``image_w_residuals``, ``residuals`` but masked using user-supplied mask.
     @property
     def image(self):
         """

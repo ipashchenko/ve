@@ -587,13 +587,15 @@ def fitgaussian(data):
     return p
 
 
+# TODO: refactor to select mask type (circular, rectangular or elliptic)
+# depending on ``len(region)``
 def create_mask(shape, region):
     """
     Function that creates rectangular or circular mask.
 
     :param region:
         Tuple (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r,
-        None,).
+        None,) or (center[0], center[1], bmaj, e, bpa).
     :return:
         Numpy bool array.
     """

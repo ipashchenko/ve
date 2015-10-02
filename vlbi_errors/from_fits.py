@@ -37,7 +37,7 @@ def create_ccmodel_from_fits_file(fname, stokes='I', ver=1):
     for flux, x, y in zip(adds['FLUX'], adds['DELTAX'] * degree_to_mas,
                           adds['DELTAY'] * degree_to_mas):
         # We keep positions in mas
-        component = DeltaComponent(flux, x, y)
+        component = DeltaComponent(flux, -x, -y)
         ccmodel.add_component(component)
     return ccmodel
 

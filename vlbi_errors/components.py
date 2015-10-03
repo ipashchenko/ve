@@ -215,7 +215,6 @@ class EGComponent(Component):
         # If x0=!0 or y0=!0 then shift phase accordingly
         if x0 or y0:
             ft *= np.exp(-2. * math.pi * 1j * (u * x0 + v * y0))
-        print flux, x0, y0, bmaj
         return ft
 
     def add_to_image(self, image):

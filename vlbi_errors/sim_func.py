@@ -321,7 +321,7 @@ def bootstrap_uv_fits(uv_fits_fname, cc_fits_fnames, n, uvpath=None,
         if not os.path.exists(outpath):
             os.makedirs(outpath)
     curdir = os.getcwd()
-    os.chdir(uvpath)
+    os.chdir(outpath)
     boot.run(n=n, outname=[outname, '.fits'])
     os.chdir(curdir)
 

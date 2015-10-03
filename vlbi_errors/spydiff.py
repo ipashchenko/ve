@@ -8,7 +8,7 @@ from components import DeltaComponent, CGComponent, EGComponent
 # multiplies uv-data on exp(-1j * (u*x_shift + v*y_shift)).
 def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  path_to_script=None, mapsize_restore=None, beam_restore=None,
-                 outpath=None, shift=None):
+                 outpath=None, shift=None, show_difmap_output=False):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
@@ -39,6 +39,8 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     :param shift: (optional)
         Iterable of 2 values - shifts in both directions [mas]. If ``None`` then
         don't shift. (default: ``None``)
+    :param show_difmap_output: (optional)
+        Show difmap output? (default: ``False``)
 
     """
     if path is None:
@@ -55,11 +57,11 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
     difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
                     str(mapsize_clean[1]) + "\n")
+    difmapout.write("@" + path_to_script + " " + stokes + "\n")
     if beam_restore:
         difmapout.write("restore " + str(beam_restore[0]) + ', ' +
                         str(beam_restore[1]) + ', ' + str(beam_restore[2]) +
                         "\n")
-    difmapout.write("@" + path_to_script + " " + stokes + "\n")
     difmapout.write("mapsize " + str(mapsize_restore[0] * 2) + ', ' +
                     str(mapsize_restore[1]) + "\n")
     if outpath is None:
@@ -69,7 +71,11 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     difmapout.write("wmap " + os.path.join(outpath, outfname) + "\n")
     difmapout.write("exit\n")
     difmapout.close()
-    os.system("difmap < difmap_commands")
+    # TODO: Use subprocess for silent cleaning?
+    shell_command = "difmap < difmap_commands 2>&1"
+    if not show_difmap_output:
+        shell_command += " >/dev/null"
+    os.system(shell_command)
 
 
 def import_difmap_model(mdl_fname, mdl_dir):

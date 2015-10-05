@@ -1,11 +1,166 @@
 import triangle
 import numpy as np
+from scipy.optimize import leastsq
+from itertools import combinations
 from pymc3 import (Model, Normal, Categorical, Dirichlet, Metropolis,
                    HalfCauchy, sample, constant, ElemwiseCategoricalStep, NUTS)
 import matplotlib.pyplot as plt
 
 
-def resolver(lamba_sq, chi, s_chi=None, nsamples=10000, plot_fit=False):
+def rotm_leastsq(lambda_sq, chi, s_chi=None, p0=None):
+    """
+    Fit ROTM using least squares.
+
+    :param lambda_sq:
+        Iterable of wavelengths squared [m**2]
+    :param chi:
+        Iterable of polarization positional angles [rad].
+    :param s_chi: (optional)
+        Iterable of uncertainties of polarization positional angles [rad].
+        If ``None`` then model uncertainties. (default: ``None``)
+    :param p0: (optional)
+        Starting value for minimization (RM [rad/m**2], PA_zero_lambda [rad]).
+        If ``None`` then use ``[0, 0]``. (default: ``None``)
+    :return:
+    """
+    if p0 is None:
+        p0 = [0., 0.]
+
+    def rotm_model(p, lambda_sq):
+        return p[0] * lambda_sq + p[1]
+
+    def weighted_residuals(p, lambda_sq, chi, s_chi):
+        return (chi - rotm_model(p, lambda_sq)) / s_chi
+
+    def residuals(p, lambda_sq, chi):
+        return chi - rotm_model(p, lambda_sq)
+
+    if s_chi is None:
+        func, args = residuals, (lambda_sq, chi,)
+    else:
+        func, args = weighted_residuals, (lambda_sq, chi, s_chi,)
+
+    fit = leastsq(func, p0, args=args, full_output=True)
+    (p, pcov, infodict, errmsg, ier) = fit
+
+    if ier not in [1, 2, 3, 4]:
+        msg = "Optimal parameters not found: " + errmsg
+        raise RuntimeError(msg)
+
+    if (len(chi) > len(p0)) and pcov is not None:
+        # Residual variance
+        s_sq = (func(p, *args) ** 2.).sum() / (len(chi) - len(p0))
+        pcov *= s_sq
+    else:
+        pcov = np.nan
+
+    return p, pcov, s_sq
+
+
+def resolver_chisq(lamba_sq, chi, s_chi=None, p0=None):
+    """
+    Function that
+    :param lambda_sq:
+        Iterable of wavelengths squared [m**2]
+    :param chi:
+        Iterable of polarization positional angles [rad].
+    :param s_chi: (optional)
+        Iterable of uncertainties of polarization positional angles [rad].
+        If ``None`` then model uncertainties. (default: ``None``)
+    :param plot_fit: (optional)
+        Plot fit values using resolved ambiguity? (default: ``False``)
+    :param p0: (optional)
+        Starting value for minimization (RM [rad/m**2], PA_zero_lambda [rad]).
+        If ``None`` then use ``[0, 0]``. (default: ``None``)
+
+    :return:
+        Numpy array of polarization positional angles with +/-n*pi-ambiguity
+        resolved.
+    """
+    n_data = len(lambda_sq)
+    chi_sq = dict()
+    # First check cases when only one frequency is affected
+    for i in range(n_data):
+        chi_ = list(chi)[:]
+        chi_[i] = chi[i] + np.pi
+        p, pcov, s_sq = rotm_leastsq(lambda_sq, chi_, s_chi=s_chi, p0=p0)
+        chi_sq.update({"+{}".format(i): s_sq})
+        chi_[i] = chi[i] - np.pi
+        p, pcov, s_sq = rotm_leastsq(lambda_sq, chi_, s_chi=s_chi, p0=p0)
+        chi_sq.update({"-{}".format(i): s_sq})
+
+    # Now check cases when two frequencies are affected
+    for comb in combinations(range(n_data), 2):
+        chi_ = list(chi)[:]
+        # Both frequencies + pi
+        comb1 = "+{}+{}".format(comb[0], comb[1])
+        chi_[comb[0]] = chi[comb[0]] + np.pi
+        chi_[comb[1]] = chi[comb[1]] + np.pi
+        p, pcov, s_sq = rotm_leastsq(lambda_sq, chi_, s_chi=s_chi, p0=p0)
+        chi_sq.update({comb1: s_sq})
+
+        # Both frequencies - pi
+        comb2 = "-{}-{}".format(comb[0], comb[1])
+        chi_[comb[0]] = chi[comb[0]] - np.pi
+        chi_[comb[1]] = chi[comb[1]] - np.pi
+        p, pcov, s_sq = rotm_leastsq(lambda_sq, chi_, s_chi=s_chi, p0=p0)
+        chi_sq.update({comb2: s_sq})
+
+        # + pi - pi
+        comb3 = "+{}-{}".format(comb[0], comb[1])
+        chi_[comb[0]] = chi[comb[0]] + np.pi
+        chi_[comb[1]] = chi[comb[1]] - np.pi
+        p, pcov, s_sq = rotm_leastsq(lambda_sq, chi_, s_chi=s_chi, p0=p0)
+        chi_sq.update({comb3: s_sq})
+
+        # - pi + pi
+        comb4 = "-{}+{}".format(comb[0], comb[1])
+        chi_[comb[0]] = chi[comb[0]] - np.pi
+        chi_[comb[1]] = chi[comb[1]] + np.pi
+        p, pcov, s_sq = rotm_leastsq(lambda_sq, chi_, s_chi=s_chi, p0=p0)
+        chi_sq.update({comb4: s_sq})
+
+    # Finally, original fit
+    p, pcov, s_sq = rotm_leastsq(lambda_sq, chi, s_chi=s_chi, p0=p0)
+    chi_sq.update({'0': s_sq})
+
+    print chi_sq
+
+    chi_ = list(chi)[:]
+    best = min(chi_sq.iterkeys(), key=lambda k: chi_sq[k])
+    if len(best) == 1:
+        print "No correction"
+        result = chi_
+    elif len(best) == 2:
+        print "Corecting point #{} on {} pi".format(best[1], best[0])
+        if best[0] == '+':
+            chi_[int(best[1])] += np.pi
+        elif best[0] == '-':
+            chi_[int(best[1])] -= np.pi
+        else:
+            raise Exception()
+    elif len(best) == 4:
+        print "Corecting point #{} on {} pi".format(best[1], best[0])
+        print "Corecting point #{} on {} pi".format(best[3], best[2])
+        if best[0] == '+':
+            chi_[int(best[1])] += np.pi
+        elif best[0] == '-':
+            chi_[int(best[1])] -= np.pi
+        else:
+            raise Exception()
+        if best[2] == '+':
+            chi_[int(best[3])] += np.pi
+        elif best[2] == '-':
+            chi_[int(best[3])] -= np.pi
+        else:
+            raise Exception()
+    else:
+        raise Exception()
+
+    return chi_
+
+
+def resolver_bayesian(lamba_sq, chi, s_chi=None, nsamples=10000, plot_fit=False):
     """
     Function that
     :param lambda_sq:
@@ -147,6 +302,7 @@ if __name__ == '__main__':
     # Uncertainties of PANG values [rad]
     s_chi = np.array([ 0.26500595,  0.29110131,  0.17655808,  0.44442663])
 
-    resolved_chi = resolver(lambda_sq, chi, s_chi=None, nsamples=10000,
-                            plot_fit=True)
+    # resolved_chi = resolver_bayesian(lambda_sq, chi, s_chi=None, nsamples=10000,
+    #                         plot_fit=True)
+    resolved_chi = resolver_chisq(lambda_sq, chi, s_chi=s_chi)
 

@@ -211,8 +211,8 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
     ppol_image = images.create_pol_images(convolved=False)[0]
 
     # Equal Q & U results in chi_0 = pi / 4
-    # chi_0 = np.pi / 4
-    chi_0 = 0.
+    chi_0 = np.pi / 4
+    # chi_0 = 0.
 
     # Loop over specified uv-data, substitute real data with fake and save to
     # specified location
@@ -327,8 +327,8 @@ def bootstrap_uv_fits(uv_fits_fname, cc_fits_fnames, n, uvpath=None,
 
 
 if __name__ == '__main__':
-    n_boot = 20
-    noise_factor = 0.1
+    n_boot = 5
+    noise_factor = 1.
     # Gradient value (per beam)
     grad_value = 100.
     rm_value_0 = 200.
@@ -345,9 +345,9 @@ if __name__ == '__main__':
     outpath = '/home/ilya/vlbi_errors/simdata_{}/'.format(noise_factor)
     if not os.path.exists(outpath):
         os.makedirs(outpath)
-    width = 4.0
+    width = 2.0
     length = 10.
-    k = 2
+    k = 1
     simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux=cc_flux,
                   outpath=outpath, grad_value=grad_value, width=width,
                   length=length, k=k, noise_factor=noise_factor,
@@ -358,7 +358,8 @@ if __name__ == '__main__':
     map_info_l = get_fits_image_info(low_freq_map)
     map_info_h = get_fits_image_info(high_freq_map)
     beam_restore = map_info_l[3]
-    beam_restore_ = (beam_restore[0]/5, beam_restore[1]/5, beam_restore[2])
+    beam_restore_ = (beam_restore[0] / mas_to_rad, beam_restore[1] / mas_to_rad,
+                     beam_restore[2])
     mapsize_clean = (map_info_h[0][0],
                      map_info_h[-3][0] / mas_to_rad)
     for uvpath in glob.glob(os.path.join(outpath, "simul_uv_*")):
@@ -374,7 +375,7 @@ if __name__ == '__main__':
             clean_difmap(uvfile, "simul_{}_{}_cc.fits".format(stoke, freq),
                          stoke, mapsize_clean, path=uvdir,
                          path_to_script=path_to_script,
-                         beam_restore=beam_restore, outpath=uvdir)
+                         beam_restore=beam_restore_, outpath=uvdir)
 
     # Create image of ROTM
     print "Creating image of simulated ROTM"
@@ -382,14 +383,12 @@ if __name__ == '__main__':
     images.add_from_fits(wildcard=os.path.join(outpath, "simul_*_cc.fits"))
     # Create mask for faster calculation
     mask = np.ones((512, 512), dtype=int)
-    mask[269:271, 210:302] = 0
-    rotm_image, s_rotm_image = images.create_rotm_image(outfile='test',
-                                                        mask=mask,
-                                                        outdir=outpath)
+    mask[50:300, 150:350] = 0
+    rotm_image, s_rotm_image = images.create_rotm_image(mask=mask)
     # Plot slice
     plt.errorbar(np.arange(210, 302, 1),
-                 rotm_image.slice((270, 210), (270, 302)),
-                 s_rotm_image.slice((270, 210), (270, 302)), fmt='.k')
+                 rotm_image.slice((240, 210), (240, 302)),
+                 s_rotm_image.slice((240, 210), (240, 302)), fmt='.k')
     # Plot real ROTM grad values
     (imsize_l, pixref_l, pixrefval_l, (bmaj_l, bmin_l, bpa_l,), pixsize_l,
      stokes_l, freq_l) = get_fits_image_info(low_freq_map)
@@ -403,7 +402,7 @@ if __name__ == '__main__':
 
     plt.plot(np.arange(210, 302, 1),
              rm(np.arange(210, 302, 1) - rotm_image.pixref[1], None,
-                -grad_value))
+                grad_value, rm_value_0=rm_value_0))
     plt.axvline(rotm_image.pixref[1] - jet_width / 2.)
     plt.axvline(rotm_image.pixref[1] + jet_width / 2.)
 
@@ -488,7 +487,7 @@ if __name__ == '__main__':
     #                                                                       freq),
     #                          stoke, mapsize_clean, path=uvdir,
     #                          path_to_script=path_to_script,
-    #                          beam_restore=beam_restore, outpath=uvdir)
+    #                          beam_restore=beam_restore_, outpath=uvdir)
 
     # # Create image of ROTM from bootstrapped averaged uv-data
     # print "Creating image of ROTM from bootstrapped averaged uv-data"
@@ -547,7 +546,7 @@ if __name__ == '__main__':
     #                                                                 freq),
     #                          stoke, mapsize_clean, path=uvdir,
     #                          path_to_script=path_to_script,
-    #                          beam_restore=beam_restore, outpath=uvdir)
+    #                          beam_restore=beam_restore_, outpath=uvdir)
 
     # # Averaging Q & U bootstrapped images
     # avg_images = Images()

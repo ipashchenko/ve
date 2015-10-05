@@ -57,7 +57,7 @@ def rotm_leastsq(lambda_sq, chi, s_chi=None, p0=None):
     return p, pcov, s_sq
 
 
-def resolver_chisq(lamba_sq, chi, s_chi=None, p0=None):
+def resolver_chisq(lambda_sq, chi, s_chi=None, p0=None):
     """
     Function that
     :param lambda_sq:
@@ -124,15 +124,13 @@ def resolver_chisq(lamba_sq, chi, s_chi=None, p0=None):
     p, pcov, s_sq = rotm_leastsq(lambda_sq, chi, s_chi=s_chi, p0=p0)
     chi_sq.update({'0': s_sq})
 
-    print chi_sq
-
     chi_ = list(chi)[:]
     best = min(chi_sq.iterkeys(), key=lambda k: chi_sq[k])
     if len(best) == 1:
-        print "No correction"
+        # print "No correction"
         result = chi_
     elif len(best) == 2:
-        print "Corecting point #{} on {} pi".format(best[1], best[0])
+        # print "Corecting point #{} on {} pi".format(best[1], best[0])
         if best[0] == '+':
             chi_[int(best[1])] += np.pi
         elif best[0] == '-':
@@ -140,8 +138,8 @@ def resolver_chisq(lamba_sq, chi, s_chi=None, p0=None):
         else:
             raise Exception()
     elif len(best) == 4:
-        print "Corecting point #{} on {} pi".format(best[1], best[0])
-        print "Corecting point #{} on {} pi".format(best[3], best[2])
+        # print "Corecting point #{} on {} pi".format(best[1], best[0])
+        # print "Corecting point #{} on {} pi".format(best[3], best[2])
         if best[0] == '+':
             chi_[int(best[1])] += np.pi
         elif best[0] == '-':

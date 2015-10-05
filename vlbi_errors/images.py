@@ -2,16 +2,17 @@ import os
 import math
 import numpy as np
 import glob
-from from_fits import (create_image_from_fits_file,
-                       create_clean_image_from_fits_file)
-from utils import (mask_region, mas_to_rad, hdi_of_mcmc, flatten,
-                   nested_dict_itervalue, mask_region)
-from image import BasicImage, Image, CleanImage, plot
 from collections import defaultdict
 from scipy.optimize import leastsq
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import hist, bar, show
 # from sklearn.linear_model import Ridge
+from from_fits import (create_image_from_fits_file,
+                       create_clean_image_from_fits_file)
+from utils import (mask_region, mas_to_rad, hdi_of_mcmc, flatten,
+                   nested_dict_itervalue, mask_region)
+from image import BasicImage, Image, CleanImage, plot
+from pixel import resolver_chisq
 
 
 def unwrap_(phases):
@@ -1012,6 +1013,9 @@ def rotm(freqs, chis, s_chis=None, p0=None):
 
     # Try to unwrap angles
     chis = unwrap_(chis)
+    # Resolve ``n pi`` ambiguity resolved
+    lambdasq = (3. * 10 ** 8 / freqs) ** 2
+    chis = resolver_chisq(lambdasq, chis, s_chi=s_chis, p0=p0)
 
     # # Using ``Ridge`` cause OLS doesn't have weights of samples in ``fit``
     # model = Ridge(alpha=10**(-8))

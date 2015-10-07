@@ -182,7 +182,7 @@ def find_core_shift(uv_fits_paths, cc_image_paths, r_mask=None,
     if r_mask is None:
         # Find mask radius that gaves maximum shift length
         shifts = dict()
-        for r in range(0, map_center / 4, 10):
+        for r in range(0, map_center / 4, int(map_center / 40.)):
             region = (map_center, map_center, r, None)
             shift = ccimage_h.cross_correlate(ccimage_l, region1=region,
                                               region2=region)

@@ -6,7 +6,7 @@ from from_fits import (create_uvdata_from_fits_file,
                        create_ccmodel_from_fits_file,
                        create_clean_image_from_fits_file)
 from bootstrap import CleanBootstrap
-from utils import mas_to_rad, find_card_from_header
+from utils import mas_to_rad, find_card_from_header, degree_to_rad
 from spydiff import clean_difmap
 
 
@@ -75,7 +75,7 @@ def boot_uv_fits_with_cc_fits(uv_fits_fname, cc_fits_fnames, n, uvpath=None,
 def find_core_shift(uv_fits_paths, cc_image_paths, r_mask=None,
                     path_to_script=None, pixels_per_beam=None, imsize=None,
                     do_bootstrap=False, n_boot=50, nonparametric=True,
-                    data_dir=None):
+                    data_dir=None, upsample_factor=100):
     """
     Function that calculates core shift between two frequencies.
 
@@ -107,6 +107,12 @@ def find_core_shift(uv_fits_paths, cc_image_paths, r_mask=None,
     :param data_dir: (optional)
         Path to directory where to store clean image FITS files and bootstrapped
         UV-FITS files. If ``None`` then use cwd. (default: ``None``)
+    :param upsample_factor: (optional)
+        Upsampling factor. Images will be registered to within
+        ``1 / upsample_factor`` of a pixel. For example
+        ``upsample_factor == 20`` means the images will be registered
+        within 1/20th of a pixel. If ``1`` then no upsampling.
+        (default: ``100``)
 
     :return:
     """
@@ -127,9 +133,9 @@ def find_core_shift(uv_fits_paths, cc_image_paths, r_mask=None,
 
     bmaj_l = map_info_l[3][0] / mas_to_rad
     bmin_l = map_info_l[3][1] / mas_to_rad
-    bpa_l = map_info_l[3][2]
-    pixsize_l = map_info_l[-3][0] / mas_to_rad
-    pixsize_h = map_info_h[-3][0] / mas_to_rad
+    bpa_l = map_info_l[3][2] / degree_to_rad
+    pixsize_l = abs(map_info_l[-3][0]) / mas_to_rad
+    pixsize_h = abs(map_info_h[-3][0]) / mas_to_rad
     imsize_h = map_info_h[0][0]
     imsize_l = map_info_l[0][0]
     beam_restore = (bmaj_l, bmin_l, bpa_l)
@@ -143,13 +149,15 @@ def find_core_shift(uv_fits_paths, cc_image_paths, r_mask=None,
         # physical image size as in low frequency map
         if imsize is None:
             imsize = imsize_l * pixsize_l / pixsize
-            powers = [2 ** i / imsize for i in range(15)]
-            indx = len(powers) - powers[::-1].index(0) - 1
+            powers = [imsize // (2 ** i) for i in range(15)]
+            indx = powers.index(0)
             imsize = 2 ** indx
 
     # Chosen image & pixel sizes
     mapsize_clean = (imsize, pixsize)
     map_center = imsize / 2
+    print "mapsize: {}".format(mapsize_clean)
+    print "map center: {}".format(map_center)
 
     uvdata_dict = dict()
     # Clean both UV data with new image parameters
@@ -162,8 +170,10 @@ def find_core_shift(uv_fits_paths, cc_image_paths, r_mask=None,
         # Frequency in Hz
         freq = uvdata._io.hdu.header['CRVAL{}'.format(freq_card[0][-1])]
         uvdata_dict.update({freq: uvdata_path})
-        print "restoring with beam ", beam_restore
-        print "Cleaning with map parama ", mapsize_clean
+        print "restoring with beam: ", beam_restore
+        print "Cleaning with map parameters: ", mapsize_clean
+        print "Saving map to {}".format(os.path.join(data_dir,
+                                                     "shift_i_{}_cc.fits".format(freq)))
         clean_difmap(uvdata_file, "shift_i_{}_cc.fits".format(freq),
                      stokes='i', mapsize_clean=mapsize_clean, path=uvdata_dir,
                      path_to_script=path_to_script, beam_restore=beam_restore,
@@ -190,9 +200,12 @@ def find_core_shift(uv_fits_paths, cc_image_paths, r_mask=None,
         r_mask = max(shifts.iterkeys(), key=lambda k: shifts[k])
 
     region = (map_center, map_center, r_mask, None)
+    print "Using mask : {}".format(region)
     shift = ccimage_h.cross_correlate(ccimage_l, region1=region,
-                                      region2=region)
+                                      region2=region,
+                                      upsample_factor=upsample_factor)
     print "Shift found: {}".format(shift)
+    shifts = list()
 
     if do_bootstrap:
         # Bootstrap clean images
@@ -229,7 +242,7 @@ def find_core_shift(uv_fits_paths, cc_image_paths, r_mask=None,
                          path_to_script=path_to_script,
                          beam_restore=beam_restore, outpath=data_dir)
 
-        # Caclulate shifts for all pairs of bootstrapped clean maps
+        # Calculate shifts for all pairs of bootstrapped clean maps
         shifts = list()
         for i_boot in range(1, n_boot + 1):
             cc_fnames_glob = 'shift_*_{}_cc.fits'.format(i_boot)
@@ -240,7 +253,9 @@ def find_core_shift(uv_fits_paths, cc_image_paths, r_mask=None,
                                                                        cc_fnames[0]))
             ccimage_h = create_clean_image_from_fits_file(os.path.join(data_dir,
                                                                        cc_fnames[1]))
-            shift = ccimage_h.cross_correlate(ccimage_l, region1=region, region2=region)
+            shift = ccimage_h.cross_correlate(ccimage_l, region1=region,
+                                              region2=region,
+                                              upsample_factor=upsample_factor)
             print "Found shift {}".format(shift)
             shifts.append(shift)
 

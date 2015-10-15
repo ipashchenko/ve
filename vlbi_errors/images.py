@@ -1,39 +1,14 @@
-import os
-import math
 import numpy as np
 import glob
 from collections import defaultdict
-from scipy.optimize import leastsq
-from matplotlib import pyplot as plt
 from matplotlib.pyplot import hist, bar, show
-# from sklearn.linear_model import Ridge
+from knuth_hist import histogram
 from from_fits import (create_image_from_fits_file,
                        create_clean_image_from_fits_file)
 from utils import (mask_region, mas_to_rad, hdi_of_mcmc, flatten,
                    nested_dict_itervalue, mask_region)
 from image import BasicImage, Image, CleanImage, plot
-from pixel import resolver_chisq
-
-
-def unwrap_(phases):
-    """
-    Function that bring phases that are subject to +/-pi*N closer.
-     """
-    # Bring first value to [-pi/2, pi/2] interval
-    values = np.array(phases)
-    if values[0] > np.pi / 2:
-        values[0] -= np.pi
-    elif values[0] < -np.pi / 2:
-        values[0] += np.pi
-    for i, value in enumerate(values[1:]):
-        diff = value - values[i]
-        # 0 => 0, 1 => -pi, 2 => +pi
-        diff_array = np.array([abs(diff), abs(diff - np.pi),
-                               abs(diff + np.pi)])
-        add_dict = {0: 0, 1: -np.pi, 2: np.pi}
-        values[i+1] += add_dict[np.argmin(diff_array)]
-
-    return values
+from image_ops import add_dterm_evpa, pol_map, fpol_map, pang_map, rotm_map
 
 
 # TODO: Option for using only CCc w/o residuals for building images
@@ -203,7 +178,6 @@ class Images(object):
         values = np.ma.array(cube, mask=mask)
         values = values.reshape((cube.shape[0] * cube.shape[1], cube.shape[2]))
         values = mode_dict[mode](values, axis=0)
-        from knuth_hist import histogram
         probs, edges = histogram(values, density=True)
         lower_d = np.resize(edges, len(edges) - 1)
         bar(lower_d, probs, width=np.diff(lower_d)[0], linewidth=2, color='w')
@@ -257,7 +231,7 @@ class Images(object):
 
         """
         if fnames is None:
-            fnames = glob.glob(wildcard)
+            fnames = sorted(glob.glob(wildcard))
         if len(fnames) < 1:
             raise Exception("Need at least 1 image")
 
@@ -408,7 +382,7 @@ class Images(object):
         # Get some image from stacked to use it parameters for saving output. It
         # doesn't matter what image - they all are checked to have the same
         # basic parameters
-        img = self._images_dict[freq][stokes][0]
+        img = self._images_dict[freq][stokes][n]
 
         # Create container for Polarization Angle maps
         pang_arrays = list()
@@ -634,7 +608,7 @@ class Images(object):
                 pol_array = pol_map(q_image.image, u_image.image, mask=mask)
             else:
                 pol_array = pol_map(q_image._image, u_image._image, mask=mask)
-            # Create basic image and add ``pang_array``
+            # Create basic image and add ``pol_array``
             pol_image = Image(imsize=img.imsize, pixref=img.pixref,
                               pixrefval=img.pixrefval, pixsize=img.pixsize,
                               freq=img.freq, stokes='PPOL')
@@ -715,405 +689,63 @@ class Images(object):
 
         return fpol_images
 
-
-def rotm_map(freqs, chis, s_chis=None, mask=None, outfile=None, outdir=None,
-             ext='png'):
-    """
-    Function that calculates Rotation Measure map.
-
-    :param freqs:
-        Iterable of frequencies [Hz].
-    :param chis:
-        Iterable of 2D numpy arrays with polarization positional angles [rad].
-    :param s_chis: (optional)
-        Iterable of 2D numpy arrays with polarization positional angles
-        uncertainties estimates [rad].
-    :param mask: (optional)
-        Mask to be applied to arrays before calculation. If ``None`` then don't
-        apply mask. Note that ``mask`` must have dimensions of only one image,
-        that is it should be 2D array.
-
-    :return:
-        Tuple of 2D numpy array with values of Rotation Measure [rad/m**2] and
-        2D numpy array with uncertainties map [rad/m**2].
-
-    """
-    freqs = np.array(freqs)
-    if s_chis is not None:
-        assert len(freqs) == len(chis) == len(s_chis)
-    else:
-        assert len(freqs) == len(chis)
-
-    chi_cube = np.dstack(chis)
-    if s_chis is not None:
-        s_chi_cube = np.dstack(s_chis)
-    rotm_array = np.empty(np.shape(chi_cube[:, :, 0]))
-    s_rotm_array = np.empty(np.shape(chi_cube[:, :, 0]))
-    rotm_array[:] = np.nan
-    s_rotm_array[:] = np.nan
-
-    if mask is None:
-        mask = np.zeros(rotm_array.shape, dtype=int)
-
-    # If saving output
-    if outfile:
-
-        # Function for plotting lines
-        def rotm_model(p, freqs):
-            lambdasq = (3. * 10 ** 8 / freqs) ** 2
-            return p[0] * lambdasq + p[1]
-
-        if outdir is None:
-            outdir = '.'
-        # If the directory does not exist, create it
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
-
-        # Calculate how many pixels there should be
-        npixels = len(np.where(mask.ravel() == 0)[0])
-        print "{} pixels with fit will be plotted".format(npixels)
-        nrows = int(np.sqrt(npixels) + 1)
-        print "Plot will have dims: {} by {}".format(nrows, nrows)
-
-        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, sharex=True,
-                                 sharey=True)
-        fig.set_size_inches(18.5, 18.5)
-        plt.rcParams.update({'axes.titlesize': 'small'})
-        i, j = 0, 0
-
-    for (x, y), value in np.ndenumerate(rotm_array):
-        # If pixel should be masked then just pass by and leave NaN as value
-        if mask[x, y]:
-            continue
-
-        if s_chis is not None:
-            p, pcov = rotm(freqs, chi_cube[x, y, :], s_chi_cube[x, y, :])
-        else:
-            p, pcov = rotm(freqs, chi_cube[x, y, :])
-
-        if pcov is not np.nan:
-            rotm_array[x, y] = p[0]
-            s_rotm_array[x, y] = math.sqrt(pcov[0, 0])
-        else:
-            rotm_array[x, y] = p[0]
-            s_rotm_array[x, y] = np.nan
-
-        # Plot to file
-        if outfile:
-            lambdasq = (3. * 10 ** 8 / freqs) ** 2
-            if s_chis is not None:
-                axes[i, j].errorbar(lambdasq, chi_cube[x, y, :],
-                                    s_chi_cube[x, y, :], fmt='.k')
-            else:
-                axes[i, j].plot(lambdasq, chi_cube[x, y, :], '.k')
-            lambdasq_ = np.linspace(lambdasq[0], lambdasq[-1], 10)
-            axes[i, j].plot(lambdasq_,
-                            rotm_model(p, 3. * 10 ** 8 / np.sqrt(lambdasq_)),
-                            'r', lw=2, label="RM={0:.1f}".format(p[0]))
-            axes[i, j].set_title("{}-{}".format(x, y))
-            axes[i, j].legend(prop={'size': 6}, loc='best', fancybox=True,
-                              framealpha=0.5)
-            # Check this text box
-            # ax.hist(x, 50)
-            # # these are matplotlib.patch.Patch properties
-            # props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-
-            # # place a text box in upper left in axes coords
-            # ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14,
-            # verticalalignment='top', bbox=props)
-
-            axes[i, j].set_xticks([lambdasq[0], lambdasq[-1]])
-            axes[i, j].set_ylim(-np.pi, np.pi)
-            j += 1
-            # Plot first row first
-            if j // nrows > 0:
-                # Then second row, etc...
-                i += 1
-                j = 0
-
-    if outfile:
-        path = os.path.join(outdir, outfile)
-        print "Saving linear fits to {}.{}".format(path, ext)
-        fig.show()
-        fig.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=200)
-
-    return rotm_array, s_rotm_array
-
-
-def pang_map(q_array, u_array, mask=None):
-    """
-    Function that calculates Polarization Angle map.
-
-    :param q_array:
-        Numpy 2D array of Stokes Q values.
-    :param u_array:
-        Numpy 2D array of Stokes U values.
-    :param mask: (optional)
-        Mask to be applied to arrays before calculation. If ``None`` then don't
-        apply mask.
-
-    :return:
-        Numpy 2D array of Polarization Angle values [rad].
-
-    :note:
-        ``q_array`` & ``u_array`` must have the same units (e.g. [Jy/beam])
-
-    """
-    q_array = np.atleast_2d(q_array)
-    u_array = np.atleast_2d(u_array)
-    assert q_array.shape == u_array.shape
-
-    if mask is not None:
-        q_array = np.ma.array(q_array, mask=mask, fill_value=np.nan)
-        u_array = np.ma.array(u_array, mask=mask, fill_value=np.nan)
-
-    return 0.5 * np.arctan2(u_array, q_array)
-
-
-def cpol_map(q_array, u_array, mask=None):
-    """
-    Function that calculates Complex Polarization map.
-
-    :param q_array:
-        Numpy 2D array of Stokes Q values.
-    :param u_array:
-        Numpy 2D array of Stokes U values.
-    :param mask: (optional)
-        Mask to be applied to arrays before calculation. If ``None`` then don't
-        apply mask.
-
-    :return:
-        Numpy 2D array of Complex Polarization values.
-
-    :note:
-        ``q_array`` & ``u_array`` must have the same units (e.g. [Jy/beam]),
-        then output array will have the same units.
-
-    """
-    q_array = np.atleast_2d(q_array)
-    u_array = np.atleast_2d(u_array)
-    assert q_array.shape == u_array.shape
-
-    if mask is not None:
-        q_array = np.ma.array(q_array, mask=mask, fill_value=np.nan)
-        u_array = np.ma.array(u_array, mask=mask, fill_value=np.nan)
-
-    return q_array + 1j * u_array
-
-
-def pol_map(q_array, u_array, mask=None):
-    """
-    Function that calculates Polarization Flux map.
-
-    :param q_array:
-        Numpy 2D array of Stokes Q values.
-    :param u_array:
-        Numpy 2D array of Stokes U values.
-    :param mask: (optional)
-        Mask to be applied to arrays before calculation. If ``None`` then don't
-        apply mask.
-
-    :return:
-        Numpy 2D array of Polarization Flux values.
-
-    :note:
-        ``q_array`` & ``u_array`` must have the same units (e.g. [Jy/beam])
-
-    """
-    cpol_array = cpol_map(q_array, u_array, mask=mask)
-    return np.sqrt(cpol_array * cpol_array.conj()).real
-
-
-def fpol_map(q_array, u_array, i_array, mask=None):
-    """
-    Function that calculates Fractional Polarization map.
-
-    :param q_array:
-        Numpy 2D array of Stokes Q values.
-    :param u_array:
-        Numpy 2D array of Stokes U values.
-    :param i_array:
-        Numpy 2D array of Stokes I values.
-    :param mask: (optional)
-        Mask to be applied to arrays before calculation. If ``None`` then don't
-        apply mask.
-
-    :return:
-        Numpy 2D array of Fractional Polarization values.
-
-    :note:
-        ``q_array``, ``u_array`` & ``i_array`` must have the same units (e.g.
-        [Jy/beam])
-
-    """
-    cpol_array = cpol_map(q_array, u_array, mask=mask)
-    return np.sqrt(cpol_array * cpol_array.conj()).real / i_array
-
-
-def rotm(freqs, chis, s_chis=None, p0=None):
-    """
-    Function that calculates Rotation Measure.
-
-    :param freqs:
-        Iterable of frequencies [Hz].
-    :param chis:
-        Iterable of polarization positional angles [rad].
-    :param s_chis: (optional)
-        Iterable of polarization positional angles uncertainties estimates
-        [rad].
-    :param p0:
-        Starting value for minimization (RM [rad/m**2], PA_zero_lambda [rad]).
-
-    :return:
-        Tuple of numpy array of (RM [rad/m**2], PA_zero_lambda [rad]) and 2D
-        numpy array of covariance matrix.
-
-    """
-
-    if p0 is None:
-        p0 = [0., 0.]
-
-    if s_chis is not None:
-        assert len(freqs) == len(chis) == len(s_chis)
-    else:
-        assert len(freqs) == len(chis)
-
-    p0 = np.array(p0)
-    freqs = np.array(freqs)
-    chis = np.array(chis)
-    if s_chis is not None:
-        s_chis = np.array(s_chis)
-
-    def unwrap(values):
-        d = (np.diff(values) / np.pi).astype("Int8")
-        out = np.empty_like(values)
-        out[0] = values[0]
-        out[1:] = values[1:] - np.cumsum(d) * np.pi
-        return out
-
-    def unwrap_(phases):
-        """
-        Function that bring phases that are subject to +/-pi*N closer.
-         """
-        # Bring first value to [-pi/2, pi/2] interval
-        values = np.array(phases)
-        if values[0] > np.pi / 2:
-            values[0] -= np.pi
-        elif values[0] < -np.pi / 2:
-            values[0] += np.pi
-        for i, value in enumerate(values[1:]):
-            diff = value - values[i]
-            # 0 => 0, 1 => -pi, 2 => +pi
-            diff_array = np.array([abs(diff), abs(diff - np.pi),
-                                   abs(diff + np.pi)])
-            add_dict = {0: 0, 1: -np.pi, 2: np.pi}
-            values[i+1] += add_dict[np.argmin(diff_array)]
-
-        return values
-
-    # Try to unwrap angles
-    chis = unwrap_(chis)
-    # Resolve ``n pi`` ambiguity resolved
-    lambdasq = (3. * 10 ** 8 / freqs) ** 2
-    chis = resolver_chisq(lambdasq, chis, s_chi=s_chis, p0=p0)
-
-    # # Using ``Ridge`` cause OLS doesn't have weights of samples in ``fit``
-    # model = Ridge(alpha=10**(-8))
-    # lambdasq = (3. * 10 ** 8 / freqs) ** 2.
-    # x = np.atleast_2d(lambdasq).T
-    # y = chis
-    # sy = s_chis
-
-    # def cook_dist(x, y, s_y=None):
-    #     """Vectorized version of Cook's distance."""
-    #     model = Ridge(alpha=10**(-8.))
-    #     n = len(x)
-    #     if s_y is None:
-    #         model.fit(x, y)
-    #     else:
-    #         model.fit(x, y, sample_weight=1./s_y ** 2)
-    #     yhat = model.predict(x)
-    #     n_p = 2
-
-    #     mse = np.sum((yhat - y)**2.0)/n
-    #     denom = n_p * mse
-    #     idx = np.arange(n)
-    #     return np.array([np.sum((yhat-model.fit(x[idx!=i],y[idx!=i],
-    #                                             sample_weight=1./s_y[idx!=i]**2).predict(x)) ** 2.0) for
-    #                      i in range(n)])/denom
-
-    def rotm_model(p, freqs):
-        lambdasq = (3. * 10 ** 8 / freqs) ** 2
-        return p[0] * lambdasq + p[1]
-
-    def weighted_residuals(p, freqs, chis, s_chis):
-        return (chis - rotm_model(p, freqs)) / s_chis
-
-    def residuals(p, freqs, chis):
-        return chis - rotm_model(p, freqs)
-
-    if s_chis is None:
-        func, args = residuals, (freqs, chis,)
-    else:
-        func, args = weighted_residuals, (freqs, chis, s_chis,)
-    fit = leastsq(func, p0, args=args, full_output=True)
-    (p, pcov, infodict, errmsg, ier) = fit
-
-    if ier not in [1, 2, 3, 4]:
-        msg = "Optimal parameters not found: " + errmsg
-        raise RuntimeError(msg)
-
-    if (len(chis) > len(p0)) and pcov is not None:
-        # Residual variance
-        s_sq = (func(p, *args) ** 2.).sum() / (len(chis) - len(p0))
-        pcov *= s_sq
-    else:
-        pcov = np.nan
-
-    return p, pcov
-
-
-def hdi_of_images(images, cred_mass=0.68):
-    """
-    Function that calculates a width of highest density interval for each pixel
-    using user supplied images.
-    :param images:
-        Iterable of images.
-    :param cred_mass: (optional)
-        Credibility mass. (default: ``0.68``)
-    :return:
-        Numpy 2D array with
-    """
-    images = [np.atleast_2d(image) for image in images]
-    # Check that images have the same shape
-    assert len(set([image.shape for image in images])) == 1
-
-    images_cube = np.dstack(tuple(image for image in images))
-    hdis = np.zeros(np.shape(images_cube[:, :, 0]))
-    for (x, y), value in np.ndenumerate(hdis):
-        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=cred_mass)
-        hdis[x, y] = hdi[1] - hdi[0]
-    return hdis
-
-
 if __name__ == '__main__':
+    pass
+    data_dir = '/home/ilya/Dropbox/4vlbi_errors/DENISE/'
+    d_term_std = 0.002
+    evpa_std = 2.
     import os
-    # data_dir = '/home/ilya/vlbi_errors/0148+274/2007_03_01/'
-    data_dir = '/home/ilya/vlbi_errors/0952+179/2007_04_30/'
-    # Directory with fits-images of bootstrapped data
-    i_dir_c1 = data_dir + 'C1/im/I/'
-    i_dir_c2 = data_dir + 'C2/im/I/'
-    i_dir_x1 = data_dir + 'X1/im/I/'
-    i_dir_x2 = data_dir + 'X2/im/I/'
-    q_dir_c1 = data_dir + 'C1/im/Q/'
-    u_dir_c1 = data_dir + 'C1/im/U/'
-    q_dir_c2 = data_dir + 'C2/im/Q/'
-    u_dir_c2 = data_dir + 'C2/im/U/'
-    q_dir_x1 = data_dir + 'X1/im/Q/'
-    u_dir_x1 = data_dir + 'X1/im/U/'
-    q_dir_x2 = data_dir + 'X2/im/Q/'
-    u_dir_x2 = data_dir + 'X2/im/U/'
-    # original_cc_fits_file = 'cc.fits'
+    # For each frequency create mask based on PPOL distribution
+    ppol_error_images_dict = dict()
+    ppol_images_dict = dict()
+    ppol_masks_dict = dict()
+    for freq in ('l18', 'l20', 'l21', 'l22'):
+        images = Images()
+        images.add_from_fits(wildcard=os.path.join(data_dir,
+                                                   '1038+064.{}.boot_*.*cn.fits'.format(freq)))
+        ppol_images = Images()
+        ppol_images.add_images(images.create_pol_images())
+        ppol_error_image = ppol_images.create_error_image(cred_mass=0.95)
+        ppol_error_images_dict.update({freq: ppol_error_image})
+        images = Images()
+        images.add_from_fits(wildcard=os.path.join(data_dir,
+                                                   '1038+064.{}.common.*cn.fits'.format(freq)))
+        ppol_image = images.create_pol_images()[0]
+        ppol_images_dict.update({freq: ppol_image})
+        mask = ppol_image.image < ppol_error_image.image
+        print mask
+        ppol_masks_dict.update({freq: mask})
+
+    # Create overall mask for PPOL flux
+    masks = [np.array(mask, dtype=int) for mask in ppol_masks_dict.values()]
+    ppol_mask = np.zeros(masks[0].shape, dtype=int)
+    for mask in masks:
+        ppol_mask += mask
+    ppol_mask[ppol_mask != 0] = 1
+
+    # Create ROTM images with calculated mask
+    images = Images()
+    images.add_from_fits(wildcard=os.path.join(data_dir,
+                                               '1038+064.l*.boot_*.*cn.fits'))
+    rotm_images_list = images.create_rotm_images(mask=ppol_mask)
+
+    # import os
+    # # data_dir = '/home/ilya/vlbi_errors/0148+274/2007_03_01/'
+    # data_dir = '/home/ilya/vlbi_errors/0952+179/2007_04_30/'
+    # # Directory with fits-images of bootstrapped data
+    # i_dir_c1 = data_dir + 'C1/im/I/'
+    # i_dir_c2 = data_dir + 'C2/im/I/'
+    # i_dir_x1 = data_dir + 'X1/im/I/'
+    # i_dir_x2 = data_dir + 'X2/im/I/'
+    # q_dir_c1 = data_dir + 'C1/im/Q/'
+    # u_dir_c1 = data_dir + 'C1/im/U/'
+    # q_dir_c2 = data_dir + 'C2/im/Q/'
+    # u_dir_c2 = data_dir + 'C2/im/U/'
+    # q_dir_x1 = data_dir + 'X1/im/Q/'
+    # u_dir_x1 = data_dir + 'X1/im/U/'
+    # q_dir_x2 = data_dir + 'X2/im/Q/'
+    # u_dir_x2 = data_dir + 'X2/im/U/'
+    # # original_cc_fits_file = 'cc.fits'
 
     # # Testing ``Images.create_error_image``
     # print "Testing ``Images.create_error_image`` method..."
@@ -1244,160 +876,160 @@ if __name__ == '__main__':
 
     # First, create polarization flux (PPOL) error image for each frequency
     # data
-    band_dir = {'c1': {'i': i_dir_c1, 'q': q_dir_c1, 'u': u_dir_c1},
-                'c2': {'i': i_dir_c2, 'q': q_dir_c2, 'u': u_dir_c2},
-                'x1': {'i': i_dir_x1, 'q': q_dir_x1, 'u': u_dir_x1},
-                'x2': {'i': i_dir_x2, 'q': q_dir_x2, 'u': u_dir_x2}}
-    mask_last = None
-    fnames = list()
-    images_allbands_50 = Images()
-    print "Constructing Images instance for all bands for all bootstrapped" \
-          " data..."
-    for band in ('c1', 'c2', 'x1', 'x2'):
-        print ""
-        fnames = [os.path.join(band_dir[band]['q'], 'cc_{}.fits'.format(i)) for
-                  i in range(1, 51)]
-        fnames += [os.path.join(band_dir[band]['u'], 'cc_{}.fits'.format(i)) for
-                   i in range(1, 51)]
-        fnames += [os.path.join(band_dir[band]['i'], 'cc_{}.fits'.format(i)) for
-                   i in range(1, 51)]
-        images_allbands_50.add_from_fits(fnames)
+    # band_dir = {'c1': {'i': i_dir_c1, 'q': q_dir_c1, 'u': u_dir_c1},
+    #             'c2': {'i': i_dir_c2, 'q': q_dir_c2, 'u': u_dir_c2},
+    #             'x1': {'i': i_dir_x1, 'q': q_dir_x1, 'u': u_dir_x1},
+    #             'x2': {'i': i_dir_x2, 'q': q_dir_x2, 'u': u_dir_x2}}
+    # mask_last = None
+    # fnames = list()
+    # images_allbands_50 = Images()
+    # print "Constructing Images instance for all bands for all bootstrapped" \
+    #       " data..."
+    # for band in ('c1', 'c2', 'x1', 'x2'):
+    #     print ""
+    #     fnames = [os.path.join(band_dir[band]['q'], 'cc_{}.fits'.format(i)) for
+    #               i in range(1, 51)]
+    #     fnames += [os.path.join(band_dir[band]['u'], 'cc_{}.fits'.format(i)) for
+    #                i in range(1, 51)]
+    #     fnames += [os.path.join(band_dir[band]['i'], 'cc_{}.fits'.format(i)) for
+    #                i in range(1, 51)]
+    #     images_allbands_50.add_from_fits(fnames)
 
-    for i, band in enumerate(('c1', 'c2', 'x1', 'x2')):
-        print "Creating mask for {}-band PPOL and I image".format(band)
-        i_error_image = images_allbands_50.create_error_image(stokes='I',
-                                                               freq=images_allbands_50.freqs[i],
-                                                               cred_mass=0.95)
-        pol_images_50 = images_allbands_50.create_pol_images(freq=images_allbands_50.freqs[i])
-        images = Images()
-        images.add_images(pol_images_50)
-        pol_error_image = images.create_error_image(cred_mass=0.95)
-        images = Images()
-        images.add_from_fits(fnames=[os.path.join(band_dir[band]['q'],
-                                                  'cc_orig.fits'),
-                                     os.path.join(band_dir[band]['u'],
-                                                  'cc_orig.fits')])
-        pol_image = images.create_pol_images()[0]
-        i_image = create_clean_image_from_fits_file(os.path.join(band_dir[band]['i'],
-                                                                 'cc_orig.fits'))
-        mask_pol = pol_image.image < pol_error_image.image
-        mask_i = i_image.image < i_error_image.image
-        mask = np.logical_or(mask_pol, mask_i)
-        if mask_last is not None:
-            mask = np.logical_or(mask, mask_last)
-        mask_last = mask.copy()
+    # for i, band in enumerate(('c1', 'c2', 'x1', 'x2')):
+    #     print "Creating mask for {}-band PPOL and I image".format(band)
+    #     i_error_image = images_allbands_50.create_error_image(stokes='I',
+    #                                                            freq=images_allbands_50.freqs[i],
+    #                                                            cred_mass=0.95)
+    #     pol_images_50 = images_allbands_50.create_pol_images(freq=images_allbands_50.freqs[i])
+    #     images = Images()
+    #     images.add_images(pol_images_50)
+    #     pol_error_image = images.create_error_image(cred_mass=0.95)
+    #     images = Images()
+    #     images.add_from_fits(fnames=[os.path.join(band_dir[band]['q'],
+    #                                               'cc_orig.fits'),
+    #                                  os.path.join(band_dir[band]['u'],
+    #                                               'cc_orig.fits')])
+    #     pol_image = images.create_pol_images()[0]
+    #     i_image = create_clean_image_from_fits_file(os.path.join(band_dir[band]['i'],
+    #                                                              'cc_orig.fits'))
+    #     mask_pol = pol_image.image < pol_error_image.image
+    #     mask_i = i_image.image < i_error_image.image
+    #     mask = np.logical_or(mask_pol, mask_i)
+    #     if mask_last is not None:
+    #         mask = np.logical_or(mask, mask_last)
+    #     mask_last = mask.copy()
 
-    # Now make ROTM image with this mask
-    print "Constructing Images instance with original data..."
-    images = Images()
-    images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_orig.fits'),
-                                 os.path.join(u_dir_c1, 'cc_orig.fits'),
-                                 os.path.join(q_dir_c2, 'cc_orig.fits'),
-                                 os.path.join(u_dir_c2, 'cc_orig.fits'),
-                                 os.path.join(q_dir_x1, 'cc_orig.fits'),
-                                 os.path.join(u_dir_x1, 'cc_orig.fits'),
-                                 os.path.join(q_dir_x2, 'cc_orig.fits'),
-                                 os.path.join(u_dir_x2, 'cc_orig.fits')])
-    print "Creating original ROTM image with constructed mask..."
-    masked_rotm_image_no_s, masked_s_rotm_image_no_s =\
-        images.create_rotm_image(mask=mask)
+    # # Now make ROTM image with this mask
+    # print "Constructing Images instance with original data..."
+    # images = Images()
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_c1, 'cc_orig.fits'),
+    #                              os.path.join(q_dir_c2, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_c2, 'cc_orig.fits'),
+    #                              os.path.join(q_dir_x1, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_x1, 'cc_orig.fits'),
+    #                              os.path.join(q_dir_x2, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_x2, 'cc_orig.fits')])
+    # print "Creating original ROTM image with constructed mask..."
+    # masked_rotm_image_no_s, masked_s_rotm_image_no_s =\
+    #     images.create_rotm_image(mask=mask)
 
-    # # Testing uncertainties estimates for ROTM maps
-    # print "Testing uncertainties estimates for ROTM images..."
-    # Error on ROTM can be calculated in several ways. First, create Q, U images
-    # from bootstrapped uv-data and make ROTM image for each. Then stack them
-    # and find error in each pixel or find ``p-value`` of any feature. Second,
-    # it can be created using uncertainties of PANG images created from
-    # bootstrapped uv-data.
-    # Concerning error of PANG-calibration. It can be used in both ways. In
-    # first approach - just add random number from PANG error distribution to
-    # each PANG map, made from bootstrapped uv-data. In second approach - just
-    # add in quadrature estimated PA-calibration error to PANG error images at
-    # each frequency.
+    # # # Testing uncertainties estimates for ROTM maps
+    # # print "Testing uncertainties estimates for ROTM images..."
+    # # Error on ROTM can be calculated in several ways. First, create Q, U images
+    # # from bootstrapped uv-data and make ROTM image for each. Then stack them
+    # # and find error in each pixel or find ``p-value`` of any feature. Second,
+    # # it can be created using uncertainties of PANG images created from
+    # # bootstrapped uv-data.
+    # # Concerning error of PANG-calibration. It can be used in both ways. In
+    # # first approach - just add random number from PANG error distribution to
+    # # each PANG map, made from bootstrapped uv-data. In second approach - just
+    # # add in quadrature estimated PA-calibration error to PANG error images at
+    # # each frequency.
 
-    # Create ROTM image for each of the bootstrapped Q & U image
-    print "Creating ROTM images of bootstrapped data with constructed mask..."
-    # Now create 50 ROTM images with mask basked on PPOL & I bootstrapped data
-    rotm_images_50 = images_allbands_50.create_rotm_images(mask=mask)
-    print "Creating ERROR ROTM image from bootstrapped ROTM images..."
-    rotm_error_50 = rotm_images_50.create_error_image()
+    # # Create ROTM image for each of the bootstrapped Q & U image
+    # print "Creating ROTM images of bootstrapped data with constructed mask..."
+    # # Now create 50 ROTM images with mask basked on PPOL & I bootstrapped data
+    # rotm_images_50 = images_allbands_50.create_rotm_images(mask=mask)
+    # print "Creating ERROR ROTM image from bootstrapped ROTM images..."
+    # rotm_error_50 = rotm_images_50.create_error_image()
 
-    print "Creating ONE ROTM image from original data + bootstrapped PANG" \
-          "errors"
-    # Now create 50 PANG images with mask basked on PPOL & I bootstrapped data
-    bands = ['c1', 'c2', 'x1', 'x2']
-    pang_50_bands = dict()
-    for i, freq in enumerate(images_allbands_50.freqs):
-        images = Images()
-        print "Creating boot PANG images for band {}".format(bands[i])
-        images.add_images(images_allbands_50.create_pang_images(freq=freq,
-                                                                mask=mask))
-        pang_50_bands.update({bands[i]: images})
+    # print "Creating ONE ROTM image from original data + bootstrapped PANG" \
+    #       "errors"
+    # # Now create 50 PANG images with mask basked on PPOL & I bootstrapped data
+    # bands = ['c1', 'c2', 'x1', 'x2']
+    # pang_50_bands = dict()
+    # for i, freq in enumerate(images_allbands_50.freqs):
+    #     images = Images()
+    #     print "Creating boot PANG images for band {}".format(bands[i])
+    #     images.add_images(images_allbands_50.create_pang_images(freq=freq,
+    #                                                             mask=mask))
+    #     pang_50_bands.update({bands[i]: images})
 
-    pang_error_maps = dict()
-    # Create PANG error maps for each band
-    #TODO: Use Q&U error images for creating PANG error maps
-    for band, pang_images in pang_50_bands.iteritems():
-        print "Creating PANG error image for band {}".format(band)
-        pang_error_maps.update({band: pang_images.create_error_image()})
+    # pang_error_maps = dict()
+    # # Create PANG error maps for each band
+    # #TODO: Use Q&U error images for creating PANG error maps
+    # for band, pang_images in pang_50_bands.iteritems():
+    #     print "Creating PANG error image for band {}".format(band)
+    #     pang_error_maps.update({band: pang_images.create_error_image()})
 
-    images = Images()
-    images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_orig.fits'),
-                                 os.path.join(u_dir_c1, 'cc_orig.fits'),
-                                 os.path.join(q_dir_c2, 'cc_orig.fits'),
-                                 os.path.join(u_dir_c2, 'cc_orig.fits'),
-                                 os.path.join(q_dir_x1, 'cc_orig.fits'),
-                                 os.path.join(u_dir_x1, 'cc_orig.fits'),
-                                 os.path.join(q_dir_x2, 'cc_orig.fits'),
-                                 os.path.join(u_dir_x2, 'cc_orig.fits')])
-    print "Creating original ROTM image with constructed mask..."
-    masked_rotm_image_w_s, masked_s_rotm_image_w_s = \
-        images.create_rotm_image(s_pang_arrays=[pang_error_maps[band].image for
-                                                band in bands],
-                                 mask=mask)
+    # images = Images()
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_c1, 'cc_orig.fits'),
+    #                              os.path.join(q_dir_c2, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_c2, 'cc_orig.fits'),
+    #                              os.path.join(q_dir_x1, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_x1, 'cc_orig.fits'),
+    #                              os.path.join(q_dir_x2, 'cc_orig.fits'),
+    #                              os.path.join(u_dir_x2, 'cc_orig.fits')])
+    # print "Creating original ROTM image with constructed mask..."
+    # masked_rotm_image_w_s, masked_s_rotm_image_w_s = \
+    #     images.create_rotm_image(s_pang_arrays=[pang_error_maps[band].image for
+    #                                             band in bands],
+    #                              mask=mask)
 
-    # Creating original C1 image w new resolution
-    i_image = create_clean_image_from_fits_file(os.path.join(band_dir['c1']['i'],
-                                                             'cc_orig.fits'))
+    # # Creating original C1 image w new resolution
+    # i_image = create_clean_image_from_fits_file(os.path.join(band_dir['c1']['i'],
+    #                                                          'cc_orig.fits'))
 
-    # Testing RM +/-pi*n stuff
-    c1_q_image = images._images_dict[4608458750.0]['Q'][0]
-    c1_u_image = images._images_dict[4608458750.0]['U'][0]
-    c2_q_image = images._images_dict[5003458750.0]['Q'][0]
-    c2_u_image = images._images_dict[5003458750.0]['U'][0]
-    x1_q_image = images._images_dict[8108458750.0]['Q'][0]
-    x1_u_image = images._images_dict[8108458750.0]['U'][0]
-    x2_q_image = images._images_dict[8429458750.0]['Q'][0]
-    x2_u_image = images._images_dict[8429458750.0]['U'][0]
+    # # Testing RM +/-pi*n stuff
+    # c1_q_image = images._images_dict[4608458750.0]['Q'][0]
+    # c1_u_image = images._images_dict[4608458750.0]['U'][0]
+    # c2_q_image = images._images_dict[5003458750.0]['Q'][0]
+    # c2_u_image = images._images_dict[5003458750.0]['U'][0]
+    # x1_q_image = images._images_dict[8108458750.0]['Q'][0]
+    # x1_u_image = images._images_dict[8108458750.0]['U'][0]
+    # x2_q_image = images._images_dict[8429458750.0]['Q'][0]
+    # x2_u_image = images._images_dict[8429458750.0]['U'][0]
 
-    c1_pang_array = pang_map(c1_q_image.image, c1_u_image.image, mask=mask)
-    c2_pang_array = pang_map(c2_q_image.image, c2_u_image.image, mask=mask)
-    x1_pang_array = pang_map(x1_q_image.image, x1_u_image.image, mask=mask)
-    x2_pang_array = pang_map(x2_q_image.image, x2_u_image.image, mask=mask)
+    # c1_pang_array = pang_map(c1_q_image.image, c1_u_image.image, mask=mask)
+    # c2_pang_array = pang_map(c2_q_image.image, c2_u_image.image, mask=mask)
+    # x1_pang_array = pang_map(x1_q_image.image, x1_u_image.image, mask=mask)
+    # x2_pang_array = pang_map(x2_q_image.image, x2_u_image.image, mask=mask)
 
-    c1_pang_error_array = pang_error_maps['c1'].image
-    c2_pang_error_array = pang_error_maps['c2'].image
-    x1_pang_error_array = pang_error_maps['x1'].image
-    x2_pang_error_array = pang_error_maps['x2'].image
+    # c1_pang_error_array = pang_error_maps['c1'].image
+    # c2_pang_error_array = pang_error_maps['c2'].image
+    # x1_pang_error_array = pang_error_maps['x1'].image
+    # x2_pang_error_array = pang_error_maps['x2'].image
 
-    # rotm_array, s_rotm_array = rotm_map(images.freqs, [c1_pang_array,
-    #                                                    c2_pang_array,
-    #                                                    x1_pang_array,
-    #                                                    x2_pang_array],
-    #                                     s_chis=[c1_pang_error_array,
-    #                                             c2_pang_error_array,
-    #                                             x1_pang_error_array,
-    #                                             x2_pang_error_array],
-    #                                     mask=mask,
-    #                                     outfile='LinearFit',
-    #                                     outdir='/home/ilya/vlbi_errors/')
+    # # rotm_array, s_rotm_array = rotm_map(images.freqs, [c1_pang_array,
+    # #                                                    c2_pang_array,
+    # #                                                    x1_pang_array,
+    # #                                                    x2_pang_array],
+    # #                                     s_chis=[c1_pang_error_array,
+    # #                                             c2_pang_error_array,
+    # #                                             x1_pang_error_array,
+    # #                                             x2_pang_error_array],
+    # #                                     mask=mask,
+    # #                                     outfile='LinearFit',
+    # #                                     outdir='/home/ilya/vlbi_errors/')
 
 
-    print "Average BOOTSTRAPPED ROTM  images..."
-    average_ROTM = np.mean(np.dstack(tuple(image.image for image in
-                                           rotm_images_50.images)), axis=2)
-    # Plot original ROTM (LSQ fit w/o errors)
-    # plot(contours=i_image.image_w_residuals,
+    # print "Average BOOTSTRAPPED ROTM  images..."
+    # average_ROTM = np.mean(np.dstack(tuple(image.image for image in
+    #                                        rotm_images_50.images)), axis=2)
+    # # Plot original ROTM (LSQ fit w/o errors)
+    # # plot(contours=i_image.image_w_residuals,
     #      colors=masked_rotm_image_w_s.image,
     #      x=i_image.x[0, :], y=i_image.y[:, 0], blc=(245, 245), trc=(280, 315),
     #      min_abs_level=0.0005, colors_mask=mask,

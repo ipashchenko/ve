@@ -1,15 +1,16 @@
-import copy
 import glob
 import os
 import shutil
+import numpy as np
 from from_fits import (create_uvdata_from_fits_file,
                        create_ccmodel_from_fits_file,
                        create_clean_image_from_fits_file,
+                       create_image_from_fits_file,
                        get_fits_image_info)
 from bootstrap import CleanBootstrap
 from spydiff import clean_difmap
 from utils import mas_to_rad, degree_to_rad
-from image import CleanImage
+from images import Images
 
 # TODO: We need to get RM map and it's uncertainty for each source and epoch.
 # Input: calibrated visibilities, CLEAN models in "naitive" resolution.
@@ -23,28 +24,31 @@ from image import CleanImage
 
 # C - 4.6&5GHz, X - 8.11&8.43GHz, U - 15.4GHz
 # Bands must be sorted with lowest frequency first
-bands = ['c1', 'c2', 'x1', 'x2', 'u1']
+
+# bands = ['c1', 'c2', 'x1', 'x2', 'u1']
+bands = ['c1', 'c2', 'x1', 'x2']
 epochs = ['2007_03_01', '2007_04_30', '2007_05_03', '2007_06_01']
-sources = ['0148+274',
-           '0342+147',
-           '0425+048',
-           '0507+179',
-           '0610+260',
-           '0839+187',
-           '0952+179',
-           '1004+141',
-           '1011+250',
-           '1049+215',
-           '1219+285',
-           '1406-076',
-           '1458+718',
-           '1642+690',
-           '1655+077',
-           '1803+784',
-           '1830+285',
-           '1845+797',
-           '2201+315',
-           '2320+506']
+sources = ['0952+179']
+# sources = ['0148+274',
+#            '0342+147',
+#            '0425+048',
+#            '0507+179',
+#            '0610+260',
+#            '0839+187',
+#            '0952+179',
+#            '1004+141',
+#            '1011+250',
+#            '1049+215',
+#            '1219+285',
+#            '1406-076',
+#            '1458+718',
+#            '1642+690',
+#            '1655+077',
+#            '1803+784',
+#            '1830+285',
+#            '1845+797',
+#            '2201+315',
+#            '2320+506']
 
 stokes = ['i', 'q', 'u']
 
@@ -81,6 +85,7 @@ def im_fits_path(source, band, epoch, stoke, base_path=None):
            stoke.upper() + '/'
 
 
+# FIXME: results in changing cwd to ``base_path``
 def create_dirtree(sources, epochs, bands, stokes, base_path=None):
     """
     Function that creates directory tree for observations.
@@ -124,6 +129,8 @@ def create_dirtree(sources, epochs, bands, stokes, base_path=None):
                 os.chdir(os.path.join(os.path.pardir, os.curdir))
             os.chdir(os.path.join(os.path.pardir, os.curdir))
         os.chdir(os.path.join(os.path.pardir, os.curdir))
+
+    os.chdir(curdir)
 
 
 def put_uv_files_to_dirs(sources, epochs, bands, base_path=None, ext="PINAL",
@@ -269,8 +276,7 @@ def generate_boot_data(sources, epochs, bands, stokes, n_boot=10,
 
 
 def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
-                    path_to_script=None, beam=None, mapsize_clean=None,
-                    mapsize_restore=None):
+                    path_to_script=None, pixels_per_beam=None, imsize=None):
     """
     :param sources:
         Iterable of sources names.
@@ -313,15 +319,55 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
         print " for source ", source
         for epoch in epochs:
             print " for epoch ", epoch
-            # Bands must be sorted in descending order - use beam of first band
-            # FIXME: but pixsize of highest frequency map
-            beam_restore = None
-            mapsize_clean = None
+            stoke = 'i'
+            # Find ``mapsize`` using highest frequency data
+            band = bands[-1]
+
+            map_path = im_fits_path(source, band, epoch, stoke,
+                                    base_path=base_path)
+            try:
+                map_info = get_fits_image_info(map_path + 'cc.fits')
+            except IOError:
+                continue
+            mapsize_clean = (map_info[0][0], map_info[-3][0] / mas_to_rad)
+            # Find ``beam_restore`` using lowest frequency data
+            band = bands[0]
+            map_path = im_fits_path(source, band, epoch, stoke,
+                                    base_path=base_path)
+            map_info = get_fits_image_info(map_path + 'cc.fits')
+            beam_restore = (map_info[3][0] / mas_to_rad,
+                            map_info[3][1] / mas_to_rad,
+                            map_info[3][2] / degree_to_rad)
+            # If we told to use some pixel size (in units of low frequency beam)
+            if pixels_per_beam is not None:
+                pixsize = beam_restore[0] / pixels_per_beam
+            else:
+                pixsize = mapsize_clean[1]
+                # If we don't told to use some image size we construct it to keep
+                # physical image size as in low frequency map
+                if imsize is None:
+                    # imsize = imsize_low * pix_size_low / new_pixsize
+                    imsize = map_info[0][0] * (map_info[-3][0] /
+                                               mas_to_rad) / pixsize
+                    powers = [imsize // (2 ** i) for i in range(15)]
+                    indx = powers.index(0)
+                    imsize = 2 ** indx
+
+            # Chosen image & pixel sizes
+            mapsize_clean = (imsize, pixsize)
+            print "Common mapsize: {}".format(mapsize_clean)
+
             for band in bands:
                 print " for band ", band
                 uv_path = uv_fits_path(source, band.upper(), epoch,
                                        base_path=base_path)
                 n = len(glob.glob(uv_path + '*boot*_*.fits'))
+                if n == 0:
+                    print "skippin source {}, epoch {}, band {}".format(source,
+                                                                        epoch,
+                                                                        band)
+                    continue
+                # Cleaning bootstrapped data & restore with low resolution
                 for i in range(n):
                     uv_fname = uv_path + 'boot_' + str(i + 1) + '.fits'
                     if not os.path.isfile(uv_fname):
@@ -333,14 +379,6 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                         print "  working with stokes parameter ", stoke
                         map_path = im_fits_path(source, band, epoch, stoke,
                                                 base_path=base_path)
-                        # This should use stokes ``I`` beam and mapsize for
-                        # lowest frequency band
-                        if beam_restore is None:
-                            map_info = get_fits_image_info(map_path +
-                                                           'cc.fits')
-                            beam_restore = map_info[3]
-                            mapsize_clean = (map_info[0][0],
-                                             map_info[-3][0] / mas_to_rad)
                         clean_difmap(fname='boot_' + str(i + 1) + '.fits',
                                      outfname='cc_' + str(i + 1) + '.fits',
                                      stokes=stoke, mapsize_clean=mapsize_clean,
@@ -349,7 +387,7 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                                      mapsize_restore=None,
                                      beam_restore=beam_restore,
                                      outpath=map_path)
-                # Cleaning original data with low_freq resolution
+                # Cleaning original data & restore with low_freq resolution
                 for stoke in stokes:
                     print "  working with stokes parameter ", stoke
                     map_path = im_fits_path(source, band, epoch, stoke,
@@ -365,92 +403,42 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
     os.chdir(curdir)
 
 
-def create_maps_from_boot_images(sources, epochs, bands, stokes,
-                                 base_path=None):
+def create_images_from_boot_images(source, epoch, bands, stokes, base_path=None):
     """
-    :param sources:
-        Iterable of sources names.
-    :param epochs:
-        Iterable of sources epochs.
+    :param source:
+        Source name.
+    :param epoch:
+        Sources epoch.
     :param bands:
         Iterable of bands.
-    :param stokes:
-        Iterable of stokes parameters.
     :param base_path: (optional)
         Path to route of directory tree. If ``None`` then use current directory.
         (default: ``None``)
     """
-    if base_path is None:
-        base_path = os.getcwd()
-    elif not base_path.endswith("/"):
-        base_path += "/"
 
     curdir = os.getcwd()
     print "Stacking bootstrapped images..."
-    for source in sources:
-        print " for source ", source
-        for epoch in epochs:
-            print " for epoch ", epoch
-            stokes_dicts = list()
-            for band in bands:
-                print " for band ", band
-                uv_path = uv_fits_path(source, band.upper(), epoch,
-                                       base_path=base_path)
-                n = len(glob.glob(uv_path + '*boot*_*.fits'))
-                for i in range(n):
-                    uv_fname = uv_path + 'boot_' + str(i + 1) + '.fits'
-                    if not os.path.isfile(uv_fname):
-                        print "...skipping absent file ", uv_fname
-                        continue
-                    # Sort stokes with ``I`` first and use it's beam
-                    stokes_dict = dict()
-                    for stoke in stokes:
-                        print "  fetching stokes parameter map ", stoke
-                        map_path = im_fits_path(source, band, epoch, stoke,
-                                                base_path=base_path)
-                        map_fname='cc_' + str(i + 1) + '.fits',
-                        stokes_dict.update({stoke: map_path + map_fname})
-                    stokes_dicts.append(stokes_dict)
+    images = Images()
+    for band in bands:
+        print " for band ", band
+        for stoke in stokes:
+            map_path = im_fits_path(source, band, epoch, stoke,
+                                    base_path=base_path)
+            images.add_from_fits(wildcard=os.path.join(map_path, 'cc_*.fits'))
 
-
-# FIXME: It isn't ``Unix way``. I should get parameters of map using one
-# function and use it for cleaning in another function.
-def to_other_freq(map_fname, uv_fname, outfname, shift=None, stokes='I'):
-    """
-    Function that cleans some uv-data fits-file on map with``mapsize``
-    parameter of some user-specified map fits-file and restore CCs with the beam
-    of that user-specified map fits-file.
-    :param map_fname:
-        Fits file with map which parameters will be used for cleaning.
-    :param uv_fname:
-    :param outfname:
-    :param stokes:
-    :return:
-    """
-    map_info = get_fits_image_info(map_fname)
-    # Create in difmap clean map (fits-file) with cleaned ``uv_fname1`` restored
-    # with beam of map2 and parameters of map2
-    beam_restore = map_info[3]
-    mapsize_clean = (map_info[0][0],
-                     map_info[-3][0] / mas_to_rad)
-    clean_difmap(uv_fname, outfname, stokes, mapsize_clean, path=None,
-                 path_to_script=None, mapsize_restore=None, shift=shift,
-                 beam_restore=beam_restore, outpath=None)
-
-
-def calc_shift():
-    pass
+    return images
 
 
 if __name__ == '__main__':
 
+    n_boot = 100
     # Directories that contain data for loading in project
     uv_data_dir = '/home/ilya/Dropbox/Zhenya/to_ilya/uv/'
     # uv_data_dir = '/home/ilya/code/vlbi_errors/data/zhenya/uv/'
     im_data_dir = '/home/ilya/Dropbox/Zhenya/to_ilya/clean_images/'
     # im_data_dir = '/home/ilya/code/vlbi_errors/data/zhenya/clean_images/'
     # Path to project's root directory
-    base_path = '/home/ilya/code/vlbi_errors/vlbi_errors/test/'
+    base_path = '/home/ilya/sandbox/zhenya/'
     path_to_script = '/home/ilya/Dropbox/Zhenya/to_ilya/clean/final_clean_nw'
 
     create_dirtree(sources, epochs, bands, stokes, base_path=base_path)
@@ -458,7 +446,73 @@ if __name__ == '__main__':
                          ext="PINAL", uv_files_path=uv_data_dir)
     put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=base_path,
                          ext="fits", im_files_path=im_data_dir)
-    generate_boot_data(sources, epochs, bands, stokes, n_boot=100,
+    generate_boot_data(sources, epochs, bands, stokes, n_boot=n_boot,
                        base_path=base_path)
     clean_boot_data(sources, epochs, bands, stokes, base_path=base_path,
                     path_to_script=path_to_script)
+
+    # Workflow for one source
+    source = '0952+179'
+    epoch = '2007_04_30'
+
+    # Find core shift between each pair of frequencies
+    low_band = 'c1'
+    high_band = 'x2'
+    im_fits_path_low = im_fits_path(source, low_band, epoch, stoke='i',
+                                    base_path=base_path)
+    im_fits_path_high = im_fits_path(source, high_band, epoch, stoke='i',
+                                     base_path=base_path)
+    image_low = create_image_from_fits_file(os.path.join(im_fits_path_low,
+                                                         'cc_orig.fits'))
+    image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
+                                                          'cc_orig.fits'))
+    region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, 40, None)
+    shift_orig = image_low.cross_correlate(image_high, region1=region,
+                                           region2=region)
+    # Find bootstrapped distribution of shifts
+    shifts_boot = list()
+    for j in range(1, n_boot+1):
+        image_low = create_image_from_fits_file(os.path.join(im_fits_path_low,
+                                                             'cc_{}.fits'.format(j)))
+        image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
+                                                              'cc_{}.fits'.format(j)))
+        region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, 40, None)
+        shift = image_low.cross_correlate(image_high, region1=region,
+                                          region2=region)
+        shifts_boot.append(shift)
+
+
+
+    images = create_images_from_boot_images(source, epoch, bands, stokes,
+                                            base_path=base_path)
+    # For each frequency create mask based on PPOL distribution
+    ppol_error_images_dict = dict()
+    ppol_images_dict = dict()
+    ppol_masks_dict = dict()
+    for band in bands:
+        images_ = create_images_from_boot_images(source, epoch, [band], stokes,
+                                                 base_path=base_path)
+        ppol_images = Images()
+        ppol_images.add_images(images_.create_pol_images())
+        ppol_error_image = ppol_images.create_error_image(cred_mass=0.95)
+        ppol_error_images_dict.update({band: ppol_error_image})
+        images_ = Images()
+        for stoke in stokes:
+            map_path = im_fits_path(source, band, epoch, stoke,
+                                    base_path=base_path)
+            images_.add_from_fits(wildcard=os.path.join(map_path, 'cc.fits'))
+        ppol_image = images.create_pol_images()[0]
+        ppol_images_dict.update({band: ppol_image})
+        mask = ppol_image.image < ppol_error_image.image
+        print mask
+        ppol_masks_dict.update({band: mask})
+
+    # Create overall mask for PPOL flux
+    masks = [np.array(mask, dtype=int) for mask in ppol_masks_dict.values()]
+    ppol_mask = np.zeros(masks[0].shape, dtype=int)
+    for mask in masks:
+        ppol_mask += mask
+    ppol_mask[ppol_mask != 0] = 1
+
+    # Create ROTM images with calculated mask
+    rotm_images_list = images.create_rotm_images(mask=ppol_mask)

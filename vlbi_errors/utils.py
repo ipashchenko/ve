@@ -647,6 +647,21 @@ def create_grid(imsize):
     return (x, y,)
 
 
+def gen_rand_vecs(dims, number):
+    """
+    Function that generates random unit vectors.
+    :param dims:
+        Number of dimensions.
+    :param number:
+        Number of vectors to generate.
+    :return:
+        2D numpy array with shape (number, dims,)
+    """
+    vecs = np.random.normal(size=(number,dims))
+    mags = np.linalg.norm(vecs, axis=-1)
+    return vecs / mags[..., np.newaxis]
+
+
 def find_close_regions(data, std_decrease_factor=1.1):
     """
     Function that finds entries of array with close elements (aka scans for time
@@ -799,6 +814,50 @@ def hdi_of_mcmc(sample_vec, cred_mass=0.95):
     hdi_max = sorted_pts[min_idx + ci_idx_inc]
 
     return hdi_min, hdi_max
+
+
+def hdi_of_arrays(arrays, cred_mass=0.68):
+    """
+    Function that calculates a width of highest density interval for each pixel
+    using user supplied arrays.
+    :param arrays:
+        Iterable of arrays.
+    :param cred_mass: (optional)
+        Credibility mass. (default: ``0.68``)
+    :return:
+        Numpy 2D array with widths of hdi in each pixel.
+    """
+    arrays = [np.atleast_2d(array) for array in arrays]
+    # Check that images have the same shape
+    assert len(set([array.shape for array in arrays])) == 1
+
+    cube = np.dstack(tuple(array for array in arrays))
+    hdis = np.zeros(np.shape(cube[:, :, 0]))
+    for (x, y), value in np.ndenumerate(hdis):
+        hdi = hdi_of_mcmc(cube[x, y, :], cred_mass=cred_mass)
+        hdis[x, y] = hdi[1] - hdi[0]
+    return hdis
+
+
+def unwrap_phases(phases):
+    """
+    Function that bring phases that are subject to +/-pi*N closer.
+     """
+    # Bring first value to [-pi/2, pi/2] interval
+    values = np.array(phases)
+    if values[0] > np.pi / 2:
+        values[0] -= np.pi
+    elif values[0] < -np.pi / 2:
+        values[0] += np.pi
+    for i, value in enumerate(values[1:]):
+        diff = value - values[i]
+        # 0 => 0, 1 => -pi, 2 => +pi
+        diff_array = np.array([abs(diff), abs(diff - np.pi),
+                               abs(diff + np.pi)])
+        add_dict = {0: 0, 1: -np.pi, 2: np.pi}
+        values[i+1] += add_dict[np.argmin(diff_array)]
+
+    return values
 
 
 def getFromDict(dataDict, mapList):

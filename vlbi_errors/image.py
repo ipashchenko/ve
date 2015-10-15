@@ -22,7 +22,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          rel_levels=None, min_abs_level=None, min_rel_level=None, k=2., vinc=2.,
          show_beam=False, beam_corner='ll', beam=None, contours_mask=None,
          colors_mask=None, vectors_mask=None, plot_title=None, color_clim=None,
-         outfile=None, outdir=None, ext='png', close=False):
+         outfile=None, outdir=None, ext='png', close=False, slice_points=None):
     """
     Plot image(s).
 
@@ -129,11 +129,20 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     x_ = x[x_slice] * factor_x
     y_ = y[y_slice] * factor_y
     # With this coordinates are plotted as in Zhenya's map
-    x_ *= -1.
-    y_ *= -1.
+    # x_ *= -1.
+    # y_ *= -1.
     # Coordinates for plotting
-    x = np.linspace(x_[0, 0], x_[0, -1], imsize_x)
-    y = np.linspace(y_[0, 0], y_[-1, 0], imsize_y)
+    # x = np.linspace(x_[0, 0], x_[0, -1], imsize_x)
+    # y = np.linspace(y_[0, 0], y_[-1, 0], imsize_y)
+    x = np.linspace(x_[0], x_[-1], imsize_x)
+    y = np.linspace(y_[0], y_[-1], imsize_y)
+    # This results in
+    # plot(contours=image.image, colors=rotm_image.image, min_rel_level=0.5,
+    # x=image.x[0], y=image.y[:, 0])
+    # - it comes with right coordinates (zero at center)
+    # or
+    # plot(contours=image.image, colors=rotm_image.image, min_rel_level=0.5)
+    # it comes with zero at corner
 
     # Optionally mask arrays
     if contours is not None and contours_mask is not None:
@@ -195,6 +204,10 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                         v[::vinc, ::vinc], angles='uv',
                         units='xy', headwidth=0., headlength=0., scale=0.005,
                         width=0.05, headaxislength=0.)
+
+    if slice_points is not None:
+        ax.plot([slice_points[0][0], slice_points[1][0]],
+                [slice_points[0][1], slice_points[1][1]])
 
     if plot_title:
         title = ax.set_title(plot_title, fontsize='large')
@@ -272,13 +285,13 @@ class BasicImage(object):
         """
         Compares current instance of ``Image`` class with other instance.
         """
-        return (self.imsize == other.imsize and self.pixsize == other.pixsize)
+        return self.imsize == other.imsize and self.pixsize == other.pixsize
 
     def __ne__(self, image):
         """
         Compares current instance of ``Image`` class with other instance.
         """
-        return (self.imsize != image.imsize or self.pixsize != image.pixsize)
+        return self.imsize != image.imsize or self.pixsize != image.pixsize
 
     def __add__(self, image):
         """
@@ -320,6 +333,33 @@ class BasicImage(object):
             self.image /= other
         return self
 
+    # FIXME: To use it in ``CleanImage`` i should make ``image`` property return
+    # CC convolved with beam + residuals.
+    def rms(self, region=None, do_plot=False, **hist_kwargs):
+        """
+        Method that calculate rms for image region.
+
+        :param region: (optional)
+            Region to include in rms calculation. Or (blc[0], blc[1], trc[0],
+            trc[1],) or (center[0], center[1], r, None,). If ``None`` then use
+            all image in rms calculation. Default ``None``.
+        :param do_plot: (optional)
+            Plot histogramm of image values? (default: ``False``)
+        :param hist_kwargs: (optional)
+            Any kewword arguments that get passed to ``plt.hist``.
+        :return:
+            rms value.
+        """
+        mask = np.zeros(self.image.shape, dtype=bool)
+        if region is not None:
+            mask = create_mask(self.image.shape, region)
+        masked_image = np.ma.array(self.image, mask=~mask)
+
+        if do_plot:
+            plt.hist(masked_image.compressed(), **hist_kwargs)
+
+        return np.ma.std(masked_image.ravel())
+
     # Convolve with any object that has ``image`` attribute
     def convolve(self, image_like):
         """
@@ -346,8 +386,7 @@ class BasicImage(object):
 
     # TODO: Should i compare images before?
     # TODO: Implement several regions to include for each image
-    # TODO: One should somehow choose what to cross-corelate
-    # for ``CleanImages``
+    # TODO: Implement masking clean components with ``mask_cc`` parameter
     def cross_correlate(self, image, region1=None, region2=None,
                         upsample_factor=100, mask_cc=False):
         """
@@ -368,7 +407,7 @@ class BasicImage(object):
             ``1 / upsample_factor`` of a pixel. For example
             ``upsample_factor == 20`` means the images will be registered
             within 1/20th of a pixel. If ``1`` then no upsampling.
-            (default: ``1``)
+            (default: ``100``)
         :param mask_cc: (optional)
             If some of images is instance of ``CleanImage`` class - should we
             mask clean components instead of image array? (default: ``False``)
@@ -376,17 +415,17 @@ class BasicImage(object):
         :return:
             Array of shifts (subpixeled) in each direction.
         """
+        image1 = self.image.copy()
         if region1 is not None:
             mask1 = create_mask(self.image.shape, region1)
             if mask_cc and isinstance(self, CleanImage):
                 raise NotImplementedError()
-            image1 = self.image.copy()
             image1[mask1] = 0.
+        image2 = image.image.copy()
         if region2 is not None:
             mask2 = create_mask(image.image.shape, region2)
             if mask_cc and isinstance(image, CleanImage):
                 raise NotImplementedError()
-            image2 = image.image.copy()
             image2[mask2] = 0.
         # Cross-correlate images
         shift, error, diffphase = register_translation(image1, image2,

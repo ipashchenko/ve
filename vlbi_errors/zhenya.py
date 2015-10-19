@@ -466,22 +466,36 @@ if __name__ == '__main__':
                                                          'cc_orig.fits'))
     image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
                                                           'cc_orig.fits'))
-    region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, 40, None)
-    shift_orig = image_low.cross_correlate(image_high, region1=region,
-                                           region2=region)
+    shifts_orig = list()
+    for r in range(0, 100, 5):
+        region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, r, None)
+        shift_orig = image_low.cross_correlate(image_high, region1=region,
+                                               region2=region)
+        shifts_orig.append(shift_orig)
+    shifts_orig = np.vstack(shifts_orig)
+    shifts_orig = shifts_orig[:, 0] + 1j * shifts_orig[:, 1]
+
     # Find bootstrapped distribution of shifts
-    shifts_boot = list()
+    shifts_dict_boot = dict()
     for j in range(1, n_boot+1):
+        print "Finding shifts for bootstrap images #{}".format(j)
         image_low = create_image_from_fits_file(os.path.join(im_fits_path_low,
                                                              'cc_{}.fits'.format(j)))
         image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
                                                               'cc_{}.fits'.format(j)))
-        region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, 40, None)
-        shift = image_low.cross_correlate(image_high, region1=region,
-                                          region2=region)
-        shifts_boot.append(shift)
+        shift_boot = list()
+        for r in range(0, 100, 5):
+            region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, r, None)
+            shift = image_low.cross_correlate(image_high, region1=region,
+                                              region2=region)
+            shift_boot.append(shift)
+        shift_boot = np.vstack(shift_boot)
+        shift_boot = shift_boot[:, 0] + 1j * shift_boot[:, 1]
 
+        shifts_dict_boot.update({j: shift_boot})
 
+    from cmath import polar
+    polar = np.vectorize(polar)
 
     images = create_images_from_boot_images(source, epoch, bands, stokes,
                                             base_path=base_path)

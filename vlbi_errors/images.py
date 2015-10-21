@@ -399,9 +399,11 @@ class Images(object):
 
         # Calculate Rotation Measure array and write it to ``BasicImage``
         # isntance
-        rotm_array, s_rotm_array = rotm_map(freqs, pang_arrays, s_pang_arrays,
-                                            mask=mask, outfile=outfile,
-                                            outdir=outdir, ext=ext)
+        rotm_array, s_rotm_array, chisq_array = rotm_map(freqs, pang_arrays,
+                                                         s_pang_arrays,
+                                                         mask=mask,
+                                                         outfile=outfile,
+                                                         outdir=outdir, ext=ext)
         rotm_image = Image(imsize=img.imsize, pixref=img.pixref,
                            pixrefval=img.pixrefval, pixsize=img.pixsize,
                            freq=tuple(freqs), stokes='ROTM')

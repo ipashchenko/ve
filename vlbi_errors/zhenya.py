@@ -2,6 +2,7 @@ import glob
 import os
 import shutil
 import numpy as np
+import matplotlib.pyplot as plt
 from from_fits import (create_uvdata_from_fits_file,
                        create_ccmodel_from_fits_file,
                        create_clean_image_from_fits_file,
@@ -11,6 +12,7 @@ from bootstrap import CleanBootstrap
 from spydiff import clean_difmap
 from utils import mas_to_rad, degree_to_rad
 from images import Images
+from image import plot
 
 # TODO: We need to get RM map and it's uncertainty for each source and epoch.
 # Input: calibrated visibilities, CLEAN models in "naitive" resolution.
@@ -497,28 +499,41 @@ if __name__ == '__main__':
     from cmath import polar
     polar = np.vectorize(polar)
 
-    images = create_images_from_boot_images(source, epoch, bands, stokes,
-                                            base_path=base_path)
+    # Plot all shifts
+    for i, shifts in shifts_dict_boot.items():
+        plt.plot(range(0, 100, 5), polar(shifts)[0], '.k')
+    plt.plot(range(0, 100, 5), polar(shifts_orig)[0])
+    plt.xlabel("R of mask, [pix]")
+    plt.ylabel("shift value, [pix]")
+    plt.savefig("{}_core_shift.png".format(source), bbox_inches='tight',
+                dpi=200)
+
     # For each frequency create mask based on PPOL distribution
     ppol_error_images_dict = dict()
+    pang_error_images_dict = dict()
     ppol_images_dict = dict()
+    pang_images_dict = dict()
     ppol_masks_dict = dict()
     for band in bands:
         images_ = create_images_from_boot_images(source, epoch, [band], stokes,
                                                  base_path=base_path)
         ppol_images = Images()
+        pang_images = Images()
         ppol_images.add_images(images_.create_pol_images())
+        pang_images.add_images(images_.create_pang_images())
         ppol_error_image = ppol_images.create_error_image(cred_mass=0.95)
+        pang_error_image = pang_images.create_error_image(cred_mass=0.68)
         ppol_error_images_dict.update({band: ppol_error_image})
+        pang_error_images_dict.update({band: pang_error_image})
         images_ = Images()
         for stoke in stokes:
             map_path = im_fits_path(source, band, epoch, stoke,
                                     base_path=base_path)
-            images_.add_from_fits(wildcard=os.path.join(map_path, 'cc.fits'))
-        ppol_image = images.create_pol_images()[0]
+            images_.add_from_fits(wildcard=os.path.join(map_path,
+                                                        'cc_orig.fits'))
+        ppol_image = images_.create_pol_images()[0]
         ppol_images_dict.update({band: ppol_image})
         mask = ppol_image.image < ppol_error_image.image
-        print mask
         ppol_masks_dict.update({band: mask})
 
     # Create overall mask for PPOL flux
@@ -527,6 +542,47 @@ if __name__ == '__main__':
     for mask in masks:
         ppol_mask += mask
     ppol_mask[ppol_mask != 0] = 1
+    # Save mask to disk
+    np.savetxt(os.path.join(base_path, "ppol_mask.txt"), ppol_mask)
+    ppol_mask = np.loadtxt(os.path.join(base_path, "ppol_mask.txt"))
 
-    # Create ROTM images with calculated mask
-    rotm_images_list = images.create_rotm_images(mask=ppol_mask)
+    # Create bootstrap ROTM images with calculated mask
+    rotm_images_list = list()
+    for i in range(1, n_boot + 1):
+        images = Images()
+        for band in bands:
+            for stoke in stokes:
+                map_path = im_fits_path(source, band, epoch, stoke,
+                                        base_path=base_path)
+                fname = os.path.join(map_path, "cc_{}.fits".format(i))
+                images.add_from_fits(fnames=[fname])
+        rotm_image, s_rotm_image = images.create_rotm_image(mask=ppol_mask)
+        rotm_images_list.append(rotm_image)
+
+    # Stack ROTM images
+    rotm_images_boot = Images()
+    rotm_images_boot.add_images(rotm_images_list)
+    fig = plt.figure()
+    for image in rotm_images_boot.images:
+        plt.plot(np.arange(500, 550, 1), image.slice((550, 500), (550, 550)),
+                 '.k')
+
+    # Plot I, ROTM image
+    i_path = im_fits_path(source, bands[-1], epoch, 'i', base_path=base_path)
+    i_image = create_clean_image_from_fits_file(os.path.join(i_path,
+                                                             'cc_orig.fits'))
+    # Create original ROTM image
+    rotm_images = Images()
+    for band in bands:
+        for stoke in stokes:
+            map_path = im_fits_path(source, band, epoch, stoke,
+                                    base_path=base_path)
+            fname = os.path.join(map_path, "cc_orig.fits")
+            images.add_from_fits(fnames=[fname])
+    s_pang_arrays = [pang_error_images_dict[band].image for band in bands]
+    rotm_image, s_rotm_image = images.create_rotm_image(s_pang_arrays=s_pang_arrays,
+                                                        mask=ppol_mask,
+                                                        outfile="{}_ROTM".format(source),
+                                                        outdir=base_path)
+    plot(contours=i_image.image, colors=rotm_image.image[::-1, ::-1],
+         min_rel_level=0.5, x=image.x[0], y=image.y[:, 0])

@@ -405,7 +405,8 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
     os.chdir(curdir)
 
 
-def create_images_from_boot_images(source, epoch, bands, stokes, base_path=None):
+def create_images_from_boot_images(source, epoch, bands, stokes,
+                                   base_path=None):
     """
     :param source:
         Source name.
@@ -581,8 +582,6 @@ if __name__ == '__main__':
             images.add_from_fits(fnames=[fname])
     s_pang_arrays = [pang_error_images_dict[band].image for band in bands]
     rotm_image, s_rotm_image = images.create_rotm_image(s_pang_arrays=s_pang_arrays,
-                                                        mask=ppol_mask,
-                                                        outfile="{}_ROTM".format(source),
-                                                        outdir=base_path)
+                                                        mask=ppol_mask)
     plot(contours=i_image.image, colors=rotm_image.image[::-1, ::-1],
          min_rel_level=0.5, x=image.x[0], y=image.y[:, 0])

@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from components import CGComponent, EGComponent
+from components import CGComponent, EGComponent, DeltaComponent
 from from_fits import (create_uvdata_from_fits_file,
                        create_image_from_fits_file,
                        create_clean_image_from_fits_file)

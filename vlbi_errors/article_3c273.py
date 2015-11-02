@@ -417,19 +417,35 @@ if __name__ == '__main__':
     put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=base_path,
                          ext="fits", im_files_path=im_data_dir)
 
-    # Now clean Q&U stokes with naitive resolution to use this models for
+    # Now clean Q&U stokes with native resolution to use this models for
     # bootstrap
     for source in sources:
+        print "Cleaning source {}".format(source)
         for epoch in epochs:
+            print "epoch {}".format(epoch)
             for band in bands:
+                print "band {}".format(band)
+                uv_path = uv_fits_path(source, band.upper(), epoch,
+                                       base_path=base_path)
                 # Find mapsize from I
+                map_path = im_fits_path(source, band, epoch, stoke='i',
+                                        base_path=base_path)
+                map_info = get_fits_image_info(map_path + 'cc.fits')
+                mapsize_clean = (map_info[0][0], map_info[-3][0] / mas_to_rad)
+                print "mapsize {}".format(mapsize_clean)
                 for stoke in ('q', 'u'):
-                    clean_difmap('sc_uv.fits', 'cc.fits', stoke,)
+                    print "Stokes {}".format(stokes)
+                    outpath = im_fits_path(source, band, epoch, stoke,
+                                           base_path=base_path)
+
+                    clean_difmap('sc_uv.fits', 'cc.fits', stoke, mapsize_clean,
+                                 path=uv_path, path_to_script=path_to_script,
+                                 outpath=outpath, show_difmap_output=False)
 
     generate_boot_data(sources, epochs, bands, stokes, n_boot=n_boot,
                        base_path=base_path)
-    #clean_boot_data(sources, epochs, bands, stokes, base_path=base_path,
-    #                path_to_script=path_to_script)
+    clean_boot_data(sources, epochs, bands, stokes, base_path=base_path,
+                    path_to_script=path_to_script)
 
     ## Workflow for one source
     #bands = ['x', 'y', 'j', 'u']

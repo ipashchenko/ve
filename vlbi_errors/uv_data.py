@@ -11,11 +11,37 @@ except ImportError:
 from utils import baselines_2_ants, get_uv_correlations
 from utils import index_of
 from utils import get_triangles
+from data_io import Groups, IDI
 
 vec_complex = np.vectorize(np.complex)
 
 # TODO: add possibility to input/output in different FITS-formats (and other
 # formats too).
+# FIXME: Should i keep ``HDU`` in instances of ``UVData``?
+# FIXME: How to deepcopy instances of ``UVData``?
+
+
+def create_uvdata_from_fits_file(fname, structure='UV'):
+    """
+    Helper function for loading FITS-files.
+
+        :param fname:
+            Path to FITS-file.
+
+        :param structure (optional):
+            Structure of FITS-file. ``UV`` or ``IDI``. (default: ``UV``)
+
+        :return:
+            Instance of ``UVData`` class for the specified FITS-file.
+    """
+
+    assert(structure in ['UV', 'IDI'])
+
+    structures = {'UV': Groups(), 'IDI': IDI()}
+    uvdata = UVData(io=structures[structure])
+    uvdata.load(fname)
+
+    return uvdata
 
 
 class UVData(object):
@@ -38,6 +64,9 @@ class UVData(object):
         self._io = io
         self._data = None
         self._error = None
+
+    def __deepcopy__(self, memo):
+        return create_uvdata_from_fits_file(self._io.hdulist.filename())
 
     def multiply(self, x):
         """

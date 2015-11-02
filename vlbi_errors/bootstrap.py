@@ -17,13 +17,13 @@ class Bootstrap(object):
         bootstrapping.. There should be only one (or zero) model for each stokes
         parameter. If there are two, say I-stokes models, then sum them firstly
         using ``Model.__add__``.
-    :param data:
-        Path to FITS-file with uv-data (self-calibrated or not).
+    :param uvdata:
+        Instance of ``UVData`` class.
     """
-    def __init__(self, models, data):
+    def __init__(self, models, uvdata):
         self.models = models
-        self.data = data
-        self.model_data = copy.deepcopy(self.data)
+        self.data = uvdata
+        self.model_data = copy.deepcopy(uvdata)
         self.model_data.substitute(models)
         self.residuals = self.get_residuals()
 

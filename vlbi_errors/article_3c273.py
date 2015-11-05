@@ -301,7 +301,9 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                 map_info = get_fits_image_info(map_path + 'cc.fits')
             except IOError:
                 continue
-            mapsize_clean = (map_info[0][0], map_info[-3][0] / mas_to_rad)
+            # FIXME: dirty hack - check images!
+            mapsize_clean = (1024, map_info[-3][0] / mas_to_rad)
+            # mapsize_clean = (map_info[0][0] / 2, map_info[-3][0] / mas_to_rad)
             # Find ``beam_restore`` using lowest frequency data
             band = bands[0]
             map_path = im_fits_path(source, band, epoch, stoke,
@@ -311,23 +313,24 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                             map_info[3][1] / mas_to_rad,
                             map_info[3][2] / degree_to_rad)
             # If we told to use some pixel size (in units of low frequency beam)
-            if pixels_per_beam is not None:
-                pixsize = beam_restore[0] / pixels_per_beam
-            else:
-                pixsize = mapsize_clean[1]
-                # If we don't told to use some image size we construct it to keep
-                # physical image size as in low frequency map
-                if imsize is None:
-                    # imsize = imsize_low * pix_size_low / new_pixsize
-                    imsize = map_info[0][0] * (map_info[-3][0] /
-                                               mas_to_rad) / pixsize
-                    powers = [imsize // (2 ** i) for i in range(15)]
-                    indx = powers.index(0)
-                    imsize = 2 ** indx
+            # if pixels_per_beam is not None:
+            #     pixsize = beam_restore[0] / pixels_per_beam
+            # else:
+            #     pixsize = mapsize_clean[1]
+            #     # If we don't told to use some image size we construct it to keep
+            #     # physical image size as in low frequency map
+            #     if imsize is None:
+            #         # imsize = imsize_low * pix_size_low / new_pixsize
+            #         imsize = map_info[0][0] * (map_info[-3][0] /
+            #                                    mas_to_rad) / pixsize
+            #         powers = [imsize // (2 ** i) for i in range(15)]
+            #         indx = powers.index(0)
+            #         imsize = 2 ** indx
 
             # Chosen image & pixel sizes
-            mapsize_clean = (imsize, pixsize)
+            # mapsize_clean = (imsize, pixsize)
             print "Common mapsize: {}".format(mapsize_clean)
+            print "Common beam: {}".format(beam_restore)
 
             for band in bands:
                 print " for band ", band
@@ -358,7 +361,8 @@ def clean_boot_data(sources, epochs, bands, stokes, base_path=None,
                                      path_to_script=path_to_script,
                                      mapsize_restore=None,
                                      beam_restore=beam_restore,
-                                     outpath=map_path)
+                                     outpath=map_path,
+                                     show_difmap_output=True)
                 # Cleaning original data & restore with low_freq resolution
                 for stoke in stokes:
                     print "  working with stokes parameter ", stoke
@@ -403,7 +407,7 @@ def create_images_from_boot_images(source, epoch, bands, stokes,
 
 if __name__ == '__main__':
 
-    n_boot = 100
+    n_boot = 1
     # Directories that contain data for loading in project
     uv_data_dir = '/home/ilya/Dropbox/article/data/3c273'
     im_data_dir = '/home/ilya/Dropbox/article/data/3c273'
@@ -434,7 +438,7 @@ if __name__ == '__main__':
                 mapsize_clean = (map_info[0][0], map_info[-3][0] / mas_to_rad)
                 print "mapsize {}".format(mapsize_clean)
                 for stoke in ('q', 'u'):
-                    print "Stokes {}".format(stokes)
+                    print "Stokes {}".format(stoke)
                     outpath = im_fits_path(source, band, epoch, stoke,
                                            base_path=base_path)
 
@@ -447,30 +451,31 @@ if __name__ == '__main__':
     clean_boot_data(sources, epochs, bands, stokes, base_path=base_path,
                     path_to_script=path_to_script)
 
-    ## Workflow for one source
-    #bands = ['x', 'y', 'j', 'u']
-    #epoch = '2006_06_15'
-    #source = '1226+023'
+    # Workflow for one source
+    # 8.1, 8.4, 12.1, 15
+    bands = ['x', 'y', 'j', 'u']
+    epoch = '2006_06_15'
+    source = '1226+023'
 
-    ## Find core shift between each pair of frequencies
-    #low_band = 'c1'
-    #high_band = 'x2'
-    #im_fits_path_low = im_fits_path(source, low_band, epoch, stoke='i',
-    #                                base_path=base_path)
-    #im_fits_path_high = im_fits_path(source, high_band, epoch, stoke='i',
-    #                                 base_path=base_path)
-    #image_low = create_image_from_fits_file(os.path.join(im_fits_path_low,
-    #                                                     'cc_orig.fits'))
-    #image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
-    #                                                      'cc_orig.fits'))
-    #shifts_orig = list()
-    #for r in range(0, 100, 5):
-    #    region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, r, None)
-    #    shift_orig = image_low.cross_correlate(image_high, region1=region,
-    #                                           region2=region)
-    #    shifts_orig.append(shift_orig)
-    #shifts_orig = np.vstack(shifts_orig)
-    #shifts_orig = shifts_orig[:, 0] + 1j * shifts_orig[:, 1]
+    # Find core shift between each pair of frequencies
+    low_band = 'x'
+    high_band = 'j'
+    im_fits_path_low = im_fits_path(source, low_band, epoch, stoke='i',
+                                    base_path=base_path)
+    im_fits_path_high = im_fits_path(source, high_band, epoch, stoke='i',
+                                     base_path=base_path)
+    image_low = create_image_from_fits_file(os.path.join(im_fits_path_low,
+                                                         'cc_orig.fits'))
+    image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
+                                                          'cc_orig.fits'))
+    shifts_orig = list()
+    for r in range(0, 100, 5):
+        region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, r, None)
+        shift_orig = image_low.cross_correlate(image_high, region1=region,
+                                               region2=region)
+        shifts_orig.append(shift_orig)
+    shifts_orig = np.vstack(shifts_orig)
+    shifts_orig = shifts_orig[:, 0] + 1j * shifts_orig[:, 1]
 
     ## Find bootstrapped distribution of shifts
     #shifts_dict_boot = dict()
@@ -491,8 +496,8 @@ if __name__ == '__main__':
 
     #    shifts_dict_boot.update({j: shift_boot})
 
-    #from cmath import polar
-    #polar = np.vectorize(polar)
+    from cmath import polar
+    polar = np.vectorize(polar)
 
     ## Plot all shifts
     #for i, shifts in shifts_dict_boot.items():

@@ -407,54 +407,54 @@ def create_images_from_boot_images(source, epoch, bands, stokes,
 
 if __name__ == '__main__':
 
-    n_boot = 1
+    n_boot = 100
     # Directories that contain data for loading in project
-    uv_data_dir = '/home/ilya/Dropbox/article/data/3c273'
-    im_data_dir = '/home/ilya/Dropbox/article/data/3c273'
+    uv_data_dir = '/home/ilya/data/3c273'
+    im_data_dir = '/home/ilya/data/3c273'
     # Path to project's root directory
-    base_path = '/home/ilya/Dropbox/article/data/3c273'
-    path_to_script = '/home/ilya/Dropbox/Zhenya/to_ilya/clean/final_clean_nw'
+    base_path = '/home/ilya/data/3c273'
+    path_to_script = '/home/ilya/data/final_clean_nw'
 
-    create_dirtree(sources, epochs, bands, stokes, base_path=base_path)
-    put_uv_files_to_dirs(sources, epochs, bands, base_path=base_path,
-                         ext="uvf", uv_files_path=uv_data_dir)
-    put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=base_path,
-                         ext="fits", im_files_path=im_data_dir)
+    # create_dirtree(sources, epochs, bands, stokes, base_path=base_path)
+    # put_uv_files_to_dirs(sources, epochs, bands, base_path=base_path,
+    #                      ext="uvf", uv_files_path=uv_data_dir)
+    # put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=base_path,
+    #                      ext="fits", im_files_path=im_data_dir)
 
-    # Now clean Q&U stokes with native resolution to use this models for
-    # bootstrap
-    for source in sources:
-        print "Cleaning source {}".format(source)
-        for epoch in epochs:
-            print "epoch {}".format(epoch)
-            for band in bands:
-                print "band {}".format(band)
-                uv_path = uv_fits_path(source, band.upper(), epoch,
-                                       base_path=base_path)
-                # Find mapsize from I
-                map_path = im_fits_path(source, band, epoch, stoke='i',
-                                        base_path=base_path)
-                map_info = get_fits_image_info(map_path + 'cc.fits')
-                mapsize_clean = (map_info[0][0], map_info[-3][0] / mas_to_rad)
-                print "mapsize {}".format(mapsize_clean)
-                for stoke in ('q', 'u'):
-                    print "Stokes {}".format(stoke)
-                    outpath = im_fits_path(source, band, epoch, stoke,
-                                           base_path=base_path)
+    # # Now clean Q&U stokes with native resolution to use this models for
+    # # bootstrap
+    # for source in sources:
+    #     print "Cleaning source {}".format(source)
+    #     for epoch in epochs:
+    #         print "epoch {}".format(epoch)
+    #         for band in bands:
+    #             print "band {}".format(band)
+    #             uv_path = uv_fits_path(source, band.upper(), epoch,
+    #                                    base_path=base_path)
+    #             # Find mapsize from I
+    #             map_path = im_fits_path(source, band, epoch, stoke='i',
+    #                                     base_path=base_path)
+    #             map_info = get_fits_image_info(map_path + 'cc.fits')
+    #             mapsize_clean = (map_info[0][0], map_info[-3][0] / mas_to_rad)
+    #             print "mapsize {}".format(mapsize_clean)
+    #             for stoke in ('q', 'u'):
+    #                 print "Stokes {}".format(stoke)
+    #                 outpath = im_fits_path(source, band, epoch, stoke,
+    #                                        base_path=base_path)
 
-                    clean_difmap('sc_uv.fits', 'cc.fits', stoke, mapsize_clean,
-                                 path=uv_path, path_to_script=path_to_script,
-                                 outpath=outpath, show_difmap_output=False)
+    #                 clean_difmap('sc_uv.fits', 'cc.fits', stoke, mapsize_clean,
+    #                              path=uv_path, path_to_script=path_to_script,
+    #                              outpath=outpath, show_difmap_output=False)
 
-    generate_boot_data(sources, epochs, bands, stokes, n_boot=n_boot,
-                       base_path=base_path)
-    clean_boot_data(sources, epochs, bands, stokes, base_path=base_path,
-                    path_to_script=path_to_script)
+    # generate_boot_data(sources, epochs, bands, stokes, n_boot=n_boot,
+    #                    base_path=base_path)
+    # clean_boot_data(sources, epochs, bands, stokes, base_path=base_path,
+    #                 path_to_script=path_to_script)
 
     # Workflow for one source
     # 8.1, 8.4, 12.1, 15
     bands = ['x', 'y', 'j', 'u']
-    epoch = '2006_06_15'
+    epoch = '2006_03_09'
     source = '1226+023'
 
     # Find core shift between each pair of frequencies
@@ -477,102 +477,106 @@ if __name__ == '__main__':
     shifts_orig = np.vstack(shifts_orig)
     shifts_orig = shifts_orig[:, 0] + 1j * shifts_orig[:, 1]
 
-    ## Find bootstrapped distribution of shifts
-    #shifts_dict_boot = dict()
-    #for j in range(1, n_boot+1):
-    #    print "Finding shifts for bootstrap images #{}".format(j)
-    #    image_low = create_image_from_fits_file(os.path.join(im_fits_path_low,
-    #                                                         'cc_{}.fits'.format(j)))
-    #    image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
-    #                                                          'cc_{}.fits'.format(j)))
-    #    shift_boot = list()
-    #    for r in range(0, 100, 5):
-    #        region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, r, None)
-    #        shift = image_low.cross_correlate(image_high, region1=region,
-    #                                          region2=region)
-    #        shift_boot.append(shift)
-    #    shift_boot = np.vstack(shift_boot)
-    #    shift_boot = shift_boot[:, 0] + 1j * shift_boot[:, 1]
+    # Find bootstrapped distribution of shifts
+    shifts_dict_boot = dict()
+    for j in range(1, n_boot+1):
+        print "Finding shifts for bootstrap images #{}".format(j)
+        image_low = create_image_from_fits_file(os.path.join(im_fits_path_low,
+                                                             'cc_{}.fits'.format(j)))
+        image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
+                                                              'cc_{}.fits'.format(j)))
+        shift_boot = list()
+        for r in range(0, 100, 5):
+            region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, r, None)
+            shift = image_low.cross_correlate(image_high, region1=region,
+                                              region2=region)
+            shift_boot.append(shift)
+        shift_boot = np.vstack(shift_boot)
+        shift_boot = shift_boot[:, 0] + 1j * shift_boot[:, 1]
 
-    #    shifts_dict_boot.update({j: shift_boot})
+        shifts_dict_boot.update({j: shift_boot})
 
     from cmath import polar
     polar = np.vectorize(polar)
 
-    ## Plot all shifts
-    #for i, shifts in shifts_dict_boot.items():
-    #    plt.plot(range(0, 100, 5), polar(shifts)[0], '.k')
-    #plt.plot(range(0, 100, 5), polar(shifts_orig)[0])
-    #plt.xlabel("R of mask, [pix]")
-    #plt.ylabel("shift value, [pix]")
-    #plt.savefig("{}_core_shift.png".format(source), bbox_inches='tight',
-    #            dpi=200)
+    # Plot all shifts
+    for i, shifts in shifts_dict_boot.items():
+        plt.plot(range(0, 100, 5), polar(shifts)[0], '.k')
+    plt.plot(range(0, 100, 5), polar(shifts_orig)[0], '.r')
+    plt.xlabel("R of mask, [pix]")
+    plt.ylabel("shift value, [pix]")
+    plt.show()
+    plt.savefig(os.path.join(base_path,
+                             "shifts_{}_{}_{}_{}.png".format(source, epoch,
+                                                             low_band,
+                                                             high_band)),
+                bbox_inches='tight', dpi=200)
 
-    ## For each frequency create mask based on PPOL distribution
-    #ppol_error_images_dict = dict()
-    #pang_error_images_dict = dict()
-    #ppol_images_dict = dict()
-    #pang_images_dict = dict()
-    #ppol_masks_dict = dict()
-    #for band in bands:
-    #    images_ = create_images_from_boot_images(source, epoch, [band], stokes,
-    #                                             base_path=base_path)
-    #    ppol_images = Images()
-    #    pang_images = Images()
-    #    ppol_images.add_images(images_.create_pol_images())
-    #    pang_images.add_images(images_.create_pang_images())
-    #    ppol_error_image = ppol_images.create_error_image(cred_mass=0.95)
-    #    pang_error_image = pang_images.create_error_image(cred_mass=0.68)
-    #    ppol_error_images_dict.update({band: ppol_error_image})
-    #    pang_error_images_dict.update({band: pang_error_image})
-    #    images_ = Images()
-    #    for stoke in stokes:
-    #        map_path = im_fits_path(source, band, epoch, stoke,
-    #                                base_path=base_path)
-    #        images_.add_from_fits(wildcard=os.path.join(map_path,
-    #                                                    'cc_orig.fits'))
-    #    ppol_image = images_.create_pol_images()[0]
-    #    ppol_images_dict.update({band: ppol_image})
-    #    mask = ppol_image.image < ppol_error_image.image
-    #    ppol_masks_dict.update({band: mask})
+    # # For each frequency create mask based on PPOL distribution
+    # ppol_error_images_dict = dict()
+    # pang_error_images_dict = dict()
+    # ppol_images_dict = dict()
+    # pang_images_dict = dict()
+    # ppol_masks_dict = dict()
+    # for band in bands:
+    #     images_ = create_images_from_boot_images(source, epoch, [band], stokes,
+    #                                              base_path=base_path)
+    #     ppol_images = Images()
+    #     pang_images = Images()
+    #     ppol_images.add_images(images_.create_pol_images())
+    #     pang_images.add_images(images_.create_pang_images())
+    #     ppol_error_image = ppol_images.create_error_image(cred_mass=0.95)
+    #     pang_error_image = pang_images.create_error_image(cred_mass=0.68)
+    #     ppol_error_images_dict.update({band: ppol_error_image})
+    #     pang_error_images_dict.update({band: pang_error_image})
+    #     images_ = Images()
+    #     for stoke in stokes:
+    #         map_path = im_fits_path(source, band, epoch, stoke,
+    #                                 base_path=base_path)
+    #         images_.add_from_fits(wildcard=os.path.join(map_path,
+    #                                                     'cc_orig.fits'))
+    #     ppol_image = images_.create_pol_images()[0]
+    #     ppol_images_dict.update({band: ppol_image})
+    #     mask = ppol_image.image < ppol_error_image.image
+    #     ppol_masks_dict.update({band: mask})
 
-    ## Create overall mask for PPOL flux
-    #masks = [np.array(mask, dtype=int) for mask in ppol_masks_dict.values()]
-    #ppol_mask = np.zeros(masks[0].shape, dtype=int)
-    #for mask in masks:
-    #    ppol_mask += mask
-    #ppol_mask[ppol_mask != 0] = 1
-    ## Save mask to disk
-    #np.savetxt(os.path.join(base_path, "ppol_mask.txt"), ppol_mask)
-    #ppol_mask = np.loadtxt(os.path.join(base_path, "ppol_mask.txt"))
+    # # Create overall mask for PPOL flux
+    # masks = [np.array(mask, dtype=int) for mask in ppol_masks_dict.values()]
+    # ppol_mask = np.zeros(masks[0].shape, dtype=int)
+    # for mask in masks:
+    #     ppol_mask += mask
+    # ppol_mask[ppol_mask != 0] = 1
+    # # Save mask to disk
+    # np.savetxt(os.path.join(base_path, "ppol_mask.txt"), ppol_mask)
+    # #ppol_mask = np.loadtxt(os.path.join(base_path, "ppol_mask.txt"))
 
-    ## Create bootstrap ROTM images with calculated mask
-    #rotm_images_list = list()
-    #for i in range(1, n_boot + 1):
-    #    images = Images()
-    #    for band in bands:
-    #        for stoke in stokes:
-    #            map_path = im_fits_path(source, band, epoch, stoke,
-    #                                    base_path=base_path)
-    #            fname = os.path.join(map_path, "cc_{}.fits".format(i))
-    #            images.add_from_fits(fnames=[fname])
-    #    rotm_image, s_rotm_image = images.create_rotm_image(mask=ppol_mask)
-    #    rotm_images_list.append(rotm_image)
+    # # Create bootstrap ROTM images with calculated mask
+    # rotm_images_list = list()
+    # for i in range(1, n_boot + 1):
+    #     images = Images()
+    #     for band in bands:
+    #         for stoke in stokes:
+    #             map_path = im_fits_path(source, band, epoch, stoke,
+    #                                     base_path=base_path)
+    #             fname = os.path.join(map_path, "cc_{}.fits".format(i))
+    #             images.add_from_fits(fnames=[fname])
+    #     rotm_image, s_rotm_image = images.create_rotm_image(mask=ppol_mask)
+    #     rotm_images_list.append(rotm_image)
 
-    ## Stack ROTM images
-    #rotm_images_boot = Images()
-    #rotm_images_boot.add_images(rotm_images_list)
-    #fig = plt.figure()
-    #for image in rotm_images_boot.images:
-    #    plt.plot(np.arange(500, 550, 1), image.slice((550, 500), (550, 550)),
-    #             '.k')
+    # ## Stack ROTM images
+    # #rotm_images_boot = Images()
+    # #rotm_images_boot.add_images(rotm_images_list)
+    # #fig = plt.figure()
+    # #for image in rotm_images_boot.images:
+    # #    plt.plot(np.arange(500, 550, 1), image.slice((550, 500), (550, 550)),
+    # #             '.k')
 
-    ## Plot I, ROTM image
-    #i_path = im_fits_path(source, bands[-1], epoch, 'i', base_path=base_path)
-    #i_image = create_clean_image_from_fits_file(os.path.join(i_path,
-    #                                                         'cc_orig.fits'))
-    ## Create original ROTM image
-    #rotm_images = Images()
+    # # Plot I, ROTM image
+    # i_path = im_fits_path(source, bands[-1], epoch, 'i', base_path=base_path)
+    # i_image = create_clean_image_from_fits_file(os.path.join(i_path,
+    #                                                          'cc_orig.fits'))
+    # # Create original ROTM image
+    # rotm_images = Images()
     # for band in bands:
     #     for stoke in stokes:
     #         map_path = im_fits_path(source, band, epoch, stoke,
@@ -583,4 +587,4 @@ if __name__ == '__main__':
     # rotm_image, s_rotm_image = images.create_rotm_image(s_pang_arrays=s_pang_arrays,
     #                                                     mask=ppol_mask)
     # plot(contours=i_image.image, colors=rotm_image.image[::-1, ::-1],
-    #      min_rel_level=0.5, x=image.x[0], y=image.y[:, 0])
+    #      min_rel_level=0.5, x=i_image.x[0], y=i_image.y[:, 0])

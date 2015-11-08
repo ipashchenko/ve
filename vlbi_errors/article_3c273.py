@@ -2,7 +2,8 @@ import glob
 import os
 import shutil
 import numpy as np
-import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 from from_fits import (create_uvdata_from_fits_file,
                        create_ccmodel_from_fits_file,
                        create_clean_image_from_fits_file,
@@ -10,7 +11,7 @@ from from_fits import (create_uvdata_from_fits_file,
                        get_fits_image_info)
 from bootstrap import CleanBootstrap
 from spydiff import clean_difmap
-from utils import mas_to_rad, degree_to_rad
+from utils import mas_to_rad, degree_to_rad, hdi_of_mcmc
 from images import Images
 from image import plot
 
@@ -400,14 +401,15 @@ def create_images_from_boot_images(source, epoch, bands, stokes,
         for stoke in stokes:
             map_path = im_fits_path(source, band, epoch, stoke,
                                     base_path=base_path)
-            images.add_from_fits(wildcard=os.path.join(map_path, 'cc_*.fits'))
+            images.add_from_fits(wildcard=os.path.join(map_path,
+                                                       'cc_*[0-9].fits'))
 
     return images
 
 
 if __name__ == '__main__':
 
-    n_boot = 100
+    n_boot = 3
     # Directories that contain data for loading in project
     uv_data_dir = '/home/ilya/data/3c273'
     im_data_dir = '/home/ilya/data/3c273'
@@ -457,60 +459,85 @@ if __name__ == '__main__':
     epoch = '2006_03_09'
     source = '1226+023'
 
-    # Find core shift between each pair of frequencies
-    low_band = 'x'
-    high_band = 'j'
-    im_fits_path_low = im_fits_path(source, low_band, epoch, stoke='i',
-                                    base_path=base_path)
-    im_fits_path_high = im_fits_path(source, high_band, epoch, stoke='i',
-                                     base_path=base_path)
-    image_low = create_image_from_fits_file(os.path.join(im_fits_path_low,
-                                                         'cc_orig.fits'))
-    image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
-                                                          'cc_orig.fits'))
-    shifts_orig = list()
-    for r in range(0, 100, 5):
-        region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, r, None)
-        shift_orig = image_low.cross_correlate(image_high, region1=region,
-                                               region2=region)
-        shifts_orig.append(shift_orig)
-    shifts_orig = np.vstack(shifts_orig)
-    shifts_orig = shifts_orig[:, 0] + 1j * shifts_orig[:, 1]
+    # Find bootstrap error-map of stokes 'I'
+    im_fits_path_ = im_fits_path(source, 'x', epoch, 'i', base_path=base_path)
+    image = create_image_from_fits_file(os.path.join(im_fits_path_,
+                                                           'cc.fits'))
+    # Find rms
+    rms = image.rms(region=(100, 100, 100, None))
+    print "imsize {}".format(image.imsize)
+    print "RMS = {}".format(rms)
 
-    # Find bootstrapped distribution of shifts
-    shifts_dict_boot = dict()
-    for j in range(1, n_boot+1):
-        print "Finding shifts for bootstrap images #{}".format(j)
-        image_low = create_image_from_fits_file(os.path.join(im_fits_path_low,
-                                                             'cc_{}.fits'.format(j)))
-        image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
-                                                              'cc_{}.fits'.format(j)))
-        shift_boot = list()
-        for r in range(0, 100, 5):
-            region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, r, None)
-            shift = image_low.cross_correlate(image_high, region1=region,
-                                              region2=region)
-            shift_boot.append(shift)
-        shift_boot = np.vstack(shift_boot)
-        shift_boot = shift_boot[:, 0] + 1j * shift_boot[:, 1]
+    images = create_images_from_boot_images(source, epoch, ['x'], ['i'],
+                                            base_path=base_path)
+    error_image = images.create_error_image()
+    # images._create_cube(stokes='i', freq=images.freqs[0])
+    # # Create image of per-pixel hdi
+    # hdis = np.zeros(np.shape(images._cube[:, :, 0]))
+    # for (x, y), value in np.ndenumerate(hdis):
+    #     hdis[x, y] = hdi_of_mcmc(images._cube[x, y, :])
+    # hdi_rms_map = hdis / rms
 
-        shifts_dict_boot.update({j: shift_boot})
+    color_mask = image.image < 2. * rms
+    plot(contours=image.image, colors=error_image.image / rms,
+         colors_mask=color_mask, min_rel_level=0.75, x=image.x[0],
+         y=image.y[:, 0], outfile='i_error', outdir=base_path, blc=(450, 300),
+         trc=(800, 600))
 
-    from cmath import polar
-    polar = np.vectorize(polar)
+    # # Find core shift between each pair of frequencies
+    # low_band = 'x'
+    # high_band = 'j'
+    # im_fits_path_low = im_fits_path(source, low_band, epoch, stoke='i',
+    #                                 base_path=base_path)
+    # im_fits_path_high = im_fits_path(source, high_band, epoch, stoke='i',
+    #                                  base_path=base_path)
+    # image_low = create_image_from_fits_file(os.path.join(im_fits_path_low,
+    #                                                      'cc_orig.fits'))
+    # image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
+    #                                                       'cc_orig.fits'))
+    # shifts_orig = list()
+    # for r in range(0, 100, 5):
+    #     region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, r, None)
+    #     shift_orig = image_low.cross_correlate(image_high, region1=region,
+    #                                            region2=region)
+    #     shifts_orig.append(shift_orig)
+    # shifts_orig = np.vstack(shifts_orig)
+    # shifts_orig = shifts_orig[:, 0] + 1j * shifts_orig[:, 1]
 
-    # Plot all shifts
-    for i, shifts in shifts_dict_boot.items():
-        plt.plot(range(0, 100, 5), polar(shifts)[0], '.k')
-    plt.plot(range(0, 100, 5), polar(shifts_orig)[0], '.r')
-    plt.xlabel("R of mask, [pix]")
-    plt.ylabel("shift value, [pix]")
-    plt.show()
-    plt.savefig(os.path.join(base_path,
-                             "shifts_{}_{}_{}_{}.png".format(source, epoch,
-                                                             low_band,
-                                                             high_band)),
-                bbox_inches='tight', dpi=200)
+    # # Find bootstrapped distribution of shifts
+    # shifts_dict_boot = dict()
+    # for j in range(1, n_boot+1):
+    #     print "Finding shifts for bootstrap images #{}".format(j)
+    #     image_low = create_image_from_fits_file(os.path.join(im_fits_path_low,
+    #                                                          'cc_{}.fits'.format(j)))
+    #     image_high = create_image_from_fits_file(os.path.join(im_fits_path_high,
+    #                                                           'cc_{}.fits'.format(j)))
+    #     shift_boot = list()
+    #     for r in range(0, 100, 5):
+    #         region = (image_low.imsize[0] / 2, image_low.imsize[0] / 2, r, None)
+    #         shift = image_low.cross_correlate(image_high, region1=region,
+    #                                           region2=region)
+    #         shift_boot.append(shift)
+    #     shift_boot = np.vstack(shift_boot)
+    #     shift_boot = shift_boot[:, 0] + 1j * shift_boot[:, 1]
+
+    #     shifts_dict_boot.update({j: shift_boot})
+
+    # from cmath import polar
+    # polar = np.vectorize(polar)
+
+    # # Plot all shifts
+    # matplotlib.pyplot.figure()
+    # for i, shifts in shifts_dict_boot.items():
+    #     matplotlib.pyplot.plot(range(0, 100, 5), polar(shifts)[0], '.k')
+    # matplotlib.pyplot.plot(range(0, 100, 5), polar(shifts_orig)[0], '.r')
+    # matplotlib.pyplot.xlabel("R of mask, [pix]")
+    # matplotlib.pyplot.ylabel("shift value, [pix]")
+    # matplotlib.pyplot.savefig(os.path.join(base_path,
+    #                          "tshifts_{}_{}_{}_{}.png".format(source, epoch,
+    #                                                           low_band,
+    #                                                           high_band)),
+    #             bbox_inches='tight', dpi=200)
 
     # # For each frequency create mask based on PPOL distribution
     # ppol_error_images_dict = dict()

@@ -3,6 +3,7 @@ import os
 import shutil
 import numpy as np
 import matplotlib
+# For saving images without plotting
 matplotlib.use('Agg')
 from from_fits import (create_uvdata_from_fits_file,
                        create_ccmodel_from_fits_file,
@@ -11,8 +12,9 @@ from from_fits import (create_uvdata_from_fits_file,
                        get_fits_image_info)
 from bootstrap import CleanBootstrap
 from spydiff import clean_difmap
-from utils import mas_to_rad, degree_to_rad, hdi_of_mcmc
+from utils import mas_to_rad, degree_to_rad, hdi_of_mcmc, find_card_from_header
 from images import Images
+from sim_func import simulate_grad
 from image import plot
 
 
@@ -20,9 +22,6 @@ from image import plot
 # Bands must be sorted with lowest frequency first
 # 8.1, 8.4, 12.1, 15
 bands = ['x', 'y', 'j', 'u']
-epochs = ['2006_03_09', '2006_06_15']
-sources = ['1226+023']
-
 stokes = ['i', 'q', 'u']
 
 
@@ -409,81 +408,104 @@ def create_images_from_boot_images(source, epoch, bands, stokes,
 
 if __name__ == '__main__':
 
-    n_boot = 3
+    n_boot = 100
+    # 3c273
+    # sources = ['1226+023']
+    # epochs = ['2006_03_09', '2006_06_15']
+    # 2230+114
+    sources = ['2230+114']
+    epochs = ['2006_02_12']
     # Directories that contain data for loading in project
-    uv_data_dir = '/home/ilya/data/3c273'
-    im_data_dir = '/home/ilya/data/3c273'
+    # # 3c273
+    # uv_data_dir = '/home/ilya/data/3c273'
+    # im_data_dir = '/home/ilya/data/3c273'
+    # # Path to project's root directory
+    # base_path = '/home/ilya/data/3c273'
+    # 2230+114
+    uv_data_dir = '/home/ilya/data/2230'
+    im_data_dir = '/home/ilya/data/2230'
     # Path to project's root directory
-    base_path = '/home/ilya/data/3c273'
+    base_path = '/home/ilya/data/2230'
     path_to_script = '/home/ilya/data/final_clean_nw'
 
-    # create_dirtree(sources, epochs, bands, stokes, base_path=base_path)
-    # put_uv_files_to_dirs(sources, epochs, bands, base_path=base_path,
-    #                      ext="uvf", uv_files_path=uv_data_dir)
-    # put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=base_path,
-    #                      ext="fits", im_files_path=im_data_dir)
+    create_dirtree(sources, epochs, bands, stokes, base_path=base_path)
+    put_uv_files_to_dirs(sources, epochs, bands, base_path=base_path,
+                         ext="uvf", uv_files_path=uv_data_dir)
+    put_im_files_to_dirs(sources, epochs, bands, stokes, base_path=base_path,
+                         ext="fits", im_files_path=im_data_dir)
 
-    # # Now clean Q&U stokes with native resolution to use this models for
-    # # bootstrap
-    # for source in sources:
-    #     print "Cleaning source {}".format(source)
-    #     for epoch in epochs:
-    #         print "epoch {}".format(epoch)
-    #         for band in bands:
-    #             print "band {}".format(band)
-    #             uv_path = uv_fits_path(source, band.upper(), epoch,
-    #                                    base_path=base_path)
-    #             # Find mapsize from I
-    #             map_path = im_fits_path(source, band, epoch, stoke='i',
-    #                                     base_path=base_path)
-    #             map_info = get_fits_image_info(map_path + 'cc.fits')
-    #             mapsize_clean = (map_info[0][0], map_info[-3][0] / mas_to_rad)
-    #             print "mapsize {}".format(mapsize_clean)
-    #             for stoke in ('q', 'u'):
-    #                 print "Stokes {}".format(stoke)
-    #                 outpath = im_fits_path(source, band, epoch, stoke,
-    #                                        base_path=base_path)
+    # Now clean Q&U stokes with native resolution to use this models for
+    # bootstrap
+    for source in sources:
+        print "Cleaning source {}".format(source)
+        for epoch in epochs:
+            print "epoch {}".format(epoch)
+            for band in bands:
+                print "band {}".format(band)
+                uv_path = uv_fits_path(source, band.upper(), epoch,
+                                       base_path=base_path)
+                # Find mapsize from I
+                map_path = im_fits_path(source, band, epoch, stoke='i',
+                                        base_path=base_path)
+                try:
+                    map_info = get_fits_image_info(map_path + 'cc.fits')
+                except IOError:
+                    print "Haven't found map for band {}".format(band)
+                    continue
+                mapsize_clean = (map_info[0][0], map_info[-3][0] / mas_to_rad)
+                print "mapsize {}".format(mapsize_clean)
+                for stoke in ('q', 'u'):
+                    print "Stokes {}".format(stoke)
+                    outpath = im_fits_path(source, band, epoch, stoke,
+                                           base_path=base_path)
 
-    #                 clean_difmap('sc_uv.fits', 'cc.fits', stoke, mapsize_clean,
-    #                              path=uv_path, path_to_script=path_to_script,
-    #                              outpath=outpath, show_difmap_output=False)
+                    clean_difmap('sc_uv.fits', 'cc.fits', stoke, mapsize_clean,
+                                 path=uv_path, path_to_script=path_to_script,
+                                 outpath=outpath, show_difmap_output=False)
 
-    # generate_boot_data(sources, epochs, bands, stokes, n_boot=n_boot,
-    #                    base_path=base_path)
-    # clean_boot_data(sources, epochs, bands, stokes, base_path=base_path,
-    #                 path_to_script=path_to_script)
+    generate_boot_data(sources, epochs, bands, stokes, n_boot=n_boot,
+                       base_path=base_path)
+    clean_boot_data(sources, epochs, bands, stokes, base_path=base_path,
+                    path_to_script=path_to_script)
 
     # Workflow for one source
     # 8.1, 8.4, 12.1, 15
     bands = ['x', 'y', 'j', 'u']
-    epoch = '2006_03_09'
-    source = '1226+023'
+    # # 3c273
+    # epoch = '2006_03_09'
+    # source = '1226+023'
+    # 2230+114
+    epoch = '2006_02_12'
+    source = '2230+114'
 
-    # Find bootstrap error-map of stokes 'I'
-    im_fits_path_ = im_fits_path(source, 'x', epoch, 'i', base_path=base_path)
-    image = create_image_from_fits_file(os.path.join(im_fits_path_,
-                                                           'cc.fits'))
-    # Find rms
-    rms = image.rms(region=(100, 100, 100, None))
-    print "imsize {}".format(image.imsize)
-    print "RMS = {}".format(rms)
+    # # ==========================================================================
+    # # Find bootstrap error-map of stokes 'I'
+    # im_fits_path_ = im_fits_path(source, 'x', epoch, 'i', base_path=base_path)
+    # image = create_image_from_fits_file(os.path.join(im_fits_path_,
+    #                                                        'cc.fits'))
+    # # Find rms
+    # rms = image.rms(region=(100, 100, 100, None))
+    # print "imsize {}".format(image.imsize)
+    # print "RMS = {}".format(rms)
 
-    images = create_images_from_boot_images(source, epoch, ['x'], ['i'],
-                                            base_path=base_path)
-    error_image = images.create_error_image()
-    # images._create_cube(stokes='i', freq=images.freqs[0])
-    # # Create image of per-pixel hdi
-    # hdis = np.zeros(np.shape(images._cube[:, :, 0]))
-    # for (x, y), value in np.ndenumerate(hdis):
-    #     hdis[x, y] = hdi_of_mcmc(images._cube[x, y, :])
-    # hdi_rms_map = hdis / rms
+    # images = create_images_from_boot_images(source, epoch, ['x'], ['i'],
+    #                                         base_path=base_path)
+    # error_image = images.create_error_image()
+    # # images._create_cube(stokes='i', freq=images.freqs[0])
+    # # # Create image of per-pixel hdi
+    # # hdis = np.zeros(np.shape(images._cube[:, :, 0]))
+    # # for (x, y), value in np.ndenumerate(hdis):
+    # #     hdis[x, y] = hdi_of_mcmc(images._cube[x, y, :])
+    # # hdi_rms_map = hdis / rms
 
-    color_mask = image.image < 2. * rms
-    plot(contours=image.image, colors=error_image.image / rms,
-         colors_mask=color_mask, min_rel_level=0.75, x=image.x[0],
-         y=image.y[:, 0], outfile='i_error', outdir=base_path, blc=(450, 300),
-         trc=(800, 600))
+    # color_mask = image.image < 2. * rms
+    # plot(contours=image.image, colors=error_image.image / rms,
+    #      colors_mask=color_mask, min_rel_level=0.75, x=image.x[0],
+    #      y=image.y[:, 0], outfile='i_error', outdir=base_path, blc=(450, 300),
+    #      trc=(800, 600))
+    # ==========================================================================
 
+    # # ==========================================================================
     # # Find core shift between each pair of frequencies
     # low_band = 'x'
     # high_band = 'j'
@@ -534,11 +556,24 @@ if __name__ == '__main__':
     # matplotlib.pyplot.xlabel("R of mask, [pix]")
     # matplotlib.pyplot.ylabel("shift value, [pix]")
     # matplotlib.pyplot.savefig(os.path.join(base_path,
-    #                          "tshifts_{}_{}_{}_{}.png".format(source, epoch,
+    #                           "shifts_{}_{}_{}_{}.png".format(source, epoch,
     #                                                           low_band,
     #                                                           high_band)),
-    #             bbox_inches='tight', dpi=200)
+    #                           bbox_inches='tight', dpi=200)
+    # matplotlib.pyplot.close()
+    # hist_shifts = [polar(shifts)[0][11] for i, shifts in
+    #                shifts_dict_boot.items()]
+    # matplotlib.pyplot.hist(hist_shifts, bins=15, normed=True)
+    # matplotlib.pyplot.axvline(polar(shifts_orig)[0][11], lw=2, color='r')
+    # matplotlib.pyplot.savefig(os.path.join(base_path,
+    #                           "shift_{}_{}_{}_{}.png".format(source, epoch,
+    #                                                          low_band,
+    #                                                          high_band)),
+    #                           bbox_inches='tight', dpi=200)
+    # matplotlib.pyplot.close()
+    # ==========================================================================
 
+    # ==========================================================================
     # # For each frequency create mask based on PPOL distribution
     # ppol_error_images_dict = dict()
     # pang_error_images_dict = dict()
@@ -575,9 +610,11 @@ if __name__ == '__main__':
     # ppol_mask[ppol_mask != 0] = 1
     # # Save mask to disk
     # np.savetxt(os.path.join(base_path, "ppol_mask.txt"), ppol_mask)
-    # #ppol_mask = np.loadtxt(os.path.join(base_path, "ppol_mask.txt"))
+    # ==========================================================================
 
+    # ==========================================================================
     # # Create bootstrap ROTM images with calculated mask
+    # #ppol_mask = np.loadtxt(os.path.join(base_path, "ppol_mask.txt"))
     # rotm_images_list = list()
     # for i in range(1, n_boot + 1):
     #     images = Images()
@@ -615,3 +652,95 @@ if __name__ == '__main__':
     #                                                     mask=ppol_mask)
     # plot(contours=i_image.image, colors=rotm_image.image[::-1, ::-1],
     #      min_rel_level=0.5, x=i_image.x[0], y=i_image.y[:, 0])
+    # ==========================================================================
+
+    # # ==========================================================================
+    # # Simulate gradient
+    # grad_value = 100.
+    # rm_value_0 = 200.
+    # noise_factor = 1.
+    # # Width  of jet in beams
+    # width = 2.0
+    # # Length of jet in beams
+    # length = 10.
+    # # How much model pixels in units of high frequency map pixels to use
+    # k = 2
+    # # high_freq_map = os.path.join(im_fits_path(source, bands[-1], epoch, 'i',
+    # #                                           base_path=base_path), 'cc.fits')
+    # high_freq_map = os.path.join(base_path, '1226+023.u.2006_03_09.icn.fits')
+    # # low_freq_map = os.path.join(im_fits_path(source, bands[0], epoch, 'i',
+    # #                                          base_path=base_path), 'cc.fits')
+    # low_freq_map = os.path.join(base_path, '1226+023.x.2006_03_09.i_0.1.fits')
+    # # uvdata_files = [os.path.join(uv_fits_path(source, band, epoch,
+    # #                                           base_path=base_path),
+    # #                              'sc_uv.fits') for band in bands]
+    # uvdata_files = [os.path.join(base_path, fname) for fname in
+    #                 ('1226+023.x.2006_03_09.uvf', '1226+023.y.2006_03_09.uvf',
+    #                  '1226+023.j.2006_03_09.uvf', '1226+023.u.2006_03_09.uvf')]
+    # cc_flux = 0.20
+    # outpath = os.path.join(base_path, 'simdata_{}/'.format(noise_factor))
+    # # if not os.path.exists(outpath):
+    # #     os.makedirs(outpath)
+    # # simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux=cc_flux,
+    # #               outpath=outpath, grad_value=grad_value, width=width,
+    # #               length=length, k=k, noise_factor=noise_factor,
+    # #               rm_value_0=rm_value_0)
+    # # ==========================================================================
+
+    # # ==========================================================================
+    # # Clean simulated uv-data
+    # map_info_l = get_fits_image_info(low_freq_map)
+    # map_info_h = get_fits_image_info(high_freq_map)
+    # beam_restore = map_info_l[3]
+    # beam_restore_ = (beam_restore[0] / mas_to_rad, beam_restore[1] / mas_to_rad,
+    #                  beam_restore[2])
+    # mapsize_clean = (map_info_h[0][0],
+    #                  map_info_h[-3][0] / mas_to_rad)
+    # for uvpath in glob.glob(os.path.join(outpath, "simul_uv_*")):
+    #     uvdir, uvfile = os.path.split(uvpath)
+    #     print "Cleaning uv file {}".format(uvpath)
+    #     uvdata = create_uvdata_from_fits_file(uvpath)
+    #     freq_card = find_card_from_header(uvdata._io.hdu.header,
+    #                                       value='FREQ')[0]
+    #     # Frequency in Hz
+    #     freq = uvdata._io.hdu.header['CRVAL{}'.format(freq_card[0][-1])]
+    #     for stoke in ('i', 'q', 'u'):
+    #         print "Stokes {}".format(stoke)
+    #         clean_difmap(uvfile, "simul_{}_{}_cc.fits".format(stoke, freq),
+    #                      stoke, mapsize_clean, path=uvdir,
+    #                      path_to_script=path_to_script,
+    #                      beam_restore=beam_restore_, outpath=outpath)
+    # # ==========================================================================
+
+    # # ==========================================================================
+    # # Create image of ROTM for simulated cleaned data
+    # print "Creating image of simulated ROTM"
+    # images = Images()
+    # images.add_from_fits(wildcard=os.path.join(outpath, "simul_*_cc.fits"))
+    # # Create mask for faster calculation
+    # mask = np.ones((1024, 1024), dtype=int)
+    # mask[200:550, 400:600] = 0
+    # rotm_image, s_rotm_image = images.create_rotm_image(mask=mask)
+    # matplotlib.pyplot.matshow(rotm_image.image)
+    # Plot slice
+    # matplotlib.pyplot.errorbar(np.arange(210, 302, 1),
+    #                            rotm_image.slice((240, 210), (240, 302)),
+    #                            s_rotm_image.slice((240, 210), (240, 302)),
+    #                            fmt='.k')
+    # # Plot real ROTM grad values
+    # (imsize_l, pixref_l, pixrefval_l, (bmaj_l, bmin_l, bpa_l,), pixsize_l,
+    #  stokes_l, freq_l) = get_fits_image_info(low_freq_map)
+    # # Jet width in pixels
+    # jet_width = width * bmaj_l / abs(rotm_image.pixsize[0])
+
+    # # Analytical gradient in real image (didn't convolved)
+    # def rm(x, y, grad_value, rm_value_0=0.0):
+    #     k = grad_value / (bmaj_l/abs(rotm_image.pixsize[0]))
+    #     return k * x + rm_value_0
+
+    # matplotlib.pyplot.plot(np.arange(210, 302, 1),
+    #                        rm(np.arange(210, 302, 1) - rotm_image.pixref[1],
+    #                           None, grad_value, rm_value_0=rm_value_0))
+    # matplotlib.pyplot.axvline(rotm_image.pixref[1] - jet_width / 2.)
+    # matplotlib.pyplot.axvline(rotm_image.pixref[1] + jet_width / 2.)
+    # ==========================================================================

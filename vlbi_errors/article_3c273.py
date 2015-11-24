@@ -612,6 +612,28 @@ def count_contained(curves, means, widths):
     return i
 
 
+def create_sim_conf_band(curves, means, widths, alpha=0.95, delta=0.01):
+    """
+    Function that builds simultanious confidence band.
+    :param curves:
+    :param means:
+    :param widths:
+    :param alpha: (optional)
+        Number in (0., 1.) - ``1 - significance`` of CB. (default: ``0.95``)
+    :param delta: (optional)
+        Step of widening of band. (default: ``0.01``)
+    :return:
+        Two 1D numpy arrays with low and upper alpha-level simultaneous
+        confidence bands.
+    """
+    n = count_contained(curves, means, widths)
+    f = 1
+    while n < len(curves) * alpha:
+        f += delta
+        n = count_contained(curves, means, f * means)
+    return means - f * widths, means + f * widths
+
+
 if __name__ == '__main__':
 
     n_boot = 100
@@ -1161,6 +1183,12 @@ if __name__ == '__main__':
     print "Increasing width of CB from ``sigmas`` till it contains 95% of " \
           "curves"
     # Count how many curves are contained by CB and loop
+    n = count_contained(slices_, obs_slice, sigmas)
+    f = 1
+    while n < 95:
+        f += 0.01
+        n = count_contained(slices_, obs_slice, f * sigmas)
+
 
 
 

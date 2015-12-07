@@ -110,7 +110,7 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
             Width of jet [pixels].
         """
         return max_flux - (max_flux / length) * x -\
-               (max_flux / (width / 2) ** 2.) * y ** 2.
+            (max_flux / (width / 2) ** 2.) * y ** 2.
 
     def rm(x, y, grad_value, rm_value_0=0.0):
         """
@@ -133,7 +133,7 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
     # Use value for gradient ``k`` times less then original because of pixel
     # size
     image_rm._image = rm(image.x/abs(pixsize[0]), image.y/abs(pixsize[1]),
-                         grad_value / beam_width, rm_value_0=200.)
+                         grad_value / beam_width, rm_value_0=rm_value_0)
     image_rm._image = np.ma.array(image_rm._image, mask=jet_region.mask)
 
     # Create ROTM image with size as for lowest freq. and pixel size - as for
@@ -147,7 +147,7 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
     save_rm._image = rm(save_rm.x/abs(save_pixsize[0]),
                         save_rm.y/abs(save_pixsize[1]),
                         grad_value/(bmaj_l/abs(save_pixsize[0])),
-                        rm_value_0=200.0)
+                        rm_value_0=rm_value_0)
     half_width_l = int(width * bmaj_l/abs(save_pixsize[0])//2)
     jet_length_l = int(length * bmaj_l/ abs(save_pixsize[0]))
     jet_region_l = mask_region(save_rm._image,
@@ -157,7 +157,7 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
                                        save_pixref[1] + jet_length_l))
     save_rm._image = np.ma.array(save_rm._image, mask=~jet_region_l.mask)
     print "Saving image of ROTM gradient..."
-    np.savetxt('RM_grad_image.txt', save_rm._image)
+    np.savetxt(os.path.join(outpath, 'RM_grad_image.txt'), save_rm._image)
 
 
     # Create model instance and fill it with components
@@ -180,6 +180,7 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
                               image.x[x, y] / mas_to_rad,
                               image.y[x, y] / mas_to_rad) for (x, y), value in
                np.ndenumerate(jet_region) if not jet_region.mask[x, y]]
+    # FIXME: just ``comps_u = comps_q``
     comps_u = [DeltaComponent(flux(image.y[x, y] / abs(pixsize[0]),
                                    image.x[x, y] / abs(pixsize[0]),
                                    max_flux, jet_length, jet_width),
@@ -187,10 +188,11 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
                               image.y[x, y] / mas_to_rad) for (x, y), value in
                np.ndenumerate(jet_region) if not jet_region.mask[x, y]]
 
+    # FIXME: why for Q & U?
     # Keep only positive components
     comps_i = [comp for comp in comps_i if comp.p[0] > 0]
-    comps_q = [comp for comp in comps_q if comp.p[0] > 0]
-    comps_u = [comp for comp in comps_u if comp.p[0] > 0]
+    # comps_q = [comp for comp in comps_q if comp.p[0] > 0]
+    # comps_u = [comp for comp in comps_u if comp.p[0] > 0]
 
     print "Adding components to I,Q & U models..."
     model_i.add_components(*comps_i)

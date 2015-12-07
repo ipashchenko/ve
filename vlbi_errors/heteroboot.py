@@ -1,7 +1,6 @@
 import os
+import numpy as np
 import matplotlib.pyplot as plt
-from zhenya import (put_im_files_to_dirs, put_uv_files_to_dirs, im_fits_path,
-                    uv_fits_path, create_dirtree)
 from from_fits import (create_ccmodel_from_fits_file,
                        create_uvdata_from_fits_file)
 from bootstrap import CleanBootstrap
@@ -37,7 +36,7 @@ os.chdir(curdir)
 
 nrows = int(np.sqrt(2. * len(uvdata_r.baselines))) + 1
 fig, axes = plt.subplots(nrows=nrows, ncols=nrows, sharex=True,
-                        sharey=True)
+                         sharey=True)
 fig.set_size_inches(18.5, 18.5)
 plt.rcParams.update({'axes.titlesize': 'small'})
 i, j = 0, 0
@@ -70,5 +69,4 @@ for baseline in uvdata_r.baselines:
         j = 0
 fig.show()
 fig.savefig("{}.{}".format(os.path.join(base_path, 'res'), 'png'),
-                           bbox_inches='tight', dpi=200)
-
+            bbox_inches='tight', dpi=200)

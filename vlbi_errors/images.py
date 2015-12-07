@@ -1,7 +1,9 @@
+import os
 import numpy as np
 import glob
 from collections import defaultdict
-from matplotlib.pyplot import hist, bar, show
+from matplotlib.pyplot import (bar, show, savefig, axvline, xlabel, ylabel,
+                               close)
 from knuth_hist import histogram
 from from_fits import (create_image_from_fits_file,
                        create_clean_image_from_fits_file)
@@ -119,7 +121,8 @@ class Images(object):
         self._save_cube(stokes=stokes, freq=freq)
 
     def pixels_histogram(self, stokes=None, freq=None, region=None, mask=None,
-                         mode='mean'):
+                         mode='mean', outdir=None, outname=None,
+                         hdi_lines=0.95):
         """
         Method that creates histogram of pixel values for use-specified pixel or
         region of pixels.
@@ -181,7 +184,16 @@ class Images(object):
         probs, edges = histogram(values, density=True)
         lower_d = np.resize(edges, len(edges) - 1)
         bar(lower_d, probs, width=np.diff(lower_d)[0], linewidth=2, color='w')
+        low, high = hdi_of_mcmc(values, cred_mass=hdi_lines)
+        axvline(low, color='b', lw=3)
+        axvline(high, color='b', lw=3)
+        xlabel("Flux Density, [Jy/beam]")
+        ylabel("Density")
         show()
+        if outname:
+            outdir = outdir or os.getcwd()
+            savefig(os.path.join(outdir, outname), bbox_inches='tight', dpi=200)
+            close()
 
     def compare_images_by_param(self, param, freq_stokes_dict=None):
         """

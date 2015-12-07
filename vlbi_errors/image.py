@@ -154,7 +154,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
 
     # Actually plotting
     fig = plt.figure()
-    ax = fig.add_axes([0.1, 0.1, 0.6, 0.8])
+    ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
 
     # Plot contours
     if contours is not None:
@@ -213,7 +213,9 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         title = ax.set_title(plot_title, fontsize='large')
     # Add colorbar if plotting colors
     if colors is not None:
-        colorbar_ax = fig.add_axes([0.7, 0.1, 0.05, 0.8])
+        # colorbar_ax = fig.add_axes([0.85, 0.11, 0.05, 0.78])
+        # colorbar_ax = fig.add_axes([0.66, 0.10, 0.05, 0.80])
+        colorbar_ax = fig.add_axes([0.70, 0.10, 0.05, 0.80])
         fig.colorbar(im, cax=colorbar_ax)
     fig.show()
 

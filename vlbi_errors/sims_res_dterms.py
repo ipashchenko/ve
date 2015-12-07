@@ -1,4 +1,5 @@
 import os
+import numpy as np
 from from_fits import (create_ccmodel_from_fits_file,
                        create_uvdata_from_fits_file)
 from PA import PA

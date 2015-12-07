@@ -498,6 +498,7 @@ def clean_sumulated_boot_data(freqs, stokes, base_path=None,
     for freq in freqs:
         print " for freq", freq
         n = len(glob.glob(base_path + 'simul_uv_boot_{}_*.fits'.format(freq)))
+        print "n = {}".format(n)
         # Cleaning bootstrapped data & restore with low resolution
         for i in range(n):
             uv_fname = os.path.join(base_path,
@@ -616,8 +617,11 @@ def create_sim_conf_band(curves, means, widths, alpha=0.95, delta=0.01):
     """
     Function that builds simultanious confidence band.
     :param curves:
+        Iterable of numpy 1D arrays with curves to count.
     :param means:
+        Iterable of band's means.
     :param widths:
+        Iterable of widths (sigmas).
     :param alpha: (optional)
         Number in (0., 1.) - ``1 - significance`` of CB. (default: ``0.95``)
     :param delta: (optional)
@@ -630,7 +634,7 @@ def create_sim_conf_band(curves, means, widths, alpha=0.95, delta=0.01):
     f = 1
     while n < len(curves) * alpha:
         f += delta
-        n = count_contained(curves, means, f * means)
+        n = count_contained(curves, means, f * widths)
     return means - f * widths, means + f * widths
 
 
@@ -736,7 +740,7 @@ if __name__ == '__main__':
     # Find bootstrap error-map of stokes 'I'
     # # 3c273
     # im_fits_path_ = im_fits_path(source, 'x', epoch, 'i', base_path=base_path)
-    # # 1633
+    # 1633
     # im_fits_path_ = im_fits_path(source, 'l22', epoch, 'i', base_path=base_path)
     # image = create_image_from_fits_file(os.path.join(im_fits_path_, 'cc.fits'))
     # Find rms
@@ -766,11 +770,11 @@ if __name__ == '__main__':
     #      colors_mask=color_mask, min_rel_level=0.75, x=image.x[0],
     #      y=image.y[:, 0], outfile='i_error', outdir=base_path, blc=(450, 300),
     #      trc=(800, 600))
-    # # 1633
-    # plot(contours=image.image, colors=error_image.image / rms,
-    #      colors_mask=color_mask, min_rel_level=0.05, x=image.x[0],
-    #      y=image.y[:, 0], outfile='i_error', outdir=base_path, blc=(200, 200),
-    #      trc=(450, 400))
+    # 1633
+    plot(contours=image.image, colors=error_image.image / rms,
+         colors_mask=color_mask, min_rel_level=0.05, x=image.x[0],
+         y=image.y[:, 0], outfile='i_error', outdir=base_path, blc=(200, 200),
+         trc=(450, 400))
     # ==========================================================================
 
     # # ==========================================================================
@@ -937,11 +941,11 @@ if __name__ == '__main__':
     # Simulate gradient
     grad_value = 50.
     rm_value_0 = 100.
-    noise_factor = 3.
+    noise_factor = 6.
     # # Width  of jet in beams
-    width = 1.0
+    width = 0.5
     # # Length of jet in beams
-    length = 7.
+    length = 4.
     # # How much model pixels in units of high frequency map pixels to use
     k = 2
     high_freq_map = os.path.join(im_fits_path(source, bands[-1], epoch, 'i',
@@ -969,31 +973,31 @@ if __name__ == '__main__':
     #               rm_value_0=rm_value_0)
     # # ==========================================================================
 
-    # # ==========================================================================
-    # # Clean simulated uv-data
-    # print "Cleaning simulated uv-data..."
-    # map_info_l = get_fits_image_info(low_freq_map)
-    # map_info_h = get_fits_image_info(high_freq_map)
-    # beam_restore = map_info_l[3]
-    # beam_restore_ = (beam_restore[0] / mas_to_rad, beam_restore[1] / mas_to_rad,
-    #                  beam_restore[2])
-    # mapsize_clean = (map_info_h[0][0],
-    #                  map_info_h[-3][0] / mas_to_rad)
-    # for uvpath in glob.glob(os.path.join(outpath, "simul_uv_*")):
-    #     uvdir, uvfile = os.path.split(uvpath)
-    #     print "Cleaning uv file {}".format(uvpath)
-    #     uvdata = create_uvdata_from_fits_file(uvpath)
-    #     freq_card = find_card_from_header(uvdata._io.hdu.header,
-    #                                       value='FREQ')[0]
-    #     # Frequency in Hz
-    #     freq = uvdata._io.hdu.header['CRVAL{}'.format(freq_card[0][-1])]
-    #     for stoke in ('i', 'q', 'u'):
-    #         print "Stokes {}".format(stoke)
-    #         clean_difmap(uvfile, "simul_{}_{}_cc.fits".format(stoke, freq),
-    #                      stoke, mapsize_clean, path=uvdir,
-    #                      path_to_script=path_to_script,
-    #                      beam_restore=beam_restore_, outpath=outpath)
-    # # ==========================================================================
+    # ==========================================================================
+    # Clean simulated uv-data
+    print "Cleaning simulated uv-data..."
+    map_info_l = get_fits_image_info(low_freq_map)
+    map_info_h = get_fits_image_info(high_freq_map)
+    beam_restore = map_info_l[3]
+    beam_restore_ = (beam_restore[0] / mas_to_rad, beam_restore[1] / mas_to_rad,
+                     beam_restore[2])
+    mapsize_clean = (map_info_h[0][0],
+                     map_info_h[-3][0] / mas_to_rad)
+    for uvpath in glob.glob(os.path.join(outpath, "simul_uv_*")):
+        uvdir, uvfile = os.path.split(uvpath)
+        print "Cleaning uv file {}".format(uvpath)
+        uvdata = create_uvdata_from_fits_file(uvpath)
+        freq_card = find_card_from_header(uvdata._io.hdu.header,
+                                          value='FREQ')[0]
+        # Frequency in Hz
+        freq = uvdata._io.hdu.header['CRVAL{}'.format(freq_card[0][-1])]
+        for stoke in ('i', 'q', 'u'):
+            print "Stokes {}".format(stoke)
+            clean_difmap(uvfile, "simul_{}_{}_cc.fits".format(stoke, freq),
+                         stoke, mapsize_clean, path=uvdir,
+                         path_to_script=path_to_script,
+                         beam_restore=beam_restore_, outpath=outpath)
+    # ==========================================================================
 
     # ==========================================================================
     # Create image of ROTM for simulated cleaned data
@@ -1029,106 +1033,89 @@ if __name__ == '__main__':
     matplotlib.pyplot.axvline(rotm_image.pixref[1] + jet_width / 2.)
     # ==========================================================================
 
-    # # ==========================================================================
-    # # Bootstrap gradient value
-    # uv_data_dir = outpath
-    # im_data_dir = outpath
-    # base_path = outpath
-    uv_fits_paths = glob.glob(os.path.join(outpath, 'simul_uv*_Hz.fits'))
-    # # Create bootstrapped uv-data
-    # for uv_fits_path in uv_fits_paths:
-    #     _, uv_fits_fname = os.path.split(uv_fits_path)
-    #     freq = uv_fits_fname.split('_')[2]
-    #     im_fits_fnames = ['simul_{}_{}_cc.fits'.format(stokes, freq) for
-    #         stokes in ('i', 'q', 'u')]
-    #     ccpath = [im_data_dir] * len(im_fits_fnames)
-    #     boot_uv_fits_with_cc_fits(uv_fits_fname, im_fits_fnames, n=100,
-    #                               uvpath=uv_data_dir, ccpath=ccpath,
-    #                               outname='simul_boot_uv_{}.fits'.format(freq),
-    #                               outpath=outpath)
-
     # ==========================================================================
     # Generate bootstrapped-data
     print "Generating bootstrapped data from simulated data..."
     freqs = list()
+    uv_fits_paths = glob.glob(os.path.join(outpath, 'simul_uv*_Hz.fits'))
     for uv_fits_path in uv_fits_paths:
         _, uv_fits_fname = os.path.split(uv_fits_path)
         freq = uv_fits_fname.split('_')[2]
         freqs.append(freq)
     freqs.sort()
-    # generate_simulated_boot_data(freqs, ('i', 'q', 'u'), n_boot=n_boot,
-    #                              base_path=outpath)
-    # clean_sumulated_boot_data(freqs, ('i', 'q', 'u'), base_path=outpath,
-    #                           path_to_script=path_to_script)
-    # # ==========================================================================
+    generate_simulated_boot_data(freqs, ('i', 'q', 'u'), n_boot=n_boot,
+                                 base_path=outpath)
+    clean_sumulated_boot_data(freqs, ('i', 'q', 'u'), base_path=outpath,
+                              path_to_script=path_to_script)
+    # ==========================================================================
 
-    # # ==========================================================================
-    # # For each frequency create mask of simulated maps based on PPOL
-    # # distribution
-    # print "For each frequency create mask based on PPOL distribution"
-    # ppol_error_images_dict = dict()
-    # pang_error_images_dict = dict()
-    # ppol_images_dict = dict()
-    # pang_images_dict = dict()
-    # ppol_masks_dict = dict()
-    # for freq in freqs:
-    #     print "freq {}".format(freq)
-    #     images_ = create_images_from_simulated_boot_images([freq],
-    #                                                        ('i', 'q', 'u'),
-    #                                                        base_path=outpath)
-    #     ppol_images = Images()
-    #     pang_images = Images()
-    #     ppol_images.add_images(images_.create_pol_images())
-    #     pang_images.add_images(images_.create_pang_images())
-    #     ppol_error_image = ppol_images.create_error_image(cred_mass=0.99)
-    #     pang_error_image = pang_images.create_error_image(cred_mass=0.68)
-    #     ppol_error_images_dict.update({freq: ppol_error_image})
-    #     pang_error_images_dict.update({freq: pang_error_image})
-    #     images_ = Images()
-    #     for stoke in stokes:
-    #         orig_map_name = 'simul_{}_{}_cc.fits'.format(stoke, freq)
-    #         images_.add_from_fits(wildcard=os.path.join(outpath,
-    #                                                     orig_map_name))
-    #     ppol_image = images_.create_pol_images()[0]
-    #     ppol_images_dict.update({freq: ppol_image})
-    #     mask = ppol_image.image < ppol_error_image.image
-    #     ppol_masks_dict.update({freq: mask})
+    # ==========================================================================
+    # For each frequency create mask of simulated maps based on PPOL
+    # distribution
+    print "For each frequency create mask based on PPOL distribution"
+    ppol_error_images_dict = dict()
+    pang_error_images_dict = dict()
+    ppol_images_dict = dict()
+    pang_images_dict = dict()
+    ppol_masks_dict = dict()
+    for freq in freqs:
+        print "freq {}".format(freq)
+        images_ = create_images_from_simulated_boot_images([freq],
+                                                           ('i', 'q', 'u'),
+                                                           base_path=outpath)
+        ppol_images = Images()
+        # pang_images = Images()
+        ppol_images.add_images(images_.create_pol_images())
+        # pang_images.add_images(images_.create_pang_images())
+        ppol_error_image = ppol_images.create_error_image(cred_mass=0.99)
+        # pang_error_image = pang_images.create_error_image(cred_mass=0.68)
+        ppol_error_images_dict.update({freq: ppol_error_image})
+        # pang_error_images_dict.update({freq: pang_error_image})
+        images_ = Images()
+        for stoke in stokes:
+            orig_map_name = 'simul_{}_{}_cc.fits'.format(stoke, freq)
+            images_.add_from_fits(wildcard=os.path.join(outpath,
+                                                        orig_map_name))
+        ppol_image = images_.create_pol_images()[0]
+        ppol_images_dict.update({freq: ppol_image})
+        mask = ppol_image.image < ppol_error_image.image
+        ppol_masks_dict.update({freq: mask})
 
-    # # Create overall mask for PPOL flux
-    # print "Create overall mask for PPOL flux"
-    # masks = [np.array(mask, dtype=int) for mask in ppol_masks_dict.values()]
-    # ppol_mask = np.zeros(masks[0].shape, dtype=int)
-    # for mask in masks:
-    #     ppol_mask += mask
-    # ppol_mask[ppol_mask != 0] = 1
-    # # Save mask to disk
-    # print "Saving ppol mask on disk..."
-    # np.savetxt(os.path.join(outpath, "ppol_mask_99.txt"), ppol_mask)
-    # # ==========================================================================
+    # Create overall mask for PPOL flux
+    print "Create overall mask for PPOL flux"
+    masks = [np.array(mask, dtype=int) for mask in ppol_masks_dict.values()]
+    ppol_mask = np.zeros(masks[0].shape, dtype=int)
+    for mask in masks:
+        ppol_mask += mask
+    ppol_mask[ppol_mask != 0] = 1
+    # Save mask to disk
+    print "Saving ppol mask on disk..."
+    np.savetxt(os.path.join(outpath, "ppol_mask_99.txt"), ppol_mask)
+    # ==========================================================================
 
     # # ==========================================================================
     # # Create bootstrap ROTM images with calculated mask
     # print "Create bootstrap silumated ROTM images with calculated mask"
     ppol_mask = np.loadtxt(os.path.join(outpath, "ppol_mask_99.txt"))
-    # rotm_images_list = list()
-    # for i in range(1, n_boot + 1):
-    #     images = Images()
-    #     for freq in freqs:
-    #         for stoke in stokes:
-    #             fname = os.path.join(outpath,
-    #                                  'simul_boot_cc_{}_{}_{}.fits'.format(freq,
-    #                                                                       stoke,
-    #                                                                       i))
-    #             images.add_from_fits(fnames=[fname])
-    #     rotm_image, s_rotm_image = images.create_rotm_image(mask=ppol_mask)
-    #     rotm_images_list.append(rotm_image)
+    rotm_images_list = list()
+    for i in range(1, n_boot + 1):
+        images = Images()
+        for freq in freqs:
+            for stoke in stokes:
+                fname = os.path.join(outpath,
+                                     'simul_boot_cc_{}_{}_{}.fits'.format(freq,
+                                                                          stoke,
+                                                                          i))
+                images.add_from_fits(fnames=[fname])
+        rotm_image, s_rotm_image = images.create_rotm_image(mask=ppol_mask)
+        rotm_images_list.append(rotm_image)
 
-    # import pickle
-    # f = open(os.path.join(outpath, 'rm_images_list_99.pkl'), 'wb')
-    # print "Dumping to file bootstrapped simulated ROTM images..."
-    # pickle.dump(rotm_images_list, f)
-    # f.close()
-    # # ==========================================================================
+    import pickle
+    f = open(os.path.join(outpath, 'rm_images_list_99.pkl'), 'wb')
+    print "Dumping to file bootstrapped simulated ROTM images..."
+    pickle.dump(rotm_images_list, f)
+    f.close()
+    # ==========================================================================
 
     # ==========================================================================
     # Stack ROTM images
@@ -1139,8 +1126,8 @@ if __name__ == '__main__':
     for image in rotm_images_boot.images:
         matplotlib.pyplot.plot(np.arange(210, 302, 1) +
                                np.random.normal(0, 0.05, 92),
-                               image.slice((240, 210), (240, 302)), 'k', lw=0.1)
-        slice_ = image.slice((240, 210), (240, 302))
+                               image.slice((228, 210), (228, 302)), 'k', lw=0.1)
+        slice_ = image.slice((228, 210), (228, 302))
         slices.append(slice_[~np.isnan(slice_)])
     # Plot real ROTM grad values
     (imsize_l, pixref_l, pixrefval_l, (bmaj_l, bmin_l, bpa_l,), pixsize_l,
@@ -1151,11 +1138,12 @@ if __name__ == '__main__':
     # Analytical gradient in real image (didn't convolved)
     def rm(x, y, grad_value, rm_value_0=0.0):
         k = grad_value / (bmaj_l/abs(rotm_image.pixsize[0]))
-        return k * x + rm_value_0
+        # return k * x + rm_value_0
+        return -k * x + rm_value_0
 
     matplotlib.pyplot.plot(np.arange(210, 302, 1),
                            rm(np.arange(210, 302, 1) - rotm_image.pixref[1],
-                              None, grad_value, rm_value_0=200.))
+                              None, grad_value, rm_value_0=rm_value_0))
     matplotlib.pyplot.axvline(rotm_image.pixref[1] - jet_width / 2.)
     matplotlib.pyplot.axvline(rotm_image.pixref[1] + jet_width / 2.)
 
@@ -1165,7 +1153,13 @@ if __name__ == '__main__':
     images = Images()
     images.add_from_fits(wildcard=os.path.join(outpath, "simul_*_cc.fits"))
     rotm_image, s_rotm_image = images.create_rotm_image(mask=ppol_mask)
-    obs_slice = rotm_image.slice((240, 210), (240, 302))
+    obs_slice = rotm_image.slice((228, 210), (228, 302))
+
+
+    x = np.arange(210, 302, 1)
+    x = x[~np.isnan(obs_slice)]
+
+
     obs_slice = obs_slice[~np.isnan(obs_slice)]
 
     print "Find 68% cred. intervals from bootstrapped slices"
@@ -1180,19 +1174,22 @@ if __name__ == '__main__':
     # Move bootstrap curves to original simulated centers
     slices_ = [slice_ + diff for slice_ in slices]
 
-    print "Increasing width of CB from ``sigmas`` till it contains 95% of " \
-          "curves"
-    # Count how many curves are contained by CB and loop
-    n = count_contained(slices_, obs_slice, sigmas)
-    f = 1
-    while n < 95:
-        f += 0.01
-        n = count_contained(slices_, obs_slice, f * sigmas)
+    # Find low and upper confidence band
+    low, up = create_sim_conf_band(slices_, obs_slice, sigmas, alpha=0.99)
 
-
-
-
-
+    # Plot slice with confidence band
+    sl_len = len(obs_slice)
+    matplotlib.pyplot.plot(x, low[::-1], 'g')
+    matplotlib.pyplot.plot(x, up[::-1], 'g')
+    [matplotlib.pyplot.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in
+     slices_]
+    matplotlib.pyplot.plot(x, obs_slice[::-1], '.k')
+    matplotlib.pyplot.plot(x, rm(x - rotm_image.pixref[1], None, grad_value,
+                                 rm_value_0=100))
+    matplotlib.pyplot.axvline(rotm_image.pixref[1] - jet_width / 2.)
+    matplotlib.pyplot.axvline(rotm_image.pixref[1] + jet_width / 2.)
+    matplotlib.pyplot.savefig(os.path.join(base_path, "RM_slice_CB.png"),
+                              bbox_inches='tight', dpi=200)
 
     # # Plot I, ROTM image
     # i_path = im_fits_path(source, bands[-1], epoch, 'i', base_path=base_path)

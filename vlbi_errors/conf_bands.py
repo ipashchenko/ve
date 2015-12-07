@@ -53,6 +53,26 @@ for i in range(1, n_boot/2 + 1):
     print "updating counts with {}, {}".format(i, float(nn) / N)
     counts.update({i: float(nn) / N})
 
+# 1. Choose upper and lower percentile and find such that only \alpha of curves
+# lie outside
+sim_counts = dict()
+sim_N = n_boot
+for i in range(1, n_boot/2 + 1):
+    print i
+    low_perc = (n_boot/2. - i) / n_boot
+    high_perc = (n_boot/2. + i) / n_boot
+    print "low perc {}".format(low_perc)
+    print "high perc {}".format(high_perc)
+    nn = 0
+    for j in range(n_boot):
+        data = y_boot[:, j]
+        l, h = np.percentile(data, (100 * low_perc, 100 * high_perc))
+        n = np.count_nonzero(np.logical_and(data > l, data < h))
+        nn += n
+    print "updating counts with {}, {}".format(i, float(nn) / N)
+    counts.update({i: float(nn) / N})
+
+
 # Find percentiles that embrace 95% of data
 for key, value in counts.items():
     if value > 1 - alpha:

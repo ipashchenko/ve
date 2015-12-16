@@ -10,7 +10,7 @@ except ImportError:
     pylab = None
 from utils import baselines_2_ants, get_uv_correlations
 from utils import index_of
-from utils import get_triangles
+from utils import get_triangles, find_card_from_header
 from data_io import Groups, IDI
 
 vec_complex = np.vectorize(np.complex)
@@ -765,6 +765,14 @@ class UVData(object):
     @uvdata.setter
     def uvdata(self, uvdata):
         self.data['hands'] = uvdata
+
+    @property
+    def frequency(self):
+        """
+        Frequency in Hz.
+        """
+        freq_card = find_card_from_header(self._io.hdu.header, value='FREQ')[0]
+        return self._io.hdu.header['CRVAL{}'.format(freq_card[0][-1])]
 
     def error(self, average_freq=False):
         """

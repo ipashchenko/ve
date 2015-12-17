@@ -156,3 +156,7 @@ def clean_uv_fits(uv_fits_paths, out_fits_paths, stokes, beam=None,
                          beam_restore=beam_pars,
                          outpath=out_fits_dir)
     os.chdir(curdir)
+
+
+if __name__ == '__main__':
+

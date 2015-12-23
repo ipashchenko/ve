@@ -597,7 +597,7 @@ def create_mask(shape, region):
         Tuple (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r,
         None,) or (center[0], center[1], bmaj, e, bpa).
     :return:
-        Numpy bool array.
+        Numpy 2D bool array.
     """
     if region[3] is None:
         # Creating a disc shaped mask with radius r
@@ -607,11 +607,31 @@ def create_mask(shape, region):
         y, x = np.ogrid[-a: n - a, -b: n - b]
         mask = x ** 2 + y ** 2 <= r ** 2
 
-    else:
+    elif len(region) == 4:
         # Creating rectangular mask
         y, x = np.ogrid[0: shape[0], 0: shape[1]]
         mask = (region[0] < x) & (x < region[2]) & (region[1] < y) & (y <
                                                                       region[3])
+    elif len(region) == 5:
+        # Create elliptical mask
+        a, b = region[0], region[1]
+        n = min(shape)
+        y, x = np.ogrid[-a: n - a, -b: n - b]
+        bmaj = region[2]
+        e = region[3]
+        bpa = region[4]
+        bmin = bmaj * e
+        # This brings PA to VLBI-convention (- = from North counterclocwise)
+        bpa = -bpa
+        a = math.cos(bpa) ** 2. / (2. * bmaj ** 2.) + \
+            math.sin(bpa) ** 2. / (2. * bmin ** 2.)
+        b = math.sin(2. * bpa) / (2. * bmaj ** 2.) - \
+            math.sin(2. * bpa) / (2. * bmin ** 2.)
+        c = math.sin(bpa) ** 2. / (2. * bmaj ** 2.) + \
+            math.cos(bpa) ** 2. / (2. * bmin ** 2.)
+        mask = a * x ** 2 + b * x * y + c * y ** 2 <= 1
+    else:
+        raise Exception
     return mask
 
 

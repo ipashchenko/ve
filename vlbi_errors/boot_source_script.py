@@ -159,4 +159,4 @@ def clean_uv_fits(uv_fits_paths, out_fits_paths, stokes, beam=None,
 
 
 if __name__ == '__main__':
-
+    pass

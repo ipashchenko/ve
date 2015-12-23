@@ -219,6 +219,34 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         fig.colorbar(im, cax=colorbar_ax)
     fig.show()
 
+    # TODO: Implement plotting beam
+    # from matplotlib.patches import Ellipse
+    # e_height = 10 * pixsize * factor
+    # e_width = 5 * pixsize * factor
+    # r_min = e_height / 2
+    # if beam_place == 'lr':
+    #     y_c = y[0] + r_min
+    #     x_c = x[-1] - r_min
+    # elif beam_place == 'll':
+    #     y_c = y[0] + r_min
+    #     x_c = x[0] + r_min
+    # elif beam_place == 'ul':
+    #     y_c = y[-1] - r_min
+    #     x_c = x[0] + r_min
+    # elif beam_place == 'ur':
+    #     y_c = y[-1] - r_min
+    #     x_c = x[-1] - r_min
+    # else:
+    #     raise Exception
+
+    # e = Ellipse((y_c, x_c), e_height, e_width, angle=-30, edgecolor='black',
+    #             facecolor='none', alpha=1)
+    # ax.add_patch(e)
+    # title = ax.set_title("My plot", fontsize='large')
+    # colorbar_ax = fig.add_axes([0.7, 0.1, 0.05, 0.8])
+    # fig.colorbar(i, cax=colorbar_ax)
+    # fig.show()
+
     # Saving output
     if outfile:
         if outdir is None:

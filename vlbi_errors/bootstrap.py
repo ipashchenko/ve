@@ -225,10 +225,10 @@ if __name__ == "__main__":
                                              stokes='Q')
     ccmodelu = create_ccmodel_from_fits_file("/home/ilya/Dropbox/Zhenya/to_ilya/clean_images/0148+274.c1.2007_03_01.u.fits",
                                              stokes='U')
-    os.chdir("/home/ilya/code/vlbi_errors/vlbi_errors/test/")
+    # os.chdir("/home/ilya/code/vlbi_errors/vlbi_errors/test/")
     cbootstrap = CleanBootstrap([ccmodeli, ccmodelq, ccmodelu], uv_data)
-    cbootstrap.run(10, outname=['DEL', '.FITS'])
-    os.chdir(curdir)
+    # cbootstrap.run(10, outname=['DEL', '.FITS'])
+    # os.chdir(curdir)
 
     # # Self-calibration bootstrap
     # sc_sequence_files = ["sc_1.fits", "sc_2.fits", "sc_final.fits"]

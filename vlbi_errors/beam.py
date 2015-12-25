@@ -37,13 +37,22 @@ class DirtyBeam(Beam):
         """
         Fit central part of dirty beam and return instance of ``CleanBeam``.
         """
-        pass
+        raise NotImplementedError
 
 
-# TODO: bmaj & bmin must be in pixels and bpa - in degrees!!!
+# TODO: Refactor class - beam should't depend on any size.
 class CleanBeam(Beam):
     """
     Class that represents central part of point spread function.
+
+    :param bmaj:
+        Beam major axis [pxl].
+    :param bmin:
+        Beam minor axis [pxl].
+    :param bpa:
+        Beam positional angle [deg].
+    :param size:
+        Size of beam image [pxl].
     """
     def __init__(self, bmaj=None, bmin=None, bpa=None, size=None):
         self.bmaj = bmaj

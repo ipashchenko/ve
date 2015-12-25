@@ -163,8 +163,8 @@ def clean_uv_fits(uv_fits_paths, out_fits_paths, stokes, beam=None,
     os.chdir(curdir)
 
 
-def find_shift(image1, image2, max_shift, shift_step, max_mask_r=None,
-               mask_step=5):
+def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
+               max_mask_r=None, mask_step=5):
     """
     Find shift between two images using our heruistic.
 
@@ -176,6 +176,8 @@ def find_shift(image1, image2, max_shift, shift_step, max_mask_r=None,
         Maximum size of shift to check [pxl].
     :param shift_step:
         size of shift changes step [pxl].
+    :param min_shift: (optional)
+        Minimum size of shift to check [pxl]. (default: ``0``)
     :param max_mask_r: (optional)
         Maximum size of mask to apply. If ``None`` then use maximum possible.
         (default: ``None``)
@@ -187,7 +189,7 @@ def find_shift(image1, image2, max_shift, shift_step, max_mask_r=None,
     shift_dict = dict()
 
     # Iterating over difference of mask sizes
-    for dr in range(0, max_shift, shift_step):
+    for dr in range(min_shift, max_shift, shift_step):
         print("Using dr={}".format(dr))
         shift_dict[dr] = list()
 
@@ -398,8 +400,19 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
         image_1 = cc_image_dict[freq_1]['I']
         for freq_2 in freqs[1:]:
             image_2 = cc_image_dict[freq_2]['I']
+            # Coarse grid of possible shifts
             shift = find_shift(image_1, image_2, 100, 5, max_mask_r=200,
                                mask_step=5)
+            # More accurate grid of possible shifts
+            coarse_grid = range(0, 100, 5)
+            idx = coarse_grid.index(shift)
+            if idx > 0:
+                min_shift = coarse_grid[idx - 1]
+            else:
+                min_shift = 0
+            shift = find_shift(image_1, image_2, coarse_grid[idx + 1], 1,
+                               min_shift=min_shift, max_mask_r=200, mask_step=5)
+
             shift_dict.update({(freq_1, freq_2,): shift})
 
 

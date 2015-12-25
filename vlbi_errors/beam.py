@@ -61,6 +61,11 @@ class CleanBeam(Beam):
         self.size = size
         self.image = gaussianBeam(self.size[0], self.bmaj, self.bmin,
                                   self.bpa + 90., self.size[1])
+
+    @property
+    def beam(self):
+        return self.bmaj, self.bmin, self.bpa
+
     def __eq__(self, other):
         """
         Compares current instance of ``CleanBeam`` class with other instance.

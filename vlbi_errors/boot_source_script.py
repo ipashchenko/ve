@@ -1,9 +1,14 @@
 import os
+from itertools import combinations
+
+import numpy as np
 from from_fits import (create_uvdata_from_fits_file,
-                       create_ccmodel_from_fits_file)
+                       create_ccmodel_from_fits_file,
+                       create_image_from_fits_file,
+                       create_clean_image_from_fits_file)
 from bootstrap import CleanBootstrap
 from data_io import get_fits_image_info
-from utils import (mas_to_rad, degree_to_rad)
+from utils import (mas_to_rad, degree_to_rad, find_card_from_header)
 from spydiff import clean_difmap
 
 
@@ -156,6 +161,250 @@ def clean_uv_fits(uv_fits_paths, out_fits_paths, stokes, beam=None,
                          beam_restore=beam_pars,
                          outpath=out_fits_dir)
     os.chdir(curdir)
+
+
+def find_shift(image1, image2, max_shift, shift_step, max_mask_r=None,
+               mask_step=5):
+    """
+    Find shift between two images using our heruistic.
+
+    :param image1:
+        Instance of ``BasicImage`` class.
+    :param image2:
+        Instance of ``BasicImage`` class.
+    :param max_shift:
+        Maximum size of shift to check [pxl].
+    :param shift_step:
+        size of shift changes step [pxl].
+    :param max_mask_r: (optional)
+        Maximum size of mask to apply. If ``None`` then use maximum possible.
+        (default: ``None``)
+    :param mask_step: (optional)
+        Size of mask size changes step. (default: ``5``)
+    :return:
+        Array of shifts.
+    """
+    shift_dict = dict()
+
+    # Iterating over difference of mask sizes
+    for dr in range(0, max_shift, shift_step):
+        print("Using dr={}".format(dr))
+        shift_dict[dr] = list()
+
+        # Iterating over mask sizes
+        for r in range(0, max_mask_r, mask_step):
+            print("Using r={}".format(r))
+            r1 = r
+            r2 = r + dr
+            shift = image1.cross_correlate(image2,
+                                           region1=(image1.x_c, image1.y_c, r1,
+                                                    None),
+                                           region2=(image2.x_c, image2.y_c, r2,
+                                                    None))
+            print("Got shift {}".format(shift))
+            shift_dict[dr].append(shift)
+
+    for key, value in shift_dict.items():
+        value = np.array(value)
+        shifts = np.sqrt(value[:, 0] ** 2. + value[:, 1] ** 2.)
+        shift_dict.update({key: np.std(shifts)})
+
+    # Searching for mask size difference that has minimal std in shifts
+    # calculated for different mask sizes
+    return sorted(shift_dict, key=lambda _: shift_dict[_])[0]
+
+
+def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
+                   common_imsize=None, common_beam=None, find_shifts=False,
+                   bootstrap_shift_error=False, add_shift=False, outdir=None,
+                   path_to_script=None, stokes=None):
+    """
+    Function that uses multifrequency self-calibration data for in-depth
+    analysis.
+
+    :param uv_fits_paths:
+        Iterable of paths to self-calibrated uv-data FITS-files.
+    :param n_boot:
+        Number of bootstrap replications to use in analysis.
+    :param cc_fits_paths: (optional)
+        Iterable of dicts with paths to FITS-files with CLEAN-images. Each
+        dictionary should include stokes parameters ``I``[, ``Q``, ``U``]. If
+        ``None`` then use use-specified image parameters. (default: ``None``)
+    :param imsizes: (optional)
+        Iterable of image parameters (imsize, pixsize) that should be used for
+        CLEANing of uv-data if no CLEAN-images are supplied. Should be sorted in
+        increasing frequency order. If ``None`` then specify parameters by CLEAN
+        images. (default: ``None``)
+    :param common_imsize: (optional)
+        Image parameters that will be used in making common size images for
+        multifrequency analysis. If ``None`` then use physical image size of
+        lowest frequency and pixel size of highest frequency. (default:
+        ``None``)
+    :param common_beam: (optional)
+        Beam parameters that will be used in making common size images for
+        multifrequency analysis. If ``None`` then use beam of lowest frequency.
+        (default: ``None``)
+    :param find_shifts: (optional)
+        Find shifts between multifrequency images? (default: ``False``)
+    :param bootstrap_shift_error: (optional)
+        Use bootstrap to estimate shift image error. (default: ``False``)
+    :param add_shift: (optional)
+        Add shift while CLEANing bootstrap replications? (default: ``False``)
+    :param outdir: (optional)
+        Output directory. This directory will be used for saving picture, data,
+        etc. If ``None`` then use CWD. (default: ``None``)
+    :param path_to_script: (optional)
+        Path ot difmap CLEAN script. If ``None`` then use CWD. (default:
+        ``None``)
+    :param stokes: (optional)
+        Iterable of stokes parameters to CLEAN original self-calibrated uv-data.
+        If ``None`` then ('I', 'Q', 'U'). (default: ``None``)
+
+    :note:
+        Function use this workflow:
+
+        1. CLEAN uv-data in specified FITS-files (``uv_fits_paths``) with
+        parameters specified in ``imsizes`` argument. If ``cc_fits_paths`` are
+        specified then it supposed that it is the result of such CLEAN.
+
+        #. Bootstrap uv-data with obtained CLEAN-models using ``n_boot``
+        bootstrap realizations.
+
+        #. Find shift between all possible frequencies. Optionally finds
+        bootstrap error estimate of found shift values.
+
+        #. CLEAN bootstrapped data (optionally with added shifts relative to
+        lowest frequency) with image parameters (imsize, pixsize) specified by
+        ``common_imsize`` or (if it is ``None``) by lowest and highest frequency
+        CLEAN images.
+
+        #. Create ROTM images from CLEANed bootstrapped data.
+
+    """
+    if outdir is None:
+        outdir = os.getcwd()
+    n_freq = len(uv_fits_paths)
+    # Container for original self-calibrated uv-data
+    uv_data_dict = dict()
+    uv_fits_dict = dict()
+    for uv_fits_path in uv_fits_paths:
+        uvdata = create_uvdata_from_fits_file(uv_fits_path)
+        # Mark frequencies by total band center [Hz] for consistency with image.
+        uv_data_dict.update({uvdata.band_center: uvdata})
+        uv_fits_dict.update({uvdata.band_center: uv_fits_path})
+    freqs = sorted(uv_fits_dict.keys())
+
+    # Container for original CLEAN-images of self-calibrated uv-data
+    cc_image_dict = dict()
+    cc_fits_dict = dict()
+    cc_beam_dict = dict()
+    for freq in freqs:
+        cc_image_dict.update({freq: dict()})
+        cc_fits_dict.update({freq: dict()})
+        cc_beam_dict.update({freq: dict()})
+
+    # If CLEAN-images are supplied then use them
+    if cc_fits_paths is not None:
+        imsizes_dict = dict()
+        print("Exploring supplied CLEAN images")
+        for cc_fits_path in cc_fits_paths:
+            image = create_image_from_fits_file(cc_fits_path)
+            freq = image.freq
+            stoke = image.stokes
+            if freq not in freqs:
+                raise Exception("Frequency of CLEAN image not known from"
+                                " UV-data!")
+            cc_image_dict[freq].update({stoke: image})
+            cc_fits_dict[freq].update({stoke: cc_fits_path})
+            # FIXME: Should be ([mas], [mas], [deg])
+            # TODO: Add property in ``CleanImage``
+            if stoke == 'I':
+                ccimage = create_clean_image_from_fits_file(cc_fits_path)
+                cc_beam_dict[freq].update({stoke: ccimage._beam.beam})
+        for freq in freqs:
+            image = cc_image_dict[freq][stoke]
+            imsizes_dict.update({freq: (image.imsize[0], abs(image.pixsize[0] /
+                                                             mas_to_rad))})
+
+        assert set(uv_fits_dict.keys()).issubset(cc_fits_dict.keys())
+        # Define stokes from existing CLEAN-images
+        stokes = cc_image_dict[freqs[0]].keys()
+
+    # If no CLEAN-images are supplied then CLEAN original data with
+    # use-specified parameters
+    elif imsizes is not None:
+        assert len(imsizes) == n_freq
+        if stokes is None:
+            stokes = ('I', 'Q', 'U')
+        imsizes_dict = dict()
+        for i, freq in enumerate(freqs):
+            imsizes_dict.update({freq: imsizes[i]})
+        for freq in freqs:
+            uv_fits_path = uv_fits_dict[freq]
+            uv_dir, uv_fname = os.path.split(uv_fits_path)
+            for stoke in stokes:
+                outfname = '{}_{}_cc.fits'.format(freq, stoke)
+                outpath = os.path.join(outdir, outfname)
+                clean_difmap(uv_fname, outfname, stoke, imsizes[freq],
+                             path=uv_dir, path_to_script=path_to_script,
+                             outpath=outdir, show_difmap_output=True)
+                cc_fits_dict[freq].update({stoke: os.path.join(outdir,
+                                                               outfname)})
+                image = create_image_from_fits_file(outpath)
+                cc_image_dict[freq].update({stoke: image})
+                if stoke == 'I':
+                    ccimage = create_clean_image_from_fits_file(outpath)
+                    cc_beam_dict[freq].update({stoke: ccimage._beam.beam})
+
+    # Now CLEAN uv-data using ``common_imsize`` or parameters of CLEAN-image
+    # from lowest and highest frequencies
+    # Container for common sized CLEAN-images of self-calibrated uv-data
+    cc_cs_image_dict = dict()
+    cc_cs_fits_dict = dict()
+    if common_imsize is None:
+        imsize_low, pixsize_low = imsizes_dict[freqs[0]]
+        imsize_high, pixsize_high = imsizes_dict[freqs[-1]]
+        imsize = imsize_low * pixsize_low / pixsize_high
+        powers = [imsize // (2 ** i) for i in range(15)]
+        imsize = 2 ** powers.index(0)
+        common_imsize = (imsize, pixsize_high)
+    for freq in freqs:
+        cc_cs_image_dict.update({freq: dict()})
+        cc_cs_fits_dict.update({freq: dict()})
+
+        uv_fits_path = uv_fits_dict[freq]
+        uv_dir, uv_fname = os.path.split(uv_fits_path)
+        for stoke in stokes:
+            outfname = 'cs_{}_{}_cc.fits'.format(freq, stoke)
+            outpath = os.path.join(outdir, outfname)
+            clean_difmap(uv_fname, outfname, stoke, common_imsize,
+                         path=uv_dir, path_to_script=path_to_script,
+                         outpath=outdir, show_difmap_output=True)
+            cc_fits_dict[freq].update({stoke: os.path.join(outdir,
+                                                           outfname)})
+            image = create_image_from_fits_file(outpath)
+            cc_image_dict[freq].update({stoke: image})
+
+    # Bootstrap self-calibrated uv-data with CLEAN-models
+    for freq, uv_fits_path in uv_fits_dict:
+        cc_fits_paths = cc_fits_dict[freq].keys()
+        bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n_boot, outpath=outpath,
+                          outname=('boot_{}'.format(freq), '_uv.fits'))
+
+    # Optionally find shifts between images
+    if find_shifts:
+        shift_dict = dict()
+        freq_1 = freqs[0]
+        image_1 = cc_image_dict[freq_1]['I']
+        for freq_2 in freqs[1:]:
+            image_2 = cc_image_dict[freq_2]['I']
+            shift = find_shift(image_1, image_2, 100, 5, max_mask_r=200,
+                               mask_step=5)
+            shift_dict.update({(freq_1, freq_2,): shift})
+
+
+
+
 
 
 if __name__ == '__main__':

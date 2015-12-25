@@ -219,7 +219,9 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         fig.colorbar(im, cax=colorbar_ax)
     fig.show()
 
-    # TODO: Implement plotting beam
+
+
+
     # from matplotlib.patches import Ellipse
     # e_height = 10 * pixsize * factor
     # e_width = 5 * pixsize * factor
@@ -405,6 +407,7 @@ class BasicImage(object):
         model.add_to_image(self)
 
     # TODO: Implement Rayleigh (Rice) distributed noise for stokes I
+    # FIXME: This is uncorrelated noise - that is too simple model
     def add_noise(self, std, df=None):
         size = self.imsize[0] * self.imsize[1]
         if df is None:
@@ -428,10 +431,11 @@ class BasicImage(object):
         :param region1 (optional):
             Region to EXCLUDE in current instance of ``Image``.
             Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r,
-            None,). Default ``None``.
+            None,) or (center[0], center[1], bmaj, e, bpa). Default ``None``.
         :param region2 (optional):
-            Region to EXCLUDE in ``image``. Or (blc[0], blc[1], trc[0], trc[1],)
-            or (center[0], center[1], r, None,). Default ``None``.
+            Region to EXCLUDE in other instance of ``Image``. Or (blc[0], blc[1],
+            trc[0], trc[1],) or (center[0], center[1], r, None,) or (center[0],
+            center[1], bmaj, e, bpa). Default ``None``.
         :param upsample_factor: (optional)
             Upsampling factor. Images will be registered to within
             ``1 / upsample_factor`` of a pixel. For example

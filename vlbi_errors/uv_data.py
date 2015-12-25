@@ -175,6 +175,20 @@ class UVData(object):
         return self.hdu.header['CRVAL{}'.format(freq_card[0][-1])]
 
     @property
+    def freq_width_if(self):
+        freq_card = find_card_from_header(self.hdu.header, value='FREQ')[0]
+        return self.hdu.header['CDELT{}'.format(freq_card[0][-1])]
+
+    @property
+    def freq_width(self):
+        freq_card = find_card_from_header(self.hdu.header, value='FREQ')[0]
+        return self.nif * self.hdu.header['CDELT{}'.format(freq_card[0][-1])]
+
+    @property
+    def band_center(self):
+        return self.frequency + self.freq_width_if * (self.nif / 2. - 0.5)
+
+    @property
     def scans(self):
         """
         Returns list of times that separates different scans. If NX table is

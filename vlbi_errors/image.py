@@ -421,7 +421,8 @@ class BasicImage(object):
     # TODO: Implement several regions to include for each image
     # TODO: Implement masking clean components with ``mask_cc`` parameter
     def cross_correlate(self, image, region1=None, region2=None,
-                        upsample_factor=100, mask_cc=False):
+                        upsample_factor=100, extended_output=False,
+                        mask_cc=False):
         """
         Cross-correlates current instance of ``Image`` with another instance
         using phase correlation.
@@ -442,12 +443,16 @@ class BasicImage(object):
             ``upsample_factor == 20`` means the images will be registered
             within 1/20th of a pixel. If ``1`` then no upsampling.
             (default: ``100``)
+        :param extended_output: (optioinal)
+            Output all information from ``register_translation``? (default:
+            ``False``)
         :param mask_cc: (optional)
             If some of images is instance of ``CleanImage`` class - should we
             mask clean components instead of image array? (default: ``False``)
 
         :return:
-            Array of shifts (subpixeled) in each direction.
+            Array of shifts (subpixeled) in each direction or full information
+            from ``register_translation`` depending on ``extended_output``.
         """
         image1 = self.image.copy()
         if region1 is not None:
@@ -464,7 +469,10 @@ class BasicImage(object):
         # Cross-correlate images
         shift, error, diffphase = register_translation(image1, image2,
                                                        upsample_factor)
-        return shift
+        result = shift
+        if extended_output:
+            result = (shift, error, diffphase)
+        return result
 
     def slice(self, pix1, pix2):
         """

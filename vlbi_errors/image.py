@@ -275,8 +275,8 @@ class BasicImage(object):
         self.imsize = imsize
         self.pixsize = pixsize
         self.pixref = pixref
-        self.dx, self.dy = pixsize
-        self.x_c, self.y_c = pixref
+        self.dy, self.dx = pixsize
+        self.y_c, self.x_c = pixref
         if pixrefval is None:
             pixrefval = (0., 0.,)
         self.x_c_val, self.y_c_val = pixrefval
@@ -289,6 +289,7 @@ class BasicImage(object):
         y = y - self.y_c
         x = x * self.dx
         y = y * self.dy
+        # TODO: Use sign of ``self.pixsize`` to [::-1] if it is -1!
         self.x = x
         self.y = y
 
@@ -364,6 +365,14 @@ class BasicImage(object):
         else:
             self.image /= other
         return self
+
+    @property
+    def phys_size(self):
+        """
+        Shortcut for physical size of image.
+        """
+        return (self.imsize[0] * abs(self.pixsize[0]), self.imsize[1] *
+                abs(self.pixsize[1]))
 
     # FIXME: To use it in ``CleanImage`` i should make ``image`` property return
     # CC convolved with beam + residuals.

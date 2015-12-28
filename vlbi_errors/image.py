@@ -289,7 +289,6 @@ class BasicImage(object):
         y = y - self.y_c
         x = x * self.dx
         y = y * self.dy
-        # TODO: Use sign of ``self.pixsize`` to [::-1] if it is -1!
         self.x = x
         self.y = y
 
@@ -530,10 +529,12 @@ class Image(BasicImage):
     def __init__(self, imsize=None, pixref=None, pixrefval=None, pixsize=None,
                  stokes=None, freq=None):
         super(Image, self).__init__(imsize=imsize, pixref=pixref,
-                                         pixrefval=pixrefval, pixsize=pixsize)
+                                    pixrefval=pixrefval, pixsize=pixsize)
         self.stokes = stokes
         self.freq = freq
 
+    def from_fits(self, fits_path):
+        pass
 
 
 # TODO: Add method ``shift`` that shifts image (CCs and residulas)
@@ -542,6 +543,10 @@ class Image(BasicImage):
 class CleanImage(Image):
     """
     Class that represents image made using CLEAN algorithm.
+    :param bmaj:
+        Beam major axis [rad].
+    :param bpa:
+        Beam positional angle [deg].
     """
     def __init__(self, imsize=None, pixref=None, pixrefval=None, pixsize=None,
                  stokes=None, freq=None, bmaj=None, bmin=None, bpa=None):
@@ -550,8 +555,9 @@ class CleanImage(Image):
         # TODO: What if pixsize has different sizes???
         # FIXME: Beam has image twice the imsize. It's bad for plotting...
         self._beam = CleanBeam(bmaj / abs(pixsize[0]), bmin / abs(pixsize[0]),
-                              bpa, imsize)
+                               bpa, imsize)
         self._residuals = BasicImage(imsize, pixref, pixrefval, pixsize)
+        self._image_original = np.zeros(self.imsize, dtype=float)
 
     def __eq__(self, other):
         """
@@ -594,28 +600,27 @@ class CleanImage(Image):
                                beam_pars[1] * mas_to_rad / abs(self.pixsize[0]),
                                beam_pars[2], self.imsize)
 
-    # TODO: Add ``masked`` decorator that returns the same as ``image``, ``cc``,
-    # ``image_w_residuals``, ``residuals`` but masked using user-supplied mask.
     @property
     def image(self):
         """
-        Shorthand for CLEAN image.
+        Shorthand for clean components convolved with original clean beam with
+        residuals added (that is what ``Image.image`` contains).
+        """
+        return self._image_original
+
+    @property
+    def cc_image(self):
+        """
+        Shorthand for convolved clean components image.
         """
         return signal.fftconvolve(self._image, self.beam, mode='same')
 
     @property
     def cc(self):
         """
-        Shorthand for image of clean components.
+        Shorthand for image of clean components (didn't convolved with beam).
         """
         return self._image
-
-    @property
-    def image_w_residuals(self):
-        """
-        Shorthand for CLEAN image with residuals added.
-        """
-        return self.image + self.residuals
 
     # FIXME: Should be read-only as residuals have sense only for naitive clean
     @property

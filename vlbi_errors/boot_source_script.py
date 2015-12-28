@@ -1,22 +1,21 @@
 import os
-from itertools import combinations
-
+import json
 import numpy as np
-from from_fits import (create_uvdata_from_fits_file,
-                       create_ccmodel_from_fits_file,
+from from_fits import (create_ccmodel_from_fits_file,
                        create_image_from_fits_file,
                        create_clean_image_from_fits_file)
+from uv_data import UVData
 from bootstrap import CleanBootstrap
 from data_io import get_fits_image_info
-from utils import (mas_to_rad, degree_to_rad, find_card_from_header)
+from utils import (mas_to_rad, degree_to_rad)
 from spydiff import clean_difmap
 
 
 def bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n, outpath=None,
                       outname=None):
     """
-    Function that bootstraps UV-data in user-specified UV-FITS files and FITS
-    files with CC-models.
+    Function that bootstraps uv-data in user-specified FITS-files and
+    FITS-files with clean components.
 
     :param uv_fits_path:
         Path to fits file with self-calibrated uv-data.
@@ -24,16 +23,13 @@ def bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n, outpath=None,
         Iterable of paths to files with CC models.
     :param outpath:
 
-    :param boot_kwargs:
     """
 
-    uvdata = create_uvdata_from_fits_file(uv_fits_path)
+    uvdata = UVData(uv_fits_path)
 
     models = list()
     for cc_fits_path in cc_fits_paths:
-        # FIXME: I can infer ``stokes`` from FITS-file!
-        stokes = get_fits_image_info(cc_fits_path)[-2].upper()
-        ccmodel = create_ccmodel_from_fits_file(cc_fits_path, stokes=stokes)
+        ccmodel = create_ccmodel_from_fits_file(cc_fits_path)
         models.append(ccmodel)
 
     boot = CleanBootstrap(models, uvdata)
@@ -125,9 +121,9 @@ def clean_uv_fits(uv_fits_path, out_fits_path, stokes, beam=None,
         beam_pars = beam
     if beam_pars is None and beamsize_fits_path is not None:
         map_info = get_fits_image_info(beamsize_fits_path)
-        print(1, map_info)
-        beam_pars = (map_info[3][0] / mas_to_rad, map_info[3][1] / mas_to_rad,
-                     map_info[3][2] / degree_to_rad)
+        beam_pars = (map_info['bmaj'] / mas_to_rad,
+                     map_info['bmin'] / mas_to_rad,
+                     map_info['bpa'] / degree_to_rad)
 
     # Choosing image parameters
     map_pars = None
@@ -135,8 +131,8 @@ def clean_uv_fits(uv_fits_path, out_fits_path, stokes, beam=None,
         map_pars = mapsize_clean
     if map_pars is None and mapsize_fits_path is not None:
         map_info = get_fits_image_info(mapsize_fits_path)
-        print(2, map_info)
-        map_pars = (map_info[0][0], map_info[-3][0] / mas_to_rad)
+        map_pars = (map_info['imsize'][0],
+                    abs(map_info['pixsize'][0]) / mas_to_rad)
 
     # Choosing pixel parameters
     pixsize = None
@@ -145,8 +141,7 @@ def clean_uv_fits(uv_fits_path, out_fits_path, stokes, beam=None,
 
     if pixsize is None and pixsize_fits_path is not None:
         map_info = get_fits_image_info(pixsize_fits_path)
-        print(3, map_info)
-        pixsize = abs(map_info[-3][0]) / mas_to_rad
+        pixsize = abs(map_info['pixsize'][0]) / mas_to_rad
     # Correcting image size when pixel size has changed
     imsize = map_pars[0] * abs(map_pars[1]) / abs(pixsize)
     print(imsize)
@@ -164,11 +159,9 @@ def clean_uv_fits(uv_fits_path, out_fits_path, stokes, beam=None,
         out_fits_dir, out_fits_fname = os.path.split(out_fits_path)
         print("Cleaning {} to {} stokes {}, mapsize_clean {}, beam_restore"
               " {} with shift {}".format(uv_fits_fname,
-                           os.path.join(out_fits_path, out_fits_fname),
-                           stokes,
-                           map_pars,
-                           beam_pars,
-                           shift))
+                                         os.path.join(out_fits_path,
+                                                      out_fits_fname),
+                                         stokes, map_pars, beam_pars, shift))
         #clean_difmap(fname=uv_fits_fname,
         #             outfname=out_fits_fname,
         #             stokes=stoke, mapsize_clean=map_pars,
@@ -299,34 +292,41 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
         #. Create ROTM images from CLEANed bootstrapped data.
 
     """
+    # Setting up the output directory
     if outdir is None:
         outdir = os.getcwd()
+    # Assume input self-calibrated uv-data FITS files have different frequencies
     n_freq = len(uv_fits_paths)
     # Container for original self-calibrated uv-data
     uv_data_dict = dict()
+    # Container for original self-calibrated uv-data FITS-file paths
     uv_fits_dict = dict()
     for uv_fits_path in uv_fits_paths:
-        uvdata = create_uvdata_from_fits_file(uv_fits_path)
+        uvdata = UVData(uv_fits_path)
         # Mark frequencies by total band center [Hz] for consistency with image.
         uv_data_dict.update({uvdata.band_center: uvdata})
         uv_fits_dict.update({uvdata.band_center: uv_fits_path})
+    # Lowest frequency goes first
     freqs = sorted(uv_fits_dict.keys())
 
     # Container for original CLEAN-images of self-calibrated uv-data
     cc_image_dict = dict()
+    # Container for paths to FITS-files with original CLEAN-images of
+    # self-calibrated uv-data
     cc_fits_dict = dict()
+    # Container for original CLEAN-image's beam parameters
     cc_beam_dict = dict()
     for freq in freqs:
         cc_image_dict.update({freq: dict()})
         cc_fits_dict.update({freq: dict()})
         cc_beam_dict.update({freq: dict()})
 
-    # If CLEAN-images are supplied then use them
+    # If CLEAN-images are supplied then use them to fill the containers
     if cc_fits_paths is not None:
         imsizes_dict = dict()
         print("Exploring supplied CLEAN images")
         for cc_fits_path in cc_fits_paths:
-            image = create_image_from_fits_file(cc_fits_path)
+            image = create_clean_image_from_fits_file(cc_fits_path)
             freq = image.freq
             stoke = image.stokes
             if freq not in freqs:
@@ -334,11 +334,8 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
                                 " UV-data!")
             cc_image_dict[freq].update({stoke: image})
             cc_fits_dict[freq].update({stoke: cc_fits_path})
-            # FIXME: Should be ([mas], [mas], [deg])
-            # TODO: Add property in ``CleanImage``
             if stoke == 'I':
-                ccimage = create_clean_image_from_fits_file(cc_fits_path)
-                cc_beam_dict[freq].update({stoke: ccimage._beam.beam})
+                cc_beam_dict[freq].update({stoke: image.beam})
         for freq in freqs:
             image = cc_image_dict[freq][stoke]
             imsizes_dict.update({freq: (image.imsize[0], abs(image.pixsize[0] /
@@ -371,8 +368,9 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
                 image = create_image_from_fits_file(outpath)
                 cc_image_dict[freq].update({stoke: image})
                 if stoke == 'I':
-                    ccimage = create_clean_image_from_fits_file(outpath)
-                    cc_beam_dict[freq].update({stoke: ccimage._beam.beam})
+                    cc_beam_dict[freq].update({stoke: image.beam})
+    else:
+        raise Exception("Provide ``cc_fits_paths`` of ``imsizes``")
 
     # Now CLEAN uv-data using ``common_imsize`` or parameters of CLEAN-image
     # from lowest and highest frequencies
@@ -409,17 +407,20 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
         bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n_boot, outpath=outpath,
                           outname=('boot_{}'.format(freq), '_uv.fits'))
 
-    # Optionally find shifts between images
+    # Optionally find shifts between original CLEAN-images
     if find_shifts:
+        print("Determining images shift...")
         shift_dict = dict()
         freq_1 = freqs[0]
         image_1 = cc_image_dict[freq_1]['I']
+
         for freq_2 in freqs[1:]:
             image_2 = cc_image_dict[freq_2]['I']
             # Coarse grid of possible shifts
             shift = find_shift(image_1, image_2, 100, 5, max_mask_r=200,
                                mask_step=5)
             # More accurate grid of possible shifts
+            print("Using fine grid for accurate estimate")
             coarse_grid = range(0, 100, 5)
             idx = coarse_grid.index(shift)
             if idx > 0:
@@ -431,9 +432,8 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
 
             shift_dict.update({(freq_1, freq_2,): shift})
 
-
-
-
+        # Dumping shifts to json file in target directory
+        json.dump(shift_dict, os.path.join(outpath, "shifts_original.json"))
 
 
 if __name__ == '__main__':

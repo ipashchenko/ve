@@ -574,16 +574,24 @@ class CleanImage(Image):
         """
         return self._beam.image
 
+    @property
+    def beam(self):
+        """
+        Shorthand for beam parameters bmaj [mas], bmin [mas], bpa [deg].
+        """
+        return (self._beam.beam[0] * abs(self.pixsize[0]) / mas_to_rad,
+                self._beam.beam[1] * abs(self.pixsize[0]) / mas_to_rad,
+                self._beam.beam[2])
     @beam.setter
     def beam(self, beam_pars):
         """
         Set beam parameters.
 
         :param beam_pars:
-            Iterable of bmaj [pix], bmin [pix], bpa [deg].
+            Iterable of bmaj [mas], bmin [mas], bpa [deg].
         """
-        self._beam = CleanBeam(beam_pars[0] / abs(self.pixsize[0]),
-                               beam_pars[1] / abs(self.pixsize[0]),
+        self._beam = CleanBeam(beam_pars[0] * mas_to_rad / abs(self.pixsize[0]),
+                               beam_pars[1] * mas_to_rad / abs(self.pixsize[0]),
                                beam_pars[2], self.imsize)
 
     # TODO: Add ``masked`` decorator that returns the same as ``image``, ``cc``,

@@ -182,24 +182,39 @@ def get_hdu(fname, extname=None, ver=1):
     """
 
     hdulist = pf.open(fname)
+    return get_hdu_from_hdulist(hdulist, extname, ver)
 
+
+def get_hdu_from_hdulist(hdulist, extname=None, ver=1):
+    """
+    Function that returns instance of ``PyFits.HDU`` class with specified
+    extension and version from instance of ``PyFits.HDUList``.
+
+    :param hdulist:
+        Instance of ``PyFits.HDUList``.
+
+    :param extname: (optional)
+        Header's extension. If ``None`` then return first from
+        ``PyFits.HDUList``. (default: ``None``)
+
+    :param ver: (optional)
+        Version of ``HDU`` with specified extension.
+
+    :return:
+        Instance of ``PyFits.HDU`` class.
+
+    """
     if extname:
         try:
             indx = hdulist.index_of((extname, ver,))
             hdu = hdulist[indx]
         except:
-            raise AbsentHduExtensionError('Haven\'t  found ' + extname
-                                          + ' binary table in ' + fname)
-
-    # Get Primary HDU with UV-data in groups.
+            raise AbsentHduExtensionError('No {} binary table'
+                                          ' found'.format(extname))
     else:
         hdu = hdulist[0]
 
-    # # Close associated FITS-file
-    # hdulist.close()
-
     return hdu
-
 
 class IO(object):
     """

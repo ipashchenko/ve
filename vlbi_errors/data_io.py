@@ -97,6 +97,71 @@ def get_fits_image_info(fname):
     return imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes, freq
 
 
+def get_fits_image_info_hdulist(hdulist):
+    """
+    Returns fits-image information.
+
+    :param hdulist:
+        Instance of ``PyFits.HDUList``.
+
+    :return:
+        Dictionary with following imformation:
+        ``imsize`` [pix, pix] - size of image,
+        ``pixref`` [pix, pix] - reference pixel numbers,
+        ``pixrefval`` [rad, rad] - value of coordinates at reference pixels,
+        ``(bmaj, bmin, bpa,)`` [rad, rad, rad] - beam parameters (if any). If no
+        beam parameters found => ``(None, None, None,)``,
+        ``pixsize`` [rad, rad]- size of pixel dimensions,
+        ``stokes`` (I, Q, U or V) - stokes parameter that image does describe,
+        ``freq`` [Hz] - sky frequency.
+
+    """
+    bmaj, bmin, bpa = None, None, None
+    pr_header = hdulist[0].header
+    imsize = (pr_header['NAXIS1'], pr_header['NAXIS2'],)
+    pixref = (int(pr_header['CRPIX1']), int(pr_header['CRPIX2']),)
+    pixrefval = (pr_header['CRVAL1'] * degree_to_rad,
+                 pr_header['CRVAL2'] * degree_to_rad,)
+    pixsize = (pr_header['CDELT1'] * degree_to_rad,
+               pr_header['CDELT2'] * degree_to_rad,)
+    # Find stokes info
+    stokes_card = find_card_from_header(pr_header, value='STOKES')[0]
+    indx = stokes_card.keyword[-1]
+    stokes = stokes_dict[pr_header['CRVAL' + indx]]
+    # Find frequency info
+    freq_card = find_card_from_header(pr_header, value='FREQ')[0]
+    indx = freq_card.keyword[-1]
+    freq = pr_header['CRVAL' + indx]
+
+    try:
+        # BEAM info in ``AIPS CG`` table
+        idx = hdulist.index_of('AIPS CG')
+        data = hdulist[idx].data
+        bmaj = float(data['BMAJ']) * degree_to_rad
+        bmin = float(data['BMIN']) * degree_to_rad
+        bpa = float(data['BPA']) * degree_to_rad
+    # In Petrov's data it in PrimaryHDU header
+    except KeyError:
+        try:
+            bmaj = pr_header['BMAJ'] * degree_to_rad
+            bmin = pr_header['BMIN'] * degree_to_rad
+            bpa = pr_header['BPA'] * degree_to_rad
+        except KeyError:
+            # In Denise data it is in PrimaryHDU ``HISTORY``
+            # TODO: Use ``pyfits.header._HeaderCommentaryCards`` interface if
+            # any
+            for line in pr_header['HISTORY']:
+                if 'BMAJ' in line and 'BMIN' in line and 'BPA' in line:
+                    bmaj = float(line.split()[3]) * degree_to_rad
+                    bmin = float(line.split()[5]) * degree_to_rad
+                    bpa = float(line.split()[7]) * degree_to_rad
+        if not (bmaj and bmin and bpa):
+            warnings.warn("Beam info absent!")
+
+    return {"imsize": imsize, "pixref": pixref, "pixrefval": pixrefval,
+            "bmaj": bmaj, "bmin": bmin, "bpa": bpa, "pixsize": pixsize,
+            "stokes": stokes, "freq": freq}
+
 def get_hdu(fname, extname=None, ver=1):
     """
     Function that returns instance of ``PyFits.HDU`` class with specified

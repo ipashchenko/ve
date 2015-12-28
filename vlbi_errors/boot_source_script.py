@@ -46,18 +46,20 @@ def bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n, outpath=None,
     os.chdir(curdir)
 
 
-def clean_uv_fits(uv_fits_paths, out_fits_paths, stokes, beam=None,
+def clean_uv_fits(uv_fits_path, out_fits_path, stokes, beam=None,
                   mapsize_clean=None,
                   mapsize_fits_path=None, pixsize_fits_path=None,
                   pixel_per_beam=None, mapsize=None,
                   beamsize_fits_path=None, mapsize_restore=None,
-                  path_to_script=None):
+                  path_to_script=None, shift=None):
     """
     Clean uv-data fits files with image and clean parameters that are chosen in
     several possible ways.
 
-    :param uv_fits_paths:
-        Iterable of paths to uv-data fits-files.
+    :param uv_fits_path:
+        Path to uv-data fits-file.
+    :param out_fits_path:
+        Path to output fits-file with CLEAN image.
     :param stokes:
         Iterable of stokes parameters.
     :param beam: (optional)
@@ -94,6 +96,9 @@ def clean_uv_fits(uv_fits_paths, out_fits_paths, stokes, beam=None,
     :param path_to_script: (optional)
         Path to ``clean`` difmap script. If ``None`` then use current directory.
         (default: ``None``)
+    :param shift: (optional)
+        Shift to apply. (mas, mas). If ``None`` then don't apply shift.
+        (default: ``None``)
 
     :note:
         Image, pixel & beam specification uses this sequence. If ``beam`` is not
@@ -120,6 +125,7 @@ def clean_uv_fits(uv_fits_paths, out_fits_paths, stokes, beam=None,
         beam_pars = beam
     if beam_pars is None and beamsize_fits_path is not None:
         map_info = get_fits_image_info(beamsize_fits_path)
+        print(1, map_info)
         beam_pars = (map_info[3][0] / mas_to_rad, map_info[3][1] / mas_to_rad,
                      map_info[3][2] / degree_to_rad)
 
@@ -129,6 +135,7 @@ def clean_uv_fits(uv_fits_paths, out_fits_paths, stokes, beam=None,
         map_pars = mapsize_clean
     if map_pars is None and mapsize_fits_path is not None:
         map_info = get_fits_image_info(mapsize_fits_path)
+        print(2, map_info)
         map_pars = (map_info[0][0], map_info[-3][0] / mas_to_rad)
 
     # Choosing pixel parameters
@@ -138,28 +145,37 @@ def clean_uv_fits(uv_fits_paths, out_fits_paths, stokes, beam=None,
 
     if pixsize is None and pixsize_fits_path is not None:
         map_info = get_fits_image_info(pixsize_fits_path)
-        pixsize = map_info[-3][0] / mas_to_rad
+        print(3, map_info)
+        pixsize = abs(map_info[-3][0]) / mas_to_rad
     # Correcting image size when pixel size has changed
-    imsize = map_pars[0] * abs(map_pars[1]) / pixsize
-    powers = [imsize // (2 ** i) for i in range(15)]
-    imsize = 2 ** powers.index(0)
+    imsize = map_pars[0] * abs(map_pars[1]) / abs(pixsize)
+    print(imsize)
+    powers = np.array([float(imsize) / (2 ** i) for i in range(15)])
+    print(powers)
+    imsize = 2**(list(np.array(powers <= 1, dtype=int)).index(1))
 
     map_pars = (imsize, pixsize)
 
     print "Selected image and pixel size: {}".format(map_pars)
 
-    for uv_fits_path, out_fits_path in zip(uv_fits_paths, out_fits_paths):
-        for stoke in stokes:
-            print "Cleaning stokes {}", stoke
-            uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
-            out_fits_dir, out_fits_fname = os.path.split(out_fits_path)
-            clean_difmap(fname=uv_fits_fname,
-                         outfname=out_fits_fname,
-                         stokes=stoke, mapsize_clean=map_pars,
-                         path=uv_fits_dir,
-                         path_to_script=path_to_script,
-                         beam_restore=beam_pars,
-                         outpath=out_fits_dir)
+    for stoke in stokes:
+        print "Cleaning stokes {}", stoke
+        uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
+        out_fits_dir, out_fits_fname = os.path.split(out_fits_path)
+        print("Cleaning {} to {} stokes {}, mapsize_clean {}, beam_restore"
+              " {} with shift {}".format(uv_fits_fname,
+                           os.path.join(out_fits_path, out_fits_fname),
+                           stokes,
+                           map_pars,
+                           beam_pars,
+                           shift))
+        #clean_difmap(fname=uv_fits_fname,
+        #             outfname=out_fits_fname,
+        #             stokes=stoke, mapsize_clean=map_pars,
+        #             path=uv_fits_dir,
+        #             path_to_script=path_to_script,
+        #             beam_restore=beam_pars,
+        #             outpath=out_fits_dir)
     os.chdir(curdir)
 
 

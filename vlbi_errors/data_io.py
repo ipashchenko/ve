@@ -162,6 +162,7 @@ def get_fits_image_info_hdulist(hdulist):
             "bmaj": bmaj, "bmin": bmin, "bpa": bpa, "pixsize": pixsize,
             "stokes": stokes, "freq": freq}
 
+
 def get_hdu(fname, extname=None, ver=1):
     """
     Function that returns instance of ``PyFits.HDU`` class with specified

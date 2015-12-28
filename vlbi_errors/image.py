@@ -568,7 +568,7 @@ class CleanImage(Image):
                 self._beam.__ne__(other._beam))
 
     @property
-    def beam(self):
+    def beam_image(self):
         """
         Shorthand for beam image.
         """

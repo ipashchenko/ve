@@ -1,14 +1,14 @@
 import emcee
 import triangle
 import scipy as sp
-from from_fits import create_uvdata_from_fits_file
+from uv_data import UVData
 from components import CGComponent
 from model import Model
 from stats import LnPost
 
 
 if __name__ == '__main__':
-    uvdata = create_uvdata_from_fits_file('J0006-0623_X_2008_07_09_pus_vis.fits')
+    uvdata = UVData('J0006-0623_X_2008_07_09_pus_vis.fits')
     uv = uvdata.uvw[:, :2]
     # Create several components
     cg1 = CGComponent(2.0, 0.0, 0.0, 0.1)
@@ -44,6 +44,6 @@ if __name__ == '__main__':
     pos, prob, state = sampler.run_mcmc(p0, 100)
     sampler.reset()
     sampler.run_mcmc(pos, 700)
-    uvdata.uvplot_model(mdl1, stokes='RR', style='a&p'):
+    uvdata.uvplot_model(mdl1, stokes='RR', style='a&p')
     fig = triangle.corner(sampler.flatchain[::10, :4],
                           labels=["$flux$", "$y$", "$x$", "$maj$"])

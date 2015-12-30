@@ -1,5 +1,5 @@
 from scipy import signal
-from data_io import get_fits_image_info
+from from_fits import get_fits_image_info
 from utils import gaussianBeam
 
 

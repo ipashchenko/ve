@@ -1,12 +1,12 @@
 import os
 import json
 import numpy as np
-from from_fits import (create_ccmodel_from_fits_file,
+from from_fits import (get_fits_image_info,
+                       create_model_from_fits_file,
                        create_image_from_fits_file,
                        create_clean_image_from_fits_file)
 from uv_data import UVData
 from bootstrap import CleanBootstrap
-from data_io import get_fits_image_info
 from utils import (mas_to_rad, degree_to_rad)
 from spydiff import clean_difmap
 
@@ -29,7 +29,7 @@ def bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n, outpath=None,
 
     models = list()
     for cc_fits_path in cc_fits_paths:
-        ccmodel = create_ccmodel_from_fits_file(cc_fits_path)
+        ccmodel = create_model_from_fits_file(cc_fits_path)
         models.append(ccmodel)
 
     boot = CleanBootstrap(models, uvdata)
@@ -172,6 +172,7 @@ def clean_uv_fits(uv_fits_path, out_fits_path, stokes, beam=None,
     os.chdir(curdir)
 
 
+# TODO: use iterables of shifts and sizes as arguments. UNIX-way:)
 def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
                max_mask_r=None, mask_step=5):
     """
@@ -271,8 +272,8 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
         Iterable of stokes parameters to CLEAN original self-calibrated uv-data.
         If ``None`` then ('I', 'Q', 'U'). (default: ``None``)
 
-    :note:
-        Function use this workflow:
+    :notes:
+        Function uses this workflow:
 
         1. CLEAN uv-data in specified FITS-files (``uv_fits_paths``) with
         parameters specified in ``imsizes`` argument. If ``cc_fits_paths`` are

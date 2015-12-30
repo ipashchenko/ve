@@ -5,10 +5,8 @@ import numpy as np
 import matplotlib
 # For saving images without plotting
 matplotlib.use('Agg')
-from from_fits import (create_uvdata_from_fits_file,
-                       create_ccmodel_from_fits_file,
-                       create_clean_image_from_fits_file,
-                       create_image_from_fits_file,
+from uv_data import UVData
+from from_fits import (create_model_from_fits_file,
                        get_fits_image_info)
 from bootstrap import CleanBootstrap
 from spydiff import clean_difmap
@@ -16,7 +14,6 @@ from utils import mas_to_rad, degree_to_rad, hdi_of_arrays, find_card_from_heade
 from images import Images
 from sim_func import simulate_grad
 from image import plot
-from convenience_funcs import boot_uv_fits_with_cc_fits
 
 
 def im_fits_fname(source, band, epoch, stokes='i', ext='fits'):
@@ -232,7 +229,7 @@ def generate_boot_data(sources, epochs, bands, stokes, n_boot=10,
                     print "...skipping absent file ", uv_fname
                     continue
                 print "  Using uv-file (data): ", uv_fname
-                uvdata = create_uvdata_from_fits_file(uv_fname)
+                uvdata = UVData(uv_fname)
                 models = list()
                 for stoke in stokes:
                     print "  Adding model with stokes parameter ", stoke
@@ -240,8 +237,8 @@ def generate_boot_data(sources, epochs, bands, stokes, n_boot=10,
                                             base_path=base_path)
                     map_fname = map_path + 'cc.fits'
                     print "  from CC-model file ", map_fname
-                    ccmodel = create_ccmodel_from_fits_file(map_fname,
-                                                            stokes=stoke.upper())
+                    ccmodel = create_model_from_fits_file(map_fname,
+                                                          stokes=stoke.upper())
                     models.append(ccmodel)
                 boot = CleanBootstrap(models, uvdata)
                 os.chdir(uv_path)
@@ -270,14 +267,14 @@ def generate_simulated_boot_data(freqs, stokes, n_boot=10, base_path=None):
         print " for freq", freq
         uv_fname = boot_uv_fits_fname(freq)
         print "  Using uv-file (data): ", uv_fname
-        uvdata = create_uvdata_from_fits_file(os.path.join(base_path, uv_fname))
+        uvdata = UVData(os.path.join(base_path, uv_fname))
         models = list()
         for stoke in stokes:
             print "  Adding model with stokes parameter ", stoke
             map_fname = boot_im_fits_fname(freq, stoke)
             print "  from CC-model file ", map_fname
-            ccmodel = create_ccmodel_from_fits_file(os.path.join(base_path, map_fname),
-                                                    stokes=stoke.upper())
+            ccmodel = create_model_from_fits_file(os.path.join(base_path,
+                                                               map_fname))
             models.append(ccmodel)
         boot = CleanBootstrap(models, uvdata)
         os.chdir(base_path)
@@ -771,11 +768,11 @@ if __name__ == '__main__':
     #      y=image.y[:, 0], outfile='i_error', outdir=base_path, blc=(450, 300),
     #      trc=(800, 600))
     # 1633
-    plot(contours=image.image, colors=error_image.image / rms,
-         colors_mask=color_mask, min_rel_level=0.05, x=image.x[0],
-         y=image.y[:, 0], outfile='i_error', outdir=base_path, blc=(200, 200),
-         trc=(450, 400))
-    # ==========================================================================
+    # plot(contours=image.image, colors=error_image.image / rms,
+    #      colors_mask=color_mask, min_rel_level=0.05, x=image.x[0],
+    #      y=image.y[:, 0], outfile='i_error', outdir=base_path, blc=(200, 200),
+    #      trc=(450, 400))
+    # # ==========================================================================
 
     # # ==========================================================================
     # # Find core shift between each pair of frequencies
@@ -986,7 +983,7 @@ if __name__ == '__main__':
     for uvpath in glob.glob(os.path.join(outpath, "simul_uv_*")):
         uvdir, uvfile = os.path.split(uvpath)
         print "Cleaning uv file {}".format(uvpath)
-        uvdata = create_uvdata_from_fits_file(uvpath)
+        uvdata = UVData(uvpath)
         freq_card = find_card_from_header(uvdata._io.hdu.header,
                                           value='FREQ')[0]
         # Frequency in Hz

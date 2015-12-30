@@ -1,13 +1,10 @@
 import math
 import numpy as np
 import scipy as sp
-from utils import degree_to_mas, gaussianBeam
 from image import BasicImage, CleanImage
-from data_io import BinTable, get_fits_image_info
-# FIXME: problems whith this import
-# from from_fits import create_uvdata_from_fits_file
+from from_fits import get_fits_image_info
 from stats import LnPost
-from components import DeltaComponent, CGComponent, EGComponent
+from components import CGComponent, EGComponent
 
 try:
     import pylab
@@ -15,8 +12,8 @@ except ImportError:
     pylab = None
 
 
-# TODO: ``Model`` subclasses can't be convolved with anything! It is ``BasicImage``
-# that can be convolved.
+# TODO: ``Model`` subclasses can't be convolved with anything! It is
+# `BasicImage`` that can be convolved.
 # TODO: Keep components ordered by what?
 class Model(object):
     """
@@ -144,8 +141,8 @@ class Model(object):
 
         # First create ``BasicImage`` instance
         if bpa is None:
-            image = BasicImage(imsize=imsize, pixref=pixref, pixrefval=pixrefval,
-                          pixsize=pixsize)
+            image = BasicImage(imsize=imsize, pixref=pixref,
+                               pixrefval=pixrefval, pixsize=pixsize)
         else:
             image = CleanImage(imsize=imsize, pixref=pixref,
                                pixrefval=pixrefval, pixsize=pixsize, bmaj=bmaj,
@@ -154,29 +151,6 @@ class Model(object):
         self.add_to_image(image)
 
         return image
-
-
-# TODO: Do i need separate class CCModel???
-# TODO: add ft_all method for speed up
-# TODO: move ``add_cc_from_fits`` to function ``create_ccmodel_from_fits``
-class CCModel(Model):
-    """
-    Class that represents clean components model.
-    """
-    def add_cc_from_fits(self, fname, ver=1):
-        """
-        Adds CC components to model from FITS-file.
-
-        :param fname:
-            Path to FITS-file with model (Clean Components CC-table).
-        """
-        cc = BinTable(fname, extname='AIPS CC', ver=ver)
-        adds = cc.load()
-        for flux, x, y in zip(adds['FLUX'], adds['DELTAX'] * degree_to_mas,
-                              adds['DELTAY'] * degree_to_mas):
-            # We keep positions in mas
-            component = DeltaComponent(flux, x, y)
-            self.add_component(component)
 
 
 if __name__ == "__main__":
@@ -195,7 +169,8 @@ if __name__ == "__main__":
 
     # TESTING fitting gaussian components to uv-data
     # Load uv-data
-    uvdata = create_uvdata_from_fits_file('1308+326.U1.2009_08_28.UV_CAL')
+    from uv_data import UVData
+    uvdata = UVData('1308+326.U1.2009_08_28.UV_CAL')
     uv = uvdata.uvw[:, :2]
     #twickle
     # Create several components

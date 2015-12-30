@@ -1,7 +1,7 @@
 __author__ = 'ilya'
 import copy
 import numpy as np
-from from_fits import create_uvdata_from_fits_file
+from uv_data import UVData
 from gains import Absorber
 
 
@@ -199,7 +199,7 @@ class SelfCalBootstrap(object):
         self.data = data
         self.calibs = calibs
         # Last self-calibrated data
-        last_calib = create_uvdata_from_fits_file(calibs[-1])
+        last_calib = UVData(calibs[-1])
         self.last_calib = last_calib
 
         model_data = copy.deepcopy(self.data)
@@ -217,7 +217,7 @@ if __name__ == "__main__":
     # Clean bootstrap
     import os
     curdir = os.getcwd()
-    uv_data = create_uvdata_from_fits_file("/home/ilya/Dropbox/Zhenya/to_ilya/uv/0148+274.C1.2007_03_01.PINAL")
+    uv_data = UVData("/home/ilya/Dropbox/Zhenya/to_ilya/uv/0148+274.C1.2007_03_01.PINAL")
     from from_fits import create_ccmodel_from_fits_file
     ccmodeli = create_ccmodel_from_fits_file("/home/ilya/Dropbox/Zhenya/to_ilya/clean_images/0148+274.c1.2007_03_01.i.fits",
                                             stokes='I')

@@ -37,8 +37,8 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         Path to file with CCs. If ``None`` then use ``path``.
         (default: ``None``)
     :param shift: (optional)
-        Iterable of 2 values - shifts in both directions [mas]. If ``None`` then
-        don't shift. (default: ``None``)
+        Iterable of 2 values - shifts in both directions - East & North [mas].
+        If ``None`` then don't shift. (default: ``None``)
     :param show_difmap_output: (optional)
         Show difmap output? (default: ``False``)
 

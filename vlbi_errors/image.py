@@ -588,6 +588,7 @@ class CleanImage(Image):
         return (self._beam.beam[0] * abs(self.pixsize[0]) / mas_to_rad,
                 self._beam.beam[1] * abs(self.pixsize[0]) / mas_to_rad,
                 self._beam.beam[2])
+
     @beam.setter
     def beam(self, beam_pars):
         """
@@ -626,7 +627,6 @@ class CleanImage(Image):
     @property
     def residuals(self):
         return self._residuals.image
-
 
     def plot(self, to_plot, blc=None, trc=None, color_clim=None, cmap=None,
              abs_levels=None, rel_levels=None, min_abs_level=None,

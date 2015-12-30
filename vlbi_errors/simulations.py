@@ -8,6 +8,7 @@ from model import Model
 from components import DeltaComponent
 
 
+# TODO: Define cc_flux from original image and beam (for I & Q, U independ.)
 def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
                   outpath, grad_value, width, length, k, noise_factor=1.,
                   rm_value_0=0.0):
@@ -23,7 +24,7 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
     :param cc_flux:
         Flux density of CC-components that will model the polarization
         [Jy/pixel]. That CCs will be used in Q & U clean models. Being convolved
-        with beam it lowers the maximum flux density by factor
+        with beam it increases the maximum flux density by factor
         ``pi * beam_width ** 2`` and converts to units [Jy/beam].
     :param outpath:
         Path where to save all resulting files.

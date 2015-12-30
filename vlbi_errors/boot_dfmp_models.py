@@ -5,7 +5,7 @@ try:
 except ImportError:
     triangle = None
 import numpy as np
-from from_fits import create_uvdata_from_fits_file
+from uv_data import UVData
 from components import DeltaComponent, CGComponent, EGComponent
 from bootstrap import CleanBootstrap
 from model import Model
@@ -24,7 +24,7 @@ n = 300
 
 if __name__ == '__main__':
 
-    uvdata = create_uvdata_from_fits_file(os.path.join(data_dir, uv_fname))
+    uvdata = UVData(os.path.join(data_dir, uv_fname))
     model = Model(stokes='I')
     comps = import_difmap_model(mdl_fname, data_dir)
     model.add_components(*comps)

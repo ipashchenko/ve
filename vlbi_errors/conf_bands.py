@@ -4,6 +4,7 @@ import numpy as np
 def is_embraced(curve, means, widths):
     """
     Function that checks if 1D curve is embraced by 1D band.
+
     :param curve:
         Iterable of curve's points.
     :param means:
@@ -25,6 +26,7 @@ def is_embraced(curve, means, widths):
 def count_contained(curves, means, widths):
     """
     Count haw many curves are contained inside given band.
+
     :param curves:
         Iterable of numpy 1D arrays with curves to count.
     :param means:
@@ -44,6 +46,7 @@ def count_contained(curves, means, widths):
 def create_sim_conf_band(curves, means, widths, alpha=0.95, delta=0.01):
     """
     Function that builds simultanious confidence band.
+
     :param curves:
         Iterable of numpy 1D arrays with curves to count.
     :param means:
@@ -64,5 +67,3 @@ def create_sim_conf_band(curves, means, widths, alpha=0.95, delta=0.01):
         f += delta
         n = count_contained(curves, means, f * widths)
     return means - f * widths, means + f * widths
-
-

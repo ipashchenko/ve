@@ -1,8 +1,8 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from from_fits import (create_ccmodel_from_fits_file,
-                       create_uvdata_from_fits_file)
+from uv_data import UVData
+from from_fits import create_model_from_fits_file
 from bootstrap import CleanBootstrap
 
 
@@ -22,9 +22,9 @@ stoke = 'i'
 image_fname = '0952+179.c1.2007_04_30.i.fits'
 uv_fname = '0952+179.C1.2007_04_30.PINAL'
 
-ccmodel = create_ccmodel_from_fits_file(os.path.join(im_data_dir, image_fname))
-uvdata = create_uvdata_from_fits_file(os.path.join(uv_data_dir, uv_fname))
-uvdata_m = create_uvdata_from_fits_file(os.path.join(uv_data_dir, uv_fname))
+ccmodel = create_model_from_fits_file(os.path.join(im_data_dir, image_fname))
+uvdata = UVData(os.path.join(uv_data_dir, uv_fname))
+uvdata_m = UVData(os.path.join(uv_data_dir, uv_fname))
 uvdata_m.substitute([ccmodel])
 uvdata_r = uvdata - uvdata_m
 bootstrap = CleanBootstrap([ccmodel], uvdata)

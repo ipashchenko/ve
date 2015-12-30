@@ -3,8 +3,8 @@ import os
 import shutil
 import numpy as np
 import matplotlib.pyplot as plt
-from from_fits import (create_uvdata_from_fits_file,
-                       create_ccmodel_from_fits_file,
+from uv_data import UVData
+from from_fits import (create_model_from_fits_file,
                        create_clean_image_from_fits_file,
                        create_image_from_fits_file,
                        get_fits_image_info)
@@ -260,7 +260,7 @@ def generate_boot_data(sources, epochs, bands, stokes, n_boot=10,
                     print "...skipping absent file ", uv_fname
                     continue
                 print "  Using uv-file (data): ", uv_fname
-                uvdata = create_uvdata_from_fits_file(uv_fname)
+                uvdata = UVData(uv_fname)
                 models = list()
                 for stoke in stokes:
                     print "  Adding model with stokes parameter ", stoke
@@ -268,8 +268,8 @@ def generate_boot_data(sources, epochs, bands, stokes, n_boot=10,
                                             base_path=base_path)
                     map_fname = map_path + 'cc.fits'
                     print "  from CC-model file ", map_fname
-                    ccmodel = create_ccmodel_from_fits_file(map_fname,
-                                                            stokes=stoke.upper())
+                    ccmodel = create_model_from_fits_file(map_fname,
+                                                          stokes=stoke.upper())
                     models.append(ccmodel)
                 boot = CleanBootstrap(models, uvdata)
                 os.chdir(uv_path)

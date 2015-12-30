@@ -2,15 +2,12 @@ import os
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
-from from_fits import (get_fits_image_info, create_uvdata_from_fits_file,
-                       create_ccmodel_from_fits_file,
-                       create_clean_image_from_fits_file)
-from image import (BasicImage, Image, CleanImage)
-from utils import (mask_region, mas_to_rad, find_card_from_header,
-                   slice_2darray)
+from uv_data import UVData
+from from_fits import (get_fits_image_info, create_model_from_fits_file)
+from image import (BasicImage, Image)
+from utils import (mask_region, mas_to_rad, find_card_from_header)
 from model import Model
 from components import DeltaComponent
-from images import Images
 from spydiff import clean_difmap
 from images import Images
 from bootstrap import CleanBootstrap
@@ -220,7 +217,7 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
     # specified location
     print "Now substituting ROTM gradient in real data and saving out..."
     for uvfile in uvdata_files:
-        uvdata = create_uvdata_from_fits_file(uvfile)
+        uvdata = UVData(uvfile)
         freq_card = find_card_from_header(uvdata._io.hdu.header,
                                           value='FREQ')[0]
         # Frequency in Hz
@@ -307,7 +304,7 @@ def bootstrap_uv_fits(uv_fits_fname, cc_fits_fnames, n, uvpath=None,
 
     if uvpath is not None:
         uv_fits_fname = os.path.join(uvpath, uv_fits_fname)
-    uvdata = create_uvdata_from_fits_file(uv_fits_fname)
+    uvdata = UVData(uv_fits_fname)
 
     models = list()
     for cc_fits_fname, ccpath_ in zip(cc_fits_fnames, ccpath):
@@ -315,7 +312,7 @@ def bootstrap_uv_fits(uv_fits_fname, cc_fits_fnames, n, uvpath=None,
             cc_fits_fname = os.path.join(ccpath_, cc_fits_fname)
         # FIXME: I can infer ``stokes`` from FITS-file!
         stokes = get_fits_image_info(cc_fits_fname)[-2].upper()
-        ccmodel = create_ccmodel_from_fits_file(cc_fits_fname, stokes=stokes)
+        ccmodel = create_model_from_fits_file(cc_fits_fname, stokes=stokes)
         models.append(ccmodel)
 
     boot = CleanBootstrap(models, uvdata)
@@ -367,7 +364,7 @@ if __name__ == '__main__':
     for uvpath in glob.glob(os.path.join(outpath, "simul_uv_*")):
         uvdir, uvfile = os.path.split(uvpath)
         print "Cleaning uv file {}".format(uvpath)
-        uvdata = create_uvdata_from_fits_file(uvpath)
+        uvdata = UVData(uvpath)
         freq_card = find_card_from_header(uvdata._io.hdu.header,
                                           value='FREQ')[0]
         # Frequency in Hz

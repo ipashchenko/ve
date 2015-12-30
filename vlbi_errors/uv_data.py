@@ -1127,7 +1127,7 @@ class UVData(object):
         :param model:
             Instance of ``Model`` class.
 
-        :param baselines (optional):
+        :param baselines: (optional)
             One or iterable of baselines numbers or ``None``. If ``None`` then
             use all baselines. (default: ``None``)
 
@@ -1135,12 +1135,12 @@ class UVData(object):
             One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
             use all IFs. (default: ``None``)
 
-        :param stokes (optional):
+        :param stokes: (optional)
             Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
             ``LR`` or ``None``. If ``None`` then use ``I``.
             (default: ``None``)
 
-        :param style (optional):
+        :param style: (optional)
             How to plot complex visibilities - real and imaginary part
             (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
         """
@@ -1148,6 +1148,29 @@ class UVData(object):
         # atribute of ``model``'s copy to calculated ``uvws``. Use
         # ``model.uvplot()`` method to plot model.
         raise NotImplementedError
+
+    def ft_to_image(self, image_params, baselines=None, IF=None, times=None,
+                    freq_average=True):
+        """
+        FT uv-data to dirty map with specified parameters.
+
+        :param image_params:
+            Dictionary with image parameters.
+        :param baselines: (optional)
+            Baselines to use. If ``None`` then use all. (default: ``None``)
+        :param IF: (optional)
+            IFs to use. If ``None`` then use all. (default: ``None``)
+        :param times: (optional)
+            Time range to use. If ``None`` then use all. (default: ``None``)
+        :param freq_average: (optional)
+            Average IFs? (default: ``True``)
+
+        :return:
+            ``Image`` instance with dirty map.
+        """
+        # im(x, y) = vis(u, v) * np.exp(2. * math.pi * 1j * (u * x + v * y))
+        # where x, y - distances from pase center [rad]
+        pass
 
 
 if __name__ == '__main__':

@@ -1,9 +1,10 @@
-import os
 import math
 import numpy as np
+import pyfits as pf
 from scipy import signal
-from utils import (create_grid, create_mask, mask_region, fitgaussian,
-                   mas_to_rad, v_round)
+from utils import (create_grid, create_mask, mas_to_rad, v_round,
+                   get_fits_image_info_from_hdulist, get_hdu_from_hdulist)
+from model import Model
 from beam import CleanBeam
 from skimage.feature import register_translation
 import matplotlib.pyplot as plt
@@ -265,35 +266,32 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         plt.close()
 
 
-# TODO: Option for saving ``Image`` instance
-# TODO: Default value of pixref - center of image.
 class BasicImage(object):
     """
-    Class that represents images.
+    Image class that implements basic image functionality that physical scale
+    free.
     """
-    def __init__(self, imsize=None, pixref=None, pixrefval=None, pixsize=None):
-        self.imsize = imsize
-        self.pixsize = pixsize
-        self.pixref = pixref
-        self.dy, self.dx = pixsize
-        self.y_c, self.x_c = pixref
-        if pixrefval is None:
-            pixrefval = (0., 0.,)
-        self.x_c_val, self.y_c_val = pixrefval
-        self.pixrefval = pixrefval
-        # Create flux array
-        self._image = np.zeros(self.imsize, dtype=float)
-        # Create coordinate arrays
-        x, y = create_grid(self.imsize)
-        x = x - self.x_c
-        y = y - self.y_c
-        x = x * self.dx
-        y = y * self.dy
-        self.x = x
-        self.y = y
+    def __init__(self):
+        self.imsize = None
+        self._image = None
 
-    # TODO: Sometimes we need to add/substract convolved images. So subclasses
-    # should implement property with convolution.
+    def _construct(self, **kwargs):
+        try:
+            self.imsize = kwargs["imsize"]
+        except KeyError:
+            raise Exception
+        self._image = np.empty(self.imsize, dtype=float)
+
+    def from_hdulist(self, hdulist):
+        image_params = get_fits_image_info_from_hdulist(hdulist)
+        self._construct(**image_params)
+        pr_hdu = get_hdu_from_hdulist(hdulist)
+        self.image = pr_hdu.data.squeeze()
+
+    def from_fits(self, fname):
+        hdulist = pf.open(fname)
+        self.from_hdulist(hdulist)
+
     @property
     def image(self):
         """
@@ -301,10 +299,9 @@ class BasicImage(object):
         """
         return self._image
 
-    # TODO: Am i need it? Should i compare instances before setting?
     @image.setter
     def image(self, image):
-        if isinstance(image, BasicImage):
+        if isinstance(image, Image):
             if self == image:
                 self._image = image.image.copy()
             else:
@@ -315,66 +312,70 @@ class BasicImage(object):
 
     def __eq__(self, other):
         """
-        Compares current instance of ``Image`` class with other instance.
+        Compares current instance of ``BasicImage`` class with other instance.
         """
-        return self.imsize == other.imsize and self.pixsize == other.pixsize
+        return self.imsize == other.imsize
 
     def __ne__(self, image):
         """
-        Compares current instance of ``Image`` class with other instance.
+        Compares current instance of ``BasicImage`` class with other instance.
         """
-        return self.imsize != image.imsize or self.pixsize != image.pixsize
+        return self.imsize != image.imsize
 
     def __add__(self, image):
         """
-        Sums current instance of ``Image`` class with other instance.
+        Sums current instance of ``BasicImage`` class with other instance.
         """
-        self.image += image.image
+        if self == image:
+            self.image += image.image
+        else:
+            raise Exception("Different image parameters")
         return self
 
     def __mul__(self, other):
         """
-        Multiply current instance of ``Image`` class with other instance or
+        Multiply current instance of ``BasicImage`` class with other instance or
         some number.
         """
         if isinstance(other, BasicImage):
-            self.image *= other.image
+            if self == other:
+                self.image *= other.image
+            else:
+                raise Exception("Different image parameters")
         else:
             self.image *= other
         return self
 
     def __sub__(self, other):
         """
-        Substruct from current instance of ``Image`` class other instance or
-        some number.
+        Substruct from current instance of ``BasicImage`` class other instance
+        or some number.
         """
         if isinstance(other, BasicImage):
-            self._image -= other.image
+            if self == other:
+                self._image -= other.image
+            else:
+                raise Exception("Different image parameters")
         else:
             self._image -= other
         return self
 
     def __div__(self, other):
         """
-        Divide current instance of ``Image`` class on other instance or some
-        number.
+        Divide current instance of ``BasicImage`` class on other instance or
+        some number.
         """
         if isinstance(other, BasicImage):
-            self.image /= other.image
+            if self == other:
+                self.image /= other.image
+            else:
+                raise Exception("Different image parameters")
         else:
             self.image /= other
         return self
 
-    @property
-    def phys_size(self):
-        """
-        Shortcut for physical size of image.
-        """
-        return (self.imsize[0] * abs(self.pixsize[0]), self.imsize[1] *
-                abs(self.pixsize[1]))
-
-    # FIXME: To use it in ``CleanImage`` i should make ``image`` property return
-    # CC convolved with beam + residuals.
+    # TODO: In subclasses pixels got sizes so one can use physical sizes as
+    # ``region`` parameters. Subclasses should extend this method.
     def rms(self, region=None, do_plot=False, **hist_kwargs):
         """
         Method that calculate rms for image region.
@@ -384,9 +385,9 @@ class BasicImage(object):
             trc[1],) or (center[0], center[1], r, None,). If ``None`` then use
             all image in rms calculation. Default ``None``.
         :param do_plot: (optional)
-            Plot histogramm of image values? (default: ``False``)
+            Plot histogram of image values? (default: ``False``)
         :param hist_kwargs: (optional)
-            Any kewword arguments that get passed to ``plt.hist``.
+            Any keyword arguments that get passed to ``plt.hist``.
         :return:
             rms value.
         """
@@ -406,13 +407,6 @@ class BasicImage(object):
         Convolve ``Image`` array with image-like instance.
         """
         return signal.fftconvolve(self._image, image_like.image, mode='same')
-
-    def add_component(self, component):
-        component.add_to_image(self)
-
-    # TODO: Should i compare stokes of ``Image`` and ``Model`` instances?
-    def add_model(self, model):
-        model.add_to_image(self)
 
     # TODO: Implement Rayleigh (Rice) distributed noise for stokes I
     # FIXME: This is uncorrelated noise - that is too simple model
@@ -437,14 +431,14 @@ class BasicImage(object):
 
         :param image:
             Instance of image class.
-        :param region1 (optional):
+        :param region1: (optional)
             Region to EXCLUDE in current instance of ``Image``.
             Or (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r,
             None,) or (center[0], center[1], bmaj, e, bpa). Default ``None``.
-        :param region2 (optional):
-            Region to EXCLUDE in other instance of ``Image``. Or (blc[0], blc[1],
-            trc[0], trc[1],) or (center[0], center[1], r, None,) or (center[0],
-            center[1], bmaj, e, bpa). Default ``None``.
+        :param region2: (optional)
+            Region to EXCLUDE in other instance of ``Image``. Or (blc[0],
+            blc[1], trc[0], trc[1],) or (center[0], center[1], r, None,) or
+            (center[0], center[1], bmaj, e, bpa). Default ``None``.
         :param upsample_factor: (optional)
             Upsampling factor. Images will be registered to within
             ``1 / upsample_factor`` of a pixel. For example
@@ -482,14 +476,15 @@ class BasicImage(object):
             result = (shift, error, diffphase)
         return result
 
+    # TODO: Implement physical sizes as vertexes of slice in ``Image``
     def slice(self, pix1, pix2):
         """
         Method that returns slice of image along line.
 
-        :param x1:
-            Iterable of cordinates of first pixel.
-        :param x2:
-            Iterable of cordinates of second pixel.
+        :param pix1:
+            Iterable of coordinates of first pixel.
+        :param pix2:
+            Iterable of coordinates of second pixel.
         :return:
             Numpy array of image values for given slice.
         """
@@ -505,6 +500,77 @@ class BasicImage(object):
 
         return self.image[v_round(x).astype(np.int), v_round(y).astype(np.int)]
 
+
+# TODO: Option for saving ``Image`` instance
+# TODO: Default value of pixref - center of image.
+class Image(BasicImage):
+    """
+    Class that represents images.
+    """
+    def __init__(self):
+        super(Image, self).__init__()
+        self.pixsize = None
+        self.pixref = None
+        self.pixrefval = None
+        self.freq = None
+        self.stokes = None
+
+    def _construct(self, **kwargs):
+        super(Image, self)._construct(**kwargs)
+        self.pixsize = kwargs["pixsize"]
+        try:
+            self.pixref = kwargs["pixref"]
+        except KeyError:
+            self.pixref = (int(self.imsize / 2), int(self.imsize / 2))
+        self.stokes = kwargs["stokes"]
+        self.freq = kwargs["freq"]
+        self.dy, self.dx = self.pixsize
+        self.y_c, self.x_c = self.pixref
+        try:
+            self.pixrefval = kwargs["pixrefval"]
+        except KeyError:
+            self.pixrefval = (0., 0.)
+        self.x_c_val, self.y_c_val = self.pixrefval
+        # Create coordinate arrays
+        x, y = create_grid(self.imsize)
+        x = x - self.x_c
+        y = y - self.y_c
+        x = x * self.dx
+        y = y * self.dy
+        self.x = x
+        self.y = y
+
+    def __eq__(self, other):
+        """
+        Compares current instance of ``Image`` class with other instance.
+        """
+        return (super(Image, self).__eq__(other) and
+                self.pixsize == other.pixsize)
+
+    def __ne__(self, other):
+        """
+        Compares current instance of ``Image`` class with other instance.
+        """
+        return super(Image, self).__ne__(other) or self.pixsize != other.pixsize
+
+    @property
+    def phys_size(self):
+        """
+        Shortcut for physical size of image.
+        """
+        return (self.imsize[0] * abs(self.pixsize[0]), self.imsize[1] *
+                abs(self.pixsize[1]))
+
+    # This method has no sense in ``BasicImage`` class as there are no physical
+    # sizes here.
+    def add_component(self, component):
+        component.add_to_image(self)
+
+    def add_model(self, model):
+        if self.stokes != model.stokes:
+            raise Exception
+        model.add_to_image(self)
+
     def plot(self, blc=None, trc=None, clim=None, cmap=None, abs_levels=None,
              rel_levels=None, min_abs_level=None, min_rel_level=None, factor=2.,
              plot_color=False):
@@ -516,48 +582,54 @@ class BasicImage(object):
             converted to python-like zero-indexing.
 
         """
-        plot(self.image, x=self.x, y=self.y, blc=blc, trc=trc, clim=clim,
-             cmap=cmap, abs_levels=abs_levels, rel_levels=rel_levels,
-             min_abs_level=min_abs_level, min_rel_level=min_rel_level,
-             factor=factor, plot_color=plot_color)
-
-
-class Image(BasicImage):
-    """
-    Class that represents images obtained using radio interferometry.
-    """
-    def __init__(self, imsize=None, pixref=None, pixrefval=None, pixsize=None,
-                 stokes=None, freq=None):
-        super(Image, self).__init__(imsize=imsize, pixref=pixref,
-                                    pixrefval=pixrefval, pixsize=pixsize)
-        self.stokes = stokes
-        self.freq = freq
-
-    def from_fits(self, fits_path):
         pass
+        # plot(self.image, x=self.x, y=self.y, blc=blc, trc=trc, clim=clim,
+        #      cmap=cmap, abs_levels=abs_levels, rel_levels=rel_levels,
+        #      min_abs_level=min_abs_level, min_rel_level=min_rel_level,
+        #      factor=factor, plot_color=plot_color)
 
 
-# TODO: Add method ``shift`` that shifts image (CCs and residulas)
-# FIXME: Better shift in uv-domain
-# TODO: Should i extend ``__eq__`` by comparing beams too?
+# TODO: Add method ``shift`` that shifts image (CCs and residulas). Is it better
+# to shift in uv-domain?
 class CleanImage(Image):
     """
     Class that represents image made using CLEAN algorithm.
-    :param bmaj:
-        Beam major axis [rad].
-    :param bpa:
-        Beam positional angle [deg].
     """
-    def __init__(self, imsize=None, pixref=None, pixrefval=None, pixsize=None,
-                 stokes=None, freq=None, bmaj=None, bmin=None, bpa=None):
-        super(CleanImage, self).__init__(imsize, pixref, pixrefval, pixsize,
-                                         stokes, freq)
+    def __init__(self):
+        super(CleanImage, self).__init__()
+        self._beam = CleanBeam()
+        # FIXME: Make ``_residuals`` a 2D-array only. Don't need ``Image``
+        # instance
+        self._residuals = None
+        self._image_original = None
+
+    def _construct(self, **kwargs):
+        """
+        :param bmaj:
+            Beam major axis [rad].
+        :param bmin:
+            Beam minor axis [rad].
+        :param bpa:
+            Beam positional angle [deg].
+        :return:
+        """
+        super(CleanImage, self)._construct(**kwargs)
         # TODO: What if pixsize has different sizes???
         # FIXME: Beam has image twice the imsize. It's bad for plotting...
-        self._beam = CleanBeam(bmaj / abs(pixsize[0]), bmin / abs(pixsize[0]),
-                               bpa, imsize)
-        self._residuals = BasicImage(imsize, pixref, pixrefval, pixsize)
-        self._image_original = np.zeros(self.imsize, dtype=float)
+        kwargs["bmaj"] /= abs(kwargs["pixsize"][0])
+        kwargs["bmin"] /= abs(kwargs["pixsize"][0])
+        self._beam._construct(**kwargs)
+        self._residuals = np.empty(self.imsize, dtype=float)
+        self._image_original = np.empty(self.imsize, dtype=float)
+
+    def from_hdulist(self, hdulist, ver=1):
+        super(CleanImage, self).from_hdulist(hdulist)
+
+        model = Model(stokes=self.stokes)
+        model.from_hdulist(hdulist, ver=ver)
+        self.add_model(model)
+
+        self._residuals = self._image_original - self.cc_image
 
     def __eq__(self, other):
         """
@@ -597,9 +669,12 @@ class CleanImage(Image):
         :param beam_pars:
             Iterable of bmaj [mas], bmin [mas], bpa [deg].
         """
-        self._beam = CleanBeam(beam_pars[0] * mas_to_rad / abs(self.pixsize[0]),
-                               beam_pars[1] * mas_to_rad / abs(self.pixsize[0]),
-                               beam_pars[2], self.imsize)
+        # FIXME: Here i create new instance. Should i implement setter for
+        # beam parameters in ``CleanBeam``?
+        self._beam = CleanBeam()
+        self._beam._construct(bmaj=beam_pars[0]*mas_to_rad/abs(self.pixsize[0]),
+                              bmin=beam_pars[1]*mas_to_rad/abs(self.pixsize[0]),
+                              bpa=beam_pars[2], imsize=self.imsize)
 
     @property
     def image(self):
@@ -609,12 +684,23 @@ class CleanImage(Image):
         """
         return self._image_original
 
+    @image.setter
+    def image(self, image):
+        if isinstance(image, Image):
+            if self == image:
+                self._image_original = image.image.copy()
+            else:
+                raise Exception("Images have incompatible parameters!")
+        # If ``image`` is array-like
+        else:
+            self._image_original = np.atleast_2d(image).copy()
+
     @property
     def cc_image(self):
         """
         Shorthand for convolved clean components image.
         """
-        return signal.fftconvolve(self._image, self.beam, mode='same')
+        return signal.fftconvolve(self._image, self.beam_image, mode='same')
 
     @property
     def cc(self):
@@ -626,7 +712,7 @@ class CleanImage(Image):
     # FIXME: Should be read-only as residuals have sense only for naitive clean
     @property
     def residuals(self):
-        return self._residuals.image
+        return self._residuals
 
     def plot(self, to_plot, blc=None, trc=None, color_clim=None, cmap=None,
              abs_levels=None, rel_levels=None, min_abs_level=None,
@@ -665,47 +751,52 @@ class CleanImage(Image):
 #    pass
 
 if __name__ == '__main__':
-
-    # Importing stuff
+    image = CleanImage()
     import os
-    from images import Images
-    from from_fits import create_clean_image_from_fits_file
+    image.from_fits(os.path.join('/home/ilya/data/3c273',
+                                 '1226+023.u.2006_06_15.ict.fits'))
 
-    abs_levels = [-0.0004]+[0.0004 * 2**(j) for j in range(15)]
 
-    data_dir = '/home/ilya/vlbi_errors/0952+179/2007_04_30/'
-    i_dir_c1 = data_dir + 'C1/im/I/'
-    q_dir_c1 = data_dir + 'C1/im/Q/'
-    u_dir_c1 = data_dir + 'C1/im/U/'
-    print "Creating PANG image..."
-    images = Images()
-    images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
-                                 os.path.join(u_dir_c1, 'cc.fits')])
-    pang_image = images.create_pang_images()[0]
+    # # Importing stuff
+    # import os
+    # from images import Images
+    # from from_fits import create_clean_image_from_fits_file
 
-    print "Creating PPOL image..."
-    images = Images()
-    images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
-                                 os.path.join(u_dir_c1, 'cc.fits')])
-    ppol_image = images.create_pol_images()[0]
+    # abs_levels = [-0.0004] + [0.0004 * 2**j for j in range(15)]
 
-    print "Creating I image..."
-    i_image = create_clean_image_from_fits_file(os.path.join(i_dir_c1,
-                                                             'cc.fits'))
-    print "Creating FPOL image..."
-    images = Images()
-    images.add_from_fits(fnames=[os.path.join(i_dir_c1, 'cc.fits'),
-                                 os.path.join(q_dir_c1, 'cc.fits'),
-                                 os.path.join(u_dir_c1, 'cc.fits')])
-    fpol_image = images.create_fpol_images()[0]
+    # data_dir = '/home/ilya/vlbi_errors/0952+179/2007_04_30/'
+    # i_dir_c1 = data_dir + 'C1/im/I/'
+    # q_dir_c1 = data_dir + 'C1/im/Q/'
+    # u_dir_c1 = data_dir + 'C1/im/U/'
+    # print "Creating PANG image..."
+    # images = Images()
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
+    #                              os.path.join(u_dir_c1, 'cc.fits')])
+    # pang_image = images.create_pang_images()[0]
 
-    # Creating masks
-    ppol_mask = np.zeros(ppol_image.imsize)
-    ppol_mask[ppol_image.image < 0.001] = 1
+    # print "Creating PPOL image..."
+    # images = Images()
+    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
+    #                              os.path.join(u_dir_c1, 'cc.fits')])
+    # ppol_image = images.create_pol_images()[0]
 
-    plot(contours=i_image.image_w_residuals, colors=fpol_image.image,
-         vectors=pang_image.image, vectors_values=ppol_image.image,
-         x=i_image.x[0, :], y=i_image.y[:, 0], blc=(240, 235), trc=(300, 370),
-         colors_mask=ppol_mask, vectors_mask=ppol_mask, min_abs_level=0.0005)
-         # plot_title="0952+179 C1",
-         # outdir='/home/ilya/vlbi_errors/', outfile='0952+179_C1')
+    # print "Creating I image..."
+    # i_image = create_clean_image_from_fits_file(os.path.join(i_dir_c1,
+    #                                                          'cc.fits'))
+    # print "Creating FPOL image..."
+    # images = Images()
+    # images.add_from_fits(fnames=[os.path.join(i_dir_c1, 'cc.fits'),
+    #                              os.path.join(q_dir_c1, 'cc.fits'),
+    #                              os.path.join(u_dir_c1, 'cc.fits')])
+    # fpol_image = images.create_fpol_images()[0]
+
+    # # Creating masks
+    # ppol_mask = np.zeros(ppol_image.imsize)
+    # ppol_mask[ppol_image.image < 0.001] = 1
+
+    # plot(contours=i_image.image_w_residuals, colors=fpol_image.image,
+    #      vectors=pang_image.image, vectors_values=ppol_image.image,
+    #      x=i_image.x[0, :], y=i_image.y[:, 0], blc=(240, 235), trc=(300, 370),
+    #      colors_mask=ppol_mask, vectors_mask=ppol_mask, min_abs_level=0.0005)
+    #      # plot_title="0952+179 C1",
+    #      # outdir='/home/ilya/vlbi_errors/', outfile='0952+179_C1')

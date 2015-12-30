@@ -1,13 +1,12 @@
 import os
 import json
 import numpy as np
-from from_fits import (get_fits_image_info,
-                       create_model_from_fits_file,
+from from_fits import (create_model_from_fits_file,
                        create_image_from_fits_file,
                        create_clean_image_from_fits_file)
 from uv_data import UVData
 from bootstrap import CleanBootstrap
-from utils import (mas_to_rad, degree_to_rad)
+from utils import (mas_to_rad, degree_to_rad, get_fits_image_info)
 from spydiff import clean_difmap
 
 

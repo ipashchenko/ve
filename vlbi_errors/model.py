@@ -1,10 +1,11 @@
 import math
 import numpy as np
 import scipy as sp
-from image import BasicImage, CleanImage
-from from_fits import get_fits_image_info
+import pyfits as pf
 from stats import LnPost
-from components import CGComponent, EGComponent
+from components import CGComponent, EGComponent, DeltaComponent
+from utils import get_hdu_from_hdulist, get_fits_image_info_from_hdulist,\
+    degree_to_mas
 
 try:
     import pylab
@@ -21,7 +22,82 @@ class Model(object):
     """
     def __init__(self, stokes=None):
         self._components = list()
-        self.stokes = stokes
+        self._stokes = stokes
+
+    @property
+    def stokes(self):
+        return self._stokes
+
+    @stokes.setter
+    def stokes(self, stokes):
+        self._stokes = stokes.upper()
+
+    # TODO: Implement adding gaussian components
+    def from_hdulist(self, hdulist, ver=1):
+        image_params = get_fits_image_info_from_hdulist(hdulist)
+        self.stokes = image_params['stokes']
+        hdu = get_hdu_from_hdulist(hdulist, extname='AIPS CC', ver=ver)
+        # TODO: Need this when dealing with IDI UV_DATA extension binary table
+        # dtype = build_dtype_for_bintable_data(hdu.header)
+        dtype = hdu.data.dtype
+        data = np.zeros(hdu.header['NAXIS2'], dtype=dtype)
+        for name in data.dtype.names:
+            data[name] = hdu.data[name]
+
+        for flux, x, y in zip(data['FLUX'], data['DELTAX'] * degree_to_mas,
+                              data['DELTAY'] * degree_to_mas):
+            # We keep positions in mas
+            component = DeltaComponent(flux, -x, -y)
+            self.add_component(component)
+
+    def from_fits(self, fname, ver=1):
+        hdulist = pf.open(fname)
+        self.from_hdulist(hdulist, ver)
+
+    def from_txt(self, fname, style='difmap'):
+        """
+        Function that reads TXT-files with models in difmap or AIPS format.
+
+        :param fname:
+            File with components.
+        :param style: (optional)
+            Style of model file. ``difmap`` or ``aips``. (default: ``difmap``)
+        """
+        mdlo = open(fname)
+        lines = mdlo.readlines()
+        comps = list()
+        for line in lines:
+            if line.startswith('!'):
+                continue
+            line = line.strip('\n ')
+            flux, radius, theta, major, axial, phi, type_, freq, spec =\
+                line.split()
+            x = -float(radius[:-1]) * np.sin(np.deg2rad(float(theta[:-1])))
+            y = -float(radius[:-1]) * np.cos(np.deg2rad(float(theta[:-1])))
+            flux = float(flux[:-1])
+            if int(type_) == 0:
+                comp = DeltaComponent(flux, x, y)
+            elif int(type_) == 1:
+                try:
+                    bmaj = float(major)
+                except ValueError:
+                    bmaj = float(major[:-1])
+                if float(axial[:-1]) == 1:
+                    comp = CGComponent(flux, x, y, bmaj)
+                else:
+                    try:
+                        e = float(axial)
+                    except ValueError:
+                        e = float(axial[:-1])
+                    try:
+                        bpa = -np.deg2rad(float(phi)) + np.pi / 2.
+                    except ValueError:
+                        bpa = -np.deg2rad(float(phi[:-1])) + np.pi / 2.
+                    comp = EGComponent(flux, x, y, bmaj, e, bpa)
+            else:
+                raise NotImplementedError("Only CC, CG & EG are implemented")
+            comps.append(comp)
+        self.add_components(comps)
 
     # FIXME: Add only models with same stokes? Or implement multistokes models?
     def __add__(self, other):
@@ -112,45 +188,7 @@ class Model(object):
             Instance of ``Image`` subclass.
         """
         for component in self._components:
-            image.add_component(component)
-
-    def make_image(self, fname=None, imsize=None, pixref=None, pixsize=None,
-                   bmaj=None, bmin=None, bpa=None):
-        """
-        Method that returns instance of Image class using model data (CCs, clean
-        beam, map size & pixel size).
-
-        :param fname: (optional)
-            Fits file of image to get image parameters.
-        :param bmaj: (optional)
-            Beam major axis size [rad].
-        :param bmin: (optional)
-            Beam minor axis size [rad].
-        :param bpa: (optional)
-            Beam positional angle [deg]
-        :return:
-            Instance of ``Image`` or ``CleanImage`` class (if beam information
-            is supplied.
-        """
-        # If we got fits-file then get parameters of image from it
-        if fname:
-            imsize, pixref, pixrefval, (bmaj, bmin, bpa,), pixsize, stokes,\
-                freq = get_fits_image_info(fname)
-        if imsize is None or pixref is None or pixsize is None:
-            raise Exception("Need image parameters to create Image instance!")
-
-        # First create ``BasicImage`` instance
-        if bpa is None:
-            image = BasicImage(imsize=imsize, pixref=pixref,
-                               pixrefval=pixrefval, pixsize=pixsize)
-        else:
-            image = CleanImage(imsize=imsize, pixref=pixref,
-                               pixrefval=pixrefval, pixsize=pixsize, bmaj=bmaj,
-                               bmin=bmin, bpa=bpa)
-        # Putting model components to image grid
-        self.add_to_image(image)
-
-        return image
+            component.add_to_image(image)
 
 
 if __name__ == "__main__":

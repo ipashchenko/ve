@@ -359,8 +359,7 @@ class DeltaComponent(Component):
         # 2 means that x_c & x_coords should be zero-indexed actually both.
         x = x_c + x_coords - 2
         y = y_c + y_coords - 2
-        # Property ``image.image`` has setter that looks ``.image`` attribute of
-        # ``flux`` object. So use ``_image``.
+        # ``._image`` attribute contains model (FT of uv-data)
         # [y, x] - to get coincidence with fits clean maps
         image._image[y, x] += flux
 

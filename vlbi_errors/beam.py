@@ -1,3 +1,4 @@
+import numpy as np
 from scipy import signal
 from utils import gaussianBeam
 
@@ -25,9 +26,20 @@ class Beam(object):
     def __init__(self):
         self.image = None
 
-    # Convolve with any object that has ``image`` attribute
-    def convolve(self, image_like):
-        return signal.fftconvolve(self.image, image_like.image, mode='same')
+    # FIXME: This code almost repeat ``Image.convolve``! Beam wants to inherit
+    # from ``BasicImage``!
+    def convolve(self, image):
+        """
+        Convolve ``Image`` array with image-like instance or 2D array-like.
+
+        :param image:
+            Instance of ``BasicImage`` or 2D array-like.
+        """
+        try:
+            to_convolve = image.image
+        except AttributeError:
+            to_convolve = np.atleast_2d(image)
+        return signal.fftconvolve(self.image, to_convolve, mode='same')
 
 
 class DirtyBeam(Beam):

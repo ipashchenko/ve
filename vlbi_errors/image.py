@@ -401,12 +401,18 @@ class BasicImage(object):
 
         return np.ma.std(masked_image.ravel())
 
-    # Convolve with any object that has ``image`` attribute
-    def convolve(self, image_like):
+    def convolve(self, image):
         """
-        Convolve ``Image`` array with image-like instance.
+        Convolve ``Image`` array with image-like instance or 2D array-like.
+
+        :param image:
+            Instance of ``BasicImage`` or 2D array-like.
         """
-        return signal.fftconvolve(self._image, image_like.image, mode='same')
+        try:
+            to_convolve = image.image
+        except AttributeError:
+            to_convolve = np.atleast_2d(image)
+        return signal.fftconvolve(self._image, to_convolve, mode='same')
 
     # TODO: Implement Rayleigh (Rice) distributed noise for stokes I
     # FIXME: This is uncorrelated noise - that is too simple model

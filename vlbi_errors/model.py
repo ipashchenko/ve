@@ -63,6 +63,10 @@ class Model(object):
         :param style: (optional)
             Style of model file. ``difmap`` or ``aips``. (default: ``difmap``)
         """
+        if style not in ['difmap', 'aips']:
+            raise Exception
+        if style == 'aips':
+            raise NotImplementedError
         mdlo = open(fname)
         lines = mdlo.readlines()
         comps = list()

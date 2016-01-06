@@ -8,7 +8,7 @@ try:
 except ImportError:
     pylab = None
 from data_io import AN
-from utils import baselines_2_ants
+from utils import baselines_2_ants, get_hdu
 
 
 def open_gains(fname, snver=1):
@@ -27,23 +27,221 @@ def open_gains(fname, snver=1):
         Instance of ``Gains`` class.
     """
 
-    gains = Gains()
-    gains.load(fname, snver=snver)
+    hdu = get_hdu(fname, extname='AIPS SN', ver=snver)
 
+    nif = hdu.header['NO_IF']
+    npol = hdu.header['NO_POL']
+    nant = hdu.header['NO_ANT']
+    # set ``nif'' from dtype of hdu.data
+    _data = np.zeros(hdu.header['NAXIS2'], dtype=[('start', '<f8'),
+                                                  ('stop', '<f8'),
+                                                  ('antenna', 'int'),
+                                                  ('gains', 'complex',
+                                                   (nif, npol,)),
+                                                  ('weights', '<f8',
+                                                   (nif, npol,))])
+
+    time = hdu.data['TIME']
+    dtime = hdu.data['TIME INTERVAL']
+    antenna = hdu.data['ANTENNA NO.']
+
+    # Constructing `gains` field
+    rgains = hdu.data['REAL1'] + 1j * hdu.data['IMAG1']
+    # => (466, 8)
+    lgains = hdu.data['REAL2'] + 1j * hdu.data['IMAG2']
+    rgains = np.expand_dims(rgains, axis=2)
+    # => (466, 8, 1)
+    lgains = np.expand_dims(lgains, axis=2)
+    gains = np.dstack((rgains, lgains))
+    # => (466, 8, 2)
+
+    # Constructing `weights` field
+    rweights = hdu.data['WEIGHT 1']
+    # => (466, 8)
+    lweights = hdu.data['WEIGHT 2']
+    rweights = np.expand_dims(rweights, axis=2)
+    # => (466, 8, 1)
+    lweights = np.expand_dims(lweights, axis=2)
+    weights = np.dstack((rweights, lweights))
+    # => (466, 8, 2)
+
+    # Filling structured array by fileds
+    _data['start'] = time - 0.5 * dtime
+    _data['stop'] = time + 0.5 * dtime
+    _data['antenna'] = antenna
+    _data['gains'] = gains
+    _data['weights'] = weights
+
+    gains = list()
+    for ant in set(_data['antenna']):
+        idx = _data['antenna'] == ant
+        gains.append(GainCurve(ant, nif, npol, _data[idx][['start', 'stop',
+                                                           'gains',
+                                                           'weights']]))
     return gains
+
+
+class GainCurve(object):
+    """
+    Class that represents gain curve for single antenna.
+    """
+    def __init__(self, ant, nif, npol, data):
+        """
+        :param ant:
+        :param data:
+            Numpy structured array.
+        :return:
+        """
+        self.ant = ant
+        self.n_if = nif
+        self.n_pol = npol
+        self._data = data
+        self._t = 0.5 * (data['stop'] + data['start'])
+
+    def __mul__(self, other):
+        """
+        :param other:
+            Instance of ``GainCurve``.
+        :return:
+            Numpy array (#t, #IF, 4,), where each row is product of gains from
+            two different antennas (r1r1, r1l1, l1r1, l1l1), r1r1 - product of
+            R gains for IF=1 of first antenna with R gains for IF=1 for second
+            antenna.
+        """
+        if not isinstance(other, GainCurve):
+            raise Exception
+        t = self._t
+        tmp = np.einsum('...ij,...kl->...ijkl', self(t), np.conjugate(other(t)))
+        return np.vstack([tmp[:, i, :, i].reshape((len(t), 4))[np.newaxis, :]
+                          for i in range(self.n_if)])
+
+    def _get_indx(self, t):
+        """
+        Get indexes of structured array with given times.
+        :param t:
+            Iterable of time values.
+        :return:
+            Numpy bool array.
+        """
+        t = np.array(t)
+        a = (t[:, np.newaxis] <= self._data['stop']) & (t[:, np.newaxis] >=
+                                                        self._data['start'])
+        return np.array([np.where(row)[0][0] for row in a])
+
+    def __call__(self, t):
+        """
+        Returns values of gains for given times.
+
+        :param t:
+            Iterable of time values.
+        :return:
+            Complex numpy array (#t, #IF, #pol)
+        """
+        idx = self._get_indx(t)
+        if not idx.any():
+            gains = np.empty((len(t), self.n_if, self.n_pol))
+            gains[:] = np.nan
+        else:
+            # Shape (#t, #if, #pol)
+            gains = self._data[idx]['gains']
+        return gains
+
+    def r(self, t):
+        return self.__call__(t)[:, :, 0]
+
+    def l(self, t):
+        return self.__call__(t)[:, :, 1]
+
+    def tplot(self, IF=None, pol=None):
+        """
+        Method that plots complex antenna gains vs. time.
+
+        :param IF:
+            IF number for which plot gains.
+
+        :param pol:
+            Polarization for which plot gains. ``R`` or ``L``.
+        """
+
+        if not IF:
+            raise Exception('Choose IF # to display: from ' + str(1) + ' to ' +
+                            str(np.shape(self._data['gains'])[1]))
+        else:
+            IF -= 1
+
+        if not pol:
+            raise Exception('Choose pol. to display: L or R')
+
+        times = self._t
+
+        if pol == 'R':
+            data = self._data['gains'][:, IF, 0]
+        elif pol == 'L':
+            data = self._data['gains'][:, IF, 1]
+        else:
+            raise Exception('``pol`` parameter should be ``R`` or ``L``!')
+
+        angles = np.angle(data)
+        amplitudes = np.real(np.sqrt(data * np.conj(data)))
+
+        plt.subplot(2, 1, 1)
+        plt.plot(times, amplitudes, '.k')
+        plt.subplot(2, 1, 2)
+        plt.plot(times, angles, '.k')
+        plt.show()
 
 
 class Gains(object):
     """
     Class that represents complex antenna gains.
-
-    :param _io (optional):
-        Instance of ``IO`` subclass used for fetching antenna gains.
     """
+    def __init__(self, fname, snver=1):
+        hdu = get_hdu(fname, extname='AIPS SN', ver=snver)
 
-    def __init__(self, _io=AN()):
-        self._io = _io
-        self._data = None
+        nif = hdu.header['NO_IF']
+        npol = hdu.header['NO_POL']
+        nant = hdu.header['NO_ANT']
+        self.nif = nif
+        self.npol = npol
+        # set ``nif'' from dtype of hdu.data
+        _data = np.zeros(hdu.header['NAXIS2'], dtype=[('start', '<f8'),
+                                                      ('stop', '<f8'),
+                                                      ('antenna', 'int'),
+                                                      ('gains', 'complex',
+                                                       (nif, npol,)),
+                                                      ('weights', '<f8',
+                                                       (nif, npol,))])
+
+        time = hdu.data['TIME']
+        dtime = hdu.data['TIME INTERVAL']
+        antenna = hdu.data['ANTENNA NO.']
+
+        # Constructing `gains` field
+        rgains = hdu.data['REAL1'] + 1j * hdu.data['IMAG1']
+        # => (466, 8)
+        lgains = hdu.data['REAL2'] + 1j * hdu.data['IMAG2']
+        rgains = np.expand_dims(rgains, axis=2)
+        # => (466, 8, 1)
+        lgains = np.expand_dims(lgains, axis=2)
+        gains = np.dstack((rgains, lgains))
+        # => (466, 8, 2)
+
+        # Constructing `weights` field
+        rweights = hdu.data['WEIGHT 1']
+        # => (466, 8)
+        lweights = hdu.data['WEIGHT 2']
+        rweights = np.expand_dims(rweights, axis=2)
+        # => (466, 8, 1)
+        lweights = np.expand_dims(lweights, axis=2)
+        weights = np.dstack((rweights, lweights))
+        # => (466, 8, 2)
+
+        # Filling structured array by fileds
+        _data['start'] = time - 0.5 * dtime
+        _data['stop'] = time + 0.5 * dtime
+        _data['antenna'] = antenna
+        _data['gains'] = gains
+        _data['weights'] = weights
 
     @property
     def data(self):
@@ -380,4 +578,3 @@ if __name__ == '__main__':
     fnames.remove('/home/ilya/work/vlbi_errors/fits/1226+023_CALIB_SEQ10.FITS')
     fnames.sort(reverse=True)
     gains.absorb(fnames)
-

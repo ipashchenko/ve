@@ -6,9 +6,13 @@ from image import Image, CleanImage
 def create_model_from_fits_file(fname, ver=1):
     """
     Function that creates instance of ``Model`` from FITS-file with CLEAN model.
+
     :param fname:
-    :param ver:
+        FITS-file with CLEAN model.
+    :param ver: (optional)
+        Version of AIPS CC table to use. (default: ``1``)
     :return:
+        Instance of ``Model`` class.
     """
     model = Model()
     model.from_fits(fname, ver)
@@ -16,6 +20,17 @@ def create_model_from_fits_file(fname, ver=1):
 
 
 def create_model_from_hdulist(hdulist, ver=1):
+    """
+    Function that creates instance of ``Model`` from instance of
+    ``PyFits.HDUList``.
+
+    :param hdulist:
+        Instance of ``PyFits.HDUList``.
+    :param ver: (optional)
+        Version of AIPS CC table to use. (default: ``1``)
+    :return:
+        Instance of ``Model`` class.
+    """
     model = Model()
     model.from_hdulist(hdulist, ver)
     return model
@@ -23,8 +38,12 @@ def create_model_from_hdulist(hdulist, ver=1):
 
 def create_clean_image_from_fits_file(fname, ver=1):
     """
-    Create instance of ``CleanImage`` from FITS-file of CLEAN image.
+    Create instance of ``CleanImage`` from FITS-file with CLEAN image.
+
     :param fname:
+        FITS-file with CLEAN model.
+    :param ver: (optional)
+        Version of AIPS CC table to use. (default: ``1``)
     :return:
         Instance of ``CleanImage``.
     """
@@ -34,9 +53,13 @@ def create_clean_image_from_fits_file(fname, ver=1):
 
 def create_clean_image_from_hdulist(hdulist, ver=1):
     """
-    Create instance of ``CleanImage`` from instance of ``Pyfits.HDUList``.
+    Function that creates instance of ``CleanImage`` from instance of
+    ``Pyfits.HDUList``.
+
     :param hdulist:
         Instance of ``PyFits.HDUList``.
+    :param ver: (optional)
+        Version of AIPS CC table to use. (default: ``1``)
     :return:
         Instance of ``CleanImage``.
     """
@@ -47,10 +70,12 @@ def create_clean_image_from_hdulist(hdulist, ver=1):
 
 def create_image_from_fits_file(fname):
     """
-    Create instance of ``CleanImage`` from FITS-file of CLEAN image.
+    Create instance of ``Image`` from FITS-file with image in primary HDU.
+
     :param fname:
+        FITS-file with image in primary HDU.
     :return:
-        Instance of ``CleanImage``.
+        Instance of ``Image``.
     """
     hdulist = pf.open(fname)
     return create_image_from_hdulist(hdulist)
@@ -59,10 +84,11 @@ def create_image_from_fits_file(fname):
 def create_image_from_hdulist(hdulist):
     """
     Create instance of ``Image`` from instance of ``PyFits.HDUList``.
-    :param hdulist:
 
+    :param hdulist:
+        Instance of ``PyFits.HDUList``.
     :return:
-        Instance of ``CleanImage``.
+        Instance of ``Image``.
     """
     image = Image()
     image.from_hdulist(hdulist)

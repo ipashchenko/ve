@@ -16,7 +16,6 @@ except ImportError:
     pass
 
 
-
 vcomplex = np.vectorize(complex)
 v_int = np.vectorize(int)
 v_round = np.vectorize(round)
@@ -183,12 +182,12 @@ def find_card_from_header(header, value=None, keyword=None,
         search = header.cards
 
     if value is not None and keyword is None:
-        result = [card for card in search if card.value==value]
+        result = [card for card in search if card.value == value]
     elif value is None and keyword is not None:
-        result = [card for card in search if card.keyword==keyword]
+        result = [card for card in search if card.keyword == keyword]
     elif value is not None and keyword is not None:
-        result = [card for card in search if (card.keyword==keyword and
-                  card.value==value)]
+        result = [card for card in search if (card.keyword == keyword and
+                  card.value == value)]
     else:
         result = search
 
@@ -222,6 +221,7 @@ def add_field(a, descr):
     the new array, whereas the new fields are uninitialized.  The
     arguments are not modified.
 
+    >>> import numpy
     >>> sa = numpy.array([(1, 'Foo'), (2, 'Bar')], \
                          dtype=[('id', int), ('name', 'S3')])
     >>> sa.dtype.descr == numpy.dtype([('id', int), ('name', 'S3')])
@@ -637,7 +637,7 @@ def time_dhms_to_frac(dhmses):
 
 
 # FIXME: Seems that size of beam here is not the same as in difmap.
-def gaussianBeam(size_x, bmaj, bmin, bpa, size_y=None):
+def gaussian_beam(size_x, bmaj, bmin, bpa, size_y=None):
     """
     Generate and return a 2D Gaussian function
     of dimensions (size_x,size_y).
@@ -652,10 +652,10 @@ def gaussianBeam(size_x, bmaj, bmin, bpa, size_y=None):
         Beam minor axis size [pixels].
     :param bpa:
         Beam positional angle [deg].
-    :param size_y (optional):
+    :param size_y: (optional)
         Size of second dimension. Default is ``size_x``.
     :return:
-        Numpy.ndarray of size (``size_x``, ``size_y``,).
+        Numpy array of shape (``size_x``, ``size_y``,).
     """
     size_y = size_y or size_x
     x, y = np.mgrid[-size_x: size_x, -size_y: size_y]
@@ -719,7 +719,7 @@ def gaussian(height, x0, y0, bmaj, e, bpa):
                                           c * (y - y0) ** 2))
 
 
-def fitgaussian(data):
+def fit_gaussian(data):
     """
     Returns (height, x, y, width_x, width_y)
     the gaussian parameters of a 2D distribution found by a fit.
@@ -888,7 +888,7 @@ def ln_uniform(x, a, b):
 
 
 def is_sorted(lst):
-    return (sorted(lst) == lst)
+    return sorted(lst) == lst
 
 
 def get_uv_correlations(uv, models):

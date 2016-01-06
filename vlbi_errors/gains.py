@@ -7,7 +7,6 @@ try:
     import pylab as plt
 except ImportError:
     pylab = None
-from data_io import AN
 from utils import baselines_2_ants, get_hdu
 
 
@@ -81,6 +80,10 @@ def open_gains(fname, snver=1):
     return gains
 
 
+# TODO: Gains could be considered as parameters in self-calibration. Connect it
+# somehow to ``Model`` via abstract class. Actually, ``GainCurve`` class could
+# be part of ``Antenna`` class that keeps all calibration information for single
+# antenna in VLBI experiment.
 class GainCurve(object):
     """
     Class that represents gain curve for single antenna.
@@ -98,22 +101,35 @@ class GainCurve(object):
         self._data = data
         self._t = 0.5 * (data['stop'] + data['start'])
 
+    # FIXME: Raise exception if for some times in other instance there's no gains
     def __mul__(self, other):
         """
+        Multiply gains of current instance of ``GainCurve`` class to gains
+        values of other instance.
+
         :param other:
             Instance of ``GainCurve``.
         :return:
-            Numpy array (#t, #IF, 4,), where each row is product of gains from
-            two different antennas (r1r1, r1l1, l1r1, l1l1), r1r1 - product of
-            R gains for IF=1 of first antenna with R gains for IF=1 for second
-            antenna.
+            Instance of ``GainCurve`` with gains values that are product of
+            gains from both instances.
+
+        :note:
+            It only has sense to multiply gains of one antenna. If it is not the
+            case - exception is raised. Multiplying gains of different antennas
+            is implemented in ``UVData.__mul__`` method.
         """
+        self_copy = copy.deepcopy(self)
+
         if not isinstance(other, GainCurve):
             raise Exception
+        if not self.ant == other.ant:
+            raise Exception
+        # We need gains values at this time moments
         t = self._t
-        tmp = np.einsum('...ij,...kl->...ijkl', self(t), np.conjugate(other(t)))
-        return np.vstack([tmp[:, i, :, i].reshape((len(t), 4))[np.newaxis, :]
-                          for i in range(self.n_if)])
+        indx = self._get_indx(t)
+        self_copy._data['gains'][indx] = self(t) * other(t)
+
+        return self_copy
 
     def _get_indx(self, t):
         """
@@ -191,9 +207,37 @@ class GainCurve(object):
         plt.show()
 
 
+class GainsOfExperiment(object):
+    def __init__(self):
+        self.gains = dict()
+
+    def from_fits_file(self, fname, snver=1):
+        gains_list = open_gains(fname, snver=snver)
+        for gains in gains_list:
+            self.gains.update({gains.ant: gains})
+
+    @property
+    def antennas(self):
+        return self.gains.keys()
+
+    def find_gains_for_antenna(self, ant, t):
+        return self.gains[ant](t)
+
+    def find_gains_for_baseline(self, bl, t):
+        ant1, ant2 = baselines_2_ants([bl])
+        # (N, #if, #pol)
+        gains1 = self.find_gains_for_antenna(ant1, t)
+        gains2 = self.find_gains_for_antenna(ant2, t)
+        gains12 = np.asarray([gains1[..., 0] * np.conjugate(gains2[..., 0]),
+                              gains1[..., 1] * np.conjugate(gains2[..., 1]),
+                              gains1[..., 0] * np.conjugate(gains2[..., 1]),
+                              gains1[..., 1] * np.conjugate(gains2[..., 0])])
+        return gains12
+
+
 class Gains(object):
     """
-    Class that represents complex antenna gains.
+    Class that represents complex antenna gains from single VLBI experiment.
     """
     def __init__(self, fname, snver=1):
         hdu = get_hdu(fname, extname='AIPS SN', ver=snver)

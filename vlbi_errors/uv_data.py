@@ -3,8 +3,8 @@ import copy
 import numpy as np
 import pyfits as pf
 from collections import OrderedDict
-from utils import baselines_2_ants, index_of, get_uv_correlations, \
-    find_card_from_header
+from utils import (baselines_2_ants, index_of, get_uv_correlations,
+                   find_card_from_header)
 
 try:
     import pylab
@@ -40,14 +40,22 @@ class UVData(object):
         self.hdu.data.data[slices_dict.values()] = self.uvdata.imag
 
     def save(self, data=None, fname=None):
+        """
+        Save uv-data to FITS-file.
+
+        :param data: (optional)
+            Numpy record array with uv-data & parameters info. If ``None`` then
+            save current instance's uv-data. (default: ``None``)
+        :param fname: (optional)
+            Name of FITS-file to save. If ``None`` then use current instance's
+            original file. (default: ``None``)
+        """
         fname = fname or self.fname
-        # Save data
         if data is None:
             self.hdulist.writeto(fname)
         else:
-            # TODO: save data: #groups has changed
             new_hdu = pf.GroupsHDU(data)
-            # PyFits updates header using given data (``GCOUNT``) anyway
+            # PyFits updates header using given data (``GCOUNT`` key) anyway
             new_hdu.header = self.hdu.header
 
             hdulist = pf.HDUList([new_hdu])
@@ -91,7 +99,7 @@ class UVData(object):
 
     def new_slices(self, key, key_slice):
         """
-        Return view of internal ``hdu.data.data`` numpy.ndarray with given
+        Return VIEW of internal ``hdu.data.data`` numpy.ndarray with given
         slice.
         """
         slices_dict = self.slices_dict.copy()
@@ -100,10 +108,10 @@ class UVData(object):
 
     def view_uvdata(self, new_slices_dict):
         """
-        Return A VIEW of internal ``hdu.data.data`` numpy.ndarray with given
+        Return VIEW of internal ``hdu.data.data`` numpy.ndarray with given
         slices.
 
-        :param slices_dict:
+        :param new_slices_dict:
             Ex. {'COMPLEX': slice(0, 1), 'IF': slice(0, 2)}
         """
         slices_dict = self.slices_dict.copy()
@@ -121,8 +129,6 @@ class UVData(object):
         # Always return complex representation of internal ``hdu.data.data``
         return self._uvdata
 
-    # FIXME: This solves problem! Syncing between complex and real
-    # ``hdu.data.data``representation!
     @uvdata.setter
     def uvdata(self, other):
         # Updates A COPY of ``hdu.data.data`` numpy.ndarray (complex repr.)
@@ -133,14 +139,13 @@ class UVData(object):
     @property
     def uvdata_freq_averaged(self):
         """
-        :returns:
-            ``self.uvdata`` averaged in IFs, that is complex numpy.ndarray with
-            shape (#N, #stokes).
+        Returns ``self.uvdata`` averaged in IFs, that is complex numpy.ndarray
+        with shape (#N, #stokes).
         """
         if self.nif > 1:
             result = np.mean(self.uvdata, axis=1)
         # FIXME: if self.nif=1 then np.mean for axis=1 will remove this
-        # dimension. So don't need this else
+        # dimension. So don't need this if-else
         else:
             result = self.uvdata[:, 0, :]
         return result
@@ -149,9 +154,6 @@ class UVData(object):
     def baselines(self):
         """
         Returns list of baselines numbers.
-
-        :return:
-            List of baselines numbers.
         """
         result = list(set(self.hdu.columns[self.par_dict['BASELINE']].array))
         return vec_int(sorted(result))
@@ -160,32 +162,38 @@ class UVData(object):
     def antennas(self):
         """
         Returns list of antennas numbers.
-
-        :return:
-            List of antennas numbers.
         """
         return baselines_2_ants(self.baselines)
 
     @property
     def frequency(self):
         """
-        Frequency in Hz.
+        Returns sky frequency in Hz.
         """
         freq_card = find_card_from_header(self.hdu.header, value='FREQ')[0]
         return self.hdu.header['CRVAL{}'.format(freq_card[0][-1])]
 
     @property
     def freq_width_if(self):
+        """
+        Returns width of IF in Hz.
+        """
         freq_card = find_card_from_header(self.hdu.header, value='FREQ')[0]
         return self.hdu.header['CDELT{}'.format(freq_card[0][-1])]
 
     @property
     def freq_width(self):
+        """
+        Returns width of all IFs in Hz.
+        """
         freq_card = find_card_from_header(self.hdu.header, value='FREQ')[0]
         return self.nif * self.hdu.header['CDELT{}'.format(freq_card[0][-1])]
 
     @property
     def band_center(self):
+        """
+        Returns center of frequency bandwidth in Hz.
+        """
         return self.frequency + self.freq_width_if * (self.nif / 2. - 0.5)
 
     @property
@@ -195,8 +203,8 @@ class UVData(object):
         present in the original
 
         :return:
-            np.ndarray with shape (#scans, 2,) with start & stop time for each
-                of #scans scans.
+            numpy.ndarray with shape (#scans, 2,) with start & stop time for each
+            of #scans scans.
         """
         try:
             indx = self.hdulist.index_of('AIPS NX')
@@ -261,15 +269,22 @@ class UVData(object):
             Numpy.ndarray with shape (N, 3,), where N is the number of (u, v, w)
             points.
         """
-        u = self.hdu.columns[self.par_dict['UU--']].array
-        v = self.hdu.columns[self.par_dict['VV--']].array
-        w = self.hdu.columns[self.par_dict['WW--']].array
+        suffix = '--'
+        try:
+            u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
+            v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
+            w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
+        except KeyError:
+            suffix = '---SIN'
+            u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
+            v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
+            w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
         return np.vstack((u, v, w)).T
 
     @property
     def uv(self):
         """
-        Shortcut for (u, v) -coordinates of self.
+        Shortcut for (u, v) -coordinates of visibility values.
 
         :return:
             Numpy.ndarray with shape (N, 2,), where N is the number of (u, v, w)
@@ -282,9 +297,6 @@ class UVData(object):
         """
         Method that returns chosen data from ``_data`` numpy structured array
         based on user specified parameters.
-
-        All checks on IF and stokes are made here in one place. This method is
-        used by methods that retrieve data, plotting methods.
 
         :param times (optional):
             Container with start & stop time or ``None``. If ``None`` then use
@@ -307,14 +319,15 @@ class UVData(object):
             Two numpy.ndarrays, where first array is array of data with shape
             (#N, #IF, #STOKES) and second array is boolean numpy array of
             indexes of data in original PyFits record array.
+
+        :note:
+            All checks on IF and stokes are made here in one place. This method
+            is heavily used by all methods that retrieve data and/or plot it.
+
         """
         # Copy with shape (#N, #IF, #STOKES, 2,)
         uvdata = self.uvdata
 
-        # TODO: create general method for retrieving indexes of structured array
-        # where the specified fields are equal to specified values. Also
-        # consider using different types of fields: interval values (time),
-        # equality to some values (baseline, IF), etc.
         if baselines is None:
             baselines = self.baselines
             indxs = np.ones(len(uvdata), dtype=bool)
@@ -334,18 +347,17 @@ class UVData(object):
             # Find indexes of structured array (in zero dim) with given
             # baselines
             for baseline in baselines_list:
-                # TODO: Vectorize that shit
-                indxs = np.logical_or(indxs, self.hdu.columns[self.par_dict['BASELINE']].array == baseline)
+                # TODO: Vectorize that.
+                indxs = np.logical_or(indxs,
+                                      self.hdu.columns[self.par_dict['BASELINE']].array == baseline)
 
         # If we are given some time interval then find among ``indxs`` only
         # those from given time interval
         if times is not None:
             # Assert that ``times`` consists of start and stop
             assert(len(times) == 2)
-            lower_indxs = self.hdu.columns[self.par_dict['DATE']].array <\
-                          times[1]
-            high_indxs = self.hdu.columns[self.par_dict['DATE']].array >\
-                         times[0]
+            lower_indxs = self.hdu.columns[self.par_dict['DATE']].array < times[1]
+            high_indxs = self.hdu.columns[self.par_dict['DATE']].array > times[0]
             time_indxs = np.logical_and(lower_indxs, high_indxs)
             indxs = np.logical_and(indxs, time_indxs)
 
@@ -408,15 +420,15 @@ class UVData(object):
         V data (`RR`` - ``LL``) for computation assuming no signal in V. Else
         use successive differences approach (Brigg's dissertation).
 
-        :param split_scans (optional):
+        :param split_scans: (optional)
             Should we calculate noise for each scan? (default: ``False``)
 
-        :param use_V (optional):
+        :param use_V: (optional)
             Use stokes V data (``RR`` - ``LL``) to calculate noise assuming no
             signal in stokes V? If ``False`` then use successive differences
             approach (see Brigg's dissertation). (default: ``True``)
 
-        :param average_freq (optional):
+        :param average_freq: (optional)
             Use IF-averaged data for calculating noise? (default: ``False``)
 
         :return:
@@ -513,12 +525,12 @@ class UVData(object):
             2) iterable of stds. Will use different values of std for different
             scans. Will use first #scans values from iterable and ignore others.
 
-        :param df (optional):
+        :param df: (optional)
             Number of d.o.f. for standard Student t-distribution used as noise
             model.  If set to ``None`` then use gaussian noise model. (default:
             ``None``)
 
-        :param split_scans (optional):
+        :param split_scans: (optional)
             Is parameter ``noise`` is mapping from baseline numbers to
             iterables of std of noise for each scan on baseline? (default:
             ``False``)
@@ -570,6 +582,9 @@ class UVData(object):
         gaussian noise.  Later it is supposed to add more functionality (see
         Issue #8).
 
+        :param average_freq: (optional)
+            Use IF-averaged data for calculating errors? (default: ``False``)
+
         :return:
             Numpy.ndarray with shape (#N, #IF, #stokes,) that repeats the shape
             of self.data['hands'] array.
@@ -599,9 +614,23 @@ class UVData(object):
         selected antenna with antennas specified in ``baselines``. It is like
         AIPS task UVPLOT with bparm=6,7,0.
 
-        :param times (optional):
+        :param antennas: (optional)
+            AIPS-like ``uvplt`` parameter.
+        :param baselines: (optional)
+            AIPS-like ``uvplt`` parameter.
+        :param sym: (optional)
+            Matplotlib symbols to plot. (default: ``.k``)
+        :param xinc: (optional)
+            AIPS-like ``uvplt`` parameter.
+        :param times: (optional)
             Container with start & stop time or ``None``. If ``None`` then use
             all time. (default: ``None``)
+        :param x_range: (optional)
+            U-distance range. If ``None`` then use all available. (default:
+            ``None``)
+        :param y_range: (optional)
+            V-distance range. If ``None`` then use all available. (default:
+            ``None``)
         """
         if antennas is None:
             antennas = self.antennas
@@ -646,16 +675,7 @@ class UVData(object):
                                             baselines=baselines_to_display,
                                             freq_average=True)
 
-        # FIXME: adapt for current implementation
-        # # If we are given some time interval then find among ``indxs`` only
-        # # those from given time interval
-        # if times is not None:
-        #     # Assert that ``times`` consists of start and stop
-        #     assert(len(times) == 2)
-        #     lower_indxs = np.where(data[indxs]['time'] < times[1])[0]
-        #     high_indxs = np.where(data[indxs]['time'] > times[0])[0]
-        #     indxs = indxs[np.intersect1d(lower_indxs, high_indxs)]
-
+        # FIXME: Use properties for u, v
         u = self.hdu.columns[self.par_dict['UU--']].array[indxs]
         v = self.hdu.columns[self.par_dict['VV--']].array[indxs]
         uv = np.vstack((u, v)).T

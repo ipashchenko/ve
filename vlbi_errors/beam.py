@@ -1,6 +1,6 @@
 import numpy as np
 from scipy import signal
-from utils import gaussianBeam
+from utils import gaussian_beam
 
 
 # * Resolution could depend on position in map or frequency. Should i associate
@@ -99,5 +99,5 @@ class CleanBeam(Beam):
         self.bmin = kwargs.pop("bmin")
         self.bpa = kwargs.pop("bpa")
         self.size = kwargs.pop("imsize")
-        self.image = gaussianBeam(self.size[0], self.bmaj, self.bmin,
-                                  self.bpa + 90., self.size[1])
+        self.image = gaussian_beam(self.size[0], self.bmaj, self.bmin,
+                                   self.bpa + 90., self.size[1])

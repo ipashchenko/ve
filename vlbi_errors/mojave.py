@@ -63,7 +63,7 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
             fname = mojave_uv_fits_fname(source, 'u', epoch)
             url = os.path.join(u_url, epoch, fname)
             print("Downloading file {}".format(fname))
-            # urllib.urlretrieve(url, os.path.join(download_dir, fname))
+            urllib.urlretrieve(url, os.path.join(download_dir, fname))
 
     # Downloading (optionally) x, y & j-band data
     request = urllib2.Request(mojave_multifreq_url)
@@ -87,7 +87,7 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
     for url in download_list:
         fname = os.path.split(url)[-1]
         print("Downloading file {}".format(fname))
-        # urllib.urlretrieve(url, os.path.join(download_dir, fname))
+        urllib.urlretrieve(url, os.path.join(download_dir, fname))
 
 
 if __name__ == '__main__':

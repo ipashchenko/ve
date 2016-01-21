@@ -295,8 +295,10 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
     # Setting up the output directory
     if outdir is None:
         outdir = os.getcwd()
+    print("Using output directory {}".format(outdir))
     # Assume input self-calibrated uv-data FITS files have different frequencies
     n_freq = len(uv_fits_paths)
+    print("Using {} frequencies".format(n_freq))
     # Container for original self-calibrated uv-data
     uv_data_dict = dict()
     # Container for original self-calibrated uv-data FITS-file paths
@@ -308,6 +310,7 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
         uv_fits_dict.update({uvdata.band_center: uv_fits_path})
     # Lowest frequency goes first
     freqs = sorted(uv_fits_dict.keys())
+    print("Frequencies are: {}".format(freqs))
 
     # Container for original CLEAN-images of self-calibrated uv-data
     cc_image_dict = dict()
@@ -323,31 +326,65 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
 
     # If CLEAN-images are supplied then use them to fill the containers
     if cc_fits_paths is not None:
+        print("CLEAN models are specified in parameters.")
         imsizes_dict = dict()
-        print("Exploring supplied CLEAN images")
+        print("Exploring supplied CLEAN models")
         for cc_fits_path in cc_fits_paths:
             image = create_clean_image_from_fits_file(cc_fits_path)
             freq = image.freq
             stoke = image.stokes
             if freq not in freqs:
-                raise Exception("Frequency of CLEAN image not known from"
-                                " UV-data!")
+                raise Exception("Frequency of given CLEAN model not known from"
+                                " UV-data for file {}!".format(cc_fits_path))
             cc_image_dict[freq].update({stoke: image})
             cc_fits_dict[freq].update({stoke: cc_fits_path})
             if stoke == 'I':
                 cc_beam_dict[freq].update({stoke: image.beam})
+
+        # Check that each frequency contains stokes I model
+        if 'I' not in cc_image_dict[freq].keys():
+            raise Exception("No stokes I CLEAN model for freq {} is specified!")
+
         for freq in freqs:
             image = cc_image_dict[freq][stoke]
             imsizes_dict.update({freq: (image.imsize[0], abs(image.pixsize[0] /
                                                              mas_to_rad))})
 
+        # Check frequency consistency
         assert set(uv_fits_dict.keys()).issubset(cc_fits_dict.keys())
         # Define stokes from existing CLEAN-images
         stokes = cc_image_dict[freqs[0]].keys()
+        for freq in freqs:
+            print("Image parameters for freq {} -"
+                  " {} [pix, mas]".format(freq, imsizes_dict[freq]))
+
+        # If some frequency doesn't have any stokes from ('I', 'Q', 'U') then
+        # CLEAN that stokes
+        to_clean = dict()
+        for freq in freqs:
+            to_clean[freq] = list()
+            for stoke in ('Q', 'U'):
+                if stoke not in cc_image_dict[freq].keys():
+                    print("Oops! No stokes {} for freq {} in supplied CLEAN"
+                          " models! We'll clean now.")
+                    outfname = '{}_{}_cc.fits'.format(freq, stoke)
+                    outpath = os.path.join(outdir, outfname)
+
+                    uv_dir, uv_fname = os.path.split(uv_fits_dict[freq])
+                    clean_difmap(uv_fname, outfname, stoke, imsizes_dict[freq],
+                                 path=uv_dir, path_to_script=path_to_script,
+                                 outpath=outdir, show_difmap_output=True)
+                    cc_fits_dict[freq].update({stoke: os.path.join(outdir,
+                                                                   outfname)})
+                    image = create_image_from_fits_file(outpath)
+                    cc_image_dict[freq].update({stoke: image})
+                    if stoke == 'I':
+                        cc_beam_dict[freq].update({stoke: image.beam})
 
     # If no CLEAN-images are supplied then CLEAN original data with
     # use-specified parameters
     elif imsizes is not None:
+        print("No CLEAN models are specified. We'll clean.")
         assert len(imsizes) == n_freq
         if stokes is None:
             stokes = ('I', 'Q', 'U')
@@ -360,20 +397,23 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
             for stoke in stokes:
                 outfname = '{}_{}_cc.fits'.format(freq, stoke)
                 outpath = os.path.join(outdir, outfname)
-                clean_difmap(uv_fname, outfname, stoke, imsizes[freq],
+                clean_difmap(uv_fname, outfname, stoke, imsizes_dict[freq],
                              path=uv_dir, path_to_script=path_to_script,
                              outpath=outdir, show_difmap_output=True)
                 cc_fits_dict[freq].update({stoke: os.path.join(outdir,
                                                                outfname)})
-                image = create_image_from_fits_file(outpath)
+                image = create_clean_image_from_fits_file(outpath)
                 cc_image_dict[freq].update({stoke: image})
                 if stoke == 'I':
                     cc_beam_dict[freq].update({stoke: image.beam})
     else:
         raise Exception("Provide ``cc_fits_paths`` of ``imsizes``")
 
+    # FIXME: Current logic of ``common_imsize`` choice results in 2048 size when
+    # really that should be 1024 (all frequencies have (1024, 0.1) image size
     # Now CLEAN uv-data using ``common_imsize`` or parameters of CLEAN-image
-    # from lowest and highest frequencies
+    # from lowest and highest frequencies and ``common_beam`` or beam of
+    # CLEAN image from lowest frequency.
     # Container for common sized CLEAN-images of self-calibrated uv-data
     cc_cs_image_dict = dict()
     cc_cs_fits_dict = dict()
@@ -384,6 +424,11 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
         powers = [imsize // (2 ** i) for i in range(15)]
         imsize = 2 ** powers.index(0)
         common_imsize = (imsize, pixsize_high)
+    print("Using common image size {}".format(common_imsize))
+    if common_beam is None:
+        common_beam = cc_beam_dict[freqs[0]]
+    print("Using common beam {}".format(common_beam))
+
     for freq in freqs:
         cc_cs_image_dict.update({freq: dict()})
         cc_cs_fits_dict.update({freq: dict()})
@@ -401,40 +446,54 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
             image = create_image_from_fits_file(outpath)
             cc_image_dict[freq].update({stoke: image})
 
-    # Bootstrap self-calibrated uv-data with CLEAN-models
-    for freq, uv_fits_path in uv_fits_dict:
-        cc_fits_paths = cc_fits_dict[freq].keys()
-        bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n_boot, outpath=outpath,
-                          outname=('boot_{}'.format(freq), '_uv.fits'))
+    # # Bootstrap self-calibrated uv-data with CLEAN-models
+    # for freq, uv_fits_path in uv_fits_dict:
+    #     cc_fits_paths = cc_fits_dict[freq].keys()
+    #     bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n_boot, outpath=outpath,
+    #                       outname=('boot_{}'.format(freq), '_uv.fits'))
 
-    # Optionally find shifts between original CLEAN-images
-    if find_shifts:
-        print("Determining images shift...")
-        shift_dict = dict()
-        freq_1 = freqs[0]
-        image_1 = cc_image_dict[freq_1]['I']
+    # # Optionally find shifts between original CLEAN-images
+    # if find_shifts:
+    #     print("Determining images shift...")
+    #     shift_dict = dict()
+    #     freq_1 = freqs[0]
+    #     image_1 = cc_image_dict[freq_1]['I']
 
-        for freq_2 in freqs[1:]:
-            image_2 = cc_image_dict[freq_2]['I']
-            # Coarse grid of possible shifts
-            shift = find_shift(image_1, image_2, 100, 5, max_mask_r=200,
-                               mask_step=5)
-            # More accurate grid of possible shifts
-            print("Using fine grid for accurate estimate")
-            coarse_grid = range(0, 100, 5)
-            idx = coarse_grid.index(shift)
-            if idx > 0:
-                min_shift = coarse_grid[idx - 1]
-            else:
-                min_shift = 0
-            shift = find_shift(image_1, image_2, coarse_grid[idx + 1], 1,
-                               min_shift=min_shift, max_mask_r=200, mask_step=5)
+    #     for freq_2 in freqs[1:]:
+    #         image_2 = cc_image_dict[freq_2]['I']
+    #         # Coarse grid of possible shifts
+    #         shift = find_shift(image_1, image_2, 100, 5, max_mask_r=200,
+    #                            mask_step=5)
+    #         # More accurate grid of possible shifts
+    #         print("Using fine grid for accurate estimate")
+    #         coarse_grid = range(0, 100, 5)
+    #         idx = coarse_grid.index(shift)
+    #         if idx > 0:
+    #             min_shift = coarse_grid[idx - 1]
+    #         else:
+    #             min_shift = 0
+    #         shift = find_shift(image_1, image_2, coarse_grid[idx + 1], 1,
+    #                            min_shift=min_shift, max_mask_r=200, mask_step=5)
 
-            shift_dict.update({(freq_1, freq_2,): shift})
+    #         shift_dict.update({(freq_1, freq_2,): shift})
 
-        # Dumping shifts to json file in target directory
-        json.dump(shift_dict, os.path.join(outpath, "shifts_original.json"))
+    #     # Dumping shifts to json file in target directory
+    #     json.dump(shift_dict, os.path.join(outpath, "shifts_original.json"))
 
 
 if __name__ == '__main__':
-    pass
+    # from mojave import download_mojave_uv_fits
+    # download_mojave_uv_fits('2230+114', epochs=['2006_02_12'],
+    #                         download_dir='/home/ilya/code/vlbi_errors/examples')
+    import glob
+    uv_fits_paths = glob.glob('/home/ilya/code/vlbi_errors/examples/*.uvf')
+    n_uv = len(uv_fits_paths)
+    imsizes = [[1024, 0.1] for i in range(n_uv)]
+    # cc_fits_paths = glob.glob('/home/ilya/code/vlbi_errors/examples/*.fits')
+    cc_fits_paths = None
+    outdir = '/home/ilya/code/vlbi_errors/examples'
+    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+
+    analyze_source(uv_fits_paths, n_boot=3, cc_fits_paths=cc_fits_paths,
+                   outdir=outdir, path_to_script=path_to_script,
+                   imsizes=imsizes)

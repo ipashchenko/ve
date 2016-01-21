@@ -19,5 +19,5 @@ setup(
     long_description=open('README.rst').read(),
     install_requires=[
         "numpy >= 1.7.2",
-        "pyfits >= 3.2", 'scipy'
+        "pyfits >= 3.2", 'scipy', 'BeautifulSoup'
     ],)

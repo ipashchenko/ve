@@ -20,7 +20,14 @@ def bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n, outpath=None,
         Path to fits file with self-calibrated uv-data.
     :param cc_fits_paths:
         Iterable of paths to files with CC models.
-    :param outpath:
+    :param n:
+        Number of bootstrap realizations.
+    :param outpath: (optional)
+        Directory to save bootstrapped uv-data FITS-files. If ``None``
+        then use CWD. (default: ``None``)
+    :param outname: (optional)
+        How to name bootstrapped uv-data FITS-files. If ``None`` then
+        use default for ``Bootstap.run`` method. (default: ``None``)
 
     """
 

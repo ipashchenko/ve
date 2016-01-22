@@ -3,10 +3,11 @@ from spydiff import clean_difmap
 from uv_data import UVData
 from_from_fits import create_clean_model_from_fits_file
 from bootstrap import CleanBootstrap
+from utils import hdi_of_mcmc
 
 
 def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
-    path_to_script=None, stokes='I', outdir=None):
+    path_to_script=None, stokes='I', outdir=None, cred_mass=0.95):
         """
     Function that runs coverage analysis of bootstrap CIs using
     user-specified FITS-file with uv-data and optional CLEAN model.
@@ -51,9 +52,26 @@ def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
         clean_difmap(uv_fits_fname, 'cc_{}.fits'.format(i), stokes,
             imsize, path=uv_fits_dir, path_to_script=path_to_script,
             outpath=outdir)
-
-        
-
+            
+    boot_cc_fits_paths = glob.glob(os.path.join(outdir, 'cc_*.fits'))
+    images = list()
+    for boot_cc_fits_path in boot_cc_fits_paths:
+        image = create_image_from_fits_file(boot_cc_fits_path)
+        images.add(image.image)
+    
+    images_cube = np.dstack(images)
+    hdi_low = np.zeros(np.shape(images_cube[:, :, 0]))
+    hdi_high = np.zeros(np.shape(images_cube[:, :, 0]))
+    for (x, y), value in np.ndenumerate(hdis):
+        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=cred_mass)
+        hdi_low[x, y] = hdi[0]
+        hdi_high[x, y] = hdi[1]
+    
+    # Original image
+    image = create_image_from_fits_file(cc_fits_path)
+    covarage = hdi_low < image.image < hdi_high
+    
+    return covarage
 
 
 def image_analysis(uv_fits_path, n_p, n_boot, cc_fits_paths=None, imsize=None,

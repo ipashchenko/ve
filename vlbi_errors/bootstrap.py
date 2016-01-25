@@ -1,7 +1,5 @@
-__author__ = 'ilya'
 import copy
 import numpy as np
-from uv_data import UVData
 from gains import Absorber
 
 
@@ -157,7 +155,7 @@ class CleanBootstrap(Bootstrap):
                     self.residuals.uvdata[indx_]
                 copy_of_model_data.sync()
 
-        self.data.save(copy_of_model_data.hdu.data, outname)
+        self.model_data.save(data=copy_of_model_data.hdu.data, fname=outname)
 
     def run(self, n, outname=['bootstrapped_data', '.fits'], nonparametric=True,
             split_scans=False, use_V=True):
@@ -216,19 +214,27 @@ class SelfCalBootstrap(object):
 if __name__ == "__main__":
     # Clean bootstrap
     import os
+    import copy
     curdir = os.getcwd()
-    uv_data = UVData("/home/ilya/Dropbox/Zhenya/to_ilya/uv/0148+274.C1.2007_03_01.PINAL")
-    from from_fits import create_ccmodel_from_fits_file
-    ccmodeli = create_ccmodel_from_fits_file("/home/ilya/Dropbox/Zhenya/to_ilya/clean_images/0148+274.c1.2007_03_01.i.fits",
-                                            stokes='I')
-    ccmodelq = create_ccmodel_from_fits_file("/home/ilya/Dropbox/Zhenya/to_ilya/clean_images/0148+274.c1.2007_03_01.q.fits",
-                                             stokes='Q')
-    ccmodelu = create_ccmodel_from_fits_file("/home/ilya/Dropbox/Zhenya/to_ilya/clean_images/0148+274.c1.2007_03_01.u.fits",
-                                             stokes='U')
-    # os.chdir("/home/ilya/code/vlbi_errors/vlbi_errors/test/")
-    cbootstrap = CleanBootstrap([ccmodeli, ccmodelq, ccmodelu], uv_data)
-    # cbootstrap.run(10, outname=['DEL', '.FITS'])
-    # os.chdir(curdir)
+    base_path = "/home/ilya/code/vlbi_errors/examples/"
+    from uv_data import UVData
+    uvdata = UVData(os.path.join(base_path, "2230+114.x.2006_02_12.uvf"))
+    from from_fits import create_model_from_fits_file
+    ccmodeli = create_model_from_fits_file(os.path.join(base_path, 'cc.fits'))
+    model_data = copy.deepcopy(uvdata)
+    model_data.substitute([ccmodeli])
+    residuals = uvdata - model_data
+    indx = uvdata._choose_uvdata(baselines=[258], indx_only=True)[1]
+    indx = np.where(indx)[0]
+    uvdata.uvdata[indx] = residuals.uvdata[indx]
+    uvdata.sync()
+    fname='/home/ilya/code/vlbi_errors/examples/s7.fits'
+    if os.path.exists(fname):
+        os.remove(fname)
+    uvdata.save(fname=fname)
+    uvdata_ = UVData(os.path.join(base_path, "s7.fits"))
+    print uvdata_.hdu.data[indx]
+
 
     # # Self-calibration bootstrap
     # sc_sequence_files = ["sc_1.fits", "sc_2.fits", "sc_final.fits"]

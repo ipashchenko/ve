@@ -65,8 +65,8 @@ def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
     uv_fits_paths = glob.glob(os.path.join(outdir, 'uv_boot*.uvf'))
     for i, uv_fits_path in enumerate(uv_fits_paths):
         uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
-        print("Cleaning {}-th bootstrapped"
-              " uv-data to {}".format(i + 1,
+        print("Cleaning {} bootstrapped"
+              " uv-data to {}".format(uv_fits_path,
                                       os.path.join(outdir,
                                                    'cc_{}.fits'.format(i + 1))))
         clean_difmap(uv_fits_fname, 'cc_{}.fits'.format(i + 1), stokes, imsize,
@@ -91,20 +91,28 @@ def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
 
     # Original image
     image = create_image_from_fits_file(cc_fits_path)
-    covarage = hdi_low < image.image < hdi_high
+    coverage_map = np.logical_and(hdi_low < image.image, image.image < hdi_high)
+    coverage = np.count_nonzero(coverage_map) / float(coverage_map.size)
 
-    return hdi_low, hdi_high, covarage
+    return hdi_low, hdi_high, coverage, coverage_map
 
 
 if __name__ == '__main__':
     base_dir = '/home/ilya/code/vlbi_errors/examples/'
-    uv_fits_path = os.path.join(base_dir, '2230+114.x.2006_02_12.uvf')
+    source = '2230+114'
+    epochs = ['2006_02_12']
+    bands = ['x']
+    from mojave import download_mojave_uv_fits
+    download_mojave_uv_fits(source, epochs=epochs, bands=bands,
+                            download_dir=base_dir)
+    uv_fits_path = os.path.join(base_dir, '2230+114.y.2006_02_12.uvf')
     cc_fits_path = os.path.join(base_dir, 'cc.fits')
+    # cc_fits_path = None
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
-    n_boot = 5
+    n_boot = 100
     imsize = (1024, 0.1)
     outdir = base_dir
-    hdi_low, hdi_high, coverage =\
+    hdi_low, hdi_high, coverage, coverage_map =\
         cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=cc_fits_path,
                            path_to_script=path_to_script, outdir=base_dir,
-                           cred_mass=0.65)
+                           cred_mass=0.65, imsize=imsize)

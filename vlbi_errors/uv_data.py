@@ -703,7 +703,7 @@ class UVData(object):
         return self
 
     def __deepcopy__(self, memo):
-        return self
+        return UVData(self.hdulist.filename())
 
     def __add__(self, other):
         """
@@ -724,6 +724,7 @@ class UVData(object):
 
         self_copy = copy.deepcopy(self)
         self_copy.uvdata = self.uvdata + other.uvdata
+        self_copy.sync()
 
         return self_copy
 
@@ -746,6 +747,7 @@ class UVData(object):
 
         self_copy = copy.deepcopy(self)
         self_copy.uvdata = self.uvdata - other.uvdata
+        self_copy.sync()
 
         return self_copy
 
@@ -757,6 +759,7 @@ class UVData(object):
         """
         self_copy = copy.deepcopy(self)
         self_copy.uvdata = x * self.uvdata
+        self_copy.sync()
 
         return self_copy
 
@@ -812,6 +815,7 @@ class UVData(object):
                 # print gains12
                 # Doesn't it change copying? Order of indexing [][] has changed
                 self_copy.uvdata[indx] *= gains12.T
+        self_copy.sync()
 
         return self_copy
 

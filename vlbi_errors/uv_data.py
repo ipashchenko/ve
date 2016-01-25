@@ -1,7 +1,7 @@
 import math
 import copy
 import numpy as np
-import pyfits as pf
+import astropy.io.fits as pf
 from collections import OrderedDict
 from utils import (baselines_2_ants, index_of, get_uv_correlations,
                    find_card_from_header)
@@ -699,6 +699,12 @@ class UVData(object):
         pylab.ylim(uv_range)
         pylab.show()
 
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
     def __add__(self, other):
         """
         Add to self another instance of UVData.
@@ -1202,12 +1208,5 @@ class UVData(object):
 
 
 if __name__ == '__main__':
-    import os
-    os.chdir('/home/ilya/code/vlbi_errors/data/misha')
-    uvdata = UVData('1308+326.U1.2009_08_28.UV_CAL')
-    #uvdata.cv(10, 'cv_test')
-    from model import Model
-    mdl = Model(stokes='I')
-    mdl.add_difmap_components('1308+326.U1.2009_08_28.mdl')
-    uvdata.cv_score(mdl)
-    os.chdir('/home/ilya/code/vlbi_errors/vlbi_errors')
+    fname = '/home/ilya/code/vlbi_errors/examples/2230+114.x.2006_02_12.uvf'
+    uvdata = UVData(fname)

@@ -1,129 +1,110 @@
 import os
+import glob
+import numpy as np
 from spydiff import clean_difmap
 from uv_data import UVData
-from_from_fits import create_clean_model_from_fits_file
+from from_fits import (create_model_from_fits_file, create_image_from_fits_file)
 from bootstrap import CleanBootstrap
-from utils import hdi_of_mcmc
+from utils import (hdi_of_mcmc, get_fits_image_info, mas_to_rad)
 
 
 def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
-    path_to_script=None, stokes='I', outdir=None, cred_mass=0.95):
-        """
+                       path_to_script=None, stokes='I', outdir=None,
+                       cred_mass=0.95):
+    """
     Function that runs coverage analysis of bootstrap CIs using
     user-specified FITS-file with uv-data and optional CLEAN model.
-    
+
     :param uv_fits_path:
         Path to FITS-file with uv-data.
     :param n_boot:
         Number of bootstrap replications to use when calculating CIs.
-    :cc_fits_path: (optional)
+    :param cc_fits_path: (optional)
         Path to FITS-file with CLEAN models. This models will
         be used as model for power analysis. If ``None`` then CLEAN uv-data
         first and use result as real model for calculating coverage.
         (default: ``None``)
-    :imsize: (optional)
+    :param imsize: (optional)
         Image parameters (image size [pix], pixel size [mas]) to use
         when doing first CLEAN with ``cc_fits_path = None``.
-    :stokes: (optional)
+    :param path_to_script: (optional)
+        Path to directory with ``difmap`` final CLEANing script. If ``None``
+        then CWD. (default: ``None``)
+    :param stokes: (optional)
         Stokes parameter to deal with. (default: ``I``)
-    :outdir: (optional)
+    :param outdir: (optional)
         Directory to store files. If ``None`` then use CWD. (default:
         ``None``)
+    :param cred_mass:  (optional)
+        Credibility mass of CI to check.
     """
-    if cc_fits_paths is None:
+    if cc_fits_path is None:
         if imsize is None:
             raise Exception("Specify ``imszie``")
         uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
+        print("Cleaning original uv-data to {}".format(os.path.join(outdir,
+                                                                    'cc.fits')))
         clean_difmap(uv_fits_fname, 'cc.fits', stokes, imsize, path=uv_fits_dir,
-            path_to_script=path_to_script, outpath=outdir)
+                     path_to_script=path_to_script, outpath=outdir)
         cc_fits_path = os.path.join(outdir, 'cc.fits')
 
     uvdata = UVData(uv_fits_path)
-    ccmodel = create_clean_model_from_fits_file(cc_fits_path)
-    bt = CleanBootstrap(uvdata, [ccmodel])
+    ccmodel = create_model_from_fits_file(cc_fits_path)
+    bt = CleanBootstrap([ccmodel], uvdata)
     cwd = os.getcwd()
     os.chdir(outdir)
-    bt.run(outname=['uv_boot', 'uvf'], n=n_boot)
+    print("Bootstrapping uv-data with {} replications".format(n_boot))
+    bt.run(outname=['uv_boot', '.uvf'], n=n_boot)
     os.chdir(cwd)
-    
+
+    if imsize is None:
+        image_params = get_fits_image_info(cc_fits_path)
+        imsize = (image_params['imsize'][0],
+                  abs(image_params['pixsize'][0]) / mas_to_rad)
+
     uv_fits_paths = glob.glob(os.path.join(outdir, 'uv_boot*.uvf'))
     for i, uv_fits_path in enumerate(uv_fits_paths):
         uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
-        clean_difmap(uv_fits_fname, 'cc_{}.fits'.format(i), stokes,
-            imsize, path=uv_fits_dir, path_to_script=path_to_script,
-            outpath=outdir)
-            
+        print("Cleaning {}-th bootstrapped"
+              " uv-data to {}".format(i + 1,
+                                      os.path.join(outdir,
+                                                   'cc_{}.fits'.format(i + 1))))
+        clean_difmap(uv_fits_fname, 'cc_{}.fits'.format(i + 1), stokes, imsize,
+                     path=uv_fits_dir, path_to_script=path_to_script,
+                     outpath=outdir)
+
     boot_cc_fits_paths = glob.glob(os.path.join(outdir, 'cc_*.fits'))
     images = list()
     for boot_cc_fits_path in boot_cc_fits_paths:
+        print("Reading image from {}".format(boot_cc_fits_path))
         image = create_image_from_fits_file(boot_cc_fits_path)
-        images.add(image.image)
-    
+        images.append(image.image)
+
     images_cube = np.dstack(images)
     hdi_low = np.zeros(np.shape(images_cube[:, :, 0]))
     hdi_high = np.zeros(np.shape(images_cube[:, :, 0]))
-    for (x, y), value in np.ndenumerate(hdis):
+    print("calculating CI intervals")
+    for (x, y), value in np.ndenumerate(hdi_low):
         hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=cred_mass)
         hdi_low[x, y] = hdi[0]
         hdi_high[x, y] = hdi[1]
-    
+
     # Original image
     image = create_image_from_fits_file(cc_fits_path)
     covarage = hdi_low < image.image < hdi_high
-    
-    return covarage
+
+    return hdi_low, hdi_high, covarage
 
 
-def image_analysis(uv_fits_path, n_p, n_boot, cc_fits_paths=None, imsize=None,
-    path_to_script=None, stokes='I', outdir=None):
-    """
-    Function that runs coverage analysis of bootstrap CIs using
-    user-specified FITS-files with uv-data.
-    
-    :param uv_fits_path:
-        Path to FITS-file with uv-data.
-    :param n_p:
-        Number of times to add noise to real model and calculate
-        bootstrap error.
-    :param n_boot:
-        Number of bootstrap replications to use when calculating CIs.
-    :cc_fits_paths: (optional)
-        List of path to FITS-files with CLEAN models. This models will
-        be used as model for power analysis. If ``None`` then CLEAN uv-data
-        first and use result as real model for calculating coverage.
-        (default: ``None``)
-    :imsize: (optional)
-        Image parameters (image size [pix], pixel size [mas]) to use
-        when doing first CLEAN with ``cc_fits_path = None``.
-    :stokes: (optional)
-        Stokes parameter to deal with. (default: ``I``)
-    :outdir: (optional)
-        Directory to store files. If ``None`` then use CWD. (default:
-        ``None``)
-    """
-    if cc_fits_paths is None:
-        if imsize is None:
-            raise Exception("Specify ``imszie``")
-        uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
-        clean_difmap(uv_fits_fname, 'cc.fits', stokes, imsize, path=uv_fits_dir,
-            path_to_script=path_to_script, outpath=outdir)
-        cc_fits_paths = [os.path.join(outdir, 'cc.fits')]
-    if len(cc_fits_paths) == 1:
-        cc_fits_paths *= n_p
-        
-    uvdata = UVData(uv_fits_path)
-    noise = uvdata.noise()
-    # Circle through ``cc_fits_paths``, add noise, create uv-data and run bootstrap
-    # analysis of this uv-data with CLEAN model to get bootstrap CIs. Count CIs
-    # containing TRUE values.
-    for i, cc_fits_path in enumerate(cc_fits_paths):
-        ccmodel = create_clean_model_from_fits_file(cc_fits_path)
-        cc_fits_dir, cc_fits_fname = os.path.split(cc_fits_path)
-        uvdata.substitute([ccmodel])
-        uvdata.save("uv_{}.fits".format(i))
-        
-        
-    
-    
-def gradient_analysis():
-    pass
+if __name__ == '__main__':
+    base_dir = '/home/ilya/code/vlbi_errors/examples/'
+    uv_fits_path = os.path.join(base_dir, '2230+114.x.2006_02_12.uvf')
+    cc_fits_path = os.path.join(base_dir, 'cc.fits')
+    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    n_boot = 5
+    imsize = (1024, 0.1)
+    outdir = base_dir
+    hdi_low, hdi_high, coverage =\
+        cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=cc_fits_path,
+                           path_to_script=path_to_script, outdir=base_dir,
+                           cred_mass=0.65)

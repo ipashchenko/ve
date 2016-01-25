@@ -127,9 +127,8 @@ class CleanBootstrap(Bootstrap):
             copy_of_model_data = copy.deepcopy(self.model_data)
             for baseline in self.residuals.baselines:
                 # Find data from one baseline
-                indxs = np.where(self.residuals._data['baseline'] ==
-                                 baseline)[0]
-                data_to_add_normvars = copy_of_model_data._data[indxs]
+                indxs = self.residuals._choose_uvdata(baselines=[baseline],
+                                                      indx_only=True)[1]
                 # Generate (len(indxs),8,4,) array of random variables
                 # ``anormvars`` to add:
                 lnormvars = list()
@@ -138,26 +137,27 @@ class CleanBootstrap(Bootstrap):
                 anormvars = np.dstack(lnormvars).reshape((len(indxs), nif,
                                                           nstokes,))
                 # Add normal random variables to data on current baseline
-                data_to_add_normvars['hands'] += anormvars
+                copy_of_model_data.uvdata[indxs] += anormvars
+                copy_of_model_data.sync()
         else:
             # TODO: should i resample all stokes and IFs together? Yes
             # Bootstrap from self.residuals._data. For each baseline.
             copy_of_model_data = copy.deepcopy(self.model_data)
             for baseline in self.residuals.baselines:
-                # Find data from one baseline
-                indxs = np.where(self.residuals._data['baseline'] ==
-                                 baseline)[0]
-                data_to_resample = self.residuals._data[indxs]
-                # Resample it
-                resampled_data = np.random.choice(data_to_resample,
-                                                  len(data_to_resample))
+                # Find indexes of data from current baseline
+                indx = self.residuals._choose_uvdata(baselines=[baseline],
+                                                     indx_only=True)[1]
+                indx = np.where(indx)[0]
+                # Resample them
+                indx_ = np.random.choice(indx, len(indx))
 
                 # Add to residuals.substitute(model)
-                copy_of_model_data._data['hands'][indxs] = \
-                    self.model_data._data['hands'][indxs] + \
-                    resampled_data['hands']
+                copy_of_model_data.uvdata[indx] =\
+                    copy_of_model_data.uvdata[indx] +\
+                    self.residuals.uvdata[indx_]
+                copy_of_model_data.sync()
 
-        self.data.save(copy_of_model_data._data, outname)
+        self.data.save(copy_of_model_data.hdu.data, outname)
 
     def run(self, n, outname=['bootstrapped_data', '.fits'], nonparametric=True,
             split_scans=False, use_V=True):

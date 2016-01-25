@@ -293,7 +293,7 @@ class UVData(object):
         return self.uvw[:, :2]
 
     def _choose_uvdata(self, times=None, baselines=None, IF=None, stokes=None,
-                       freq_average=False):
+                       freq_average=False, indx_only=False):
         """
         Method that returns chosen data from ``_data`` numpy structured array
         based on user specified parameters.
@@ -314,6 +314,9 @@ class UVData(object):
             Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
             ``LR`` or ``None``. If ``None`` then use all available stokes.
             (default: ``None``)
+
+        :param indx_only: (optional)
+            Boolean - return only indexes? (default: ``False``)
 
         :return:
             Two numpy.ndarrays, where first array is array of data with shape
@@ -360,6 +363,9 @@ class UVData(object):
             high_indxs = self.hdu.columns[self.par_dict['DATE']].array > times[0]
             time_indxs = np.logical_and(lower_indxs, high_indxs)
             indxs = np.logical_and(indxs, time_indxs)
+
+        if indx_only:
+            return None, indxs
 
         if IF is None:
             IF = np.arange(self.nif) + 1

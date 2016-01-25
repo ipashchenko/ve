@@ -29,6 +29,20 @@ stokes_dict = {-4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR', 1: 'I', 2: 'Q', 3: 'U',
                4: 'V'}
 
 
+class SyncArray(np.ndarray):
+    def __new__(cls, input_array):
+        # Input array is an already formed ndarray instance
+        # We first cast to be our class type
+        obj = np.asarray(input_array).view(cls)
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None: return
+
+    def __setitem__(self, coords, value):
+        super(SyncArray, self).__setitem__(coords, value)
+
+
 def get_fits_image_info(fname):
     """
     Returns image parameters from FITS-file.

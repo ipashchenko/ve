@@ -62,7 +62,7 @@ def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
         imsize = (image_params['imsize'][0],
                   abs(image_params['pixsize'][0]) / mas_to_rad)
 
-    uv_fits_paths = glob.glob(os.path.join(outdir, 'uv_boot*.uvf'))
+    uv_fits_paths = sorted(glob.glob(os.path.join(outdir, 'uv_boot*.uvf')))
     for i, uv_fits_path in enumerate(uv_fits_paths):
         uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
         print("Cleaning {} bootstrapped"
@@ -97,22 +97,50 @@ def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
     return hdi_low, hdi_high, coverage, coverage_map
 
 
+def cov_analysis_image_old(cc_fits_dir, cc_glob='cc_*.fits',
+                           original_cc_file='cc.fits'):
+    original_image = create_image_from_fits_file(os.path.join(cc_fits_dir,
+                                                              original_cc_file))
+    cc_fits_paths = glob.glob(os.path.join(cc_fits_dir, cc_glob))
+    coverages = list()
+    for cc_fits_path in cc_fits_paths:
+        print("Checking {}".format(cc_fits_path))
+        image = create_image_from_fits_file(cc_fits_path)
+        rms = image.rms(region=(50, 50, 50, None))
+        # rms = np.sqrt(rms ** 2. + (1.5 * rms) ** 2.)
+        hdi_low = image.image - rms
+        hdi_high = image.image + rms
+        coverage_map = np.logical_and(hdi_low < original_image.image,
+                                      original_image.image < hdi_high)
+        coverage = np.count_nonzero(coverage_map) / float(coverage_map.size)
+        print("Coverage = {}".format(coverage))
+        coverages.append(coverage)
+    return coverages
+
+
 if __name__ == '__main__':
     base_dir = '/home/ilya/code/vlbi_errors/examples/'
-    source = '2230+114'
-    epochs = ['2006_02_12']
-    bands = ['x']
-    from mojave import download_mojave_uv_fits
-    download_mojave_uv_fits(source, epochs=epochs, bands=bands,
-                            download_dir=base_dir)
-    uv_fits_path = os.path.join(base_dir, '2230+114.y.2006_02_12.uvf')
-    cc_fits_path = os.path.join(base_dir, 'cc.fits')
+    # source = '2230+114'
+    # epochs = ['2006_02_12']
+    # bands = ['x']
+    # from mojave import download_mojave_uv_fits
+    # download_mojave_uv_fits(source, epochs=epochs, bands=bands,
+    #                         download_dir=base_dir)
+    # uv_fits_path = os.path.join(base_dir, '2230+114.x.2006_02_12.uvf')
+    # # cc_fits_path = os.path.join(base_dir, 'cc.fits')
     # cc_fits_path = None
-    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
-    n_boot = 100
-    imsize = (1024, 0.1)
-    outdir = base_dir
-    hdi_low, hdi_high, coverage, coverage_map =\
-        cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=cc_fits_path,
-                           path_to_script=path_to_script, outdir=base_dir,
-                           cred_mass=0.65, imsize=imsize)
+    # path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    # n_boot = 200
+    # imsize = (1024, 0.1)
+    # outdir = base_dir
+    # hdi_low, hdi_high, coverage, coverage_map =\
+    #     cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=cc_fits_path,
+    #                        path_to_script=path_to_script, outdir=base_dir,
+    #                        cred_mass=0.65, imsize=imsize)
+    # np.savetxt(os.path.join(base_dir, 'hdi_low_65.txt'), hdi_low)
+    # np.savetxt(os.path.join(base_dir, 'hdi_high_65.txt'), hdi_high)
+    # np.savetxt(os.path.join(base_dir, 'coverage_map_65.txt'), coverage_map)
+    # print coverage
+
+    coverages = cov_analysis_image_old(base_dir)
+    print coverages, np.mean(coverages)

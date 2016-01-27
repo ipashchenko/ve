@@ -10,7 +10,7 @@ from utils import (hdi_of_mcmc, get_fits_image_info, mas_to_rad)
 
 def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
                        path_to_script=None, stokes='I', outdir=None,
-                       cred_mass=0.95):
+                       cred_mass=0.95, mask=False, nmask=1.):
     """
     Function that runs coverage analysis of bootstrap CIs using
     user-specified FITS-file with uv-data and optional CLEAN model.
@@ -37,6 +37,12 @@ def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
         ``None``)
     :param cred_mass:  (optional)
         Credibility mass of CI to check.
+    :param mask: (optional)
+        Use mask? (default: ``False``)
+    :param nmask: (optional)
+        If using mask then how many std to mask? ``1`` - ``65%``, ``2`` -
+        ``95%``, ``3`` - ``99%``. (default: ``1``)
+
     """
     if cc_fits_path is None:
         if imsize is None:
@@ -74,31 +80,20 @@ def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
                      outpath=outdir)
 
     boot_cc_fits_paths = glob.glob(os.path.join(outdir, 'cc_*.fits'))
-    images = list()
-    for boot_cc_fits_path in boot_cc_fits_paths:
-        print("Reading image from {}".format(boot_cc_fits_path))
-        image = create_image_from_fits_file(boot_cc_fits_path)
-        images.append(image.image)
-
-    images_cube = np.dstack(images)
-    hdi_low = np.zeros(np.shape(images_cube[:, :, 0]))
-    hdi_high = np.zeros(np.shape(images_cube[:, :, 0]))
-    print("calculating CI intervals")
-    for (x, y), value in np.ndenumerate(hdi_low):
-        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=cred_mass)
-        hdi_low[x, y] = hdi[0]
-        hdi_high[x, y] = hdi[1]
-
-    # Original image
-    image = create_image_from_fits_file(cc_fits_path)
-    coverage_map = np.logical_and(hdi_low < image.image, image.image < hdi_high)
-    coverage = np.count_nonzero(coverage_map) / float(coverage_map.size)
-
-    return hdi_low, hdi_high, coverage, coverage_map
+    boot_ci, coverages = cov_analysis_image_boot(boot_cc_fits_paths,
+                                                 cc_fits_path,
+                                                 cred_mass=cred_mass,
+                                                 base_dir=outdir)
+    return boot_ci, coverages
 
 
 def cov_analysis_image_boot(boot_cc_fits_paths, original_cc_fits_path,
-                            cred_mass=0.65):
+                            cred_mass=0.65,
+                            base_dir='/home/ilya/code/vlbi_errors/examples',
+                            mask=None, nmask=1.):
+    # Original image
+    original_image = create_image_from_fits_file(original_cc_fits_path)
+
     boot_images = list()
     for boot_cc_fits_path in boot_cc_fits_paths:
         print("Reading image from {}".format(boot_cc_fits_path))
@@ -112,38 +107,69 @@ def cov_analysis_image_boot(boot_cc_fits_paths, original_cc_fits_path,
         hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=cred_mass)
         boot_ci[x, y] = hdi[1] - hdi[0]
 
-    # Original image
-    original_image = create_image_from_fits_file(original_cc_fits_path)
+
     hdi_low = original_image.image - boot_ci
     hdi_high = original_image.image + boot_ci
+
+    if mask:
+        print("Using mask with {} RMS".format(nmask))
+        rms = original_image.rms(region=(50, 50, 50, None))
+        mask = original_image.image < nmask * rms
+    else:
+        mask = None
 
     coverages = list()
     for boot_image in boot_images:
         coverage_map = np.logical_and(hdi_low < boot_image,
                                       boot_image < hdi_high)
-        coverage = np.count_nonzero(coverage_map) / float(coverage_map.size)
+        coverage_map = np.ma.array(coverage_map, mask=mask)
+        print("Shape of coverage map - {}".format(coverage_map.shape))
+        print("Size of coverage map - {}".format(coverage_map.size))
+        print("Number of non-masked elements in coverage map -"
+              " {}".format(np.ma.count(coverage_map)))
+        print("Number of covered (nonzero) non-masked elements -"
+              " {}".format(len(coverage_map.nonzero()[0])))
+        coverage = len(coverage_map.nonzero()[0]) /\
+                   float(np.ma.count(coverage_map))
         print("Coverage = {}".format(coverage))
         coverages.append(coverage)
+    save_file = os.path.join(base_dir, 'boot_ci_{}.txt'.format(cred_mass))
+    print("Saving bootstrap CI to {}".format(save_file))
+    np.savetxt(save_file, boot_ci)
 
     return boot_ci, coverages
 
 
 def cov_analysis_image_old(cc_fits_dir, cc_glob='cc_*.fits',
-                           original_cc_file='cc.fits'):
+                           original_cc_file='cc.fits', mask=True, nmask=1.):
     original_image = create_image_from_fits_file(os.path.join(cc_fits_dir,
                                                               original_cc_file))
+    if mask:
+        print("Using mask with {} RMS".format(nmask))
+        rms = original_image.rms(region=(50, 50, 50, None))
+        mask = original_image.image < nmask * rms
+    else:
+        mask = None
+
     cc_fits_paths = glob.glob(os.path.join(cc_fits_dir, cc_glob))
     coverages = list()
     for cc_fits_path in cc_fits_paths:
         print("Checking {}".format(cc_fits_path))
         image = create_image_from_fits_file(cc_fits_path)
         rms = image.rms(region=(50, 50, 50, None))
+        print("RMS = {}".format(rms))
         # rms = np.sqrt(rms ** 2. + (1.5 * rms) ** 2.)
         hdi_low = image.image - rms
         hdi_high = image.image + rms
         coverage_map = np.logical_and(hdi_low < original_image.image,
                                       original_image.image < hdi_high)
-        coverage = np.count_nonzero(coverage_map) / float(coverage_map.size)
+        coverage_map = np.ma.array(coverage_map, mask=mask)
+        print("Shape of coverage map - {}".format(coverage_map.shape))
+        print("Size of coverage map - {}".format(coverage_map.size))
+        print("Number of non-masked elements in coverage map - {}".format(np.ma.count(coverage_map)))
+        print("Number of covered (nonzero) non-masked elements -"
+              " {}".format(len(coverage_map.nonzero()[0])))
+        coverage = len(coverage_map.nonzero()[0]) / float(np.ma.count(coverage_map))
         print("Coverage = {}".format(coverage))
         coverages.append(coverage)
     return coverages
@@ -173,12 +199,35 @@ if __name__ == '__main__':
     # np.savetxt(os.path.join(base_dir, 'coverage_map_65.txt'), coverage_map)
     # print coverage
 
-    # coverages = cov_analysis_image_old(base_dir)
-    # print coverages, np.mean(coverages)
-
-
-    boot_cc_fits_paths = glob.glob(os.path.join(base_dir, 'cc_*.fits'))
-    original_cc_fits_path = os.path.join(base_dir, 'cc.fits')
-    boot_ci, coverages = cov_analysis_image_boot(boot_cc_fits_paths,
-                                                 original_cc_fits_path)
+    coverages = cov_analysis_image_old(base_dir, mask=True, nmask=85.)
+    # 0.82 for mask=1, n_non_masked = 100899
+    # 0.62 for mask=2, n_non_masked = 26773
+    # 0.57 for mask=3, n_non_masked = 17730
+    # 0.56 for mask=4, n_non_masked = 14505
+    # 0.56 for mask=5, n_non_masked = 13326
+    # 0.50 for mask=15, n_non_masked = 9793
+    # 0.47 for mask=25, n_non_masked = 7966
+    # 0.47 for mask=35, n_non_masked = 6347
+    # 0.42 for mask=55, n_non_masked = 4769
+    # 0.38 for mask=85, n_non_masked = 3582
+    # 0.94 for mask=False, n_non_masked = 1048576 (full)
     print coverages, np.mean(coverages)
+
+
+    # boot_cc_fits_paths = glob.glob(os.path.join(base_dir, 'cc_*.fits'))
+    # original_cc_fits_path = os.path.join(base_dir, 'cc.fits')
+    # boot_ci, coverages = cov_analysis_image_boot(boot_cc_fits_paths,
+    #                                              original_cc_fits_path,
+    #                                              mask=True, nmask=85.)
+    # # 0.84 for mask=1, n_non_masked = 100899
+    # # 0.85 for mask=2, n_non_masked = 26773
+    # # 0.85 for mask=3, n_non_masked = 17730
+    # # 0.85 for mask=4, n_non_masked = 14505
+    # # 0.85 for mask=5, n_non_masked = 13326
+    # # 0.85 for mask=15, n_non_masked = 9793
+    # # 0.85 for mask=25, n_non_masked = 7966
+    # # 0.85 for mask=35, n_non_masked = 6347
+    # # 0.84 for mask=55, n_non_masked = 4769
+    # # 0.84 for mask=85, n_non_masked = 3582
+    # # 0.84 for mask=False, n_non_masked = 1048576 (full)
+    # print coverages, np.mean(coverages)

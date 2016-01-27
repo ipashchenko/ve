@@ -97,6 +97,37 @@ def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
     return hdi_low, hdi_high, coverage, coverage_map
 
 
+def cov_analysis_image_boot(boot_cc_fits_paths, original_cc_fits_path,
+                            cred_mass=0.65):
+    boot_images = list()
+    for boot_cc_fits_path in boot_cc_fits_paths:
+        print("Reading image from {}".format(boot_cc_fits_path))
+        image = create_image_from_fits_file(boot_cc_fits_path)
+        boot_images.append(image.image)
+
+    images_cube = np.dstack(boot_images)
+    boot_ci = np.zeros(np.shape(images_cube[:, :, 0]))
+    print("calculating CI intervals")
+    for (x, y), value in np.ndenumerate(boot_ci):
+        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=cred_mass)
+        boot_ci[x, y] = hdi[1] - hdi[0]
+
+    # Original image
+    original_image = create_image_from_fits_file(original_cc_fits_path)
+    hdi_low = original_image.image - boot_ci
+    hdi_high = original_image.image + boot_ci
+
+    coverages = list()
+    for boot_image in boot_images:
+        coverage_map = np.logical_and(hdi_low < boot_image,
+                                      boot_image < hdi_high)
+        coverage = np.count_nonzero(coverage_map) / float(coverage_map.size)
+        print("Coverage = {}".format(coverage))
+        coverages.append(coverage)
+
+    return boot_ci, coverages
+
+
 def cov_analysis_image_old(cc_fits_dir, cc_glob='cc_*.fits',
                            original_cc_file='cc.fits'):
     original_image = create_image_from_fits_file(os.path.join(cc_fits_dir,
@@ -142,5 +173,12 @@ if __name__ == '__main__':
     # np.savetxt(os.path.join(base_dir, 'coverage_map_65.txt'), coverage_map)
     # print coverage
 
-    coverages = cov_analysis_image_old(base_dir)
+    # coverages = cov_analysis_image_old(base_dir)
+    # print coverages, np.mean(coverages)
+
+
+    boot_cc_fits_paths = glob.glob(os.path.join(base_dir, 'cc_*.fits'))
+    original_cc_fits_path = os.path.join(base_dir, 'cc.fits')
+    boot_ci, coverages = cov_analysis_image_boot(boot_cc_fits_paths,
+                                                 original_cc_fits_path)
     print coverages, np.mean(coverages)

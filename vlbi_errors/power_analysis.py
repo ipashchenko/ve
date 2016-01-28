@@ -120,19 +120,40 @@ def boot_ci(boot_cc_fits_paths, original_cc_fits_path, alpha=0.68):
     return hdi_low, hdi_high
 
 
-def coverage_map_boot(original_cc_fits_path, original_uv_fits_path,
+def coverage_map_boot(original_cc_fits_path, original_uv_fits_path, ci_type,
                       outdir=None, n_boot=200, path_to_script=None,
-                      alpha=0.68, n_cov=100):
+                      alpha=0.68, n_cov=100, n_rms=1.):
     """
     Conduct coverage analysis of image pixels flux CI.
 
     :param original_cc_fits_path:
+        Path to original FITS-file with CC model.
     :param original_uv_fits_path:
+        Path to original FITS-file with uv-data.
+    :param ci_type:
+        Type of CI to test. ``boot`` or ``rms``. If ``boot`` then use residuals
+        bootstrap CI. If ``rms`` then use Hovatta corrected image rms CI.
     :param outdir: (optional)
+        Directory to store intermediate results. If ``None`` then use CWD.
+        (default: ``None``)
     :param n_boot: (optional)
+        Number of bootstrap replications to use when calculating bootstrap CI
+        for ``ci_type = boot`` option. (default: ``200``)
     :param path_to_script: (optional)
+        Path to Dan Homan's script for final clean. If ``None`` then use CWD.
+        (default: ``None``)
     :param alpha: (optional)
+        Level of significance when calculating bootstrap CI for ``ci_type =
+        boot`` case. E.g. ``0.68`` corresponds to `1 \sigma`. (default:
+        ``0.68``)
     :param n_cov: (optional)
+        Number of `samples` from infinite population to consider in coverage
+        analysis of intervals. Here `samples` - observations of known source
+        with different realisations of noise with known parameters. (default:
+         ``100``)
+    :param n_rms: (optional)
+        Number of rms to use in ``ci_type = rms`` case. (default: ``1.``)
+
     :return:
         Coverage map. Each pixel contain frequency of times when samples from
         population hit inside CI for given pixel.
@@ -140,7 +161,6 @@ def coverage_map_boot(original_cc_fits_path, original_uv_fits_path,
     original_uv_data = UVData(original_uv_fits_path)
     noise = original_uv_data.noise()
     original_model = create_model_from_fits_file(original_cc_fits_path)
-    original_image = create_image_from_fits_file(original_cc_fits_path)
     # Find images parameters for cleaning if necessary
     image_params = get_fits_image_info(original_cc_fits_path)
     imsize = (image_params['imsize'][0],
@@ -160,37 +180,47 @@ def coverage_map_boot(original_cc_fits_path, original_uv_fits_path,
     clean_difmap('observed_uv.uvf', 'observed_cc.fits',
                  original_model.stokes, imsize, path=outdir,
                  path_to_script=path_to_script, outpath=outdir)
-    # get `observed` model and image
+    # Get `observed` model and image
     observed_cc_fits_path = os.path.join(outdir, 'observed_cc.fits')
     observed_model = create_model_from_fits_file(observed_cc_fits_path)
     observed_image = create_image_from_fits_file(observed_cc_fits_path)
 
-    # Bootstrap `observed` uv-data with `observed` model
-    boot = CleanBootstrap([observed_model], observed_uv_data)
-    cwd = os.getcwd()
-    path_to_script = path_to_script or cwd
-    os.chdir(outdir)
-    print("Bootstrapping uv-data with {} replications".format(n_boot))
-    boot.run(outname=['observed_uv_boot', '.uvf'], n=n_boot)
-    os.chdir(cwd)
+    if ci_type == 'boot':
+        # Bootstrap `observed` uv-data with `observed` model
+        boot = CleanBootstrap([observed_model], observed_uv_data)
+        cwd = os.getcwd()
+        path_to_script = path_to_script or cwd
+        os.chdir(outdir)
+        print("Bootstrapping uv-data with {} replications".format(n_boot))
+        boot.run(outname=['observed_uv_boot', '.uvf'], n=n_boot)
+        os.chdir(cwd)
 
-    boot_uv_fits_paths = sorted(glob.glob(os.path.join(outdir,
-                                                       'observed_uv_boot*.uvf')))
-    for i, uv_fits_path in enumerate(boot_uv_fits_paths):
-        uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
-        print("Cleaning {} bootstrapped observed"
-              " uv-data to {}".format(uv_fits_path,
-                                      os.path.join(outdir,
-                                                   'observed_cc_{}.fits'.format(i + 1))))
-        clean_difmap(uv_fits_fname, 'observed_cc_{}.fits'.format(i + 1),
-                     original_model.stokes, imsize, path=uv_fits_dir,
-                     path_to_script=path_to_script, outpath=outdir)
+        boot_uv_fits_paths = sorted(glob.glob(os.path.join(outdir,
+                                                           'observed_uv_boot*.uvf')))
+        # Clean each bootstrapped uv-data
+        for i, uv_fits_path in enumerate(boot_uv_fits_paths):
+            uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
+            print("Cleaning {} bootstrapped observed"
+                  " uv-data to {}".format(uv_fits_path,
+                                          os.path.join(outdir,
+                                                       'observed_cc_{}.fits'.format(i + 1))))
+            clean_difmap(uv_fits_fname, 'observed_cc_{}.fits'.format(i + 1),
+                         original_model.stokes, imsize, path=uv_fits_dir,
+                         path_to_script=path_to_script, outpath=outdir)
 
-    boot_cc_fits_paths = glob.glob(os.path.join(outdir, 'observed_cc_*.fits'))
+        boot_cc_fits_paths = glob.glob(os.path.join(outdir, 'observed_cc_*.fits'))
 
-    # Calculate bootstrap CI
-    hdi_low, hdi_high = boot_ci(boot_cc_fits_paths, observed_cc_fits_path,
-                                alpha=alpha)
+        # Calculate bootstrap CI
+        hdi_low, hdi_high = boot_ci(boot_cc_fits_paths, observed_cc_fits_path,
+                                    alpha=alpha)
+    elif ci_type == 'rms':
+        # Calculate ``n_rms`` CI
+        rms = observed_image.rms(region=(50, 50, 50, None))
+        rms = np.sqrt(rms ** 2. + (1.5 * rms ** 2.) ** 2.)
+        hdi_low = observed_image.image - rms
+        hdi_high = observed_image.image + rms
+    else:
+        raise Exception("CI intervals must be `boot` or `rms`!")
 
     # Add noise to `model` uv-data ``n_cov`` times and get ``n_cov`` `samples`
     # from population
@@ -198,17 +228,18 @@ def coverage_map_boot(original_cc_fits_path, original_uv_fits_path,
     for i in range(n_cov):
         sample_uv_data = copy.deepcopy(model_uv_data)
         sample_uv_data.noise_add(noise)
-        sample_uv_fits_path = os.path.join(outdir, 'samle_uv_{}.uvf'.format(i + 1))
+        sample_uv_fits_path = os.path.join(outdir,
+                                           'samle_uv_{}.uvf'.format(i + 1))
         sample_uv_data.save(sample_uv_fits_path)
         sample_uv_fits_paths.append(sample_uv_fits_path)
 
     # Clean each `sample` FITS-file
     for i, uv_fits_path in enumerate(sample_uv_fits_paths):
         uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
-        print("Cleaning {} sample"
-              " uv-data to {}".format(uv_fits_path,
-                                      os.path.join(outdir,
-                                                   'sample_cc_{}.fits'.format(i + 1))))
+        print("Cleaning {} sample uv-data to"
+              " {}".format(uv_fits_path,
+                           os.path.join(outdir,
+                                        'sample_cc_{}.fits'.format(i + 1))))
         clean_difmap(uv_fits_fname, 'sample_cc_{}.fits'.format(i + 1),
                      original_model.stokes, imsize, path=uv_fits_dir,
                      path_to_script=path_to_script, outpath=outdir)

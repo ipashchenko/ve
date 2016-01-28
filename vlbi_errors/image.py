@@ -1,6 +1,6 @@
 import math
 import numpy as np
-import pyfits as pf
+import astropy.io.fits as pf
 from scipy import signal
 from utils import (create_grid, create_mask, mas_to_rad, v_round,
                    get_fits_image_info_from_hdulist, get_hdu_from_hdulist)

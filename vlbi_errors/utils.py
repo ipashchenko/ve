@@ -4,7 +4,7 @@ import collections
 import re
 import math
 import numpy as np
-import pyfits as pf
+import astropy.io.fits as pf
 import string
 from math import floor
 from scipy import optimize

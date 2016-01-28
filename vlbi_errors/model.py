@@ -1,7 +1,7 @@
 import math
 import numpy as np
 import scipy as sp
-import pyfits as pf
+import astropy.io.fits as pf
 from stats import LnPost
 from components import CGComponent, EGComponent, DeltaComponent
 from utils import get_hdu_from_hdulist, get_fits_image_info_from_hdulist,\

@@ -1,3 +1,4 @@
+import copy
 import os
 import glob
 import numpy as np
@@ -87,8 +88,151 @@ def cov_analysis_image(uv_fits_path, n_boot, cc_fits_path=None, imsize=None,
     return boot_ci, coverages
 
 
+def boot_ci(boot_cc_fits_paths, original_cc_fits_path, alpha=0.68):
+    """
+    Calculate bootstrap CI.
+
+    :param boot_cc_fits_paths:
+        Iterable of paths to bootstrapped CC FITS-files.
+    :param original_cc_fits_path:
+        Path to original CC FITS-file.
+    :return:
+        Two numpy arrays with low and high CI borders for each pixel.
+
+    """
+    original_image = create_image_from_fits_file(original_cc_fits_path)
+    boot_images = list()
+    for boot_cc_fits_path in boot_cc_fits_paths:
+        print("Reading image from {}".format(boot_cc_fits_path))
+        image = create_image_from_fits_file(boot_cc_fits_path)
+        boot_images.append(image.image)
+
+    images_cube = np.dstack(boot_images)
+    boot_ci = np.zeros(np.shape(images_cube[:, :, 0]))
+    print("calculating CI intervals")
+    for (x, y), value in np.ndenumerate(boot_ci):
+        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=alpha)
+        boot_ci[x, y] = hdi[1] - hdi[0]
+
+    hdi_low = original_image.image - boot_ci / 2.
+    hdi_high = original_image.image + boot_ci / 2.
+
+    return hdi_low, hdi_high
+
+
+def coverage_map_boot(original_cc_fits_path, original_uv_fits_path,
+                      outdir=None, n_boot=200, path_to_script=None,
+                      alpha=0.68, n_cov=100):
+    """
+    Conduct coverage analysis of image pixels flux CI.
+
+    :param original_cc_fits_path:
+    :param original_uv_fits_path:
+    :param outdir: (optional)
+    :param n_boot: (optional)
+    :param path_to_script: (optional)
+    :param alpha: (optional)
+    :param n_cov: (optional)
+    :return:
+        Coverage map. Each pixel contain frequency of times when samples from
+        population hit inside CI for given pixel.
+    """
+    original_uv_data = UVData(original_uv_fits_path)
+    noise = original_uv_data.noise()
+    original_model = create_model_from_fits_file(original_cc_fits_path)
+    original_image = create_image_from_fits_file(original_cc_fits_path)
+    # Find images parameters for cleaning if necessary
+    image_params = get_fits_image_info(original_cc_fits_path)
+    imsize = (image_params['imsize'][0],
+              abs(image_params['pixsize'][0]) / mas_to_rad)
+
+    # Substitute uv-data with original model and create `model` uv-data
+    model_uv_data = copy.deepcopy(original_uv_data)
+    model_uv_data.substitute([original_model])
+
+    # Add noise to `model` uv-data to get `observed` uv-data
+    observed_uv_data = copy.deepcopy(model_uv_data)
+    observed_uv_data.noise_add(noise)
+    observed_uv_fits_path = os.path.join(outdir, 'observed_uv.uvf')
+    observed_uv_data.save(observed_uv_fits_path)
+
+    # Clean `observed` uv-data to get `observed` image and model
+    clean_difmap('observed_uv.uvf', 'observed_cc.fits',
+                 original_model.stokes, imsize, path=outdir,
+                 path_to_script=path_to_script, outpath=outdir)
+    # get `observed` model and image
+    observed_cc_fits_path = os.path.join(outdir, 'observed_cc.fits')
+    observed_model = create_model_from_fits_file(observed_cc_fits_path)
+    observed_image = create_image_from_fits_file(observed_cc_fits_path)
+
+    # Bootstrap `observed` uv-data with `observed` model
+    boot = CleanBootstrap([observed_model], observed_uv_data)
+    cwd = os.getcwd()
+    path_to_script = path_to_script or cwd
+    os.chdir(outdir)
+    print("Bootstrapping uv-data with {} replications".format(n_boot))
+    boot.run(outname=['observed_uv_boot', '.uvf'], n=n_boot)
+    os.chdir(cwd)
+
+    boot_uv_fits_paths = sorted(glob.glob(os.path.join(outdir,
+                                                       'observed_uv_boot*.uvf')))
+    for i, uv_fits_path in enumerate(boot_uv_fits_paths):
+        uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
+        print("Cleaning {} bootstrapped observed"
+              " uv-data to {}".format(uv_fits_path,
+                                      os.path.join(outdir,
+                                                   'observed_cc_{}.fits'.format(i + 1))))
+        clean_difmap(uv_fits_fname, 'observed_cc_{}.fits'.format(i + 1),
+                     original_model.stokes, imsize, path=uv_fits_dir,
+                     path_to_script=path_to_script, outpath=outdir)
+
+    boot_cc_fits_paths = glob.glob(os.path.join(outdir, 'observed_cc_*.fits'))
+
+    # Calculate bootstrap CI
+    hdi_low, hdi_high = boot_ci(boot_cc_fits_paths, observed_cc_fits_path,
+                                alpha=alpha)
+
+    # Add noise to `model` uv-data ``n_cov`` times and get ``n_cov`` `samples`
+    # from population
+    sample_uv_fits_paths = list()
+    for i in range(n_cov):
+        sample_uv_data = copy.deepcopy(model_uv_data)
+        sample_uv_data.noise_add(noise)
+        sample_uv_fits_path = os.path.join(outdir, 'samle_uv_{}.uvf'.format(i + 1))
+        sample_uv_data.save(sample_uv_fits_path)
+        sample_uv_fits_paths.append(sample_uv_fits_path)
+
+    # Clean each `sample` FITS-file
+    for i, uv_fits_path in enumerate(sample_uv_fits_paths):
+        uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
+        print("Cleaning {} sample"
+              " uv-data to {}".format(uv_fits_path,
+                                      os.path.join(outdir,
+                                                   'sample_cc_{}.fits'.format(i + 1))))
+        clean_difmap(uv_fits_fname, 'sample_cc_{}.fits'.format(i + 1),
+                     original_model.stokes, imsize, path=uv_fits_dir,
+                     path_to_script=path_to_script, outpath=outdir)
+
+    sample_cc_fits_paths = glob.glob(os.path.join(outdir, 'sample_cc_*.fits'))
+    sample_images = list()
+    for sample_cc_fits_path in sample_cc_fits_paths:
+        image = create_image_from_fits_file(sample_cc_fits_path)
+        sample_images.append(image.image)
+
+    # For each pixel check how often flux in `sample` images lies in CI derived
+    # for observed image.
+    cov_array = np.zeros((imsize[0], imsize[0]), dtype=float)
+    print("calculating CI intervals")
+    for (x, y), value in np.ndenumerate(cov_array):
+        for image in sample_images:
+            cov_array[x, y] += float(np.logical_and(hdi_low < image,
+                                                    image < hdi_high))
+
+    return cov_array / n_cov
+
+
 def cov_analysis_image_boot(boot_cc_fits_paths, original_cc_fits_path,
-                            cred_mass=0.65,
+                            cred_mass=0.68,
                             base_dir='/home/ilya/code/vlbi_errors/examples',
                             mask=None, nmask=1.):
     # Original image
@@ -107,9 +251,8 @@ def cov_analysis_image_boot(boot_cc_fits_paths, original_cc_fits_path,
         hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=cred_mass)
         boot_ci[x, y] = hdi[1] - hdi[0]
 
-
-    hdi_low = original_image.image - boot_ci
-    hdi_high = original_image.image + boot_ci
+    hdi_low = original_image.image - boot_ci / 2.
+    hdi_high = original_image.image + boot_ci / 2.
 
     if mask:
         print("Using mask with {} RMS".format(nmask))
@@ -158,7 +301,7 @@ def cov_analysis_image_old(cc_fits_dir, cc_glob='cc_*.fits',
         image = create_image_from_fits_file(cc_fits_path)
         rms = image.rms(region=(50, 50, 50, None))
         print("RMS = {}".format(rms))
-        # rms = np.sqrt(rms ** 2. + (1.5 * rms) ** 2.)
+        rms = np.sqrt(rms ** 2. + (1.5 * rms) ** 2.)
         hdi_low = image.image - rms
         hdi_high = image.image + rms
         coverage_map = np.logical_and(hdi_low < original_image.image,
@@ -172,6 +315,39 @@ def cov_analysis_image_old(cc_fits_dir, cc_glob='cc_*.fits',
         coverage = len(coverage_map.nonzero()[0]) / float(np.ma.count(coverage_map))
         print("Coverage = {}".format(coverage))
         coverages.append(coverage)
+    return coverages
+
+
+def calculate_coverage_boot(boot_cc_fits_paths, original_cc_fits_path,
+                            nmasks=None, cred_mass=0.95):
+    coverages = list()
+    for nmask in nmasks:
+        if nmask:
+            nmask = nmask
+            mask = True
+        else:
+            mask = False
+        boot_ci, coverage = cov_analysis_image_boot(boot_cc_fits_paths,
+                                                    original_cc_fits_path,
+                                                    mask=mask, nmask=nmask,
+                                                    cred_mass=cred_mass)
+        coverages.append((np.mean(coverage), np.std(coverage)))
+    return coverages
+
+
+def calculate_coverage_old(cc_fits_dir, cc_glob='cc_*.fits',
+                           original_cc_file='cc.fits', nmasks=None):
+    coverages = list()
+    for nmask in nmasks:
+        if nmask:
+            nmask = nmask
+            mask = True
+        else:
+            mask = False
+        coverage = cov_analysis_image_old(cc_fits_dir, cc_glob='cc_*.fits',
+                                          original_cc_file='cc.fits',
+                                          mask=mask, nmask=nmask)
+        coverages.append((np.mean(coverage), np.std(coverage)))
     return coverages
 
 
@@ -199,19 +375,19 @@ if __name__ == '__main__':
     # np.savetxt(os.path.join(base_dir, 'coverage_map_65.txt'), coverage_map)
     # print coverage
 
-    coverages = cov_analysis_image_old(base_dir, mask=True, nmask=85.)
-    # 0.82 for mask=1, n_non_masked = 100899
-    # 0.62 for mask=2, n_non_masked = 26773
-    # 0.57 for mask=3, n_non_masked = 17730
-    # 0.56 for mask=4, n_non_masked = 14505
-    # 0.56 for mask=5, n_non_masked = 13326
-    # 0.50 for mask=15, n_non_masked = 9793
-    # 0.47 for mask=25, n_non_masked = 7966
-    # 0.47 for mask=35, n_non_masked = 6347
-    # 0.42 for mask=55, n_non_masked = 4769
-    # 0.38 for mask=85, n_non_masked = 3582
-    # 0.94 for mask=False, n_non_masked = 1048576 (full)
-    print coverages, np.mean(coverages)
+    # coverages = cov_analysis_image_old(base_dir, mask=True, nmask=85.)
+    # # 0.82 for mask=1, n_non_masked = 100899
+    # # 0.62 for mask=2, n_non_masked = 26773
+    # # 0.57 for mask=3, n_non_masked = 17730
+    # # 0.56 for mask=4, n_non_masked = 14505
+    # # 0.56 for mask=5, n_non_masked = 13326
+    # # 0.50 for mask=15, n_non_masked = 9793
+    # # 0.47 for mask=25, n_non_masked = 7966
+    # # 0.47 for mask=35, n_non_masked = 6347
+    # # 0.42 for mask=55, n_non_masked = 4769
+    # # 0.38 for mask=85, n_non_masked = 3582
+    # # 0.94 for mask=False, n_non_masked = 1048576 (full)
+    # print coverages, np.mean(coverages)
 
 
     # boot_cc_fits_paths = glob.glob(os.path.join(base_dir, 'cc_*.fits'))
@@ -231,3 +407,36 @@ if __name__ == '__main__':
     # # 0.84 for mask=85, n_non_masked = 3582
     # # 0.84 for mask=False, n_non_masked = 1048576 (full)
     # print coverages, np.mean(coverages)
+
+    # boot_cc_fits_paths = glob.glob(os.path.join(base_dir, 'cc_*.fits'))
+    # original_cc_fits_path = os.path.join(base_dir, 'cc.fits')
+    # boot_ci, coverages = cov_analysis_image_boot(boot_cc_fits_paths,
+    #                                              original_cc_fits_path,
+    #                                              mask=False, nmask=1.,
+    #                                              cred_mass=0.95)
+    # # 0.4 for mask=1, n_non_masked = 100899
+    # # 0.85 for mask=2, n_non_masked = 26773
+    # # 0.85 for mask=3, n_non_masked = 17730
+    # # 0.85 for mask=4, n_non_masked = 14505
+    # # 0.85 for mask=5, n_non_masked = 13326
+    # # 0.85 for mask=15, n_non_masked = 9793
+    # # 0.85 for mask=25, n_non_masked = 7966
+    # # 0.85 for mask=35, n_non_masked = 6347
+    # # 0.84 for mask=55, n_non_masked = 4769
+    # # 0.84 for mask=85, n_non_masked = 3582
+    # # 0.91 for mask=False, n_non_masked = 1048576 (full)
+    # print coverages, np.mean(coverages)
+
+    boot_cc_fits_paths = glob.glob(os.path.join(base_dir, 'cc_*.fits'))
+    original_cc_fits_path = os.path.join(base_dir, 'cc.fits')
+    nmasks = [0., 1., 2., 3., 4., 5., 15., 25., 35., 55., 85.]
+    coverages = calculate_coverage_boot(boot_cc_fits_paths,
+                                        original_cc_fits_path,
+                                        nmasks=nmasks, cred_mass=0.68)
+    print coverages
+
+    # nmasks = [0., 1., 2., 3., 4., 5., 15., 25., 35., 55., 85.]
+    # coverages = calculate_coverage_old(base_dir, cc_glob='cc_*.fits',
+    #                                    original_cc_file='cc.fits',
+    #                                    nmasks=nmasks)
+    # print coverages

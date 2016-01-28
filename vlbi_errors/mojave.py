@@ -91,11 +91,10 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
 
 
 if __name__ == '__main__':
-    source = '1226+023'
-    # epochs = ['2006_03_09']
+    source = '2230+114'
+    epochs = ['2006_02_12']
     # epochs = ['2006_03_09', '2006_06_15']
-    epochs = None
-    bands = ['x', 'u']
+    bands = ['x']
     # bands = None
     download_mojave_uv_fits(source, epochs=epochs, bands=bands,
                             download_dir=download_dir)

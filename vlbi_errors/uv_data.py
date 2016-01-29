@@ -87,6 +87,7 @@ class UVData(object):
         # Create dictionary with necessary slices
         slices_dict = OrderedDict()
         for key, value in data_dict.items():
+            # FIXME: Generally we should avoid removing dims
             if value[1] == 1 and key not in ['IF', 'STOKES']:
                 slices_dict.update({key: 0})
             else:
@@ -224,6 +225,8 @@ class UVData(object):
         return scans
 
     # FIXME: doesn't work for ``J0005+3820_X_1998_06_24_fey_vis.fits``
+    # FIXME: Sometimes only 1 measurement in `scan`. It results in noise =
+    # ``nan`` for that scan
     @property
     def scans_bl(self):
         """
@@ -239,7 +242,7 @@ class UVData(object):
         all_times = self.hdu.columns[self.par_dict['DATE']].array
         all_a, all_b = np.histogram(all_times[1:] - all_times[:-1])
         for bl in self.baselines:
-            print "Processing baseline ", bl
+            # print "Processing baseline ", bl
             bl_indxs = self._choose_uvdata(baselines=bl)[1]
             bl_times = self.hdu.columns[self.par_dict['DATE']].array[bl_indxs]
             a, b = np.histogram(bl_times[1:] - bl_times[:-1])
@@ -420,6 +423,10 @@ class UVData(object):
     # TODO: use qq = scipy.stats.probplot((v-mean(v))/std(v), fit=0) then
     # plot(qq[0], qq[1]) - how to check normality
     # TODO: should i fit gaussians? - np.std <=> scipy.stats.norm.fit()! NO FIT!
+    # FIXME: ``use_V = True`` gives lower more realistic noise estimates?
+    # FIXME: Generally it should return (#sc, #band, #freq, #stok) array of
+    # stds. Possible, last dimension only for ``use_V=False`` and first dim only
+    # for ``split_scans=True``.
     def noise(self, split_scans=False, use_V=True, average_freq=False):
         """
         Calculate noise for each baseline. If ``split_scans`` is True then
@@ -567,6 +574,7 @@ class UVData(object):
                                               np.shape(scan_baseline_uvdata))
                     scan_baseline_uvdata += noise_to_add
                     self.uvdata[sc_bl_indxs] = scan_baseline_uvdata
+                    self.sync()
             except TypeError:
                 baseline_uvdata, bl_indxs = \
                     self._choose_uvdata(baselines=baseline)
@@ -579,6 +587,7 @@ class UVData(object):
                                           np.shape(baseline_uvdata))
                 baseline_uvdata += noise_to_add
                 self.uvdata[bl_indxs] = baseline_uvdata
+                self.sync()
 
     def error(self, average_freq=False):
         """

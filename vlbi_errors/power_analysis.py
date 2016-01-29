@@ -181,6 +181,8 @@ def coverage_map_boot(original_uv_fits_path, ci_type,
     # If not given `original` CLEAN model - get it by cleaning `original`
     # uv-data
     if original_cc_fits_path is None:
+        print("No `original` CLEAN model specified! Will CLEAN `original`"
+              " uv-data.")
         if imsize is None:
             raise Exception("Specify ``imsize``")
         uv_fits_dir, uv_fits_fname = os.path.split(original_uv_fits_path)
@@ -195,6 +197,7 @@ def coverage_map_boot(original_uv_fits_path, ci_type,
     original_model = create_model_from_fits_file(original_cc_fits_path)
     # Find images parameters for cleaning if necessary
     if imsize is None:
+        print("Getting image parameters from `original` CLEAN FITS file.")
         image_params = get_fits_image_info(original_cc_fits_path)
         imsize = (image_params['imsize'][0],
                   abs(image_params['pixsize'][0]) / mas_to_rad)
@@ -513,10 +516,17 @@ if __name__ == '__main__':
     #                                    nmasks=nmasks)
     # print coverages
 
-    original_cc_fits_path = os.path.join(base_dir, 'cc.fits')
+    base_dir = '/home/ilya/code/vlbi_errors/examples/'
+    from mojave import download_mojave_uv_fits
+    source = '2230+114'
+    epochs = ['2006_02_12']
+    bands = ['x']
+    download_mojave_uv_fits(source, epochs=epochs, bands=bands,
+                            download_dir=base_dir)
+
     original_uv_fits_path = os.path.join(base_dir, '2230+114.x.2006_02_12.uvf')
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
-    coverage_map = coverage_map_boot(original_cc_fits_path, ci_type='rms',
-                                     outdir=base_dir,
-                                     path_to_script=path_to_script, n_cov=100,
-                                     n_rms=1.)
+    coverage_map = coverage_map_boot(original_uv_fits_path, ci_type='rms',
+                                     imsize=(1024, 0.1), outdir=base_dir,
+                                     path_to_script=path_to_script,
+                                     n_cov=100, n_rms=1., stokes='I')

@@ -537,7 +537,7 @@ class UVData(object):
 
             1) std of noise. Will use one value of std for all stokes and IFs.
             2) iterable of stds. Will use different values of std for different
-            scans. Will use first #scans values from iterable and ignore others.
+            IFs.
 
         :param df: (optional)
             Number of d.o.f. for standard Student t-distribution used as noise
@@ -551,43 +551,22 @@ class UVData(object):
         """
 
         # TODO: if on df before generating noise values
-        for baseline, stds in noise.items():
-            nscans = len(self.scans_bl[baseline])
-            try:
-                assert len(stds) >= nscans, "Give >= " + str(nscans) + \
-                                            " stds for baseline " + \
-                                            str(baseline)
-                for i, std in enumerate(stds):
-                    try:
-                        scan = self.scans_bl[baseline][i]
-                    except IndexError:
-                        break
-                    scan_baseline_uvdata, sc_bl_indxs = \
-                        self._choose_uvdata(baselines=baseline,
-                                            times=(scan[0], scan[1],))
-                    n = np.prod(np.shape(scan_baseline_uvdata))
-                    noise_to_add = vec_complex(np.random.normal(scale=std,
-                                                                size=n),
-                                               np.random.normal(scale=std,
-                                                                size=n))
-                    noise_to_add = np.reshape(noise_to_add,
-                                              np.shape(scan_baseline_uvdata))
-                    scan_baseline_uvdata += noise_to_add
-                    self.uvdata[sc_bl_indxs] = scan_baseline_uvdata
-                    self.sync()
-            except TypeError:
+        for baseline, baseline_stds in noise.items():
+            for i, std in enumerate(baseline_stds):
                 baseline_uvdata, bl_indxs = \
-                    self._choose_uvdata(baselines=baseline)
-                n = np.prod(np.shape(baseline_uvdata))
-                noise_to_add = vec_complex(np.random.normal(scale=stds,
-                                                            size=n),
-                                           np.random.normal(scale=stds,
-                                                            size=n))
+                    self._choose_uvdata(baselines=baseline, IF=i + 1)
+                # (#, #IF, #CH, #stokes)
+                n = np.shape(baseline_uvdata)[0]
+                n_to_add = n * self.nstokes
+                noise_to_add = vec_complex(np.random.normal(scale=std,
+                                                            size=n_to_add),
+                                           np.random.normal(scale=std,
+                                                            size=n_to_add))
                 noise_to_add = np.reshape(noise_to_add,
-                                          np.shape(baseline_uvdata))
+                                          (n, 1, self.nstokes))
                 baseline_uvdata += noise_to_add
                 self.uvdata[bl_indxs] = baseline_uvdata
-                self.sync()
+        self.sync()
 
     def error(self, average_freq=False):
         """
@@ -1223,3 +1202,6 @@ class UVData(object):
 if __name__ == '__main__':
     fname = '/home/ilya/code/vlbi_errors/examples/2230+114.x.2006_02_12.uvf'
     uvdata = UVData(fname)
+    noise = uvdata.noise(split_scans=False)
+    print noise
+    uvdata.noise_add(noise)

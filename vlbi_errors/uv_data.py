@@ -40,7 +40,7 @@ class UVData(object):
         slices_dict.update({'COMPLEX': 1})
         self.hdu.data.data[slices_dict.values()] = self.uvdata.imag
 
-    def save(self, data=None, fname=None):
+    def save(self, fname=None, data=None):
         """
         Save uv-data to FITS-file.
 

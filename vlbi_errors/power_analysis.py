@@ -210,7 +210,7 @@ def coverage_map_boot(original_uv_fits_path, ci_type,
     observed_uv_data = copy.deepcopy(model_uv_data)
     observed_uv_data.noise_add(noise)
     observed_uv_fits_path = os.path.join(outdir, 'observed_uv.uvf')
-    observed_uv_data.save(observed_uv_fits_path)
+    observed_uv_data.save(fname=observed_uv_fits_path)
 
     # Clean `observed` uv-data to get `observed` image and model
     clean_difmap('observed_uv.uvf', 'observed_cc.fits',

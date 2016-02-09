@@ -18,11 +18,23 @@ class UVDataIDI(UVData):
     pass
 
 
+# FREQUENCY table is mandatory if FREQID random parameter is used in UV_DATA
+# tables
 # Should calculate frequency of any channel that is specified
 # by BAND and FREQ indexes (slice).
 # pf.hdu.BinTableHDU
 class Frequency(object):
-    pass
+    def __init__(self, hdu):
+        self.hdu = hdu
+        self.n_if = hdu.header['NO IF']
+        self.band_offset = hdu.data['BANDFREQ']
+        self.ch_width = hdu.data['CH_WIDTH']
+        self.band_width = hdu.data['TOTAL BANDWIDTH']
+        self.nchannels = self.band_width / self.ch_width
+
+    def frequency_up(self, ch=None, band=None):
+        result = self.band_offset[band] + (ch - pref) * self.ch_width[band]
+
 
 
 # Get information on antenna position for PA calculation.

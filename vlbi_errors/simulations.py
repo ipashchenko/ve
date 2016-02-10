@@ -1,10 +1,11 @@
 import os
 import numpy as np
-from from_fits import get_fits_image_info, create_uvdata_from_fits_file
+from utils import get_fits_image_info
 from image import BasicImage, Image
 from images import Images
 from utils import mask_region, mas_to_rad, find_card_from_header
 from model import Model
+from uv_data import UVData
 from components import DeltaComponent
 
 
@@ -213,7 +214,7 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
     # specified location
     print "Now substituting ROTM gradient in real data and saving out..."
     for uvfile in uvdata_files:
-        uvdata = create_uvdata_from_fits_file(uvfile)
+        uvdata = UVData(uvfile)
         freq_card = find_card_from_header(uvdata._io.hdu.header,
                                           value='FREQ')[0]
         # Frequency in Hz

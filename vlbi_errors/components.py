@@ -364,26 +364,51 @@ class DeltaComponent(Component):
         image._image[y, x] += flux
 
 
-# TODO: I need to keep coordinates of pixels for FT! Should constructor accept
-# ``BasicImage`` instance?
-class MemComponent(Component):
+# FIXME: How to put positional information? Use ``Image`` instance in init?
+class ImageComponent(Component):
     """
-    Class that implements MEM algorithm component (2D-array of flux values).
+    Class that implements image component (2D-array of flux values).
     """
-    def __init__(self, image):
+    def __init__(self, image, x, y):
         """
         :param image:
-            Instance of ``Image`` class.
+            2D numpy array with image.
+        :param x:
+            Iterable of zero axis coordinates.
+        :param y:
+            Iterable of first axis coordinates.
         """
-        super(MemComponent, self).__init__()
-        self.imsize = np.shape(image.image)
+        super(ImageComponent, self).__init__()
+        self.imsize = np.shape(image)
+        self.image = image
+        self.x = x
+        self.y = y
         self._parnames = [str(i) for i in xrange(self.imsize[0] *
                                                  self.imsize[1])]
         self._fixed = np.zeros(len(self._parnames), dtype=bool)
-        self._p = image.image.flatten()
+        self._p = image.flatten()
 
     def add_to_image(self, image):
-        image.image += self._p.reshape(self.imsize)
+        image += self.image
 
     def ft(self, uv):
-        pass
+        u = uv[:, 0]
+        v = uv[:, 1]
+        visibilities = list()
+        for u0, v0 in zip(u, v):
+            vis = (self.image * np.exp(-2.0 * math.pi * 1j *
+                                       (u0 * self.x + v0 * self.y))).sum()
+            visibilities.append(vis)
+        return np.asarray(visibilities)
+
+
+if __name__ == '__main__':
+    import os
+    from uv_data import UVData
+    from from_fits import create_clean_image_from_fits_file
+    base_dir = '/home/ilya/code/vlbi_errors/examples/'
+    uvdata = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
+    uv = uvdata.uv
+    image = create_clean_image_from_fits_file(os.path.join(base_dir, 'cc.fits'))
+    icomponent = ImageComponent(image.cc, image.x, image.y)
+    vis = icomponent.ft(uv)

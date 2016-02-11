@@ -8,6 +8,7 @@ except ImportError:
     pylab = None
 
 
+# TODO: Add optional argument ``beam`` to ``add_to_image`` methods.
 class Component(object):
     """
     Basic class that implements single component of model.
@@ -66,12 +67,15 @@ class Component(object):
         """
         raise NotImplementedError("Method must me implemented in subclasses!")
 
-    def add_to_image(self, image):
+    def add_to_image(self, image, beam=None):
         """
         Add component to image.
 
         :param image:
             Instance of ``Image`` class
+        :param beam: (optional)
+            Instance of ``Beam`` subclass to convolve component with beam before
+            adding to image. If ``None`` then don't convolve.
         """
         raise NotImplementedError("Method must me implemented in subclasses!")
 
@@ -217,7 +221,7 @@ class EGComponent(Component):
             ft *= np.exp(-2. * math.pi * 1j * (u * x0 + v * y0))
         return ft
 
-    def add_to_image(self, image):
+    def add_to_image(self, image, beam=None):
         """
         Add component to given instance of ``Image`` class.
         """
@@ -268,6 +272,9 @@ class EGComponent(Component):
 
         # Creating grid with component's flux at each cell
         fluxes = gaussf(x, y)
+
+        if beam is not None:
+            fluxes = beam.convolve(fluxes)
 
         # Adding component's flux to image grid
         image._image += fluxes
@@ -341,7 +348,7 @@ class DeltaComponent(Component):
                                        v[:, np.newaxis] * y0))).sum(axis=1)
         return visibilities
 
-    def add_to_image(self, image):
+    def add_to_image(self, image, beam=None):
         """
         Add component to given instance of ``ImagePlane`` class.
         """
@@ -361,6 +368,10 @@ class DeltaComponent(Component):
         y = y_c + y_coords - 2
         # ``._image`` attribute contains model (FT of uv-data)
         # [y, x] - to get coincidence with fits clean maps
+
+        if beam is not None:
+            flux = beam.convolve(flux)
+
         image._image[y, x] += flux
 
 
@@ -388,8 +399,11 @@ class ImageComponent(Component):
         self._fixed = np.zeros(len(self._parnames), dtype=bool)
         self._p = image.flatten()
 
-    def add_to_image(self, image):
-        image += self.image
+    def add_to_image(self, image, beam=None):
+        add = self.image
+        if beam is not None:
+            add = beam.convolve(self.image)
+        image += add
 
     def ft(self, uv):
         u = uv[:, 0]

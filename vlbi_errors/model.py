@@ -184,15 +184,18 @@ class Model(object):
     def size(self):
         return len(self.p)
 
-    def add_to_image(self, image):
+    def add_to_image(self, image, beam=None):
         """
         Add model to instances of ``Image`` subclasses.
 
         :param image:
             Instance of ``Image`` subclass.
+        :param beam: (optional)
+            Instance of ``Beam`` subclass to convolve model with beam before
+            adding to image. If ``None`` then don't convolve.
         """
         for component in self._components:
-            component.add_to_image(image)
+            component.add_to_image(image, beam=beam)
 
 
 if __name__ == "__main__":

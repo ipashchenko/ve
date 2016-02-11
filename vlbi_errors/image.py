@@ -521,30 +521,39 @@ class Image(BasicImage):
         self.freq = None
         self.stokes = None
 
-    def _construct(self, **kwargs):
+    def _construct(self, pixsize, pixref, stokes, freq, pixrefval, **kwargs):
         super(Image, self)._construct(**kwargs)
-        self.pixsize = kwargs["pixsize"]
+        self.pixsize = pixsize
         try:
-            self.pixref = kwargs["pixref"]
+            self.pixref = pixref
         except KeyError:
             self.pixref = (int(self.imsize / 2), int(self.imsize / 2))
-        self.stokes = kwargs["stokes"]
-        self.freq = kwargs["freq"]
+        self.stokes = stokes
+        self.freq = freq
         self.dy, self.dx = self.pixsize
         self.y_c, self.x_c = self.pixref
         try:
-            self.pixrefval = kwargs["pixrefval"]
+            self.pixrefval = pixrefval
         except KeyError:
             self.pixrefval = (0., 0.)
         self.x_c_val, self.y_c_val = self.pixrefval
         # Create coordinate arrays
-        x, y = create_grid(self.imsize)
-        x = x - self.x_c
-        y = y - self.y_c
-        x = x * self.dx
-        y = y * self.dy
+        xsize, ysize = self.imsize
+        x = np.linspace(0, xsize - 1, xsize)
+        y = np.linspace(0, ysize - 1, ysize)
+        xv, yv = np.meshgrid(x, y)
+        x -= self.x_c
+        xv -= self.x_c
+        y -= self.y_c
+        yv -= self.y_c
+        x *= self.dx
+        xv *= self.dx
+        y *= self.dy
+        yv *= self.dy
         self.x = x
+        self.xv = xv
         self.y = y
+        self.yv = yv
 
     def __eq__(self, other):
         """

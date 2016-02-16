@@ -1,4 +1,5 @@
 import os
+import copy
 import numpy as np
 from utils import get_fits_image_info
 from image import BasicImage, Image
@@ -6,10 +7,226 @@ from images import Images
 from utils import mask_region, mas_to_rad, find_card_from_header
 from model import Model
 from uv_data import UVData
-from components import DeltaComponent
+from components import DeltaComponent, ImageComponent
+
+
+# TODO: add decline of contrjet
+def flux(x, y, max_flux, length, width):
+    """
+    Function that defines model flux distribution that declines linearly
+    from phase center (0, 0) along jet and parabolically across.
+
+    :param x:
+        x-coordinates on image [pixels].
+    :param y:
+        y-coordinates on image [pixels].
+    :param max_flux:
+        Flux density maximum [Jy/pixels].
+    :param length:
+        Length of jet [pixels].
+    :param width:
+        Width of jet [pixels].
+    """
+    return max_flux - (max_flux / length) * x -\
+        (max_flux / (width / 2) ** 2.) * y ** 2.
+
+
+def alpha(x, y, *args, **kwargs):
+    return None
+
+
+def rm(x, y, grad_value, rm_value_0=0.0):
+    """
+    Function that defines model of ROTM gradient distribution.
+
+    :param x:
+        x-coordinates on image [pixels].
+    :param y:
+        y-coordinates on image [pixels].
+    :param grad_value:
+        Value of gradient [rad/m/m/pixel].
+    :param rm_value_0: (optional)
+        Value of ROTM at center [rad/m/m]. (default: ``0.0``)
+    """
+    return grad_value * x + rm_value_0
+
+
+# Decorator that returns only constant fraction of decorated function values
+def fraction(frac):
+    def wrapper(func, *args, **kwargs):
+        return frac * func(*args, **kwargs)
+    return wrapper
+
+
+class ModelGenerator(object):
+    """
+    Class that generates models that can be represented by images (2D arrays
+    with clean component in each element).
+
+    :param stokes_models:
+        Model of Stokes parameters distribution. Dictionary with keys - Stokes
+        parameters and values - image of Stokes distribution used as model (that
+        is 2D numpy arrays of fluxes).
+    :param freq: (optional)
+        Frequency at which models [GHz]. If ``None`` then infinity.
+    :param alpha_func: (optional)
+        Callable of spectral index distribution. The same signature as for
+        ``stokes_func``. If ``None`` then use uniform distribution with zero
+        value.
+    :param rotm_func: (optional)
+        Callable of rotation measure distribution. The same signature as for
+        ``stokes_func``. If ``None`` then use uniform distribution with zero
+        value.
+    """
+    def __init__(self, stokes_models, x, y, freq=None, alpha_func=None,
+                 rotm_func=None):
+        self.stokes_models = stokes_models
+        self._x = x
+        self._y = y
+        if freq is None:
+            self.freq = +np.inf
+        else:
+            self.freq = freq
+        if alpha_func is None:
+            self.alpha_func = lambda x, y: 0.0
+        if rotm_func is None:
+            self.rotm_func = lambda x, y: 0.0
+
+    def create_model(self, freq, region=None, *args, **kwargs):
+        """
+        Create instance of ``Model`` class for given frequency.
+        :param freq:
+        :param region:
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        models = list()
+        stokes_models = self.update_for_freq(freq)
+        for stokes, image in stokes_models:
+            model = Model(stokes=stokes)
+            image_component = ImageComponent(image, self._x, self._y)
+            model.add_components(image_component)
+            models.append(model)
+        return models
+
+    def update_for_freq(self, freq):
+        """
+        Update instance of ``Model`` class in ``self`` using current instance's
+        ``alpha_func`` and ``rotm_func`` attributes.
+
+        :param freq:
+            Frequency to update to [GHz].
+        :return:
+            Instance of ``Model`` class.
+        """
+        if 'Q' in self.stokes and 'U' not in self.stokes:
+            raise Exception('Need to update both Q & U simultaneously!')
+        if 'U' in self.stokes and 'Q' not in self.stokes:
+            raise Exception('Need to update both Q & U simultaneously!')
+
+        model_i = [model for model in self.models if model.stokes == 'I']
+        models_qu = [model for model in models if model.stokes == 'Q'
+                     or model.stokes == 'U']
+        model_i = self.update_i_freq(model_i, freq)
+        models_qu = self.update_qu_freq(models_qu, freq)
+        return model_i.extend(models_qu)
+
+    def update_i_freq(self, model, freq):
+        pass
+
+    def update_qu_freq(self, models, freq):
+        pass
+
+    @property
+    def stokes(self):
+        return self.stokes_models.keys()
+
+
+# TODO: Generating model for simulation - task of other class/function.
+class Simulation(object):
+    """
+    Basic Abstract class that handles simulations of VLBI observations.
+
+    :param observed_uv:
+        Instance of ``UVData`` class with observed uv-data.
+
+    """
+    def __init__(self, observed_uv):
+        self.observed_uv = observed_uv
+        self.simulated_uv = None
+        self.models = dict()
+        self._observed_noise = None
+        self._noise = None
+
+    @property
+    def frequency(self):
+        return self.observed_uv.frequency
+
+    def add_true_model(self, model):
+        self.models[model.stokes].append(model)
+
+    def simulate(self):
+        self.simulated_uv = copy.deepcopy(self.observed_uv)
+        self.simulated_uv.substitute(self.models.values())
+        self.simulated_uv.noise_add(self.noise)
+
+    def save_fits(self, fname):
+        if self.simulated_uv is not None:
+            self.simulated_uv.save(fname=fname)
+        else:
+            raise Exception("First, simulate uv-data.")
+
+    @property
+    def noise(self):
+        if self._noise is None:
+            return self._observed_noise
+        else:
+            return self._noise
+
+    @noise.setter
+    def noise(self, noise):
+        self._noise = noise
+
+
+# TODO: Model of flux should be on infinite frequency or at highest?
+class MFSimulation(object):
+    """
+    Class that handles simulations of multifrequency VLBI observations.
+
+    :param observed_uv:
+        Iterable of ``UVData`` instances with simultaneous multifrequency
+        uv-data of the same source.
+    :param model_generator:
+        Instance of ``ModelGenerator`` class.
+
+    """
+    def __init__(self, observed_uv, model_generator):
+        self.observed_uv = sorted(observed_uv, key=lambda x: x.frequency)
+        self.simulations = [Simulation(uv) for uv in self.observed_uv]
+        self.model_generator = model_generator
+        self.add_true_model()
+
+    def add_true_model(self):
+        for simulation in self.simulations:
+            frequency = simulation.frequency
+            simulation.add_true_model(self.model_generator.update_for_freq(frequency))
+
+    def simulate(self):
+        for simulation in self.simulations:
+            simulation.simulate()
+
+    def save_fits(self, fnames_dict):
+        for simulation in self.simulations:
+            frequency = simulation.frequency
+            simulation.save_fits(fnames_dict[frequency])
 
 
 # TODO: Define cc_flux from original image and beam (for I & Q, U independ.)
+# FIXME: ``Image`` instances creation - changed API
+# TODO: Derive abstractions
+# FIXME: With working class that implements model = image we can skip using
+# ``Image`` subclasses keeping coordinates information
 def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
                   outpath, grad_value, width, length, k, noise_factor=1.,
                   rm_value_0=0.0):
@@ -51,10 +268,27 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
 
     """
 
-    (imsize_h, pixref_h, pixrefval_h, (bmaj_h, bmin_h, bpa_h,), pixsize_h,
-     stokes_h, freq_h) = get_fits_image_info(high_freq_map)
-    (imsize_l, pixref_l, pixrefval_l, (bmaj_l, bmin_l, bpa_l,), pixsize_l,
-     stokes_l, freq_l) = get_fits_image_info(low_freq_map)
+    h_freq_image_info = get_fits_image_info(high_freq_map)
+    l_freq_image_info = get_fits_image_info(low_freq_map)
+    imsize_h = h_freq_image_info['imsize']
+    pixref_h = h_freq_image_info['pixref']
+    pixrefval_h = h_freq_image_info['pixrefval']
+    bmaj_h = h_freq_image_info['bmaj']
+    bmin_h = h_freq_image_info['bmin']
+    bpa_h = h_freq_image_info['bpa']
+    pixsize_h = h_freq_image_info['pixsize']
+    stokes_h = h_freq_image_info['stokes']
+    freq_h = h_freq_image_info['freq']
+
+    imsize_l = l_freq_image_info['imsize']
+    pixref_l = l_freq_image_info['pixref']
+    pixrefval_l = l_freq_image_info['pixrefval']
+    bmaj_l = l_freq_image_info['bmaj']
+    bmin_l = l_freq_image_info['bmin']
+    bpa_l = l_freq_image_info['bpa']
+    pixsize_l = l_freq_image_info['pixsize']
+    stokes_l = l_freq_image_info['stokes']
+    freq_l = l_freq_image_info['freq']
 
     # new pixsize [rad]
     pixsize = (abs(pixsize_h[0]) / k, abs(pixsize_h[1]) / k)
@@ -152,7 +386,6 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
     save_rm._image = np.ma.array(save_rm._image, mask=~jet_region_l.mask)
     print "Saving image of ROTM gradient..."
     np.savetxt(os.path.join(outpath, 'RM_grad_image.txt'), save_rm._image)
-
 
     # Create model instance and fill it with components
     model_i = Model(stokes='I')
@@ -278,3 +511,22 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
             print "Deleting existing file: {}".format(uv_save_fname)
             os.remove(uv_save_fname)
         uvdata.save(uvdata.data, uv_save_fname)
+
+
+if __name__ == '__main__':
+    # Use case
+    # Iterable of ``UVData`` instances with simultaneous multifrequency uv-data
+    # of the same source
+    observed_uv = list()
+    # Mapping from frequencies to FITS file names
+    fnames_dict = dict()
+    stokes_func = {'I': flux, 'Q': fraction(0.1)(flux),
+                   'U': fraction(0.1)(flux)}
+    mod_generator = ModelGenerator(stokes_func, rotm_func=rm, alpha_func=alpha)
+    rm_simulation = MFSimulation(observed_uv, mod_generator)
+    for i in xrange(100):
+        fnames_dict_i = fnames_dict.copy()
+        fnames_dict.update({key: value + '_' + str(i + 1) for key, value in
+                            fnames_dict.items()})
+        rm_simulation.simulate()
+        rm_simulation.save_fits(fnames_dict_i)

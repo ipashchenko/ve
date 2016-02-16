@@ -375,7 +375,8 @@ class DeltaComponent(Component):
         image._image[y, x] += flux
 
 
-# FIXME: How to put positional information? Use ``Image`` instance in init?
+# TODO: Add method of RM/alpha transformations? With arguments ``from_freq`` &
+# ``to_freq``
 class ImageComponent(Component):
     """
     Class that implements image component (2D-array of flux values).

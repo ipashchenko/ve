@@ -58,7 +58,7 @@ class Bootstrap(object):
 
         """
         for i in range(n):
-            outname_ = outname[0] + '_' + str(i + 1) + outname[1]
+            outname_ = outname[0] + '_' + str(i + 1).zfill(3) + outname[1]
             self.resample(outname=outname_, nonparametric=nonparametric,
                           **kwargs)
 

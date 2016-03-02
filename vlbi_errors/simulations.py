@@ -58,6 +58,20 @@ def fraction(frac):
     return wrapper
 
 
+def create_jet_model_image(width, j_length, cj_length, max_flux, imsize, center):
+    from utils import create_grid
+    x, y = create_grid(imsize)
+    x -= center[0]
+    y -= center[1]
+    max_flux = float(max_flux)
+    along = np.where(x > 0, -(max_flux / j_length) * x,
+                     -(max_flux / cj_length ** 2.) * x ** 2.)
+    perp = -(max_flux / (width / 2) ** 2.) * y ** 2.
+    image = max_flux + along + perp
+    image[image < 0] = 0
+    return image
+
+
 class ModelGenerator(object):
     """
     Class that generates models that can be represented by images (2D arrays

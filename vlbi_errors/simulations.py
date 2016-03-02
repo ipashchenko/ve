@@ -4,38 +4,18 @@ import numpy as np
 from utils import get_fits_image_info
 from image import BasicImage, Image
 from images import Images
-from utils import mask_region, mas_to_rad, find_card_from_header
+from utils import mask_region, mas_to_rad, find_card_from_header, create_grid
 from model import Model
 from uv_data import UVData
 from components import DeltaComponent, ImageComponent
-
-
-# TODO: add decline of contrjet
-def flux(x, y, max_flux, length, width):
-    """
-    Function that defines model flux distribution that declines linearly
-    from phase center (0, 0) along jet and parabolically across.
-
-    :param x:
-        x-coordinates on image [pixels].
-    :param y:
-        y-coordinates on image [pixels].
-    :param max_flux:
-        Flux density maximum [Jy/pixels].
-    :param length:
-        Length of jet [pixels].
-    :param width:
-        Width of jet [pixels].
-    """
-    return max_flux - (max_flux / length) * x -\
-        (max_flux / (width / 2) ** 2.) * y ** 2.
+from image_ops import pang_map, pol_map
 
 
 def alpha(x, y, *args, **kwargs):
     return None
 
 
-def rm(x, y, grad_value, rm_value_0=0.0):
+def rotm(imsize, center, grad_value=100., rm_value_0=0.0):
     """
     Function that defines model of ROTM gradient distribution.
 
@@ -48,18 +28,33 @@ def rm(x, y, grad_value, rm_value_0=0.0):
     :param rm_value_0: (optional)
         Value of ROTM at center [rad/m/m]. (default: ``0.0``)
     """
+    # Transverse to jet x
+    y, x = create_grid(imsize)
+    x -= center[0]
+    y -= center[1]
     return grad_value * x + rm_value_0
 
 
-# Decorator that returns only constant fraction of decorated function values
-def fraction(frac):
-    def wrapper(func, *args, **kwargs):
-        return frac * func(*args, **kwargs)
-    return wrapper
+def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
+                           center):
+    """
+    Function that returns image of jet.
 
-
-def create_jet_model_image(width, j_length, cj_length, max_flux, imsize, center):
-    from utils import create_grid
+    :param width:
+        Width of jet [pxl].
+    :param j_length:
+        Length of jet [pxl].
+    :param cj_length:
+        Length of contr-jet [pxl].
+    :param max_flux:
+        Peak flux at maximum [pxl].
+    :param imsize:
+        Tuple of image size.
+    :param center:
+        Tuple of image center.
+    :return:
+        2D numpy array with jet image.
+    """
     x, y = create_grid(imsize)
     x -= center[0]
     y -= center[1]
@@ -74,93 +69,148 @@ def create_jet_model_image(width, j_length, cj_length, max_flux, imsize, center)
 
 class ModelGenerator(object):
     """
-    Class that generates models that can be represented by images (2D arrays
-    with clean component in each element).
-
+    # TODO: Rename to ``stokes_model_images``
     :param stokes_models:
         Model of Stokes parameters distribution. Dictionary with keys - Stokes
         parameters and values - image of Stokes distribution used as model (that
-        is 2D numpy arrays of fluxes).
+        is 2D numpy arrays of fluxes). Possible values: ``I``, ``Q``, ``U``,
+        ``V``, ``PPOL``, ``PANG``.
+    :param x:
+        Iterable of x-coordinates [rad].
+    :param y:
+        Iterable of y-coordinates [rad].
     :param freq: (optional)
         Frequency at which models [GHz]. If ``None`` then infinity.
-    :param alpha_func: (optional)
-        Callable of spectral index distribution. The same signature as for
-        ``stokes_func``. If ``None`` then use uniform distribution with zero
-        value.
-    :param rotm_func: (optional)
-        Callable of rotation measure distribution. The same signature as for
-        ``stokes_func``. If ``None`` then use uniform distribution with zero
-        value.
+    :param alpha: (optional)
+        2D array of spectral index distribution. If ``None`` then use uniform
+        distribution with zero value.
+    :param rotm: (optional)
+        2D array of rotation measure distribution. If ``None`` then use uniform
+        distribution with zero value.
     """
-    def __init__(self, stokes_models, x, y, freq=None, alpha_func=None,
-                 rotm_func=None):
+    def __init__(self, stokes_models, x, y, freq=None, alpha=None,
+                 rotm=None):
         self.stokes_models = stokes_models
+        images = stokes_models.values()
+        if not images:
+            raise Exception("Need at least one model")
+        shape = images[0].shape
+        self.image_shape = shape
         self._x = x
         self._y = y
         if freq is None:
             self.freq = +np.inf
+            self.lambda_sq = 0.
         else:
             self.freq = freq
-        if alpha_func is None:
-            self.alpha_func = lambda x, y: 0.0
-        if rotm_func is None:
-            self.rotm_func = lambda x, y: 0.0
+            self.lambda_sq = (3. * 10 ** 8 / freq) ** 2
+        self.alpha = alpha
+        if alpha is None:
+            self.alpha = np.zeros(shape, dtype=float)
+        self.rotm = rotm
+        if rotm is None:
+            self.rotm = np.zeros(shape, dtype=float)
 
-    def create_model(self, freq, region=None, *args, **kwargs):
+    def _get_chi(self):
+        if 'PANG' in self.stokes:
+            chi_0 = self.stokes_models['PANG']
+        elif 'Q' in self.stokes and 'U' in self.stokes:
+            chi_0 = pang_map(self.stokes_models['Q'], self.stokes_models['U'])
+        else:
+            raise Exception("No Pol. Angle information available!")
+        return chi_0
+
+    def create_models(self, stokes_models=None):
         """
-        Create instance of ``Model`` class for given frequency.
-        :param freq:
-        :param region:
-        :param args:
-        :param kwargs:
+        Create instances of ``Model`` class using current model images.
+
         :return:
+            List of ``Model`` instances.
         """
         models = list()
-        stokes_models = self.update_for_freq(freq)
-        for stokes, image in stokes_models:
+        stokes_models = stokes_models or self.stokes_models
+        for stokes, image in stokes_models.items():
             model = Model(stokes=stokes)
             image_component = ImageComponent(image, self._x, self._y)
             model.add_components(image_component)
             models.append(model)
         return models
 
-    def update_for_freq(self, freq):
+    def create_models_for_frequency(self, freq):
         """
-        Update instance of ``Model`` class in ``self`` using current instance's
-        ``alpha_func`` and ``rotm_func`` attributes.
+        Create instance of ``Model`` class for given frequency.
 
         :param freq:
-            Frequency to update to [GHz].
+            Frequency at which evaluate and return models [GHz].
+
         :return:
-            Instance of ``Model`` class.
+            List of ``Model`` isntances.
+        """
+        stokes_models = self.move_for_freq(freq)
+        return self.create_models(stokes_models)
+
+    def move_for_freq(self, freq):
+        """
+        Update images of models using current instance ``alpha_func`` and
+        ``rotm_func`` attributes.
+
+        :param freq:
+            Frequency to move to [GHz].
+
+        :return:
+            Updated dictionary with model images.
         """
         if 'Q' in self.stokes and 'U' not in self.stokes:
             raise Exception('Need to update both Q & U simultaneously!')
         if 'U' in self.stokes and 'Q' not in self.stokes:
             raise Exception('Need to update both Q & U simultaneously!')
+        if 'PPOL' in self.stokes and 'PANG' not in self.stokes:
+            raise Exception('Need to update both PPOL & PANG simultaneously!')
+        if 'PANG' in self.stokes and 'PPOL' not in self.stokes:
+            raise Exception('Need to update both PPOL & PANG simultaneously!')
 
-        model_i = [model for model in self.models if model.stokes == 'I']
-        models_qu = [model for model in models if model.stokes == 'Q'
-                     or model.stokes == 'U']
-        model_i = self.update_i_freq(model_i, freq)
-        models_qu = self.update_qu_freq(models_qu, freq)
-        return model_i.extend(models_qu)
+        stokes_models = self.stokes_models.copy()
+        if 'I' in self.stokes:
+            i_image = self._move_i_to_freq(self.stokes_models['I'], freq)
+            stokes_models.update({'I': i_image})
+        if 'Q' in self.stokes and 'U' in self.stokes:
+            q_image, u_image = self._move_qu_to_freq(self.stokes_models['Q'],
+                                                     self.stokes_models['U'],
+                                                     freq)
+            stokes_models.update({'Q': q_image, 'U': u_image})
 
-    def update_i_freq(self, model, freq):
+        return stokes_models
+
+    # TODO: Move all transformations to ``image_ops``
+    def _move_stokes_to_freq(self, stokes, image, freq):
         pass
 
-    def update_qu_freq(self, models, freq):
-        pass
+    def _move_i_to_freq(self, image_i, freq):
+        return image_i * (freq / self.freq) ** self.alpha
+
+    def _move_qu_to_freq(self, image_q, image_u, freq):
+        image_pol = pol_map(image_q, image_u)
+        image_pang = pang_map(image_q, image_u)
+        lambda_sq = (3. * 10 ** 8 / freq) ** 2
+        q_image = image_pol * np.cos(2. * (image_pang +
+                                           self.rotm * (lambda_sq ** 2. -
+                                                        self.lambda_sq ** 2.)))
+        u_image = image_pol * np.sin(2. * (image_pang +
+                                           self.rotm * (lambda_sq ** 2. -
+                                                        self.lambda_sq ** 2.)))
+        return q_image, u_image
+
+    def _move_pol_to_freq(self, image_ppol, image_pang, freq):
+        raise NotImplementedError()
 
     @property
     def stokes(self):
         return self.stokes_models.keys()
 
 
-# TODO: Generating model for simulation - task of other class/function.
 class Simulation(object):
     """
-    Basic Abstract class that handles simulations of VLBI observations.
+    Basic class that handles simulations of VLBI observations.
 
     :param observed_uv:
         Instance of ``UVData`` class with observed uv-data.
@@ -170,7 +220,7 @@ class Simulation(object):
         self.observed_uv = observed_uv
         self.simulated_uv = None
         self.models = dict()
-        self._observed_noise = None
+        self.observed_noise = observed_uv.noise()
         self._noise = None
 
     @property
@@ -179,6 +229,10 @@ class Simulation(object):
 
     def add_true_model(self, model):
         self.models[model.stokes].append(model)
+
+    def add_true_models(self, models):
+        for model in models:
+            self.add_true_model(model)
 
     def simulate(self):
         self.simulated_uv = copy.deepcopy(self.observed_uv)
@@ -194,7 +248,7 @@ class Simulation(object):
     @property
     def noise(self):
         if self._noise is None:
-            return self._observed_noise
+            return self.observed_noise
         else:
             return self._noise
 
@@ -210,7 +264,7 @@ class MFSimulation(object):
 
     :param observed_uv:
         Iterable of ``UVData`` instances with simultaneous multifrequency
-        uv-data of the same source.
+        uv-data of the same source at the same epoch.
     :param model_generator:
         Instance of ``ModelGenerator`` class.
 
@@ -221,10 +275,11 @@ class MFSimulation(object):
         self.model_generator = model_generator
         self.add_true_model()
 
-    def add_true_model(self):
+    def add_true_models(self):
         for simulation in self.simulations:
             frequency = simulation.frequency
-            simulation.add_true_model(self.model_generator.update_for_freq(frequency))
+            models = self.model_generator.create_models_for_frequency(frequency)
+            simulation.add_true_models(models)
 
     def simulate(self):
         for simulation in self.simulations:
@@ -529,14 +584,22 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
 
 if __name__ == '__main__':
     # Use case
+    data_dir = '/home/ilya/code/vlbi_errors/examples/L'
+    cc_fits = os.path.join(data_dir, 'original_cc.fits')
+    from from_fits import create_clean_image_from_fits_file
+    image = create_clean_image_from_fits_file(cc_fits)
+    x = image.x
+    y = image.y
     # Iterable of ``UVData`` instances with simultaneous multifrequency uv-data
     # of the same source
-    observed_uv = list()
+    import glob
+    observed_uv = glob.glob(os.path.join(data_dir, '1038+064*.uvf'))
     # Mapping from frequencies to FITS file names
     fnames_dict = dict()
-    stokes_func = {'I': flux, 'Q': fraction(0.1)(flux),
-                   'U': fraction(0.1)(flux)}
-    mod_generator = ModelGenerator(stokes_func, rotm_func=rm, alpha_func=alpha)
+    image = create_jet_model_image(10, 50, 10, 1., (256, 256), (128, 128))
+    rotm = rotm((256, 256), (128, 128))
+    stokes_models = {'I': image, 'Q': 0.1 * image, 'U': 0.1 * image}
+    mod_generator = ModelGenerator(stokes_models, x, y, rotm=rotm, alpha=None)
     rm_simulation = MFSimulation(observed_uv, mod_generator)
     for i in xrange(100):
         fnames_dict_i = fnames_dict.copy()

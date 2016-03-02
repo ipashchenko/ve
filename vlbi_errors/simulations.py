@@ -228,13 +228,28 @@ class Simulation(object):
         return self.observed_uv.frequency
 
     def add_true_model(self, model):
-        self.models[model.stokes].append(model)
+        """
+        Add `true` model.
+
+        :param model:
+            Instance of ``Model`` class.
+        """
+        self.models.update({model.stokes: model})
 
     def add_true_models(self, models):
+        """
+        Add `true` models.
+
+        :param models:
+            Iterable of ``Model`` class instances.
+        """
         for model in models:
             self.add_true_model(model)
 
     def simulate(self):
+        """
+        Simulate uv-data.
+        """
         self.simulated_uv = copy.deepcopy(self.observed_uv)
         self.simulated_uv.substitute(self.models.values())
         self.simulated_uv.noise_add(self.noise)
@@ -273,7 +288,7 @@ class MFSimulation(object):
         self.observed_uv = sorted(observed_uv, key=lambda x: x.frequency)
         self.simulations = [Simulation(uv) for uv in self.observed_uv]
         self.model_generator = model_generator
-        self.add_true_model()
+        self.add_true_models()
 
     def add_true_models(self):
         for simulation in self.simulations:
@@ -289,6 +304,10 @@ class MFSimulation(object):
         for simulation in self.simulations:
             frequency = simulation.frequency
             simulation.save_fits(fnames_dict[frequency])
+
+    @property
+    def freqs(self):
+        return [uvdata.frequency for uvdata in self.observed_uv]
 
 
 # TODO: Define cc_flux from original image and beam (for I & Q, U independ.)
@@ -593,17 +612,22 @@ if __name__ == '__main__':
     # Iterable of ``UVData`` instances with simultaneous multifrequency uv-data
     # of the same source
     import glob
-    observed_uv = glob.glob(os.path.join(data_dir, '1038+064*.uvf'))
-    # Mapping from frequencies to FITS file names
-    fnames_dict = dict()
+    observed_uv_fits = glob.glob(os.path.join(data_dir, '1038+064*.uvf'))
+    observed_uv = [UVData(fits_file) for fits_file in observed_uv_fits]
     image = create_jet_model_image(10, 50, 10, 1., (256, 256), (128, 128))
     rotm = rotm((256, 256), (128, 128))
     stokes_models = {'I': image, 'Q': 0.1 * image, 'U': 0.1 * image}
     mod_generator = ModelGenerator(stokes_models, x, y, rotm=rotm, alpha=None)
     rm_simulation = MFSimulation(observed_uv, mod_generator)
-    for i in xrange(100):
-        fnames_dict_i = fnames_dict.copy()
-        fnames_dict.update({key: value + '_' + str(i + 1) for key, value in
-                            fnames_dict.items()})
-        rm_simulation.simulate()
-        rm_simulation.save_fits(fnames_dict_i)
+    # Mapping from frequencies to FITS file names
+    fnames_dict = dict()
+    for freq in rm_simulation.freqs:
+        fnames_dict.update({freq: str(freq) + '_' + 'sim.uvf'})
+    rm_simulation.simulate()
+    rm_simulation.save_fits(fnames_dict)
+    # for i in xrange(10):
+    #     fnames_dict_i = fnames_dict.copy()
+    #     fnames_dict.update({key: value + '_' + str(i + 1).zfill(2) for
+    #                         key, value in fnames_dict.items()})
+    #     rm_simulation.simulate()
+    #     rm_simulation.save_fits(fnames_dict_i)

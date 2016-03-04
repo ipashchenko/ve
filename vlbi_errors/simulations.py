@@ -1,14 +1,17 @@
 import os
 import copy
+import glob
 import numpy as np
 from utils import get_fits_image_info
 from image import BasicImage, Image
 from images import Images
 from utils import mask_region, mas_to_rad, find_card_from_header, create_grid
+from from_fits import create_clean_image_from_fits_file
 from model import Model
 from uv_data import UVData
 from components import DeltaComponent, ImageComponent
 from image_ops import pang_map, pol_map
+from spydiff import clean_difmap
 
 
 def alpha(x, y, *args, **kwargs):
@@ -250,9 +253,11 @@ class Simulation(object):
         """
         Simulate uv-data.
         """
+        print "Simulating..."
         self.simulated_uv = copy.deepcopy(self.observed_uv)
         self.simulated_uv.substitute(self.models.values())
         self.simulated_uv.noise_add(self.noise)
+        print "Simulations finished"
 
     def save_fits(self, fname):
         if self.simulated_uv is not None:
@@ -289,6 +294,10 @@ class MFSimulation(object):
         self.simulations = [Simulation(uv) for uv in self.observed_uv]
         self.model_generator = model_generator
         self.add_true_models()
+
+    @property
+    def stokes(self):
+        return self.model_generator.stokes
 
     def add_true_models(self):
         for simulation in self.simulations:
@@ -604,14 +613,16 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
 if __name__ == '__main__':
     # Use case
     data_dir = '/home/ilya/code/vlbi_errors/examples/L'
+    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
     cc_fits = os.path.join(data_dir, 'original_cc.fits')
-    from from_fits import create_clean_image_from_fits_file
+    image_info = get_fits_image_info(cc_fits)
+    imsize = (image_info['imsize'][0], abs(image_info['pixsize'][0]) /
+              mas_to_rad)
     image = create_clean_image_from_fits_file(cc_fits)
-    x = image.x
-    y = image.y
+    x = image.xv
+    y = image.yv
     # Iterable of ``UVData`` instances with simultaneous multifrequency uv-data
     # of the same source
-    import glob
     observed_uv_fits = glob.glob(os.path.join(data_dir, '1038+064*.uvf'))
     observed_uv = [UVData(fits_file) for fits_file in observed_uv_fits]
     image = create_jet_model_image(10, 50, 10, 1., (256, 256), (128, 128))
@@ -621,10 +632,20 @@ if __name__ == '__main__':
     rm_simulation = MFSimulation(observed_uv, mod_generator)
     # Mapping from frequencies to FITS file names
     fnames_dict = dict()
+    os.chdir(data_dir)
     for freq in rm_simulation.freqs:
         fnames_dict.update({freq: str(freq) + '_' + 'sim.uvf'})
     rm_simulation.simulate()
     rm_simulation.save_fits(fnames_dict)
+
+    # CLEAN uv-fits with simulated data
+    for freq in rm_simulation.freqs:
+        uv_fits_fname = fnames_dict[freq]
+        for stokes in rm_simulation.stokes:
+            cc_fits_fname = str(freq) + '_' + stokes + '.fits'
+            clean_difmap(uv_fits_fname, cc_fits_fname, stokes, imsize,
+                         path=data_dir, path_to_script=path_to_script,
+                         outpath=data_dir)
     # for i in xrange(10):
     #     fnames_dict_i = fnames_dict.copy()
     #     fnames_dict.update({key: value + '_' + str(i + 1).zfill(2) for

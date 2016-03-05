@@ -619,8 +619,8 @@ if __name__ == '__main__':
     imsize = (image_info['imsize'][0], abs(image_info['pixsize'][0]) /
               mas_to_rad)
     image = create_clean_image_from_fits_file(cc_fits)
-    x = image.xv
-    y = image.yv
+    x = image.x
+    y = image.y
     # Iterable of ``UVData`` instances with simultaneous multifrequency uv-data
     # of the same source
     observed_uv_fits = glob.glob(os.path.join(data_dir, '1038+064*.uvf'))

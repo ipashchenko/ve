@@ -1,6 +1,8 @@
 import math
 import numpy as np
+# import numexpr as ne
 from utils import _function_wrapper, mas_to_rad, vcomplex, gaussian
+from ft_routines import image_ft
 
 try:
     import pylab
@@ -404,17 +406,12 @@ class ImageComponent(Component):
         add = self.image
         if beam is not None:
             add = beam.convolve(self.image)
-        image += add
+        image.image += add
 
     def ft(self, uv):
         u = uv[:, 0]
         v = uv[:, 1]
-        visibilities = list()
-        for u0, v0 in zip(u, v):
-            vis = (self.image * np.exp(-2.0 * math.pi * 1j *
-                                       (u0 * self.x + v0 * self.y))).sum()
-            visibilities.append(vis)
-        return np.asarray(visibilities)
+        return image_ft(self.image, self.x, self.y, u, v)
 
 
 if __name__ == '__main__':
@@ -425,5 +422,9 @@ if __name__ == '__main__':
     uvdata = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
     uv = uvdata.uv
     image = create_clean_image_from_fits_file(os.path.join(base_dir, 'cc.fits'))
-    icomponent = ImageComponent(image.cc, image.x, image.y)
+    icomponent = ImageComponent(image.cc, image.xv, image.yv)
+    import time
+    t0 = time.time()
     vis = icomponent.ft(uv)
+    t1 = time.time()
+    print t1 - t0

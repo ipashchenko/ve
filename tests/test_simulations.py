@@ -19,8 +19,8 @@ if __name__ == '__main__':
     imsize = (image_info['imsize'][0], abs(image_info['pixsize'][0]) /
               mas_to_rad)
     image = create_clean_image_from_fits_file(cc_fits)
-    x = image.xv
-    y = image.yv
+    x = image.x
+    y = image.y
     print x
     print y
     # Iterable of ``UVData`` instances with simultaneous multifrequency uv-data
@@ -31,7 +31,7 @@ if __name__ == '__main__':
     plt.matshow(image)
     plt.show()
     rotm = rotm((256, 256), (128, 128))
-    stokes_models = {'I': image, 'Q': 0.1 * image, 'U': 0.1 * image}
+    stokes_models = {'I': image}
     mod_generator = ModelGenerator(stokes_models, x, y, rotm=rotm)
     models = mod_generator.create_models_for_frequency(observed_uv.frequency)
     simulated_uv = copy.deepcopy(observed_uv)

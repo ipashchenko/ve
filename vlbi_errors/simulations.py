@@ -36,7 +36,7 @@ def alpha(imsize, center, y0, k=0.5, const=-0.5):
     y, x = create_grid(imsize)
     x -= center[0]
     y -= center[1]
-    alpha = 1. / (1. + np.exp(-k * (y - y0))) + const
+    alpha = -1. / (1. + np.exp(-k * (y - y0))) - const
     return alpha
 
 
@@ -95,6 +95,8 @@ def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
     return image
 
 
+# TODO: First must be fractional polarization and PANG. From fractional
+# polarization and stokes I at given frequency one can calculate PPOL.
 class ModelGenerator(object):
     """
     # TODO: Rename to ``stokes_model_images``
@@ -102,19 +104,20 @@ class ModelGenerator(object):
         Model of Stokes parameters distribution. Dictionary with keys - Stokes
         parameters and values - image of Stokes distribution used as model (that
         is 2D numpy arrays of fluxes). Possible values: ``I``, ``Q``, ``U``,
-        ``V``, ``PPOL``, ``PANG``.
+        ``V``, ``PPOL``, ``PANG``, ``FPOL``.
     :param x:
         Iterable of x-coordinates [rad].
     :param y:
         Iterable of y-coordinates [rad].
     :param freq: (optional)
-        Frequency at which models [GHz]. If ``None`` then infinity.
+        Frequency at which models [Hz]. If ``None`` then +infinity. (default:
+        ``None``)
     :param alpha: (optional)
         2D array of spectral index distribution. If ``None`` then use uniform
-        distribution with zero value.
+        distribution with zero value. (default: ``None``)
     :param rotm: (optional)
         2D array of rotation measure distribution. If ``None`` then use uniform
-        distribution with zero value.
+        distribution with zero value. (default: ``None``)
     """
     def __init__(self, stokes_models, x, y, freq=None, alpha=None,
                  rotm=None):
@@ -169,7 +172,7 @@ class ModelGenerator(object):
         Create instance of ``Model`` class for given frequency.
 
         :param freq:
-            Frequency at which evaluate and return models [GHz].
+            Frequency at which evaluate and return models [Hz].
 
         :return:
             List of ``Model`` isntances.
@@ -183,7 +186,7 @@ class ModelGenerator(object):
         ``rotm_func`` attributes.
 
         :param freq:
-            Frequency to move to [GHz].
+            Frequency to move to [Hz].
 
         :return:
             Updated dictionary with model images.
@@ -201,6 +204,9 @@ class ModelGenerator(object):
         if 'I' in self.stokes:
             i_image = self._move_i_to_freq(self.stokes_models['I'], freq)
             stokes_models.update({'I': i_image})
+        if 'FPOL' in self.stokes:
+            ppol_image = i_image * self.stokes_models['FPOL']
+        # Now convert Q&U or PPOL&PANG
         if 'Q' in self.stokes and 'U' in self.stokes:
             q_image, u_image = self._move_qu_to_freq(self.stokes_models['Q'],
                                                      self.stokes_models['U'],
@@ -217,6 +223,9 @@ class ModelGenerator(object):
         return image_i * (freq / self.freq) ** self.alpha
 
     def _move_qu_to_freq(self, image_q, image_u, freq):
+        # First move stokes Q&U to other frequency
+        image_q = self._move_i_to_freq(self.stokes_models['Q'], freq)
+        image_u = self._move_i_to_freq(self.stokes_models['U'], freq)
         image_pol = pol_map(image_q, image_u)
         image_pang = pang_map(image_q, image_u)
         lambda_sq = (3. * 10 ** 8 / freq) ** 2
@@ -253,6 +262,10 @@ class Simulation(object):
 
     @property
     def frequency(self):
+        """
+        Shortcut to frequency in Hz.
+        :return:
+        """
         return self.observed_uv.frequency
 
     def add_true_model(self, model):
@@ -649,10 +662,12 @@ if __name__ == '__main__':
     # of the same source
     observed_uv_fits = glob.glob(os.path.join(data_dir, '1038+064*.uvf'))
     observed_uv = [UVData(fits_file) for fits_file in observed_uv_fits]
-    image = create_jet_model_image(10, 50, 10, 1., (256, 256), (128, 128))
-    rotm = rotm((256, 256), (128, 128))
+    image = create_jet_model_image(10, 50, 10, 0.01, (256, 256), (128, 128))
+    rotm_image = rotm((256, 256), (128, 128))
+    alpha_image = alpha((256, 256), (128, 128), 0.)
     stokes_models = {'I': image, 'Q': 0.1 * image, 'U': 0.1 * image}
-    mod_generator = ModelGenerator(stokes_models, x, y, rotm=rotm, alpha=None)
+    mod_generator = ModelGenerator(stokes_models, x, y, rotm=rotm_image,
+                                   alpha=alpha_image, freq=15. * 10. ** 9.)
     rm_simulation = MFSimulation(observed_uv, mod_generator)
     # Mapping from frequencies to FITS file names
     fnames_dict = dict()

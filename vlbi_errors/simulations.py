@@ -14,24 +14,49 @@ from image_ops import pang_map, pol_map
 from spydiff import clean_difmap
 
 
-def alpha(x, y, *args, **kwargs):
-    return None
+def alpha(imsize, center, y0, k=0.5, const=-0.5):
+    """
+    Function that defines model of spectral index distribution.
+
+    :param imsize:
+        Image size along x & y directions [pixels, pixels].
+    :param center:
+        Center of image in x & y [pixel #, pixel #].
+    :param y0:
+        Pixel number along jet direction with sigmoid midpoint.
+    :param k: (optional)
+        Steepness of the sigmoid. (default: ``0.5``)
+    :param const: (optional)
+        Value of `base` spectral index. (default: ``-0.5``)
+
+    :return:
+        Numpy 2D array with spectral index distribution.
+    """
+    # Along jet is x
+    y, x = create_grid(imsize)
+    x -= center[0]
+    y -= center[1]
+    alpha = 1. / (1. + np.exp(-k * (y - y0))) + const
+    return alpha
 
 
 def rotm(imsize, center, grad_value=100., rm_value_0=0.0):
     """
     Function that defines model of ROTM gradient distribution.
 
-    :param x:
-        x-coordinates on image [pixels].
-    :param y:
-        y-coordinates on image [pixels].
+    :param imsize:
+        Image size along x & y directions [pixels, pixels].
+    :param center:
+        Center of image in x & y [pixel #, pixel #].
     :param grad_value:
         Value of gradient [rad/m/m/pixel].
     :param rm_value_0: (optional)
         Value of ROTM at center [rad/m/m]. (default: ``0.0``)
+
+    :return:
+        Numpy 2D array with rotation measure distribution with gradient.
     """
-    # Transverse to jet x
+    # Transverse to jet is x
     y, x = create_grid(imsize)
     x -= center[0]
     y -= center[1]
@@ -277,7 +302,6 @@ class Simulation(object):
         self._noise = noise
 
 
-# TODO: Model of flux should be on infinite frequency or at highest?
 class MFSimulation(object):
     """
     Class that handles simulations of multifrequency VLBI observations.

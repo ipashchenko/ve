@@ -416,14 +416,16 @@ class Images(object):
                                                          mask=mask,
                                                          outfile=outfile,
                                                          outdir=outdir, ext=ext)
-        rotm_image = Image(imsize=img.imsize, pixref=img.pixref,
-                           pixrefval=img.pixrefval, pixsize=img.pixsize,
-                           freq=tuple(freqs), stokes='ROTM')
+        rotm_image = Image()
+        rotm_image._construct(imsize=img.imsize, pixsize=img.pixsize,
+                              pixref=img.pixref, stokes='ROTM',
+                              freq=tuple(freqs), pixrefval=img.pixrefval)
         rotm_image.image = rotm_array
         # FIXME: use ``tuple`` for frequency container cause it is hashable
-        s_rotm_image = Image(imsize=img.imsize, pixref=img.pixref,
-                             pixrefval=img.pixrefval, pixsize=img.pixsize,
-                             freq=tuple(freqs), stokes='ROTM')
+        s_rotm_image = Image()
+        s_rotm_image._construct(imsize=img.imsize, pixsize=img.pixsize,
+                                pixref=img.pixref, stokes='ROTM',
+                                freq=tuple(freqs), pixrefval=img.pixrefval)
         s_rotm_image.image = s_rotm_array
 
         return rotm_image, s_rotm_image
@@ -622,10 +624,11 @@ class Images(object):
                 pol_array = pol_map(q_image.image, u_image.image, mask=mask)
             else:
                 pol_array = pol_map(q_image._image, u_image._image, mask=mask)
-            # Create basic image and add ``pol_array``
-            pol_image = Image(imsize=img.imsize, pixref=img.pixref,
-                              pixrefval=img.pixrefval, pixsize=img.pixsize,
-                              freq=img.freq, stokes='PPOL')
+            # Create image and add ``pol_array``
+            pol_image = Image()
+            pol_image._construct(imsize=img.imsize, pixsize=img.pixsize,
+                                 pixref=img.pixref, stokes='PPOL',
+                                 freq=img.freq, pixrefval=img.pixrefval)
             if convolved:
                 pol_image.image = pol_array
             else:

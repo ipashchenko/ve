@@ -413,6 +413,63 @@ def create_coverage_map_classic(original_uv_fits_path, ci_type,
                                 alpha=0.68, n_cov=100, n_rms=1., stokes='I',
                                 sample_cc_fits_paths=None,
                                 sample_uv_fits_paths=None):
+    """
+    Conduct coverage analysis of image pixels flux CI. Find number of times
+    when CI of `sample` values contains `true` value.
+
+    :param original_uv_fits_path:
+        Path to original FITS-file with uv-data.
+    :param ci_type:
+        Type of CI to test. ``boot`` or ``rms``. If ``boot`` then use residuals
+        bootstrap CI. If ``rms`` then use Hovatta corrected image rms CI.
+    :param original_cc_fits_path: (optional)
+        Path to original FITS-file with CC model. If ``None`` then use
+        ``imsize`` parameter to get `original` CC model from
+        ``original_uv_fits_path``. (default: ``None``)
+    :param imsize: (optional)
+        Image parameters (image size [pix], pixel size [mas]) to use
+        when doing first CC with ``original_cc_fits_path = None``. (default:
+        ``None``)
+    :param outdir: (optional)
+        Directory to store intermediate results. If ``None`` then use CWD.
+        (default: ``None``)
+    :param n_boot: (optional)
+        Number of bootstrap replications to use when calculating bootstrap CI
+        for ``ci_type = boot`` option when ``boot_cc_fits_paths`` hasn't
+        specified. (default: ``200``)
+    :param path_to_script: (optional)
+        Path to Dan Homan's script for final clean. If ``None`` then use CWD.
+        (default: ``None``)
+    :param alpha: (optional)
+        Level of significance when calculating bootstrap CI for ``ci_type =
+        boot`` case. E.g. ``0.68`` corresponds to `1 \sigma`. (default:
+        ``0.68``)
+    :param n_cov: (optional)
+        Number of `samples` from infinite population to consider in coverage
+        analysis of intervals. Here `samples` - observations of known source
+        with different realisations of noise with known parameters. (default:
+         ``100``)
+    :param n_rms: (optional)
+        Number of rms to use in ``ci_type = rms`` case. (default: ``1.``)
+    :param stokes: (optional)
+        Stokes parameter to use. If ``None`` then use ``I``. (default: ``None``)
+    :param boot_cc_fits_paths: (optional)
+        If ``ci_type = boot`` then this parameter could specify paths to cleaned
+        bootstrapped uv-data.
+    :param sample_uv_fits_paths: (optional)
+        Path to FITS-files with `sample` uv-data. If ``None`` then create
+        ``n_cov`` `sample` uv-data from noise of `original` uv-data and
+        `original` CLEAN model. (default: ``None``)
+    :param sample_cc_fits_paths: (optional)
+        Path to FITS-files with CLEAN models of `sample` uv-data. If ``None``
+        then create ``n_cov`` `sample` uv-data from noise of `original` uv-data
+        and `original` CLEAN model. (default: ``None``)
+
+    :return:
+        Coverage map. Each pixel contain frequency of times when CI for samples
+        from population contain `true` value for given pixel.
+
+    """
     if original_cc_fits_path is None:
         print("No `original` CLEAN model specified! Will CLEAN `original`"
               " uv-data.")
@@ -424,7 +481,7 @@ def create_coverage_map_classic(original_uv_fits_path, ci_type,
         clean_difmap(uv_fits_fname, 'original_cc.fits', stokes, imsize,
                      path=uv_fits_dir, path_to_script=path_to_script,
                      outpath=outdir)
-        original_cc_fits_path = os.path.join(outdir, 'orignal_cc.fits')
+        original_cc_fits_path = os.path.join(outdir, 'original_cc.fits')
 
     # Find images parameters for cleaning if necessary
     if imsize is None:
@@ -509,7 +566,7 @@ def create_coverage_map_classic(original_uv_fits_path, ci_type,
             print("Calculating rms...")
             sample_image = create_image_from_fits_file(sample_cc_fits_path)
             rms = sample_image.rms(region=(25, 25, 25, None))
-            rms = np.sqrt(rms ** 2. + (1.5 * rms ** 2.) ** 2.)
+            rms = np.sqrt(rms ** 2. + (0.0 * rms ** 2.) ** 2.)
             hdi_low = sample_image.image - n_rms * rms
             hdi_high = sample_image.image + n_rms * rms
         else:
@@ -563,12 +620,12 @@ if __name__ == '__main__':
                                                          'sample_uv_*.uvf')))
     # sample_uv_fits_paths = None
     original_cc_fits_path = os.path.join(base_dir, 'original_cc.fits')
+    # original_cc_fits_path = None
     coverage_map =\
-        create_coverage_map_classic(original_uv_fits_path, ci_type='boot',
+        create_coverage_map_classic(original_uv_fits_path, ci_type='rms',
                                     original_cc_fits_path=original_cc_fits_path,
                                     imsize=(256, 1.), outdir=base_dir,
                                     path_to_script=path_to_script,
                                     sample_cc_fits_paths=sample_cc_fits_paths,
                                     sample_uv_fits_paths=sample_uv_fits_paths,
-                                    n_rms=2., alpha=0.95, n_boot=100)
-
+                                    n_rms=3., alpha=0.95, n_boot=100)

@@ -477,7 +477,7 @@ class Images(object):
         # For each replication create ROTM map and add it to ``Images`` instance
         images = Images()
         for i in range(n_replications):
-            print "Creating {} image of {} replications".format(i,
+            print "Creating {} image of {} replications".format(i + 1,
                                                                 n_replications)
             rotm_image, s_rotm_image = self.create_rotm_image(s_pang_arrays,
                                                               freqs, mask, i)

@@ -645,12 +645,24 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
 
 if __name__ == '__main__':
     # Use case
-    plot_models = False
-    plot_rotm_image = False
-    plot_rotm_model = False
-    plot_rotm_slice = False
-    plot_slice_spread = True
+    # Number of replications
     n_sample = 3
+    # Number of PPOL image rms to use in constructing ROTM mask
+    n_rms = 5.
+    # Maximum flux in jet model image
+    max_jet_flux = 0.1
+    # Fraction of Q & U flux in model image
+    qu_fraction = 0.1
+    # Frequency [Hz] of model image
+    model_freq = 1.5 * 10 ** 9
+    # Range of ROTM values to show in resulting images
+    rotm_clim = [-50, 50]
+    # Value of model ROTM gradient [rad/m/m/pixel]. Pixel is that of high
+    # frequency data
+    rotm_grad_value = 5.
+    # Value of model ROTM at central along-jet slice
+    rotm_value_0 = 0.
+
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
     from mojave import (download_mojave_uv_fits, mojave_uv_fits_fname)
     source = '1055+018'
@@ -705,33 +717,36 @@ if __name__ == '__main__':
     observed_uv_fits = glob.glob(os.path.join(data_dir, '*.uvf'))
     observed_uv = [UVData(fits_file) for fits_file in observed_uv_fits]
     # Create jet model, ROTM & alpha images
-    jet_image = create_jet_model_image(30, 60, 10, 0.1,
+    jet_image = create_jet_model_image(30, 60, 10, max_jet_flux,
                                        (imsize_high[0], imsize_high[0]),
                                        (imsize_high[0] / 2, imsize_high[0] / 2))
     rotm_image = rotm((imsize_high[0], imsize_high[0]),
-                      (imsize_high[0] / 2, imsize_high[0] / 2))
+                      (imsize_high[0] / 2, imsize_high[0] / 2),
+                      grad_value=rotm_grad_value, rm_value_0=rotm_value_0)
     alpha_image = alpha((imsize_high[0], imsize_high[0]),
                         (imsize_high[0] / 2, imsize_high[0] / 2), 0.)
 
     # Optionally plot models
-    if plot_models:
-        fig1 = plt.figure()
-        ax1 = fig1.add_subplot(1, 1, 1)
-        ax1.matshow(jet_image)
-        fig1.show()
-        fig2 = plt.figure()
-        ax2 = fig2.add_subplot(1, 1, 1)
-        ri = ax2.matshow(rotm_image)
-        fig2.colorbar(ri)
-        fig2.show()
-        fig3 = plt.figure()
-        ax3 = fig3.add_subplot(1, 1, 1)
-        ax3.matshow(alpha_image)
-        fig3.show()
+    fig1 = plt.figure()
+    ax1 = fig1.add_subplot(1, 1, 1)
+    ax1.matshow(jet_image)
+    fig1.savefig(os.path.join(data_dir, 'jet_model_image.png'),
+                 bbox_inches='tight', dpi=200)
+    plt.close()
+    # fig2 = plt.figure()
+    # ax2 = fig2.add_subplot(1, 1, 1)
+    # ri = ax2.matshow(rotm_image)
+    # fig2.colorbar(ri)
+    # fig2.show()
+    # fig3 = plt.figure()
+    # ax3 = fig3.add_subplot(1, 1, 1)
+    # ax3.matshow(alpha_image)
+    # fig3.show()
 
-    stokes_models = {'I': jet_image, 'Q': 0.1 * jet_image, 'U': 0.1 * jet_image}
+    stokes_models = {'I': jet_image, 'Q': qu_fraction * jet_image,
+                     'U': qu_fraction * jet_image}
     mod_generator = ModelGenerator(stokes_models, x, y, rotm=rotm_image,
-                                   alpha=alpha_image, freq=15. * 10. ** 9.)
+                                   alpha=alpha_image, freq=model_freq)
     rm_simulation = MFSimulation(observed_uv, mod_generator)
 
     # Mapping from frequencies to FITS file names
@@ -777,10 +792,6 @@ if __name__ == '__main__':
     # Create ROTM image
     from images import Images
     sym_images = Images()
-    # fnames = ['1354458750.0_I.fits', '1354458750.0_Q.fits', '1354458750.0_U.fits',
-    #           '1426458750.0_I.fits', '1426458750.0_Q.fits', '1426458750.0_U.fits',
-    #           '1489458750.0_I.fits', '1489458750.0_Q.fits', '1489458750.0_U.fits',
-    #           '1661458750.0_I.fits', '1661458750.0_Q.fits', '1661458750.0_U.fits']
     fnames = glob.glob(os.path.join(data_dir, "*.0_*.fits"))
     sym_images.add_from_fits(fnames=fnames)
     from from_fits import create_image_from_fits_file
@@ -792,38 +803,45 @@ if __name__ == '__main__':
     rms = i_image.rms(region=(r_rms, r_rms, r_rms, None))
     print "RMS : ", rms
     ppol_image = sym_images.create_pol_images(freq=freq_highest)[0]
-    rotm_mask = ppol_image.image < 5. * rms
+    rotm_mask = ppol_image.image < n_rms * rms
+
+    # Optionally plot ROTM mask
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
     ax.matshow(rotm_mask)
-    fig.show()
+    fig.savefig(os.path.join(data_dir, 'rotm_mask.png'),
+                bbox_inches='tight', dpi=200)
+    plt.close()
 
     print "Calculating ROTM image"
     rotm_image_sym, s_rotm_image_sym =\
         sym_images.create_rotm_image(mask=rotm_mask)
-    if plot_rotm_image:
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
-        ri = ax.matshow(rotm_image_sym.image, clim=[-50, 50])
-        fig.colorbar(ri)
-        fig.show()
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ri = ax.matshow(rotm_image_sym.image, clim=rotm_clim)
+    fig.colorbar(ri)
+    fig.savefig(os.path.join(data_dir, 'rotm_image_sim.png'),
+                bbox_inches='tight', dpi=200)
+    plt.close()
 
-    if plot_rotm_model:
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
-        mrotm_image = np.ma.array(rotm_image, mask=rotm_mask)
-        ri = ax.matshow(mrotm_image, clim=[-50, 50])
-        fig.colorbar(ri)
-        fig.show()
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    mrotm_image = np.ma.array(rotm_image, mask=rotm_mask)
+    ri = ax.matshow(mrotm_image, clim=rotm_clim)
+    fig.colorbar(ri)
+    fig.savefig(os.path.join(data_dir, 'rotm_image_model.png'),
+                bbox_inches='tight', dpi=200)
+    plt.close()
 
-    if plot_rotm_slice:
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
-        ax.errorbar(np.arange(240, 270, 1),
-                    rotm_image_sym.slice((240, 260), (270, 260)),
-                    s_rotm_image_sym.slice((240, 260), (270, 260)), fmt='.k')
-        ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
-        fig.show()
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ax.errorbar(np.arange(240, 270, 1),
+                rotm_image_sym.slice((240, 260), (270, 260)),
+                s_rotm_image_sym.slice((240, 260), (270, 260)), fmt='.k')
+    ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
+    fig.savefig(os.path.join(data_dir, 'rotm_slice.png'),
+                bbox_inches='tight', dpi=200)
+    plt.close()
 
     # Create ROTM images of simulated sample
     sym_images = Images()
@@ -831,14 +849,15 @@ if __name__ == '__main__':
     sym_images.add_from_fits(fnames)
     rotm_images_sym = sym_images.create_rotm_images(mask=rotm_mask)
     # Plot spread of sample values
-    if plot_slice_spread:
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
-        ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
-        for i in range(n_sample):
-            print "plotting {}th slice of {}".format(i + 1, n_sample)
-            jitter = np.random.normal(0, 0.03)
-            ax.plot(np.arange(240, 270, 1) + jitter,
-                    rotm_images_sym.images[i].slice((240, 260), (270, 260)),
-                    '.k')
-        fig.show()
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
+    for i in range(n_sample):
+        print "plotting {}th slice of {}".format(i + 1, n_sample)
+        jitter = np.random.normal(0, 0.03)
+        ax.plot(np.arange(240, 270, 1) + jitter,
+                rotm_images_sym.images[i].slice((240, 260), (270, 260)),
+                '.k')
+    fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
+                bbox_inches='tight', dpi=200)
+    plt.close()

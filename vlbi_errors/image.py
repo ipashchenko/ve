@@ -199,8 +199,9 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             u = -np.sin(vectors[x_slice, y_slice])
             v = np.cos(vectors[x_slice, y_slice])
 
-        u = np.ma.array(u, mask=vectors_mask[x_slice, y_slice])
-        v = np.ma.array(v, mask=vectors_mask[x_slice, y_slice])
+        if vectors_mask is not None:
+            u = np.ma.array(u, mask=vectors_mask[x_slice, y_slice])
+            v = np.ma.array(v, mask=vectors_mask[x_slice, y_slice])
         vec = ax.quiver(y[::vinc], x[::vinc], u[::vinc, ::vinc],
                         v[::vinc, ::vinc], angles='uv',
                         units='xy', headwidth=0., headlength=0., scale=0.005,

@@ -55,7 +55,9 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
 
         if epochs is not None:
             if not set(epochs).issubset(available_epochs):
-                raise Exception(" No epochs {} in MOJAVE data")
+                raise Exception(" No epochs {} in MOJAVE data."
+                                " Available are {}".format(epochs,
+                                                           available_epochs))
         else:
             epochs = available_epochs
 

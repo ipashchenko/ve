@@ -21,19 +21,29 @@ def mojave_uv_fits_fname(source, band, epoch, ext='uvf'):
     return source + '.' + band + '.' + epoch + '.' + ext
 
 
-def get_all_mojave_multifreq_sources():
-    request = urllib2.Request(mojave_u_url)
+def get_all_mojave_sources(use_db='u'):
+    url_dict = {'u': mojave_u_url, 'multifreq': mojave_multifreq_url}
+    request = urllib2.Request(url_dict[use_db])
     response = urllib2.urlopen(request)
     soup = BeautifulSoup.BeautifulSoup(response)
 
     sources = list()
-    for a in soup.findAll('a'):
-        if fnmatch.fnmatch(a['href'], "*+*") or fnmatch.fnmatch(a['href'],
-                                                                "*-*"):
-            print a
-            epoch = str(a['href'].strip('/'))
-            sources.append(epoch)
-    return set(sources)
+    if use_db == 'u':
+        for a in soup.findAll('a'):
+            if fnmatch.fnmatch(a['href'], "*+*") or fnmatch.fnmatch(a['href'],
+                                                                    "*-*"):
+                epoch = str(a['href'].strip('/'))
+                sources.append(epoch)
+    if use_db == 'multifreq':
+        for a in soup.findAll('a'):
+            if 'uvf' in a['href']:
+                fname = a['href']
+                sources.append(str(fname.split('.')[0]))
+    return sorted(set(sources))
+
+
+def get_epochs_for_source(source, use_db='u'):
+    pass
 
 
 def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
@@ -155,11 +165,13 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
 
 if __name__ == '__main__':
     # source = '2230+114'
-    source = '1055+018'
-    epochs = ['2010_02_03']
+    # source = '1055+018'
+    # epochs = ['2010_02_03']
     # epochs = ['2006_02_12']
     # epochs = ['2006_03_09', '2006_06_15']
-    bands = ['l18']
+    # bands = ['l18']
     # bands = None
-    download_mojave_uv_fits(source, epochs=epochs, bands=bands,
-                            download_dir=download_dir)
+    # download_mojave_uv_fits(source, epochs=epochs, bands=bands,
+    #                         download_dir=download_dir)
+    sources = get_all_mojave_sources(use_db='multifreq')
+    print sources

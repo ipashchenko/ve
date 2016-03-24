@@ -3,7 +3,7 @@ import copy
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import get_fits_image_info
+from utils import get_fits_image_info, degree_to_rad
 from image import BasicImage, Image
 from images import Images
 from utils import mask_region, mas_to_rad, find_card_from_header, create_grid
@@ -676,41 +676,91 @@ def compare_simulations(rotm_image, fnames=None, wildcard=None, rotm_mask=None):
 
 if __name__ == '__main__':
     # Use case
-    data_dir = '/home/ilya/code/vlbi_errors/examples/mojave'
-    # data_dir = '/home/ilya/code/vlbi_errors/examples/L'
+    plot_models = False
+    n_sample = 30
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
-    cc_fits = os.path.join(data_dir, 'original_cc.fits')
-    image_info = get_fits_image_info(cc_fits)
-    imsize = (image_info['imsize'][0], abs(image_info['pixsize'][0]) /
-              mas_to_rad)
-    image = create_clean_image_from_fits_file(cc_fits)
-    x = image.x
-    y = image.y
-    # Iterable of ``UVData`` instances with simultaneous multifrequency uv-data
-    # of the same source
-    observed_uv_fits = glob.glob(os.path.join(data_dir, '*uv.fits'))
-    # observed_uv_fits = glob.glob(os.path.join(data_dir, '1038+064*.uvf'))
+    from mojave import (download_mojave_uv_fits, mojave_uv_fits_fname)
+    source = '1055+018'
+    base_dir = '/home/ilya/code/vlbi_errors/examples/mojave'
+    data_dir = os.path.join(base_dir, source)
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    epoch = '2006_11_10'
+    bands = ['x', 'y', 'j', 'u']
+    mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
+                    'u': (512, 0.1)}
+    mapsize_common = (512, 0.1)
+    stokes = ['I', 'Q', 'U']
+    download_mojave_uv_fits(source, epochs=epoch, bands=bands,
+                            download_dir=data_dir)
+
+    # Clean in original resolution (image size, beam)
+    for band in bands:
+        uv_fits_fname = mojave_uv_fits_fname(source, band, epoch)
+        print "Cleaning {} with native resolution".format(uv_fits_fname)
+        for stoke in stokes:
+            print "stokes {}".format(stoke)
+            cc_fits_fname = "{}_{}_{}_{}_naitive_cc.fits".format(source, epoch,
+                                                                 band, stoke)
+            clean_difmap(uv_fits_fname, cc_fits_fname, stoke,
+                         mapsize_dict[band], path=data_dir,
+                         path_to_script=path_to_script, outpath=data_dir)
+
+    # Choose common image parameters for ROTM calculations
+    cc_fits_fname_high = "{}_{}_{}_{}_naitive_cc.fits".format(source, epoch,
+                                                              bands[-1], 'I')
+    cc_fits_fname_high = os.path.join(data_dir, cc_fits_fname_high)
+    cc_fits_fname_low = "{}_{}_{}_{}_naitive_cc.fits".format(source, epoch,
+                                                             bands[0], 'I')
+    cc_fits_fname_low = os.path.join(data_dir, cc_fits_fname_low)
+
+    # Get common beam from lowest frequency
+    map_info = get_fits_image_info(cc_fits_fname_low)
+    beam_pars = (map_info['bmaj'] / mas_to_rad,
+                 map_info['bmin'] / mas_to_rad,
+                 map_info['bpa'] / degree_to_rad)
+    print "Common beam: ", beam_pars
+
+    # Choose image on highest frequency for jet model construction
+    map_info = get_fits_image_info(cc_fits_fname_high)
+    imsize_high = (map_info['imsize'][0], abs(map_info['pixsize'][0]) /
+                   mas_to_rad)
+    image_high = create_clean_image_from_fits_file(cc_fits_fname_high)
+    x = image_high.x
+    y = image_high.y
+
+    observed_uv_fits = glob.glob(os.path.join(data_dir, '*.uvf'))
     observed_uv = [UVData(fits_file) for fits_file in observed_uv_fits]
-    image = create_jet_model_image(30, 60, 10, 0.1, (512, 512), (256, 256))
-    fig1 = plt.figure()
-    ax1 = fig1.add_subplot(1, 1, 1)
-    ax1.matshow(image)
-    fig1.show()
-    rotm_image = rotm((512, 512), (256, 256))
-    fig2 = plt.figure()
-    ax2 = fig2.add_subplot(1, 1, 1)
-    ri = ax2.matshow(rotm_image)
-    fig2.colorbar(ri)
-    fig2.show()
-    alpha_image = alpha((256, 256), (128, 128), 0.)
-    fig3 = plt.figure()
-    ax3 = fig3.add_subplot(1, 1, 1)
-    ax3.matshow(alpha_image)
-    fig3.show()
-    stokes_models = {'I': image, 'Q': 0.1 * image, 'U': 0.1 * image}
+    # Create jet model, ROTM & alpha images
+    jet_image = create_jet_model_image(30, 60, 10, 0.1,
+                                       (imsize_high[0], imsize_high[0]),
+                                       (imsize_high[0] / 2, imsize_high[0] / 2))
+    rotm_image = rotm((imsize_high[0], imsize_high[0]),
+                      (imsize_high[0] / 2, imsize_high[0] / 2))
+    alpha_image = alpha((imsize_high[0], imsize_high[0]),
+                        (imsize_high[0] / 2, imsize_high[0] / 2), 0.)
+
+    # Optionally plot models
+    if plot_models:
+        fig1 = plt.figure()
+        ax1 = fig1.add_subplot(1, 1, 1)
+        ax1.matshow(jet_image)
+        fig1.show()
+        fig2 = plt.figure()
+        ax2 = fig2.add_subplot(1, 1, 1)
+        ri = ax2.matshow(rotm_image)
+        fig2.colorbar(ri)
+        fig2.show()
+        fig3 = plt.figure()
+        ax3 = fig3.add_subplot(1, 1, 1)
+        ax3.matshow(alpha_image)
+        fig3.show()
+
+    stokes_models = {'I': jet_image, 'Q': 0.1 * jet_image, 'U': 0.1 * jet_image}
     mod_generator = ModelGenerator(stokes_models, x, y, rotm=rotm_image,
-                                   alpha=None, freq=15. * 10. ** 9.)
+                                   alpha=alpha_image, freq=15. * 10. ** 9.)
     rm_simulation = MFSimulation(observed_uv, mod_generator)
+
     # Mapping from frequencies to FITS file names
     fnames_dict = dict()
     os.chdir(data_dir)
@@ -724,28 +774,31 @@ if __name__ == '__main__':
         uv_fits_fname = fnames_dict[freq]
         for stokes in rm_simulation.stokes:
             cc_fits_fname = str(freq) + '_' + stokes + '.fits'
-            clean_difmap(uv_fits_fname, cc_fits_fname, stokes, imsize,
+            clean_difmap(uv_fits_fname, cc_fits_fname, stokes, mapsize_common,
                          path=data_dir, path_to_script=path_to_script,
                          outpath=data_dir)
-    # # Creating sample
-    # for i in xrange(30):
-    #     print "Creating sample {}".format(i)
-    #     fnames_dict_i = fnames_dict.copy()
-    #     fnames_dict_i.update({freq: name + '_' + str(i + 1).zfill(3) for
-    #                           freq, name in fnames_dict.items()})
-    #     rm_simulation.simulate()
-    #     rm_simulation.save_fits(fnames_dict_i)
+    # Creating sample
+    for i in range(n_sample):
+        print "Creating sample {}".format(i)
+        fnames_dict_i = fnames_dict.copy()
+        fnames_dict_i.update({freq: name + '_' + str(i + 1).zfill(3) for
+                              freq, name in fnames_dict.items()})
+        rm_simulation.simulate()
+        rm_simulation.save_fits(fnames_dict_i)
 
-    # # CLEAN uv-fits with simulated sample data
-    # for freq in rm_simulation.freqs:
-    #     for i in xrange(30):
-    #         uv_fits_fname = fnames_dict[freq] + '_' + str(i + 1).zfill(3)
-    #         for stokes in rm_simulation.stokes:
-    #             cc_fits_fname = str(freq) + '_' + stokes + '_{}.fits'.format(str(i + 1).zfill(3))
-    #             clean_difmap(uv_fits_fname, cc_fits_fname, stokes, imsize,
-    #                          path=data_dir, path_to_script=path_to_script,
-    #                          outpath=data_dir)
+    # CLEAN uv-fits with simulated sample data
+    for freq in rm_simulation.freqs:
+        for i in range(n_sample):
+            uv_fits_fname = fnames_dict[freq] + '_' + str(i + 1).zfill(3)
+            print "Cleaning {}".format(uv_fits_fname)
+            for stokes in rm_simulation.stokes:
+                print "Stokes {}".format(stokes)
+                cc_fits_fname = str(freq) + '_' + stokes + '_{}.fits'.format(str(i + 1).zfill(3))
+                clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
+                             mapsize_common, path=data_dir,
+                             path_to_script=path_to_script, outpath=data_dir)
 
+    # Create ROTM image
     from images import Images
     sym_images = Images()
     # fnames = ['1354458750.0_I.fits', '1354458750.0_Q.fits', '1354458750.0_U.fits',
@@ -759,7 +812,8 @@ if __name__ == '__main__':
     freq_highest = sorted(sym_images.freqs, reverse=True)[0]
     i_fname = sorted(glob.glob(os.path.join(data_dir, '*_I.fits')))[0]
     i_image = create_image_from_fits_file(i_fname)
-    rms = i_image.rms(region=(50, 50, 50, None))
+    r_rms = mapsize_common[0] / 10
+    rms = i_image.rms(region=(r_rms, r_rms, r_rms, None))
     print "RMS : ", rms
     ppol_image = sym_images.create_pol_images(freq=freq_highest)[0]
     rotm_mask = ppol_image.image < 5. * rms
@@ -767,27 +821,43 @@ if __name__ == '__main__':
     ax = fig.add_subplot(1, 1, 1)
     ax.matshow(rotm_mask)
     fig.show()
+
     print "Calculating ROTM image"
     rotm_image_sym, s_rotm_image_sym =\
         sym_images.create_rotm_image(mask=rotm_mask)
-        # sym_images.create_rotm_image(mask=rotm_mask, outfile='rm_fit',
-        #                              outdir=data_dir)
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
-    ri = ax.matshow(rotm_image_sym.image)
+    ri = ax.matshow(rotm_image_sym.image, clim=[-50, 50])
     fig.colorbar(ri)
     fig.show()
 
-    # pang_images = list()
-    # for i_f, q_f, u_f in zip(sorted(fnames)[::3],
-    #                          sorted(fnames)[1::3],
-    #                          sorted(fnames)[2::3]):
-    #     q_image = create_image_from_fits_file(q_f)
-    #     u_image = create_image_from_fits_file(u_f)
-    #     i_image = create_image_from_fits_file(i_f)
-    #     pang_image = pang_map(q_image.image, u_image.image, mask=rotm_mask)
-    #     pang_images.append(pang_image)
-    #     ppol_image = pol_map(q_image.image, u_image.image, mask=rotm_mask)
-        # iplot(contours=i_image.image, colors=ppol_image, vectors=pang_image,
-        #       min_rel_level=0.5, x=i_image.x, y=i_image.y)
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    mrotm_image = np.ma.array(rotm_image, mask=rotm_mask)
+    ri = ax.matshow(mrotm_image, clim=[-50, 50])
+    fig.colorbar(ri)
+    fig.show()
 
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ax.errorbar(np.arange(240, 270, 1),
+                rotm_image_sym.slice((240, 260), (270, 260)),
+                s_rotm_image_sym.slice((240, 260), (270, 260)), fmt='.k')
+    ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
+    fig.show()
+
+    # Create ROTM images of simulated sample
+    sym_images = Images()
+    fnames = sorted(glob.glob(os.path.join(data_dir, "*.0_*_*.fits")))
+    sym_images.add_from_fits(fnames)
+    rotm_images_sym = sym_images.create_rotm_images(mask=rotm_mask)
+    # Plot spread of sample values
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
+    for i in range(30):
+        print "plotting {}th slice".format(i)
+        jitter = np.random.normal(0, 0.03)
+        ax.plot(np.arange(240, 270, 1) + jitter,
+                rotm_images_sym.images[i].slice((240, 260), (270, 260)), '.k')
+    fig.show()

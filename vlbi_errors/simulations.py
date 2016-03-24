@@ -654,7 +654,8 @@ if __name__ == '__main__':
     # Fraction of Q & U flux in model image
     qu_fraction = 0.1
     # Frequency [Hz] of model image
-    model_freq = 1.5 * 10 ** 9
+    # FIXME: When ``model_freq`` is 1.5 * ... then results are shitty!
+    model_freq = 20. * 10 ** 9
     # Range of ROTM values to show in resulting images
     rotm_clim = [-50, 50]
     # Value of model ROTM gradient [rad/m/m/pixel]. Pixel is that of high

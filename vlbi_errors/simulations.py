@@ -643,41 +643,14 @@ def simulate_grad(low_freq_map, high_freq_map, uvdata_files, cc_flux,
         uvdata.save(uvdata.data, uv_save_fname)
 
 
-def compare_simulations(rotm_image, fnames=None, wildcard=None, rotm_mask=None):
-    """
-    :param rotm_image:
-        2D-numpy array with ROTM distribution.
-    :param fnames: (optional)
-        Iterable of FITS-file names.
-    :param wildcard: (optional)
-        Wildcard used for ``glob.glob`` to select FITS-files with images.
-    :param rotm_mask: (optional)
-        Mask to use when calculating ROTM. If ``None`` then don't use any mask.
-    """
-    images = Images()
-    images.add_from_fits(fnames, wildcard)
-    rotm_images_sym = images.create_rotm_image(mask=rotm_mask)
-
-    # # Plot spread of bootstrapped values
-    # fig = plt.figure()
-    # ax = fig.add_subplot(1, 1, 1)
-    # for i in range(n_boot):
-    #     ax.plot(np.arange(210, 302, 1),
-    #             rotm_images_dict[i][0].slice((270, 210), (270, 302)), '.k')
-    # plt.plot(np.arange(240, 272, 1), rm_(np.arange(240, 272, 1), grad_value,
-    #                                      rotm_image.imsize[0]))
-    # plt.errorbar(np.arange(210, 302, 1),
-    #              rotm_image.slice((270, 210), (270, 302)),
-    #              s_rotm_image.slice((270, 210), (270, 302)), fmt='.r', lw=4)
-    # plt.axvline(rotm_image.pixref[1] - jet_width / 2.)
-    # plt.axvline(rotm_image.pixref[1] + jet_width / 2.)
-    # fig.show()
-
-
 if __name__ == '__main__':
     # Use case
     plot_models = False
-    n_sample = 30
+    plot_rotm_image = False
+    plot_rotm_model = False
+    plot_rotm_slice = False
+    plot_slice_spread = True
+    n_sample = 3
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
     from mojave import (download_mojave_uv_fits, mojave_uv_fits_fname)
     source = '1055+018'
@@ -691,7 +664,7 @@ if __name__ == '__main__':
                     'u': (512, 0.1)}
     mapsize_common = (512, 0.1)
     stokes = ['I', 'Q', 'U']
-    download_mojave_uv_fits(source, epochs=epoch, bands=bands,
+    download_mojave_uv_fits(source, epochs=[epoch], bands=bands,
                             download_dir=data_dir)
 
     # Clean in original resolution (image size, beam)
@@ -716,10 +689,10 @@ if __name__ == '__main__':
 
     # Get common beam from lowest frequency
     map_info = get_fits_image_info(cc_fits_fname_low)
-    beam_pars = (map_info['bmaj'] / mas_to_rad,
+    beam_common = (map_info['bmaj'] / mas_to_rad,
                  map_info['bmin'] / mas_to_rad,
                  map_info['bpa'] / degree_to_rad)
-    print "Common beam: ", beam_pars
+    print "Common beam: ", beam_common
 
     # Choose image on highest frequency for jet model construction
     map_info = get_fits_image_info(cc_fits_fname_high)
@@ -772,14 +745,16 @@ if __name__ == '__main__':
     # CLEAN uv-fits with simulated data
     for freq in rm_simulation.freqs:
         uv_fits_fname = fnames_dict[freq]
+        print "Cleaning {}".format(uv_fits_fname)
         for stokes in rm_simulation.stokes:
+            print "Stokes {}".format(stokes)
             cc_fits_fname = str(freq) + '_' + stokes + '.fits'
             clean_difmap(uv_fits_fname, cc_fits_fname, stokes, mapsize_common,
                          path=data_dir, path_to_script=path_to_script,
-                         outpath=data_dir)
+                         outpath=data_dir, beam_restore=beam_common)
     # Creating sample
     for i in range(n_sample):
-        print "Creating sample {}".format(i)
+        print "Creating sample {} of {}".format(i + 1, n_sample)
         fnames_dict_i = fnames_dict.copy()
         fnames_dict_i.update({freq: name + '_' + str(i + 1).zfill(3) for
                               freq, name in fnames_dict.items()})
@@ -796,7 +771,8 @@ if __name__ == '__main__':
                 cc_fits_fname = str(freq) + '_' + stokes + '_{}.fits'.format(str(i + 1).zfill(3))
                 clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
                              mapsize_common, path=data_dir,
-                             path_to_script=path_to_script, outpath=data_dir)
+                             path_to_script=path_to_script, outpath=data_dir,
+                             beam_restore=beam_common)
 
     # Create ROTM image
     from images import Images
@@ -825,26 +801,29 @@ if __name__ == '__main__':
     print "Calculating ROTM image"
     rotm_image_sym, s_rotm_image_sym =\
         sym_images.create_rotm_image(mask=rotm_mask)
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    ri = ax.matshow(rotm_image_sym.image, clim=[-50, 50])
-    fig.colorbar(ri)
-    fig.show()
+    if plot_rotm_image:
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        ri = ax.matshow(rotm_image_sym.image, clim=[-50, 50])
+        fig.colorbar(ri)
+        fig.show()
 
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    mrotm_image = np.ma.array(rotm_image, mask=rotm_mask)
-    ri = ax.matshow(mrotm_image, clim=[-50, 50])
-    fig.colorbar(ri)
-    fig.show()
+    if plot_rotm_model:
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        mrotm_image = np.ma.array(rotm_image, mask=rotm_mask)
+        ri = ax.matshow(mrotm_image, clim=[-50, 50])
+        fig.colorbar(ri)
+        fig.show()
 
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    ax.errorbar(np.arange(240, 270, 1),
-                rotm_image_sym.slice((240, 260), (270, 260)),
-                s_rotm_image_sym.slice((240, 260), (270, 260)), fmt='.k')
-    ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
-    fig.show()
+    if plot_rotm_slice:
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        ax.errorbar(np.arange(240, 270, 1),
+                    rotm_image_sym.slice((240, 260), (270, 260)),
+                    s_rotm_image_sym.slice((240, 260), (270, 260)), fmt='.k')
+        ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
+        fig.show()
 
     # Create ROTM images of simulated sample
     sym_images = Images()
@@ -852,12 +831,14 @@ if __name__ == '__main__':
     sym_images.add_from_fits(fnames)
     rotm_images_sym = sym_images.create_rotm_images(mask=rotm_mask)
     # Plot spread of sample values
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
-    for i in range(30):
-        print "plotting {}th slice".format(i)
-        jitter = np.random.normal(0, 0.03)
-        ax.plot(np.arange(240, 270, 1) + jitter,
-                rotm_images_sym.images[i].slice((240, 260), (270, 260)), '.k')
-    fig.show()
+    if plot_slice_spread:
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
+        for i in range(n_sample):
+            print "plotting {}th slice of {}".format(i + 1, n_sample)
+            jitter = np.random.normal(0, 0.03)
+            ax.plot(np.arange(240, 270, 1) + jitter,
+                    rotm_images_sym.images[i].slice((240, 260), (270, 260)),
+                    '.k')
+        fig.show()

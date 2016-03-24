@@ -16,8 +16,24 @@ pixel_size_dict = {'x': None, 'y': None, 'j': None, 'u': None}
 mojave_bands = ['x', 'y', 'j', 'u', 'l18', 'l20', 'l21', 'l22']
 l_bands = ['l18', 'l20', 'l21', 'l22']
 
+
 def mojave_uv_fits_fname(source, band, epoch, ext='uvf'):
     return source + '.' + band + '.' + epoch + '.' + ext
+
+
+def get_all_mojave_multifreq_sources():
+    request = urllib2.Request(mojave_u_url)
+    response = urllib2.urlopen(request)
+    soup = BeautifulSoup.BeautifulSoup(response)
+
+    sources = list()
+    for a in soup.findAll('a'):
+        if fnmatch.fnmatch(a['href'], "*+*") or fnmatch.fnmatch(a['href'],
+                                                                "*-*"):
+            print a
+            epoch = str(a['href'].strip('/'))
+            sources.append(epoch)
+    return set(sources)
 
 
 def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):

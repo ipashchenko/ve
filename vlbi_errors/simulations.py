@@ -701,9 +701,8 @@ if __name__ == '__main__':
 
     # Get common beam from lowest frequency
     map_info = get_fits_image_info(cc_fits_fname_low)
-    beam_common = (map_info['bmaj'] / mas_to_rad,
-                 map_info['bmin'] / mas_to_rad,
-                 map_info['bpa'] / degree_to_rad)
+    beam_common = (map_info['bmaj'] / mas_to_rad, map_info['bmin'] / mas_to_rad,
+                   map_info['bpa'] / degree_to_rad)
     print "Common beam: ", beam_common
 
     # Choose image on highest frequency for jet model construction
@@ -733,15 +732,6 @@ if __name__ == '__main__':
     fig1.savefig(os.path.join(data_dir, 'jet_model_image.png'),
                  bbox_inches='tight', dpi=200)
     plt.close()
-    # fig2 = plt.figure()
-    # ax2 = fig2.add_subplot(1, 1, 1)
-    # ri = ax2.matshow(rotm_image)
-    # fig2.colorbar(ri)
-    # fig2.show()
-    # fig3 = plt.figure()
-    # ax3 = fig3.add_subplot(1, 1, 1)
-    # ax3.matshow(alpha_image)
-    # fig3.show()
 
     stokes_models = {'I': jet_image, 'Q': qu_fraction * jet_image,
                      'U': qu_fraction * jet_image}
@@ -824,12 +814,23 @@ if __name__ == '__main__':
                 bbox_inches='tight', dpi=200)
     plt.close()
 
+    # Plotting model of ROTM
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
     mrotm_image = np.ma.array(rotm_image, mask=rotm_mask)
     ri = ax.matshow(mrotm_image, clim=rotm_clim)
     fig.colorbar(ri)
     fig.savefig(os.path.join(data_dir, 'rotm_image_model.png'),
+                bbox_inches='tight', dpi=200)
+    plt.close()
+
+    # Plot model of SPIX
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    malpha_image = np.ma.array(alpha_image, mask=rotm_mask)
+    ri = ax.matshow(malpha_image)
+    fig.colorbar(ri)
+    fig.savefig(os.path.join(data_dir, 'alpha_image_model.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
 

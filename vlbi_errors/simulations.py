@@ -758,27 +758,6 @@ if __name__ == '__main__':
             clean_difmap(uv_fits_fname, cc_fits_fname, stokes, mapsize_common,
                          path=data_dir, path_to_script=path_to_script,
                          outpath=data_dir, beam_restore=beam_common)
-    # Creating sample
-    for i in range(n_sample):
-        print "Creating sample {} of {}".format(i + 1, n_sample)
-        fnames_dict_i = fnames_dict.copy()
-        fnames_dict_i.update({freq: name + '_' + str(i + 1).zfill(3) for
-                              freq, name in fnames_dict.items()})
-        rm_simulation.simulate()
-        rm_simulation.save_fits(fnames_dict_i)
-
-    # CLEAN uv-fits with simulated sample data
-    for freq in rm_simulation.freqs:
-        for i in range(n_sample):
-            uv_fits_fname = fnames_dict[freq] + '_' + str(i + 1).zfill(3)
-            print "Cleaning {}".format(uv_fits_fname)
-            for stokes in rm_simulation.stokes:
-                print "Stokes {}".format(stokes)
-                cc_fits_fname = str(freq) + '_' + stokes + '_{}.fits'.format(str(i + 1).zfill(3))
-                clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
-                             mapsize_common, path=data_dir,
-                             path_to_script=path_to_script, outpath=data_dir,
-                             beam_restore=beam_common)
 
     # Create ROTM image
     from images import Images
@@ -805,7 +784,7 @@ if __name__ == '__main__':
     plt.close()
 
     print "Calculating ROTM image"
-    rotm_image_sym, s_rotm_image_sym =\
+    rotm_image_sym, s_rotm_image_sym = \
         sym_images.create_rotm_image(mask=rotm_mask)
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
@@ -844,6 +823,28 @@ if __name__ == '__main__':
     fig.savefig(os.path.join(data_dir, 'rotm_slice.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
+
+    # Creating sample
+    for i in range(n_sample):
+        print "Creating sample {} of {}".format(i + 1, n_sample)
+        fnames_dict_i = fnames_dict.copy()
+        fnames_dict_i.update({freq: name + '_' + str(i + 1).zfill(3) for
+                              freq, name in fnames_dict.items()})
+        rm_simulation.simulate()
+        rm_simulation.save_fits(fnames_dict_i)
+
+    # CLEAN uv-fits with simulated sample data
+    for freq in rm_simulation.freqs:
+        for i in range(n_sample):
+            uv_fits_fname = fnames_dict[freq] + '_' + str(i + 1).zfill(3)
+            print "Cleaning {}".format(uv_fits_fname)
+            for stokes in rm_simulation.stokes:
+                print "Stokes {}".format(stokes)
+                cc_fits_fname = str(freq) + '_' + stokes + '_{}.fits'.format(str(i + 1).zfill(3))
+                clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
+                             mapsize_common, path=data_dir,
+                             path_to_script=path_to_script, outpath=data_dir,
+                             beam_restore=beam_common)
 
     # Create ROTM images of simulated sample
     sym_images = Images()

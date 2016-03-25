@@ -32,8 +32,8 @@ def get_all_mojave_sources(use_db='u'):
         for a in soup.findAll('a'):
             if fnmatch.fnmatch(a['href'], "*+*") or fnmatch.fnmatch(a['href'],
                                                                     "*-*"):
-                epoch = str(a['href'].strip('/'))
-                sources.append(epoch)
+                source = str(a['href'].strip('/'))
+                sources.append(source)
     if use_db == 'multifreq':
         for a in soup.findAll('a'):
             if 'uvf' in a['href']:
@@ -43,7 +43,24 @@ def get_all_mojave_sources(use_db='u'):
 
 
 def get_epochs_for_source(source, use_db='u'):
-    pass
+    url_dict = {'u': os.path.join(mojave_u_url, source),
+                'multifreq': mojave_multifreq_url}
+    request = urllib2.Request(url_dict[use_db])
+    response = urllib2.urlopen(request)
+    soup = BeautifulSoup.BeautifulSoup(response)
+
+    epochs = list()
+    if use_db == 'u':
+        for a in soup.findAll('a'):
+            if fnmatch.fnmatch(a['href'], "*_*_*"):
+                epoch = str(a['href'].strip('/'))
+                epochs.append(epoch)
+    if use_db == 'multifreq':
+        for a in soup.findAll('a'):
+            if source in a['href'] and 'uvf' in a['href']:
+                fname = a['href']
+                epochs.append(str(fname.split('.')[2]))
+    return sorted(set(epochs))
 
 
 def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):

@@ -3,13 +3,14 @@ import urllib
 import BeautifulSoup
 import urllib2
 import fnmatch
+import numpy as np
 
 mojave_multifreq_url = "http://www.cv.nrao.edu/2cmVLBA/data/multifreq/"
 # Path to u-frequency file: dir/source/epoch/fname
 mojave_u_url = "http://www.cv.nrao.edu/2cmVLBA/data/"
 mojave_l_url = "http://www.cv.nrao.edu/MOJAVELBAND"
 
-download_dir = '/home/ilya/code/vlbi_errors/examples/'
+download_dir = '/home/ilya/code/vlbi_errors/examples/mojave'
 # x - 8.1, y - 8.4, j - 12.1, u - 15 GHz
 pixel_size_dict = {'x': None, 'y': None, 'j': None, 'u': None}
 # epoch format: YYYY-MM-DD
@@ -191,4 +192,38 @@ if __name__ == '__main__':
     # download_mojave_uv_fits(source, epochs=epochs, bands=bands,
     #                         download_dir=download_dir)
     sources = get_all_mojave_sources(use_db='multifreq')
-    print sources
+    source_epoch_dict = dict()
+    for source in sources:
+        print("Querying source {}".format(source))
+        epochs = get_epochs_for_source(source, use_db='multifreq')
+        source_epoch_dict.update({source: sorted(epochs)[-1]})
+    print source_epoch_dict
+
+    source_uv_dict = dict()
+    from uv_data import UVData
+    for source in sources:
+        download_mojave_uv_fits(source, epochs=[source_epoch_dict[source]],
+                                bands=['x'], download_dir=download_dir)
+        fname = mojave_uv_fits_fname(source, 'x', source_epoch_dict[source])
+        source_uv_dict.update({source:
+                                   UVData(os.path.join(download_dir, fname))})
+
+    source_dec_dict = dict()
+    for source in sources:
+        for sign in ('+', '-'):
+            if sign in source:
+                dec = source.split(sign)[1]
+                break
+        source_dec_dict.update({source: float(sign + dec)})
+    source_dec_list = sorted(source_dec_dict, key=lambda x: source_dec_dict[x])
+
+    grid_sources = list()
+    grid_dec = np.arange(-300, 1100, 200)
+    for dec in grid_dec:
+        print("Searching close to {} declination source".format(dec))
+        dec_diffs = abs(np.array(source_dec_dict.values()) - dec)
+        indx = np.where(dec_diffs == min(dec_diffs))[0]
+        print("Index: {}".format(indx))
+        min_dec = source_dec_dict.values()[indx]
+        grid_sources.append([source for source, dec in source_dec_dict.items()
+                             if dec == min_dec][0])

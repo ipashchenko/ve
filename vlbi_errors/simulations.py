@@ -203,11 +203,11 @@ class ModelGenerator(object):
             raise Exception('Need to update both PPOL & PANG simultaneously!')
 
         stokes_models = self.stokes_models.copy()
-        # if 'I' in self.stokes:
-        #     i_image = self._move_i_to_freq(self.stokes_models['I'], freq)
-        #     stokes_models.update({'I': i_image})
-        # if 'FPOL' in self.stokes:
-        #     ppol_image = i_image * self.stokes_models['FPOL']
+        if 'I' in self.stokes:
+            i_image = self._move_i_to_freq(self.stokes_models['I'], freq)
+            stokes_models.update({'I': i_image})
+        if 'FPOL' in self.stokes:
+            ppol_image = i_image * self.stokes_models['FPOL']
         # Now convert Q&U or PPOL&PANG
         if 'Q' in self.stokes and 'U' in self.stokes:
             q_image, u_image = self._move_qu_to_freq(self.stokes_models['Q'],
@@ -591,21 +591,29 @@ if __name__ == '__main__':
     from mojave import get_epochs_for_source
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
     base_dir = '/home/ilya/code/vlbi_errors/examples/mojave'
-    sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
-               '1749+701', '0454+844']
+    # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
+    #            '1749+701', '0454+844']
     mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
                     'u': (512, 0.1)}
     mapsize_common = (512, 0.1)
-    source_epoch_dict = dict()
-    for source in sources:
-        epochs = get_epochs_for_source(source, use_db='multifreq')
-        print "Found epochs for source {}".format(source)
-        print epochs
-        source_epoch_dict.update({source: epochs[-1]})
-    for source in sources:
-        print "Simulating source {}".format(source)
-        simulate(source, source_epoch_dict[source], ['x', 'y', 'j', 'u'],
-                 n_sample=3, rotm_clim=[-200, 200],
-                 path_to_script=path_to_script, mapsize_dict=mapsize_dict,
-                 mapsize_common=mapsize_common, base_dir=base_dir,
-                 rotm_value_0=0.)
+    # source_epoch_dict = dict()
+    # for source in sources:
+    #     epochs = get_epochs_for_source(source, use_db='multifreq')
+    #     print "Found epochs for source {}".format(source)
+    #     print epochs
+    #     source_epoch_dict.update({source: epochs[-1]})
+    # for source in sources:
+    #     print "Simulating source {}".format(source)
+    #     simulate(source, source_epoch_dict[source], ['x', 'y', 'j', 'u'],
+    #              n_sample=3, rotm_clim=[-200, 200],
+    #              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
+    #              mapsize_common=mapsize_common, base_dir=base_dir,
+    #              rotm_value_0=0.)
+
+    source = '1055+018'
+    epoch = '2006_11_10'
+    simulate(source, epoch, ['x', 'y', 'j', 'u'],
+             n_sample=3, rotm_clim=[-200, 200],
+             path_to_script=path_to_script, mapsize_dict=mapsize_dict,
+             mapsize_common=mapsize_common, base_dir=base_dir,
+             rotm_value_0=0.)

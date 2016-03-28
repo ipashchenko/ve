@@ -206,8 +206,8 @@ class ModelGenerator(object):
         # if 'I' in self.stokes:
         #     i_image = self._move_i_to_freq(self.stokes_models['I'], freq)
         #     stokes_models.update({'I': i_image})
-        if 'FPOL' in self.stokes:
-            ppol_image = i_image * self.stokes_models['FPOL']
+        # if 'FPOL' in self.stokes:
+        #     ppol_image = i_image * self.stokes_models['FPOL']
         # Now convert Q&U or PPOL&PANG
         if 'Q' in self.stokes and 'U' in self.stokes:
             q_image, u_image = self._move_qu_to_freq(self.stokes_models['Q'],
@@ -352,39 +352,48 @@ class MFSimulation(object):
         return [uvdata.frequency for uvdata in self.observed_uv]
 
 
-if __name__ == '__main__':
-    # Use case
-    # Number of replications
-    n_sample = 3
-    # Number of PPOL image rms to use in constructing ROTM mask
-    n_rms = 5.
-    # Maximum flux in jet model image
-    max_jet_flux = 0.1
-    # Fraction of Q & U flux in model image
-    qu_fraction = 0.1
-    # Frequency [Hz] of model image
-    # FIXME: When ``model_freq`` is 1.5 * ... then results are shitty!
-    model_freq = 20. * 10 ** 9
-    # Range of ROTM values to show in resulting images
-    rotm_clim = [-50, 50]
-    # Value of model ROTM gradient [rad/m/m/pixel]. Pixel is that of high
-    # frequency data
-    rotm_grad_value = 5.
-    # Value of model ROTM at central along-jet slice
-    rotm_value_0 = 0.
+def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
+             qu_fraction=0.1, model_freq=20. * 10 ** 9, rotm_clim=None,
+             rotm_grad_value=40., rotm_value_0=200., path_to_script=None,
+             base_dir=None, mapsize_common=None, mapsize_dict=None,
+             rotm_slice=((240, 260), (270, 260))):
+    """
+    :param source:
+        Source name.
+    :param epoch:
+        Epoch.
+    :param bands:
+        Iterable of bands.
+    :param n_sample:
+        Number of replications to make.
+    :param n_rms:
+        Number of PPOL image rms to use in constructing ROTM mask
+    :param max_jet_flux:
+        Maximum flux in jet model image.
+    :param qu_fraction:
+        Fraction of Q & U flux in model image.
+    :param model_freq:
+        Frequency [Hz] of model image.
+    :param rotm_clim:
+        Range of ROTM values to show in resulting images.
+    :param rotm_grad_value:
+        Value of model ROTM gradient [rad/m/m/pixel]. Pixel is that of high
+        frequency data.
+    :param rotm_value_0:
+        Value of model ROTM at central along-jet slice.
+    :param path_to_script:
+    :param base_dir:
+    :param mapsize_common:
+    :param mapsize_dict:
+    :param rotm_slice:
 
-    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    :return:
+    """
+
     from mojave import (download_mojave_uv_fits, mojave_uv_fits_fname)
-    source = '1055+018'
-    base_dir = '/home/ilya/code/vlbi_errors/examples/mojave'
     data_dir = os.path.join(base_dir, source)
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
-    epoch = '2006_11_10'
-    bands = ['x', 'y', 'j', 'u']
-    mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
-                    'u': (512, 0.1)}
-    mapsize_common = (512, 0.1)
     stokes = ['I', 'Q', 'U']
     download_mojave_uv_fits(source, epochs=[epoch], bands=bands,
                             download_dir=data_dir)
@@ -406,7 +415,7 @@ if __name__ == '__main__':
                                                               bands[-1], 'I')
     cc_fits_fname_high = os.path.join(data_dir, cc_fits_fname_high)
     cc_fits_fname_low = "{}_{}_{}_{}_naitive_cc.fits".format(source, epoch,
-                                                             bands[0], 'I')
+                                                             bands[-2], 'I')
     cc_fits_fname_low = os.path.join(data_dir, cc_fits_fname_low)
 
     # Get common beam from lowest frequency
@@ -528,7 +537,8 @@ if __name__ == '__main__':
     ax.errorbar(np.arange(240, 270, 1),
                 rotm_image_sym.slice((240, 260), (270, 260)),
                 s_rotm_image_sym.slice((240, 260), (270, 260)), fmt='.k')
-    ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
+    ax.plot(np.arange(240, 270, 1),
+            rotm_grad_value * (np.arange(240, 270, 1) - 256.) + rotm_value_0)
     fig.savefig(os.path.join(data_dir, 'rotm_slice.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
@@ -563,7 +573,8 @@ if __name__ == '__main__':
     # Plot spread of sample values
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
-    ax.plot(np.arange(240, 270, 1), 5. * (np.arange(240, 270, 1) - 256.))
+    ax.plot(np.arange(240, 270, 1),
+            rotm_grad_value * (np.arange(240, 270, 1) - 256.) + rotm_value_0)
     for i in range(n_sample):
         print "plotting {}th slice of {}".format(i + 1, n_sample)
         jitter = np.random.normal(0, 0.03)
@@ -573,3 +584,28 @@ if __name__ == '__main__':
     fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
+
+
+if __name__ == '__main__':
+
+    from mojave import get_epochs_for_source
+    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    base_dir = '/home/ilya/code/vlbi_errors/examples/mojave'
+    sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
+               '1749+701', '0454+844']
+    mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
+                    'u': (512, 0.1)}
+    mapsize_common = (512, 0.1)
+    source_epoch_dict = dict()
+    for source in sources:
+        epochs = get_epochs_for_source(source, use_db='multifreq')
+        print "Found epochs for source {}".format(source)
+        print epochs
+        source_epoch_dict.update({source: epochs[-1]})
+    for source in sources:
+        print "Simulating source {}".format(source)
+        simulate(source, source_epoch_dict[source], ['x', 'y', 'j', 'u'],
+                 n_sample=3, rotm_clim=[-200, 200],
+                 path_to_script=path_to_script, mapsize_dict=mapsize_dict,
+                 mapsize_common=mapsize_common, base_dir=base_dir,
+                 rotm_value_0=0.)

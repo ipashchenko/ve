@@ -1,3 +1,4 @@
+import os
 import math
 import numpy as np
 import astropy.io.fits as pf
@@ -23,7 +24,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          rel_levels=None, min_abs_level=None, min_rel_level=None, k=2., vinc=2.,
          show_beam=False, beam_corner='ll', beam=None, contours_mask=None,
          colors_mask=None, vectors_mask=None, plot_title=None, color_clim=None,
-         outfile=None, outdir=None, ext='png', close=False, slice_points=None):
+         outfile=None, outdir=None, ext='png', close=False, slice_points=None,
+         beam_place='ll'):
     """
     Plot image(s).
 
@@ -84,7 +86,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         (default: ``ll'')
     :param beam: (optional)
         If ``show_beam`` is True then ``beam`` should be iterable of major axis,
-        minor axis [pix] and beam positional angle [deg]. If no coordinats are
+        minor axis [mas] and beam positional angle [deg]. If no coordinates are
         supplied then beam parameters must be in pixels.
 
     :note:
@@ -156,6 +158,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     # Actually plotting
     fig = plt.figure()
     ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
+    ax.set_xlabel('RA, [mas]')
+    ax.set_ylabel('DEC, [mas]')
 
     # Plot contours
     if contours is not None:
@@ -217,39 +221,45 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     if colors is not None:
         # colorbar_ax = fig.add_axes([0.85, 0.11, 0.05, 0.78])
         # colorbar_ax = fig.add_axes([0.66, 0.10, 0.05, 0.80])
-        colorbar_ax = fig.add_axes([0.70, 0.10, 0.05, 0.80])
+        colorbar_ax = fig.add_axes([0.80, 0.10, 0.05, 0.80])
         fig.colorbar(im, cax=colorbar_ax)
-    fig.show()
+    # fig.show()
 
+    from matplotlib.patches import Ellipse
+    e_height = beam[0]
+    e_width = beam[1]
+    r_min = e_height / 2
+    if beam_place == 'lr':
+        y_c = y[0] + r_min
+        x_c = x[-1] - r_min
+    elif beam_place == 'll':
+        if y[0] > 0:
+            y_c = y[0] - r_min
+        else:
+            y_c = y[0] + r_min
+        if x[0] > 0:
+            x_c = x[0] - r_min
+        else:
+            x_c = x[0] + r_min
+    elif beam_place == 'ul':
+        y_c = y[-1] - r_min
+        x_c = x[0] + r_min
+    elif beam_place == 'ur':
+        y_c = y[-1] - r_min
+        x_c = x[-1] - r_min
+    else:
+        raise Exception
 
+    print "y, x :", y, x
+    print "Beam, xc, yc :", x_c, y_c
 
-
-    # from matplotlib.patches import Ellipse
-    # e_height = 10 * pixsize * factor
-    # e_width = 5 * pixsize * factor
-    # r_min = e_height / 2
-    # if beam_place == 'lr':
-    #     y_c = y[0] + r_min
-    #     x_c = x[-1] - r_min
-    # elif beam_place == 'll':
-    #     y_c = y[0] + r_min
-    #     x_c = x[0] + r_min
-    # elif beam_place == 'ul':
-    #     y_c = y[-1] - r_min
-    #     x_c = x[0] + r_min
-    # elif beam_place == 'ur':
-    #     y_c = y[-1] - r_min
-    #     x_c = x[-1] - r_min
-    # else:
-    #     raise Exception
-
-    # e = Ellipse((y_c, x_c), e_height, e_width, angle=-30, edgecolor='black',
-    #             facecolor='none', alpha=1)
-    # ax.add_patch(e)
+    e = Ellipse((y_c, x_c), e_width, e_height, angle=beam[2], edgecolor='black',
+                facecolor='green', alpha=0.3)
+    ax.add_patch(e)
     # title = ax.set_title("My plot", fontsize='large')
     # colorbar_ax = fig.add_axes([0.7, 0.1, 0.05, 0.8])
     # fig.colorbar(i, cax=colorbar_ax)
-    # fig.show()
+    fig.show()
 
     # Saving output
     if outfile:

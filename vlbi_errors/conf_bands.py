@@ -45,7 +45,7 @@ def count_contained(curves, means, widths):
 
 def create_sim_conf_band(curves, means, widths, alpha=0.95, delta=0.01):
     """
-    Function that builds simultanious confidence band.
+    Function that builds simultaneous confidence band.
 
     :param curves:
         Iterable of numpy 1D arrays with curves to count.

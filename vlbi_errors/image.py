@@ -25,7 +25,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          show_beam=False, beam_corner='ll', beam=None, contours_mask=None,
          colors_mask=None, vectors_mask=None, plot_title=None, color_clim=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
-         beam_place='ll'):
+         beam_place='ll', colorbar_label=None):
     """
     Plot image(s).
 
@@ -222,7 +222,9 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         # colorbar_ax = fig.add_axes([0.85, 0.11, 0.05, 0.78])
         # colorbar_ax = fig.add_axes([0.66, 0.10, 0.05, 0.80])
         colorbar_ax = fig.add_axes([0.80, 0.10, 0.05, 0.80])
-        fig.colorbar(im, cax=colorbar_ax)
+        cb = fig.colorbar(im, cax=colorbar_ax)
+        if colorbar_label is not None:
+            cb.set_label(colorbar_label)
     # fig.show()
 
     from matplotlib.patches import Ellipse

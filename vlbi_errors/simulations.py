@@ -3,7 +3,7 @@ import copy
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import get_fits_image_info, degree_to_rad
+from utils import get_fits_image_info, degree_to_rad, hdi_of_arrays
 from image import BasicImage, Image
 from images import Images
 from utils import mask_region, mas_to_rad, find_card_from_header, create_grid
@@ -14,6 +14,7 @@ from components import DeltaComponent, ImageComponent
 from image_ops import pang_map, pol_map
 from spydiff import clean_difmap
 from image import plot as iplot
+from conf_bands import create_sim_conf_band
 
 
 def alpha(imsize, center, y0, k=0.5, const=-0.5):
@@ -352,11 +353,12 @@ class MFSimulation(object):
         return [uvdata.frequency for uvdata in self.observed_uv]
 
 
+# FIXME: ``MFSimulation`` & ``Images`` instances use different frequencies.
 def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
              qu_fraction=0.1, model_freq=20. * 10 ** 9, rotm_clim=None,
              rotm_grad_value=40., rotm_value_0=200., path_to_script=None,
              base_dir=None, mapsize_common=None, mapsize_dict=None,
-             rotm_slice=((240, 260), (270, 260))):
+             rotm_slice=((240, 260), (270, 260)), n_beam=0):
     """
     :param source:
         Source name.
@@ -386,6 +388,9 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     :param mapsize_common:
     :param mapsize_dict:
     :param rotm_slice:
+    :param n_beam: (optional)
+        Number of band to use for common beamsize. E.g. ``n_beam = 0`` and
+        ``bands = ['x', 'y', 'j', 'u']`` then beam of ``x`` beand will be used.
 
     :return:
     """
@@ -399,27 +404,31 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
                             download_dir=data_dir)
 
     # Clean in original resolution (image size, beam)
-    for band in bands:
+    for band in (bands[0], bands[-1]):
         uv_fits_fname = mojave_uv_fits_fname(source, band, epoch)
         print "Cleaning {} with native resolution".format(uv_fits_fname)
         for stoke in stokes:
-            print "stokes {}".format(stoke)
-            cc_fits_fname = "{}_{}_{}_{}_naitive_cc.fits".format(source, epoch,
-                                                                 band, stoke)
-            clean_difmap(uv_fits_fname, cc_fits_fname, stoke,
-                         mapsize_dict[band], path=data_dir,
-                         path_to_script=path_to_script, outpath=data_dir)
+            if stoke == 'I':
+                print "stokes {}".format(stoke)
+                cc_fits_fname = "{}_{}_{}_{}_naitive_cc.fits".format(source,
+                                                                     epoch,
+                                                                     band,
+                                                                     stoke)
+                clean_difmap(uv_fits_fname, cc_fits_fname, stoke,
+                             mapsize_dict[band], path=data_dir,
+                             path_to_script=path_to_script, outpath=data_dir)
 
     # Choose common image parameters for ROTM calculations
     cc_fits_fname_high = "{}_{}_{}_{}_naitive_cc.fits".format(source, epoch,
                                                               bands[-1], 'I')
     cc_fits_fname_high = os.path.join(data_dir, cc_fits_fname_high)
-    cc_fits_fname_low = "{}_{}_{}_{}_naitive_cc.fits".format(source, epoch,
-                                                             bands[-2], 'I')
-    cc_fits_fname_low = os.path.join(data_dir, cc_fits_fname_low)
+    cc_fits_fname_beam = "{}_{}_{}_{}_naitive_cc.fits".format(source, epoch,
+                                                              bands[n_beam],
+                                                              'I')
+    cc_fits_fname_beam = os.path.join(data_dir, cc_fits_fname_beam)
 
     # Get common beam from lowest frequency
-    map_info = get_fits_image_info(cc_fits_fname_low)
+    map_info = get_fits_image_info(cc_fits_fname_beam)
     beam_common = (map_info['bmaj'] / mas_to_rad, map_info['bmin'] / mas_to_rad,
                    map_info['bpa'] / degree_to_rad)
     print "Common beam: ", beam_common
@@ -432,7 +441,14 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     x = image_high.x
     y = image_high.y
 
-    observed_uv_fits = glob.glob(os.path.join(data_dir, '*.uvf'))
+    observed_uv_fits = glob.glob(os.path.join(data_dir,
+                                              '{}*.uvf'.format(source)))
+
+    # Don't count symulated data as observed i any
+    for path in observed_uv_fits:
+        if 'sym' in os.path.split(path)[-1]:
+            observed_uv_fits.remove(path)
+
     observed_uv = [UVData(fits_file) for fits_file in observed_uv_fits]
     # Create jet model, ROTM & alpha images
     jet_image = create_jet_model_image(30, 60, 10, max_jet_flux,
@@ -471,11 +487,15 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
         uv_fits_fname = fnames_dict[freq]
         print "Cleaning {}".format(uv_fits_fname)
         for stokes in rm_simulation.stokes:
+            # Clean stokes I only for highest frequency. Use it for rms calc.
+            if stokes == 'I' and freq != rm_simulation.freqs[-1]:
+                continue
             print "Stokes {}".format(stokes)
             cc_fits_fname = str(freq) + '_' + stokes + '.fits'
-            clean_difmap(uv_fits_fname, cc_fits_fname, stokes, mapsize_common,
-                         path=data_dir, path_to_script=path_to_script,
-                         outpath=data_dir, beam_restore=beam_common)
+            clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
+                         mapsize_common, path=data_dir,
+                         path_to_script=path_to_script, outpath=data_dir,
+                         beam_restore=beam_common)
 
     # Create ROTM image
     from images import Images
@@ -484,12 +504,13 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     sym_images.add_from_fits(fnames=fnames)
     from from_fits import create_image_from_fits_file
     # i_fname = os.path.join(data_dir, '1354458750.0_I.fits')
-    freq_highest = sorted(sym_images.freqs, reverse=True)[0]
+    # Use highest frequency
     i_fname = sorted(glob.glob(os.path.join(data_dir, '*_I.fits')))[0]
     i_image = create_image_from_fits_file(i_fname)
     r_rms = mapsize_common[0] / 10
     rms = i_image.rms(region=(r_rms, r_rms, r_rms, None))
     print "RMS : ", rms
+    freq_highest = sorted(sym_images.freqs, reverse=True)[0]
     ppol_image = sym_images.create_pol_images(freq=freq_highest)[0]
     rotm_mask = ppol_image.image < n_rms * rms
 
@@ -506,8 +527,12 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
         sym_images.create_rotm_image(mask=rotm_mask)
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
-    ri = ax.matshow(rotm_image_sym.image, clim=rotm_clim)
-    fig.colorbar(ri)
+    ri = ax.matshow(rotm_image_sym.image[200:325, 200:350], clim=rotm_clim)
+    slice_points = ((240-200, 325-260), (270-200, 350-260))
+    ax.plot([slice_points[0][0], slice_points[1][0]],
+            [slice_points[0][1], slice_points[1][1]])
+    cb = fig.colorbar(ri)
+    cb.set_label("RM, rad/m/m")
     fig.savefig(os.path.join(data_dir, 'rotm_image_sim.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
@@ -558,45 +583,92 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
             uv_fits_fname = fnames_dict[freq] + '_' + str(i + 1).zfill(3)
             print "Cleaning {}".format(uv_fits_fname)
             for stokes in rm_simulation.stokes:
-                print "Stokes {}".format(stokes)
-                cc_fits_fname = str(freq) + '_' + stokes + '_{}.fits'.format(str(i + 1).zfill(3))
-                clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
-                             mapsize_common, path=data_dir,
-                             path_to_script=path_to_script, outpath=data_dir,
-                             beam_restore=beam_common)
+                if stokes != 'I':
+                    print "Stokes {}".format(stokes)
+                    cc_fits_fname = str(freq) + '_' + stokes + '_{}.fits'.format(str(i + 1).zfill(3))
+                    clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
+                                 mapsize_common, path=data_dir,
+                                 path_to_script=path_to_script, outpath=data_dir,
+                                 beam_restore=beam_common)
 
     # Create ROTM images of simulated sample
     sym_images = Images()
     fnames = sorted(glob.glob(os.path.join(data_dir, "*.0_*_*.fits")))
     sym_images.add_from_fits(fnames)
     rotm_images_sym = sym_images.create_rotm_images(mask=rotm_mask)
-    # Plot spread of sample values
+
+    # Calculate simulataneous confidence bands
+    # Bootstrap slices
+    slices = list()
+    for image in rotm_images_sym.images:
+        slice_ = image.slice((240, 260), (270, 260))
+        slices.append(slice_[~np.isnan(slice_)])
+
+    # Find means
+    obs_slice = rotm_image_sym.slice((240, 260), (270, 260))
+    x = np.arange(240, 270, 1)
+    x = x[~np.isnan(obs_slice)]
+    obs_slice = obs_slice[~np.isnan(obs_slice)]
+    # Find sigmas
+    slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices]
+    sigmas = hdi_of_arrays(slices_).squeeze()
+    means = np.mean(np.vstack(slices), axis=0)
+    diff = obs_slice - means
+    # Move bootstrap curves to original simulated centers
+    slices_ = [slice_ + diff for slice_ in slices]
+    # Find low and upper confidence band
+    low, up = create_sim_conf_band(slices_, obs_slice, sigmas, alpha=0.99)
+
+    # Plot confidence bands and model values
+    sl_len = len(obs_slice)
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
+    ax.plot(x, low[::-1], 'g')
+    ax.plot(x, up[::-1], 'g')
+    [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
+    ax.plot(x, obs_slice[::-1], '.k')
+    # Plot ROTM model
     ax.plot(np.arange(240, 270, 1),
-            rotm_grad_value * (np.arange(240, 270, 1) - 256.) + rotm_value_0)
-    for i in range(n_sample):
-        print "plotting {}th slice of {}".format(i + 1, n_sample)
-        jitter = np.random.normal(0, 0.03)
-        ax.plot(np.arange(240, 270, 1) + jitter,
-                rotm_images_sym.images[i].slice((240, 260), (270, 260)),
-                '.k')
+            rotm_grad_value * (np.arange(240, 270, 1) - 256.)[::-1] +
+            rotm_value_0)
+    # for i in range(n_sample):
+    #     print "plotting {}th slice of {}".format(i + 1, n_sample)
+    #     jitter = np.random.normal(0, 0.03)
+    #     ax.plot(np.arange(240, 270, 1) + jitter,
+    #             rotm_images_sym.images[i].slice((240, 260), (270, 260)),
+    #             '.k')
     fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
+
+
+    # # Plot spread of sample values
+    # fig = plt.figure()
+    # ax = fig.add_subplot(1, 1, 1)
+    # ax.plot(np.arange(240, 270, 1),
+    #         rotm_grad_value * (np.arange(240, 270, 1) - 256.) + rotm_value_0)
+    # for i in range(n_sample):
+    #     print "plotting {}th slice of {}".format(i + 1, n_sample)
+    #     jitter = np.random.normal(0, 0.03)
+    #     ax.plot(np.arange(240, 270, 1) + jitter,
+    #             rotm_images_sym.images[i].slice((240, 260), (270, 260)),
+    #             '.k')
+    # fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
+    #             bbox_inches='tight', dpi=200)
+    # plt.close()
 
 
 if __name__ == '__main__':
 
     from mojave import get_epochs_for_source
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
-    base_dir = '/home/ilya/code/vlbi_errors/examples/mojave'
+    base_dir = '/home/ilya/code/vlbi_errors/examples/mojave/0d005'
     # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
     #            '1749+701', '0454+844']
     mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
                     'u': (512, 0.1)}
     mapsize_common = (512, 0.1)
-    # source_epoch_dict = dict()
+    source_epoch_dict = dict()
     # for source in sources:
     #     epochs = get_epochs_for_source(source, use_db='multifreq')
     #     print "Found epochs for source {}".format(source)
@@ -608,12 +680,12 @@ if __name__ == '__main__':
     #              n_sample=3, rotm_clim=[-200, 200],
     #              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
     #              mapsize_common=mapsize_common, base_dir=base_dir,
-    #              rotm_value_0=0.)
+    #              rotm_value_0=0., max_jet_flux=0.005)
 
     source = '1055+018'
     epoch = '2006_11_10'
     simulate(source, epoch, ['x', 'y', 'j', 'u'],
-             n_sample=3, rotm_clim=[-200, 200],
+             n_sample=1, rotm_clim=[-200, 200],
              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
              mapsize_common=mapsize_common, base_dir=base_dir,
              rotm_value_0=0.)

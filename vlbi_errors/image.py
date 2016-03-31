@@ -19,6 +19,7 @@ except ImportError:
 
 # TODO: Implement plotting w/o coordinates - in pixels. Use pixel numbers as
 # coordinates.
+# TODO: Make possible use ``blc`` & ``trc`` in mas.
 def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          y=None, blc=None, trc=None, cmap='hsv', abs_levels=None,
          rel_levels=None, min_abs_level=None, min_rel_level=None, k=2., vinc=2.,
@@ -101,7 +102,6 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         default values. All images plotted must have the same shape.
     """
 
-
     image = None
     if contours is not None:
         image = contours
@@ -141,17 +141,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     # x_ *= -1.
     # y_ *= -1.
     # Coordinates for plotting
-    # x = np.linspace(x_[0, 0], x_[0, -1], imsize_x)
-    # y = np.linspace(y_[0, 0], y_[-1, 0], imsize_y)
     x = np.linspace(x_[0], x_[-1], imsize_x)
     y = np.linspace(y_[0], y_[-1], imsize_y)
-    # This results in
-    # plot(contours=image.image, colors=rotm_image.image, min_rel_level=0.5,
-    # x=image.x[0], y=image.y[:, 0])
-    # - it comes with right coordinates (zero at center)
-    # or
-    # plot(contours=image.image, colors=rotm_image.image, min_rel_level=0.5)
-    # it comes with zero at corner
 
     # Optionally mask arrays
     if contours is not None and contours_mask is not None:
@@ -225,13 +216,10 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         title = ax.set_title(plot_title, fontsize='large')
     # Add colorbar if plotting colors
     if colors is not None:
-        # colorbar_ax = fig.add_axes([0.85, 0.11, 0.05, 0.78])
-        # colorbar_ax = fig.add_axes([0.66, 0.10, 0.05, 0.80])
         colorbar_ax = fig.add_axes([0.80, 0.10, 0.05, 0.80])
         cb = fig.colorbar(im, cax=colorbar_ax)
         if colorbar_label is not None:
             cb.set_label(colorbar_label)
-    # fig.show()
 
     from matplotlib.patches import Ellipse
     e_height = beam[0]
@@ -258,16 +246,10 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     else:
         raise Exception
 
-    print "y, x :", y, x
-    print "Beam, xc, yc :", x_c, y_c
-
     # FIXME: check how ``bpa`` should be plotted
     e = Ellipse((y_c, x_c), e_width, e_height, angle=beam[2], edgecolor='black',
                 facecolor='green', alpha=0.3)
     ax.add_patch(e)
-    # title = ax.set_title("My plot", fontsize='large')
-    # colorbar_ax = fig.add_axes([0.7, 0.1, 0.05, 0.8])
-    # fig.colorbar(i, cax=colorbar_ax)
     fig.show()
 
     # Saving output

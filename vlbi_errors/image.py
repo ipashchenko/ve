@@ -88,6 +88,12 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         If ``show_beam`` is True then ``beam`` should be iterable of major axis,
         minor axis [mas] and beam positional angle [deg]. If no coordinates are
         supplied then beam parameters must be in pixels.
+    :param colorbar_label: (optional)
+        String to label colorbar. If ``None`` then don't label. (default:
+        ``None``)
+    :param slice_points: (optional)
+        Iterable of 2 coordinates (``y``, ``x``) [mas] to plot slice. If
+        ``None`` then don't plot slice. (default: ``None``)
 
     :note:
         ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
@@ -255,6 +261,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     print "y, x :", y, x
     print "Beam, xc, yc :", x_c, y_c
 
+    # FIXME: check how ``bpa`` should be plotted
     e = Ellipse((y_c, x_c), e_width, e_height, angle=beam[2], edgecolor='black',
                 facecolor='green', alpha=0.3)
     ax.add_patch(e)

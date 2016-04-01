@@ -402,11 +402,12 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     if download_mojave:
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
-        from mojave import (download_mojave_uv_fits, mojave_uv_fits_fname)
+        from mojave import download_mojave_uv_fits
         download_mojave_uv_fits(source, epochs=[epoch], bands=bands,
                                 download_dir=data_dir)
 
     # Clean in original resolution (image size, beam)
+    from mojave import mojave_uv_fits_fname
     for band in (bands[0], bands[-1]):
         uv_fits_fname = mojave_uv_fits_fname(source, band, epoch)
         print "Cleaning {} with native resolution".format(uv_fits_fname)
@@ -535,7 +536,8 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
           outfile='rotm_image_sym', outdir=data_dir, color_clim=[-200, 200],
           blc=(210, 200), trc=(350, 320), beam=(beam_common[0], beam_common[1],
                                                 beam_common[2]),
-          colorbar_label='RM, [rad/m/m]', slice_points=((-1, -4), (-1, 4)))
+          colorbar_label='RM, [rad/m/m]', slice_points=((-1, -4), (-1, 4)),
+          show=False)
 
     # Plotting model of ROTM
     fig = plt.figure()
@@ -688,4 +690,4 @@ if __name__ == '__main__':
              n_sample=1, rotm_clim=[-200, 200],
              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
              mapsize_common=mapsize_common, base_dir=base_dir,
-             rotm_value_0=0.)
+             rotm_value_0=0., rotm_grad_value=0.)

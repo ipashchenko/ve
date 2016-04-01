@@ -358,7 +358,8 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
              qu_fraction=0.1, model_freq=20. * 10 ** 9, rotm_clim=None,
              rotm_grad_value=40., rotm_value_0=200., path_to_script=None,
              base_dir=None, mapsize_common=None, mapsize_dict=None,
-             rotm_slice=((240, 260), (270, 260)), n_beam=0):
+             rotm_slice=((240, 260), (270, 260)), n_beam=0,
+             download_mojave=False):
     """
     :param source:
         Source name.
@@ -395,13 +396,15 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     :return:
     """
 
-    from mojave import (download_mojave_uv_fits, mojave_uv_fits_fname)
     data_dir = os.path.join(base_dir, source)
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
     stokes = ['I', 'Q', 'U']
-    download_mojave_uv_fits(source, epochs=[epoch], bands=bands,
-                            download_dir=data_dir)
+    # Download uv-data from MOJAVE web DB optionally
+    if download_mojave:
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+        from mojave import (download_mojave_uv_fits, mojave_uv_fits_fname)
+        download_mojave_uv_fits(source, epochs=[epoch], bands=bands,
+                                download_dir=data_dir)
 
     # Clean in original resolution (image size, beam)
     for band in (bands[0], bands[-1]):
@@ -525,17 +528,14 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     print "Calculating ROTM image"
     rotm_image_sym, s_rotm_image_sym = \
         sym_images.create_rotm_image(mask=rotm_mask)
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    ri = ax.matshow(rotm_image_sym.image[200:325, 200:350], clim=rotm_clim)
-    slice_points = ((240-200, 325-260), (270-200, 350-260))
-    ax.plot([slice_points[0][0], slice_points[1][0]],
-            [slice_points[0][1], slice_points[1][1]])
-    cb = fig.colorbar(ri)
-    cb.set_label("RM, rad/m/m")
-    fig.savefig(os.path.join(data_dir, 'rotm_image_sim.png'),
-                bbox_inches='tight', dpi=200)
-    plt.close()
+
+    # Plotting simulated high-freq stokes I contours with RM values.
+    iplot(i_image.image, rotm_image_sym.image, x=i_image.x, y=i_image.y,
+          min_abs_level=3. * rms, colors_mask=rotm_mask,
+          outfile='rotm_image_sym', outdir=data_dir, color_clim=[-200, 200],
+          blc=(210, 200), trc=(350, 320), beam=(beam_common[0], beam_common[1],
+                                                beam_common[2]),
+          colorbar_label='RM, [rad/m/m]', slice_points=((-1, -4), (-1, 4)))
 
     # Plotting model of ROTM
     fig = plt.figure()
@@ -559,11 +559,11 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
 
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
-    ax.errorbar(np.arange(240, 270, 1),
-                rotm_image_sym.slice((240, 260), (270, 260)),
-                s_rotm_image_sym.slice((240, 260), (270, 260)), fmt='.k')
-    ax.plot(np.arange(240, 270, 1),
-            rotm_grad_value * (np.arange(240, 270, 1) - 256.) + rotm_value_0)
+    ax.errorbar(np.arange(216, 296, 1),
+                rotm_image_sym.slice((216, 276), (296, 276)),
+                s_rotm_image_sym.slice((216, 276), (296, 276)), fmt='.k')
+    ax.plot(np.arange(216, 296, 1),
+            rotm_grad_value * (np.arange(216, 296, 1) - 256.) + rotm_value_0)
     fig.savefig(os.path.join(data_dir, 'rotm_slice.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
@@ -601,12 +601,12 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     # Bootstrap slices
     slices = list()
     for image in rotm_images_sym.images:
-        slice_ = image.slice((240, 260), (270, 260))
+        slice_ = image.slice((216, 276), (296, 276))
         slices.append(slice_[~np.isnan(slice_)])
 
     # Find means
-    obs_slice = rotm_image_sym.slice((240, 260), (270, 260))
-    x = np.arange(240, 270, 1)
+    obs_slice = rotm_image_sym.slice((216, 276), (296, 276))
+    x = np.arange(216, 296, 1)
     x = x[~np.isnan(obs_slice)]
     obs_slice = obs_slice[~np.isnan(obs_slice)]
     # Find sigmas
@@ -628,8 +628,8 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
     ax.plot(x, obs_slice[::-1], '.k')
     # Plot ROTM model
-    ax.plot(np.arange(240, 270, 1),
-            rotm_grad_value * (np.arange(240, 270, 1) - 256.)[::-1] +
+    ax.plot(np.arange(216, 296, 1),
+            rotm_grad_value * (np.arange(216, 296, 1) - 256.)[::-1] +
             rotm_value_0)
     # for i in range(n_sample):
     #     print "plotting {}th slice of {}".format(i + 1, n_sample)

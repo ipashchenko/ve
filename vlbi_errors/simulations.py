@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 from utils import get_fits_image_info, degree_to_rad, hdi_of_arrays
 from image import BasicImage, Image
 from images import Images
-from utils import mask_region, mas_to_rad, find_card_from_header, create_grid
+from utils import (mask_region, mas_to_rad, find_card_from_header, create_grid,
+                   gaussian)
 from from_fits import create_clean_image_from_fits_file
 from model import Model
 from uv_data import UVData
@@ -67,7 +68,8 @@ def rotm(imsize, center, grad_value=5., rm_value_0=0.0):
 
 
 def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
-                           center):
+                           center, gauss_peak=0.001, dist_from_core=24,
+                           gauss_bmaj=10, gauss_e=1., gauss_bpa=0., cut=0.0001):
     """
     Function that returns image of jet.
 
@@ -95,11 +97,17 @@ def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
     perp = -(max_flux / (width / 2) ** 2.) * y ** 2.
     image = max_flux + along + perp
     image[image < 0] = 0
+
+    # Jet feature
+    if gauss_peak:
+        gaussian_ = gaussian(gauss_peak, dist_from_core, 0, gauss_bmaj, gauss_e,
+                             gauss_bpa)
+        image += gaussian_(x, y)
+        image[image < cut] = 0.
+
     return image
 
 
-# TODO: First must be fractional polarization and PANG. From fractional
-# polarization and stokes I at given frequency one can calculate PPOL.
 class ModelGenerator(object):
     """
     # TODO: Rename to ``stokes_model_images``

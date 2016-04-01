@@ -362,48 +362,73 @@ class MFSimulation(object):
 
 
 # FIXME: ``MFSimulation`` & ``Images`` instances use different frequencies.
+# TODO: Add function to create realistic FPOL & Q/U distribution
+# TODO: Make ``mapsize_dict`` the required argument
+# TODO: Implement possibility of using several slice to analyze ROTM gradients
 def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
-             qu_fraction=0.1, model_freq=20. * 10 ** 9, rotm_clim=None,
+             qu_fraction=0.1, model_freq=20. * 10 ** 9, rotm_clim_sym=None,
              rotm_grad_value=40., rotm_value_0=200., path_to_script=None,
              base_dir=None, mapsize_common=None, mapsize_dict=None,
-             rotm_slice=((240, 260), (270, 260)), n_beam=0,
-             download_mojave=False):
+             rotm_slice=((216, 276), (296, 276)), n_beam=0,
+             download_mojave=False, conf_band_alpha=0.95, rotm_clim_model=None):
     """
     :param source:
-        Source name.
+        Source name [B1950].
     :param epoch:
-        Epoch.
+        Epoch [YYYY_MM_DD].
     :param bands:
-        Iterable of bands.
+        Iterable of bands letters sorted in increasing in frequency.
     :param n_sample:
-        Number of replications to make.
+        Number of bootstrap replications to create.
     :param n_rms:
-        Number of PPOL image rms to use in constructing ROTM mask
+        Number of PPOL image rms to use in constructing ROTM mask.
     :param max_jet_flux:
         Maximum flux in jet model image.
     :param qu_fraction:
         Fraction of Q & U flux in model image.
     :param model_freq:
         Frequency [Hz] of model image.
-    :param rotm_clim:
-        Range of ROTM values to show in resulting images.
-    :param rotm_grad_value:
-        Value of model ROTM gradient [rad/m/m/pixel]. Pixel is that of high
-        frequency data.
-    :param rotm_value_0:
-        Value of model ROTM at central along-jet slice.
-    :param path_to_script:
-    :param base_dir:
-    :param mapsize_common:
+    :param rotm_clim_sym: (optional)
+        Range of ROTM values to show in simulated image. If ``None`` then show
+        all range. (default: ``None``)
+    :param rotm_clim_model: (optional)
+        Range of ROTM values to show in model image. If ``None`` then show
+        all range. (default: ``None``)
+    :param rotm_grad_value: (optional)
+        Value of model ROTM gradient [rad/m/m/pixel]. Pixel is that of model
+        image. (default: ``40.0``)
+    :param rotm_value_0: (optional)
+        Value of model ROTM at central along-jet slice. (default: ``None``)
+    :param path_to_script: (optional)
+        Path to ``clean`` difmap script. If ``None`` then use current directory.
+        (default: ``None``)
+    :param base_dir: (optional)
+        Directory that will contain ``source`` catalog with visibility &
+        simulations data. If ``None`` then use CWD. (default: ``None``)
+    :param mapsize_common: (optional)
+        Common map parameters (map size [] & pixel size [mas]) that will be used
+        for creating maps of ROTM. If ``None`` the use some unimplemented logic
+        to choose. (default: ``None``)
     :param mapsize_dict:
+        Dictionary of `band: map parameters` values that will be used for
+        cleaning with native resolution.
     :param rotm_slice:
+        Iterable of coordinates for slice that will be analyzed for presense of
+        ROTM gradients.
     :param n_beam: (optional)
-        Number of band to use for common beamsize. E.g. ``n_beam = 0`` and
-        ``bands = ['x', 'y', 'j', 'u']`` then beam of ``x`` beand will be used.
+        Number of band to use for common beam size. E.g. ``n_beam = 0`` and
+        ``bands = ['x', 'y', 'j', 'u']`` then beam of ``x`` band will be used.
+    :param download_mojave: (optional)
+        Download original self-calibrated uv-data from MOJAVE web DB? (default:
+        ``False``)
+    :param conf_band_alpha: (optional)
+        Significance of the simultaneous confidence bands constructed for ROTM
+        slices. (default: ``0.95``)
 
-    :return:
     """
 
+    if base_dir is None:
+        base_dir = os.getcwd()
     data_dir = os.path.join(base_dir, source)
     stokes = ['I', 'Q', 'U']
     # Download uv-data from MOJAVE web DB optionally
@@ -456,7 +481,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     observed_uv_fits = glob.glob(os.path.join(data_dir,
                                               '{}*.uvf'.format(source)))
 
-    # Don't count symulated data as observed i any
+    # Don't count simulated data as observed i any
     for path in observed_uv_fits:
         if 'sym' in os.path.split(path)[-1]:
             observed_uv_fits.remove(path)
@@ -465,7 +490,9 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     # Create jet model, ROTM & alpha images
     jet_image = create_jet_model_image(30, 60, 10, max_jet_flux,
                                        (imsize_high[0], imsize_high[0]),
-                                       (imsize_high[0] / 2, imsize_high[0] / 2))
+                                       (imsize_high[0] / 2, imsize_high[0] / 2),
+                                       gauss_peak=0.001, dist_from_core=20,
+                                       cut=0.0002)
     rotm_image = rotm((imsize_high[0], imsize_high[0]),
                       (imsize_high[0] / 2, imsize_high[0] / 2),
                       grad_value=rotm_grad_value, rm_value_0=rotm_value_0)
@@ -515,7 +542,6 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     fnames = glob.glob(os.path.join(data_dir, "*.0_*.fits"))
     sym_images.add_from_fits(fnames=fnames)
     from from_fits import create_image_from_fits_file
-    # i_fname = os.path.join(data_dir, '1354458750.0_I.fits')
     # Use highest frequency
     i_fname = sorted(glob.glob(os.path.join(data_dir, '*_I.fits')))[0]
     i_image = create_image_from_fits_file(i_fname)
@@ -541,17 +567,17 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     # Plotting simulated high-freq stokes I contours with RM values.
     iplot(i_image.image, rotm_image_sym.image, x=i_image.x, y=i_image.y,
           min_abs_level=3. * rms, colors_mask=rotm_mask,
-          outfile='rotm_image_sym', outdir=data_dir, color_clim=[-200, 200],
+          outfile='rotm_image_sym', outdir=data_dir, color_clim=rotm_clim_sym,
           blc=(210, 200), trc=(350, 320), beam=(beam_common[0], beam_common[1],
                                                 beam_common[2]),
-          colorbar_label='RM, [rad/m/m]', slice_points=((-1, -4), (-1, 4)),
+          colorbar_label='RM, [rad/m/m]', slice_points=((-2, -4), (-2, 4)),
           show=False)
 
     # Plotting model of ROTM
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
     mrotm_image = np.ma.array(rotm_image, mask=rotm_mask)
-    ri = ax.matshow(mrotm_image, clim=rotm_clim)
+    ri = ax.matshow(mrotm_image, clim=rotm_clim_model)
     fig.colorbar(ri)
     fig.savefig(os.path.join(data_dir, 'rotm_image_model.png'),
                 bbox_inches='tight', dpi=200)
@@ -598,8 +624,8 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
                     cc_fits_fname = str(freq) + '_' + stokes + '_{}.fits'.format(str(i + 1).zfill(3))
                     clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
                                  mapsize_common, path=data_dir,
-                                 path_to_script=path_to_script, outpath=data_dir,
-                                 beam_restore=beam_common)
+                                 path_to_script=path_to_script,
+                                 outpath=data_dir, beam_restore=beam_common)
 
     # Create ROTM images of simulated sample
     sym_images = Images()
@@ -627,10 +653,10 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     # Move bootstrap curves to original simulated centers
     slices_ = [slice_ + diff for slice_ in slices]
     # Find low and upper confidence band
-    low, up = create_sim_conf_band(slices_, obs_slice, sigmas, alpha=0.99)
+    low, up = create_sim_conf_band(slices_, obs_slice, sigmas,
+                                   alpha=conf_band_alpha)
 
     # Plot confidence bands and model values
-    sl_len = len(obs_slice)
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
     ax.plot(x, low[::-1], 'g')
@@ -641,31 +667,9 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     ax.plot(np.arange(216, 296, 1),
             rotm_grad_value * (np.arange(216, 296, 1) - 256.)[::-1] +
             rotm_value_0)
-    # for i in range(n_sample):
-    #     print "plotting {}th slice of {}".format(i + 1, n_sample)
-    #     jitter = np.random.normal(0, 0.03)
-    #     ax.plot(np.arange(240, 270, 1) + jitter,
-    #             rotm_images_sym.images[i].slice((240, 260), (270, 260)),
-    #             '.k')
     fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
-
-
-    # # Plot spread of sample values
-    # fig = plt.figure()
-    # ax = fig.add_subplot(1, 1, 1)
-    # ax.plot(np.arange(240, 270, 1),
-    #         rotm_grad_value * (np.arange(240, 270, 1) - 256.) + rotm_value_0)
-    # for i in range(n_sample):
-    #     print "plotting {}th slice of {}".format(i + 1, n_sample)
-    #     jitter = np.random.normal(0, 0.03)
-    #     ax.plot(np.arange(240, 270, 1) + jitter,
-    #             rotm_images_sym.images[i].slice((240, 260), (270, 260)),
-    #             '.k')
-    # fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
-    #             bbox_inches='tight', dpi=200)
-    # plt.close()
 
 
 if __name__ == '__main__':
@@ -695,7 +699,7 @@ if __name__ == '__main__':
     source = '1055+018'
     epoch = '2006_11_10'
     simulate(source, epoch, ['x', 'y', 'j', 'u'],
-             n_sample=1, rotm_clim=[-200, 200],
+             n_sample=5, max_jet_flux=0.003, rotm_clim=[-300, 300],
              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
              mapsize_common=mapsize_common, base_dir=base_dir,
-             rotm_value_0=0., rotm_grad_value=0.)
+             rotm_value_0=0., rotm_grad_value=60., n_rms=4.)

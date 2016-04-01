@@ -489,18 +489,26 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
 
 
 if __name__ == '__main__':
-    # from mojave import download_mojave_uv_fits
-    # download_mojave_uv_fits('2230+114', epochs=['2006_02_12'],
-    #                         download_dir='/home/ilya/code/vlbi_errors/examples')
-    import glob
-    uv_fits_paths = glob.glob('/home/ilya/code/vlbi_errors/examples/*.uvf')
-    n_uv = len(uv_fits_paths)
-    imsizes = [[1024, 0.1] for i in range(n_uv)]
-    # cc_fits_paths = glob.glob('/home/ilya/code/vlbi_errors/examples/*.fits')
-    cc_fits_paths = None
-    outdir = '/home/ilya/code/vlbi_errors/examples'
+    source = '2230+114'
+    epoch = '2006_02_12'
+    base_dir = '/home/ilya/code/vlbi_errors/examples/mojave/sources'
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
+                    'u': (512, 0.1)}
+    mapsize_common = (512, 0.1)
+    data_dir = os.path.join(base_dir, source)
+    stokes = ['I', 'Q', 'U']
+    bands = ['x', 'y', 'j', 'u']
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    from mojave import download_mojave_uv_fits
+    download_mojave_uv_fits(source, epochs=[epoch], bands=bands,
+                            download_dir=data_dir)
+    from mojave import mojave_uv_fits_fname
+    uv_fits_fnames = [mojave_uv_fits_fname(source, band, epoch) for band in
+                      bands]
+    uv_fits_paths = [os.path.join(data_dir, uv_fits_fname) for uv_fits_fname in
+                     uv_fits_fnames]
 
-    analyze_source(uv_fits_paths, n_boot=3, cc_fits_paths=cc_fits_paths,
-                   outdir=outdir, path_to_script=path_to_script,
-                   imsizes=imsizes)
+    analyze_source(uv_fits_paths, n_boot=3, outdir=data_dir,
+                   path_to_script=path_to_script, imsizes=mapsize_dict.values())

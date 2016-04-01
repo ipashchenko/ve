@@ -26,7 +26,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          show_beam=False, beam_corner='ll', beam=None, contours_mask=None,
          colors_mask=None, vectors_mask=None, plot_title=None, color_clim=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
-         beam_place='ll', colorbar_label=None):
+         beam_place='ll', colorbar_label=None, show=True):
     """
     Plot image(s).
 
@@ -250,7 +250,6 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     e = Ellipse((y_c, x_c), e_width, e_height, angle=beam[2], edgecolor='black',
                 facecolor='green', alpha=0.3)
     ax.add_patch(e)
-    fig.show()
 
     # Saving output
     if outfile:
@@ -264,6 +263,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         print "Saving to {}.{}".format(path, ext)
         plt.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=200)
 
+    if show:
+        fig.show()
     if close:
         plt.close()
 

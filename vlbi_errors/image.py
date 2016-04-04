@@ -283,7 +283,7 @@ class BasicImage(object):
             self.imsize = kwargs["imsize"]
         except KeyError:
             raise Exception
-        self._image = np.empty(self.imsize, dtype=float)
+        self._image = np.zeros(self.imsize, dtype=float)
 
     def from_hdulist(self, hdulist):
         image_params = get_fits_image_info_from_hdulist(hdulist)
@@ -637,8 +637,8 @@ class CleanImage(Image):
         kwargs["bmaj"] /= abs(kwargs["pixsize"][0])
         kwargs["bmin"] /= abs(kwargs["pixsize"][0])
         self._beam._construct(**kwargs)
-        self._residuals = np.empty(self.imsize, dtype=float)
-        self._image_original = np.empty(self.imsize, dtype=float)
+        self._residuals = np.zeros(self.imsize, dtype=float)
+        self._image_original = np.zeros(self.imsize, dtype=float)
 
     def from_hdulist(self, hdulist, ver=1):
         super(CleanImage, self).from_hdulist(hdulist)

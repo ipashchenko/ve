@@ -105,7 +105,7 @@ def clean_uv_fits(uv_fits_path, out_fits_path, stokes, beam=None,
     :note:
         Image, pixel & beam specification uses this sequence. If ``beam`` is not
         supplied and ``beamsize_fits_path`` image is not supplied then beam
-        parameters naitive to uv-data and difmap cleaning script are used. Image
+        parameters native to uv-data and difmap cleaning script are used. Image
         size information comes from this sequence: ``mapsize_clean``,
         ``mapsize_fits_path``, ``mapsize``. If ``pixel_per_beam``
         is used with any of arguments that supplied image size, then image size
@@ -244,10 +244,6 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
         Iterable of paths to self-calibrated uv-data FITS-files.
     :param n_boot:
         Number of bootstrap replications to use in analysis.
-    :param cc_fits_paths: (optional)
-        Iterable of dicts with paths to FITS-files with CLEAN-images. Each
-        dictionary should include stokes parameters ``I``[, ``Q``, ``U``]. If
-        ``None`` then use use-specified image parameters. (default: ``None``)
     :param imsizes: (optional)
         Iterable of image parameters (imsize, pixsize) that should be used for
         CLEANing of uv-data if no CLEAN-images are supplied. Should be sorted in
@@ -258,54 +254,55 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
         multifrequency analysis. If ``None`` then use physical image size of
         lowest frequency and pixel size of highest frequency. (default:
         ``None``)
-    :param common_beam: (optional)
-        Beam parameters that will be used in making common size images for
-        multifrequency analysis. If ``None`` then use beam of lowest frequency.
-        (default: ``None``)
-    :param find_shifts: (optional)
-        Find shifts between multifrequency images? (default: ``False``)
-    :param bootstrap_shift_error: (optional)
-        Use bootstrap to estimate shift image error. (default: ``False``)
-    :param add_shift: (optional)
-        Add shift while CLEANing bootstrap replications? (default: ``False``)
     :param outdir: (optional)
         Output directory. This directory will be used for saving picture, data,
         etc. If ``None`` then use CWD. (default: ``None``)
     :param path_to_script: (optional)
         Path ot difmap CLEAN script. If ``None`` then use CWD. (default:
         ``None``)
-    :param stokes: (optional)
-        Iterable of stokes parameters to CLEAN original self-calibrated uv-data.
-        If ``None`` then ('I', 'Q', 'U'). (default: ``None``)
 
     :notes:
-        Function uses this workflow:
-
-        1. CLEAN uv-data in specified FITS-files (``uv_fits_paths``) with
-        parameters specified in ``imsizes`` argument. If ``cc_fits_paths`` are
-        specified then it supposed that it is the result of such CLEAN.
-
-        #. Bootstrap uv-data with obtained CLEAN-models using ``n_boot``
-        bootstrap realizations.
-
-        #. Find shift between all possible frequencies. Optionally finds
-        bootstrap error estimate of found shift values.
-
-        #. CLEAN bootstrapped data (optionally with added shifts relative to
-        lowest frequency) with image parameters (imsize, pixsize) specified by
-        ``common_imsize`` or (if it is ``None``) by lowest and highest frequency
-        CLEAN images.
-
-        #. Create ROTM images from CLEANed bootstrapped data.
+        Workflow:
+        1) Чистка с родным разрешением всех N диапазонов и получение родных
+        моделей I, Q, U.
+        2) Выбор общей ДН из N возможных
+        3) (Опционально) Выбор uv-tapering
+        4) Чистка uv-данных для всех диапазонов с (опционально применяемым
+            uv-tapering) общей ДН
+        5) Оценка сдвига ядра
+        6) Создание B наборов из N многочастотных симулированных данных
+            используя родные модели
+        7) (Опционально) Чистка B наборов из N многочастотных симданных с
+            родным разрешением для получения карт ошибок I для каждой из N
+            частот
+        8) Чистка B наборов из N многочастотных симданных для всех диапазонов с
+            (опционально применяемым uv-tapering) общей ДН
+        9) Оценка ошибки определения сдвига ядра
+        10) Оценка RM и ее ошибки
+        11) Оценка alpha и ее ошибки
 
     """
+
+    # Fail early
+    if imsizes is None:
+        raise Exception("Provide imsizes argument!")
+    if common_imsize is not None:
+        print("Using common image size {}".format(common_imsize))
+    else:
+        raise Exception("Provide common_imsize argument!")
+
     # Setting up the output directory
     if outdir is None:
         outdir = os.getcwd()
     print("Using output directory {}".format(outdir))
+
     # Assume input self-calibrated uv-data FITS files have different frequencies
     n_freq = len(uv_fits_paths)
     print("Using {} frequencies".format(n_freq))
+
+    # Assuming full multifrequency analysis
+    stokes = ('I', 'Q', 'U')
+
     # Container for original self-calibrated uv-data
     uv_data_dict = dict()
     # Container for original self-calibrated uv-data FITS-file paths
@@ -315,9 +312,12 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
         # Mark frequencies by total band center [Hz] for consistency with image.
         uv_data_dict.update({uvdata.band_center: uvdata})
         uv_fits_dict.update({uvdata.band_center: uv_fits_path})
+
     # Lowest frequency goes first
     freqs = sorted(uv_fits_dict.keys())
     print("Frequencies are: {}".format(freqs))
+    # Assert we have original map parameters for all frequencies
+    assert len(imsizes) == n_freq
 
     # Container for original CLEAN-images of self-calibrated uv-data
     cc_image_dict = dict()
@@ -331,111 +331,34 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
         cc_fits_dict.update({freq: dict()})
         cc_beam_dict.update({freq: dict()})
 
-    # If CLEAN-images are supplied then use them to fill the containers
-    if cc_fits_paths is not None:
-        print("CLEAN models are specified in parameters.")
-        imsizes_dict = dict()
-        print("Exploring supplied CLEAN models")
-        for cc_fits_path in cc_fits_paths:
-            image = create_clean_image_from_fits_file(cc_fits_path)
-            freq = image.freq
-            stoke = image.stokes
-            if freq not in freqs:
-                raise Exception("Frequency of given CLEAN model not known from"
-                                " UV-data for file {}!".format(cc_fits_path))
+    # Clean original uv-data with specified map parameters
+    imsizes_dict = dict()
+    for i, freq in enumerate(freqs):
+        imsizes_dict.update({freq: imsizes[i]})
+    for freq in freqs:
+        uv_fits_path = uv_fits_dict[freq]
+        uv_dir, uv_fname = os.path.split(uv_fits_path)
+        for stoke in stokes:
+            outfname = '{}_{}_cc.fits'.format(freq, stoke)
+            outpath = os.path.join(outdir, outfname)
+            clean_difmap(uv_fname, outfname, stoke, imsizes_dict[freq],
+                         path=uv_dir, path_to_script=path_to_script,
+                         outpath=outdir, show_difmap_output=True)
+            cc_fits_dict[freq].update({stoke: os.path.join(outdir,
+                                                           outfname)})
+            image = create_clean_image_from_fits_file(outpath)
             cc_image_dict[freq].update({stoke: image})
-            cc_fits_dict[freq].update({stoke: cc_fits_path})
             if stoke == 'I':
                 cc_beam_dict[freq].update({stoke: image.beam})
 
-        # Check that each frequency contains stokes I model
-        if 'I' not in cc_image_dict[freq].keys():
-            raise Exception("No stokes I CLEAN model for freq {} is specified!")
-
-        for freq in freqs:
-            image = cc_image_dict[freq][stoke]
-            imsizes_dict.update({freq: (image.imsize[0], abs(image.pixsize[0] /
-                                                             mas_to_rad))})
-
-        # Check frequency consistency
-        assert set(uv_fits_dict.keys()).issubset(cc_fits_dict.keys())
-        # Define stokes from existing CLEAN-images
-        stokes = cc_image_dict[freqs[0]].keys()
-        for freq in freqs:
-            print("Image parameters for freq {} -"
-                  " {} [pix, mas]".format(freq, imsizes_dict[freq]))
-
-        # If some frequency doesn't have any stokes from ('I', 'Q', 'U') then
-        # CLEAN that stokes
-        to_clean = dict()
-        for freq in freqs:
-            to_clean[freq] = list()
-            for stoke in ('Q', 'U'):
-                if stoke not in cc_image_dict[freq].keys():
-                    print("Oops! No stokes {} for freq {} in supplied CLEAN"
-                          " models! We'll clean now.")
-                    outfname = '{}_{}_cc.fits'.format(freq, stoke)
-                    outpath = os.path.join(outdir, outfname)
-
-                    uv_dir, uv_fname = os.path.split(uv_fits_dict[freq])
-                    clean_difmap(uv_fname, outfname, stoke, imsizes_dict[freq],
-                                 path=uv_dir, path_to_script=path_to_script,
-                                 outpath=outdir, show_difmap_output=True)
-                    cc_fits_dict[freq].update({stoke: os.path.join(outdir,
-                                                                   outfname)})
-                    image = create_image_from_fits_file(outpath)
-                    cc_image_dict[freq].update({stoke: image})
-                    if stoke == 'I':
-                        cc_beam_dict[freq].update({stoke: image.beam})
-
-    # If no CLEAN-images are supplied then CLEAN original data with
-    # use-specified parameters
-    elif imsizes is not None:
-        print("No CLEAN models are specified. We'll clean.")
-        assert len(imsizes) == n_freq
-        if stokes is None:
-            stokes = ('I', 'Q', 'U')
-        imsizes_dict = dict()
-        for i, freq in enumerate(freqs):
-            imsizes_dict.update({freq: imsizes[i]})
-        for freq in freqs:
-            uv_fits_path = uv_fits_dict[freq]
-            uv_dir, uv_fname = os.path.split(uv_fits_path)
-            for stoke in stokes:
-                outfname = '{}_{}_cc.fits'.format(freq, stoke)
-                outpath = os.path.join(outdir, outfname)
-                clean_difmap(uv_fname, outfname, stoke, imsizes_dict[freq],
-                             path=uv_dir, path_to_script=path_to_script,
-                             outpath=outdir, show_difmap_output=True)
-                cc_fits_dict[freq].update({stoke: os.path.join(outdir,
-                                                               outfname)})
-                image = create_clean_image_from_fits_file(outpath)
-                cc_image_dict[freq].update({stoke: image})
-                if stoke == 'I':
-                    cc_beam_dict[freq].update({stoke: image.beam})
-    else:
-        raise Exception("Provide ``cc_fits_paths`` of ``imsizes``")
-
-    # FIXME: Current logic of ``common_imsize`` choice results in 2048 size when
-    # really that should be 1024 (all frequencies have (1024, 0.1) image size
-    # Now CLEAN uv-data using ``common_imsize`` or parameters of CLEAN-image
-    # from lowest and highest frequencies and ``common_beam`` or beam of
-    # CLEAN image from lowest frequency.
-    # Container for common sized CLEAN-images of self-calibrated uv-data
+    # Containers for images and paths to FITS files with common size images
     cc_cs_image_dict = dict()
     cc_cs_fits_dict = dict()
-    if common_imsize is None:
-        imsize_low, pixsize_low = imsizes_dict[freqs[0]]
-        imsize_high, pixsize_high = imsizes_dict[freqs[-1]]
-        imsize = imsize_low * pixsize_low / pixsize_high
-        powers = [imsize // (2 ** i) for i in range(15)]
-        imsize = 2 ** powers.index(0)
-        common_imsize = (imsize, pixsize_high)
-    print("Using common image size {}".format(common_imsize))
     if common_beam is None:
         common_beam = cc_beam_dict[freqs[0]]
     print("Using common beam {}".format(common_beam))
 
+    # Clean original uv-data with common map parameters
     for freq in freqs:
         cc_cs_image_dict.update({freq: dict()})
         cc_cs_fits_dict.update({freq: dict()})

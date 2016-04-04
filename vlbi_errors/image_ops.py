@@ -445,3 +445,33 @@ def rotm(freqs, chis, s_chis=None, p0=None):
         pcov = np.nan
 
     return p, pcov, s_sq
+
+
+def jet_direction(image, rmin=0, rmax=200, dr=4, plots=False):
+    """ Find jet direction. Return array [radius, polar angle]"""
+
+    phis = []
+    fluxes = []
+    leny = np.shape(image)[0]
+    lenx = np.shape(image)[1]
+    y, x = np.mgrid[-leny/2: leny/2, -lenx/2: lenx/2]
+    rads = np.arange(rmin, rmax, dr)
+    for r in rads:
+        mask = np.logical_and(r**2 <= x*x+y*y, x*x+y*y <= (r+dr)**2)
+        x1 = x[mask]
+        y1 = y[mask]
+        img1 = image[mask]
+        angles = np.arctan2(y1, x1)
+        phi = np.arctan2((img1 * np.sin(angles)).sum() / img1.sum(),
+                         (img1 * np.cos(angles)).sum() / img1.sum())
+        phis.append(phi)
+        fluxes.append(np.ma.mean(img1))
+    f = np.array(phis)
+    if plots:
+        plt.figure()
+        plt.imshow(image)
+        plt.plot(rads*np.cos(f)+leny/2, rads*np.sin(f)+lenx/2, '.k')
+        plt.xlim(0, lenx)
+        plt.ylim(0, leny)
+
+    return rads, f, fluxes

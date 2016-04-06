@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import leastsq
 from utils import gen_rand_vecs, hdi_of_arrays, unwrap_phases, create_mask
 from pixel import resolver_chisq
+from conf_bands import create_sim_conf_band
 
 
 def rotm_model(p, freqs):
@@ -475,3 +476,108 @@ def jet_direction(image, rmin=0, rmax=200, dr=4, plots=False):
         plt.ylim(0, leny)
 
     return rads, f, fluxes
+
+
+# TODO: Add as method to ``images.Images``
+def rms_image(image):
+    """
+    Calculate rms of Image.
+
+    :param image:
+        Instance of ``Image`` class.
+    :return:
+        Value of rms.
+    """
+    r_rms = image.imsize[0] / 10
+    rms = 0.25 * image.rms(region=(r_rms, r_rms, r_rms, None))
+    rms += 0.25 * image.rms(region=(image.imsize[0] - r_rms, r_rms, r_rms,
+                                    None))
+    rms += 0.25 * image.rms(region=(r_rms, image.imsize[0] - r_rms, r_rms,
+                                    None))
+    rms += 0.25 * image.rms(region=(image.imsize[0] - r_rms,
+                                    image.imsize[0] - r_rms, r_rms, None))
+    return rms
+
+
+# TODO: Add as method to ``images.Images``
+def pol_mask(stokes_image_dict, n_sigma=2.):
+    """
+    Find mask using stokes 'I' map and 'PPOL' map using specified number of
+    sigma.
+    :param stokes_image_dict:
+        Dictionary with keys - stokes, values - instances of ``Images``.
+    :param n_sigma:
+        Number of sigma to consider for stokes 'I' and 'PPOL'. 1, 2 or 3.
+    :return:
+        Logical array of mask.
+    """
+    quantile_dict = {1: 0.68, 2: 0.95, 3: 0.99}
+    rms_cs_dict = {stokes: rms_image(stokes_image_dict[stokes]) for stokes in
+                   ('I', 'Q', 'U')}
+    qu_rms = np.mean([rms_cs_dict[stoke] for stoke in ('Q', 'U')])
+    ppol_quantile = qu_rms * np.sqrt(-np.log((1. -
+                                              quantile_dict[n_sigma]) ** 2.))
+    i_cs_mask = stokes_image_dict['I'].image < n_sigma * rms_cs_dict['I']
+    ppol_cs_image = pol_map(stokes_image_dict['Q'].image,
+                            stokes_image_dict['U'].image)
+    ppol_cs_mask = ppol_cs_image < ppol_quantile
+    return np.logical_or(i_cs_mask, ppol_cs_mask)
+
+
+def analyze_rotm_slice(slice_coords, rotm_image, rotm_images,
+                       conf_band_alpha=0.95, outdir=None,
+                       outfname='rotm_slice_spread.png'):
+    """
+    Analyze ROTM slice.
+
+    :param slice_coords:
+        Iterable of to points (x1, y1) in pixels that are coordinates of slice.
+    :param rotm_image:
+        Instance of ``Image`` class with original ROTM map.
+    :param rotm_images:
+        Instance of ``Images`` class with bootstrapped ROTM maps.
+    :param conf_band_alpha: (optional)
+        Confidence to use (0-1). (default: ``0.95``)
+    :param outdir:
+
+    :return:
+    """
+    # Setting up the output directory
+    if outdir is None:
+        outdir = os.getcwd()
+    print("Using output directory {}".format(outdir))
+
+    # Calculate simultaneous confidence bands
+    # Bootstrap slices
+    slices = list()
+    for image in rotm_images.images:
+        slice_ = image.slice(slice_coords)
+        slices.append(slice_[~np.isnan(slice_)])
+
+    # Find means
+    obs_slice = rotm_image.slice(slice_coords)
+    length = int(round(np.hypot(slice_coords[1][0] - slice_coords[0][0],
+                                slice_coords[1][1] - slice_coords[0][1])))
+    x = np.arange(length)
+    x = x[~np.isnan(obs_slice)]
+    obs_slice = obs_slice[~np.isnan(obs_slice)]
+    # Find sigmas
+    slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices]
+    sigmas = hdi_of_arrays(slices_).squeeze()
+    means = np.mean(np.vstack(slices), axis=0)
+    diff = obs_slice - means
+    # Move bootstrap curves to original simulated centers
+    slices_ = [slice_ + diff for slice_ in slices]
+    # Find low and upper confidence band
+    low, up = create_sim_conf_band(slices_, obs_slice, sigmas,
+                                   alpha=conf_band_alpha)
+
+    # Plot confidence bands and model values
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ax.plot(x, low[::-1], 'g')
+    ax.plot(x, up[::-1], 'g')
+    [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
+    ax.plot(x, obs_slice[::-1], '.k')
+    fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight', dpi=200)
+    plt.close()

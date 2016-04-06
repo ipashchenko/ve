@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import glob
 import os
 import json
 import numpy as np
@@ -8,6 +11,8 @@ from uv_data import UVData
 from bootstrap import CleanBootstrap
 from utils import (mas_to_rad, degree_to_rad, get_fits_image_info)
 from spydiff import clean_difmap
+from images import Images
+from image_ops import rms_image, pol_mask, analyze_rotm_slice
 
 
 def bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n, outpath=None,
@@ -44,7 +49,7 @@ def bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n, outpath=None,
             os.makedirs(outpath)
     curdir = os.getcwd()
     os.chdir(outpath)
-    boot.run(n=n, outname=[outname, '.fits'])
+    boot.run(n=n, outname=outname)
     os.chdir(curdir)
 
 
@@ -178,6 +183,7 @@ def clean_uv_fits(uv_fits_path, out_fits_path, stokes, beam=None,
     os.chdir(curdir)
 
 
+# FIXME: This finds only dr that minimize std for shift - radius dependence
 # TODO: use iterables of shifts and sizes as arguments. UNIX-way:)
 def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
                max_mask_r=None, mask_step=5):
@@ -206,12 +212,10 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
 
     # Iterating over difference of mask sizes
     for dr in range(min_shift, max_shift, shift_step):
-        print("Using dr={}".format(dr))
         shift_dict[dr] = list()
 
         # Iterating over mask sizes
         for r in range(0, max_mask_r, mask_step):
-            print("Using r={}".format(r))
             r1 = r
             r2 = r + dr
             shift = image1.cross_correlate(image2,
@@ -219,7 +223,6 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
                                                     None),
                                            region2=(image2.x_c, image2.y_c, r2,
                                                     None))
-            print("Got shift {}".format(shift))
             shift_dict[dr].append(shift)
 
     for key, value in shift_dict.items():
@@ -232,10 +235,10 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
     return sorted(shift_dict, key=lambda _: shift_dict[_])[0]
 
 
-def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
-                   common_imsize=None, common_beam=None, find_shifts=False,
-                   bootstrap_shift_error=False, add_shift=False, outdir=None,
-                   path_to_script=None, stokes=None):
+def analyze_source(uv_fits_paths, n_boot, imsizes=None, common_imsize=None,
+                   common_beam=None, find_shifts=False, outdir=None,
+                   path_to_script=None, clear_difmap_logs=True,
+                   rotm_slices=None):
     """
     Function that uses multifrequency self-calibration data for in-depth
     analysis.
@@ -295,6 +298,7 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
     if outdir is None:
         outdir = os.getcwd()
     print("Using output directory {}".format(outdir))
+    os.chdir(outdir)
 
     # Assume input self-calibrated uv-data FITS files have different frequencies
     n_freq = len(uv_fits_paths)
@@ -331,7 +335,9 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
         cc_fits_dict.update({freq: dict()})
         cc_beam_dict.update({freq: dict()})
 
+    # 1.
     # Clean original uv-data with specified map parameters
+    print("1. Clean original uv-data with specified map parameters...")
     imsizes_dict = dict()
     for i, freq in enumerate(freqs):
         imsizes_dict.update({freq: imsizes[i]})
@@ -343,22 +349,32 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
             outpath = os.path.join(outdir, outfname)
             clean_difmap(uv_fname, outfname, stoke, imsizes_dict[freq],
                          path=uv_dir, path_to_script=path_to_script,
-                         outpath=outdir, show_difmap_output=True)
+                         outpath=outdir)
             cc_fits_dict[freq].update({stoke: os.path.join(outdir,
                                                            outfname)})
             image = create_clean_image_from_fits_file(outpath)
             cc_image_dict[freq].update({stoke: image})
             if stoke == 'I':
-                cc_beam_dict[freq].update({stoke: image.beam})
+                cc_beam_dict.update({freq: image.beam})
 
     # Containers for images and paths to FITS files with common size images
     cc_cs_image_dict = dict()
     cc_cs_fits_dict = dict()
+    # 2.
+    # Choose common beam size
+    print("2. Choosing common beam size...")
     if common_beam is None:
         common_beam = cc_beam_dict[freqs[0]]
-    print("Using common beam {}".format(common_beam))
+    print("Using common beam [mas, mas, deg] : {}".format(common_beam))
 
+    # 3.
+    # Optionally uv-tapering uv-data
+    print("3. Optionally uv-tapering uv-data...")
+    print("skipping...")
+
+    # 4.
     # Clean original uv-data with common map parameters
+    print("4. Clean original uv-data with common map parameters...")
     for freq in freqs:
         cc_cs_image_dict.update({freq: dict()})
         cc_cs_fits_dict.update({freq: dict()})
@@ -370,45 +386,161 @@ def analyze_source(uv_fits_paths, n_boot, cc_fits_paths=None, imsizes=None,
             outpath = os.path.join(outdir, outfname)
             clean_difmap(uv_fname, outfname, stoke, common_imsize,
                          path=uv_dir, path_to_script=path_to_script,
-                         outpath=outdir, show_difmap_output=True)
-            cc_fits_dict[freq].update({stoke: os.path.join(outdir,
-                                                           outfname)})
+                         outpath=outdir, show_difmap_output=False)
+            cc_cs_fits_dict[freq].update({stoke: os.path.join(outdir,
+                                                              outfname)})
             image = create_image_from_fits_file(outpath)
-            cc_image_dict[freq].update({stoke: image})
+            cc_cs_image_dict[freq].update({stoke: image})
 
-    # # Bootstrap self-calibrated uv-data with CLEAN-models
-    # for freq, uv_fits_path in uv_fits_dict:
-    #     cc_fits_paths = cc_fits_dict[freq].keys()
-    #     bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n_boot, outpath=outpath,
-    #                       outname=('boot_{}'.format(freq), '_uv.fits'))
+    # 5.
+    # Optionally find shifts between original CLEAN-images
+    print("5. Optionally find shifts between original CLEAN-images...")
+    if find_shifts:
+        print("Determining images shift...")
+        shift_dict = dict()
+        freq_1 = freqs[0]
+        image_1 = cc_image_dict[freq_1]['I']
 
-    # # Optionally find shifts between original CLEAN-images
-    # if find_shifts:
-    #     print("Determining images shift...")
-    #     shift_dict = dict()
-    #     freq_1 = freqs[0]
-    #     image_1 = cc_image_dict[freq_1]['I']
+        for freq_2 in freqs[1:]:
+            image_2 = cc_image_dict[freq_2]['I']
+            # Coarse grid of possible shifts
+            shift = find_shift(image_1, image_2, 100, 5, max_mask_r=200,
+                               mask_step=5)
+            # More accurate grid of possible shifts
+            print("Using fine grid for accurate estimate")
+            coarse_grid = range(0, 100, 5)
+            idx = coarse_grid.index(shift)
+            if idx > 0:
+                min_shift = coarse_grid[idx - 1]
+            else:
+                min_shift = 0
+            shift = find_shift(image_1, image_2, coarse_grid[idx + 1], 1,
+                               min_shift=min_shift, max_mask_r=200,
+                               mask_step=5)
 
-    #     for freq_2 in freqs[1:]:
-    #         image_2 = cc_image_dict[freq_2]['I']
-    #         # Coarse grid of possible shifts
-    #         shift = find_shift(image_1, image_2, 100, 5, max_mask_r=200,
-    #                            mask_step=5)
-    #         # More accurate grid of possible shifts
-    #         print("Using fine grid for accurate estimate")
-    #         coarse_grid = range(0, 100, 5)
-    #         idx = coarse_grid.index(shift)
-    #         if idx > 0:
-    #             min_shift = coarse_grid[idx - 1]
-    #         else:
-    #             min_shift = 0
-    #         shift = find_shift(image_1, image_2, coarse_grid[idx + 1], 1,
-    #                            min_shift=min_shift, max_mask_r=200, mask_step=5)
+            shift_dict.update({str((freq_1, freq_2,)): shift})
 
-    #         shift_dict.update({(freq_1, freq_2,): shift})
+        # Dumping shifts to json file in target directory
+        with open(os.path.join(outdir, "shifts_original.json"), 'w') as fp:
+            json.dump(shift_dict, fp)
+    else:
+        print("skipping...")
 
-    #     # Dumping shifts to json file in target directory
-    #     json.dump(shift_dict, os.path.join(outpath, "shifts_original.json"))
+    # 6.
+    # Bootstrap self-calibrated uv-data with CLEAN-models
+    print("6. Bootstrap self-calibrated uv-data with CLEAN-models...")
+    uv_boot_fits_dict = dict()
+    for freq, uv_fits_path in uv_fits_dict.items():
+        cc_fits_paths = [cc_fits_dict[freq][stoke] for stoke in stokes]
+        bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n_boot, outpath=outdir,
+                          outname=('boot_{}'.format(freq), '_uv.fits'))
+        files = glob.glob(os.path.join(outdir, 'boot_{}*.fits'.format(freq)))
+        uv_boot_fits_dict.update({freq: sorted(files)})
+
+    # 7.
+    # Optionally clean bootstrap replications with original restoring beams and
+    # map sizes to get error estimates for original resolution maps of I, PPOL,
+    # FPOL, ...
+    print("7. Optionally clean bootstrap replications with original restoring"
+          " beams and map sizes...")
+    print("skipping...")
+
+    # 8.
+    # Optionally clean bootstrap replications with common restoring beams and
+    # map sizes
+    print("8. Optionally clean bootstrap replications with common restoring"
+          " beams and map sizes...")
+    cc_boot_fits_dict = dict()
+    for freq in freqs:
+        cc_boot_fits_dict.update({freq: dict()})
+        uv_fits_paths = uv_boot_fits_dict[freq]
+        for stoke in stokes:
+            for i, uv_fits_path in enumerate(uv_fits_paths):
+                uv_dir, uv_fname = os.path.split(uv_fits_path)
+                outfname = 'boot_{}_{}_cc_{}.fits'.format(freq, stoke,
+                                                          str(i).zfill(3))
+                clean_difmap(uv_fname, outfname, stoke, common_imsize,
+                             path=uv_dir, path_to_script=path_to_script,
+                             outpath=outdir, show_difmap_output=False)
+            files = sorted(glob.glob(os.path.join(outdir,
+                                                  'boot_{}_{}_cc_*.fits')))
+            cc_boot_fits_dict[freq].update({stoke: files})
+
+    # 9. Optionally estimate RM map and it's error
+    print("9. Optionally estimate RM map and it's error...")
+    original_cs_images = Images()
+    for freq in freqs:
+        for stoke in stokes:
+            original_cs_images.add_images(cc_cs_image_dict[freq][stoke])
+
+    # Find rough mask for creating bootstrap images of RM, alpha, ...
+    print("Finding rough mask for creating bootstrap images of RM, alpha, ...")
+    cs_mask = pol_mask({stoke: cc_cs_image_dict[freqs[-1]][stoke] for
+                        stoke in stokes}, n_sigma=2.)
+
+    rotm_image, _ = original_cs_images.create_rotm_image(mask=cs_mask)
+
+    boot_images = Images()
+    fnames = sorted(glob.glob(os.path.join(data_dir, "boot_*_*_cc_*.fits")))
+    for freq in freqs:
+        for stoke in stokes:
+            boot_images.add_from_fits(cc_boot_fits_dict[freq][stoke])
+    boot_rotm_images = boot_images.create_rotm_images(mask=cs_mask)
+    s_rotm_image = boot_rotm_images.create_error_image(cred_mass=0.95)
+
+    if rotm_slices is not None:
+        fnames = ['rotm_slice_spread_{}.png'.format(i + 1) for i in
+                  range(len(rotm_slices))]
+        for rotm_slice, fname in zip(rotm_slices, fnames):
+            analyze_rotm_slice(rotm_slice, rotm_image, boot_rotm_images,
+                               outdir=outdir, outfname=fname)
+
+
+    # # Calculate simulataneous confidence bands
+    # # Bootstrap slices
+    # slices = list()
+    # for image in rotm_images_sym.images:
+    #     slice_ = image.slice((216, 276), (296, 276))
+    #     slices.append(slice_[~np.isnan(slice_)])
+
+    # # Find means
+    # obs_slice = rotm_image_sym.slice((216, 276), (296, 276))
+    # x = np.arange(216, 296, 1)
+    # x = x[~np.isnan(obs_slice)]
+    # obs_slice = obs_slice[~np.isnan(obs_slice)]
+    # # Find sigmas
+    # slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices]
+    # sigmas = hdi_of_arrays(slices_).squeeze()
+    # means = np.mean(np.vstack(slices), axis=0)
+    # diff = obs_slice - means
+    # # Move bootstrap curves to original simulated centers
+    # slices_ = [slice_ + diff for slice_ in slices]
+    # # Find low and upper confidence band
+    # low, up = create_sim_conf_band(slices_, obs_slice, sigmas,
+    #                                alpha=conf_band_alpha)
+
+    # # Plot confidence bands and model values
+    # fig = plt.figure()
+    # ax = fig.add_subplot(1, 1, 1)
+    # ax.plot(x, low[::-1], 'g')
+    # ax.plot(x, up[::-1], 'g')
+    # [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
+    # ax.plot(x, obs_slice[::-1], '.k')
+    # # Plot ROTM model
+    # ax.plot(np.arange(216, 296, 1),
+    #         rotm_grad_value * (np.arange(216, 296, 1) - 256.)[::-1] +
+    #         rotm_value_0)
+    # fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
+    #             bbox_inches='tight', dpi=200)
+    # plt.close()
+
+
+    if clear_difmap_logs:
+        print("Removing difmap log-files...")
+        difmap_logs = glob.glob(os.path.join(outdir, "difmap.log*"))
+        for difmpa_log in difmap_logs:
+            os.unlink(difmpa_log)
+
 
 
 if __name__ == '__main__':
@@ -419,8 +551,7 @@ if __name__ == '__main__':
     mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
                     'u': (512, 0.1)}
     mapsize_common = (512, 0.1)
-    data_dir = os.path.join(base_dir, source)
-    stokes = ['I', 'Q', 'U']
+    data_dir = os.path.join(base_dir, source, epoch)
     bands = ['x', 'y', 'j', 'u']
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
@@ -434,4 +565,5 @@ if __name__ == '__main__':
                      uv_fits_fnames]
 
     analyze_source(uv_fits_paths, n_boot=3, outdir=data_dir,
-                   path_to_script=path_to_script, imsizes=mapsize_dict.values())
+                   path_to_script=path_to_script, imsizes=mapsize_dict.values(),
+                   common_imsize=mapsize_common, find_shifts=False)

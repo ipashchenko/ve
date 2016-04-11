@@ -505,7 +505,7 @@ def pol_mask(stokes_image_dict, n_sigma=2.):
     Find mask using stokes 'I' map and 'PPOL' map using specified number of
     sigma.
     :param stokes_image_dict:
-        Dictionary with keys - stokes, values - instances of ``Images``.
+        Dictionary with keys - stokes, values - instances of ``Image``.
     :param n_sigma:
         Number of sigma to consider for stokes 'I' and 'PPOL'. 1, 2 or 3.
     :return:
@@ -581,3 +581,27 @@ def analyze_rotm_slice(slice_coords, rotm_image, rotm_images,
     ax.plot(x, obs_slice[::-1], '.k')
     fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight', dpi=200)
     plt.close()
+
+
+def plot_image_correlation(image, fname='correlation.png', show=True,
+                           close=False, savefig=True, outdir=None):
+    fig = plt.figure()
+    ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
+    ax.set_xlabel('Pixles')
+    ax.set_ylabel('Pixles')
+    R = np.corrcoef(image)
+    im = ax.matshow(R, cmap='hot')
+    colorbar_ax = fig.add_axes([0.80, 0.10, 0.05, 0.80])
+    cb = fig.colorbar(im, cax=colorbar_ax)
+    cb = fig.colorbar(im, cax=colorbar_ax)
+    cb.set_label('Correlation')
+    if savefig:
+        if outdir is None:
+            outdir = os.getcwd()
+        fig.savefig(os.path.join(outdir, fname), bbox_inches='tight', dpi=200)
+    if show:
+        fig.show()
+    if close:
+        plt.close()
+
+

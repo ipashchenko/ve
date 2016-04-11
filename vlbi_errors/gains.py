@@ -64,7 +64,7 @@ def open_gains(fname, snver=1):
     weights = np.dstack((rweights, lweights))
     # => (466, 8, 2)
 
-    # Filling structured array by fileds
+    # Filling structured array by fields
     _data['start'] = time - 0.5 * dtime
     _data['stop'] = time + 0.5 * dtime
     _data['antenna'] = antenna

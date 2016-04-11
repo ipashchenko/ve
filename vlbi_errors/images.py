@@ -331,9 +331,11 @@ class Images(object):
         for (x, y), value in np.ndenumerate(hdis):
             hdi = hdi_of_mcmc(self._images_cube[x, y, :], cred_mass=cred_mass)
             hdis[x, y] = hdi[1] - hdi[0]
-        # Create basic image and add map of error
-        image = BasicImage(imsize=img.imsize, pixref=img.pixref,
-                           pixrefval=img.pixrefval, pixsize=img.pixsize)
+        # Create ``Image`` instance and add map of error
+        image = Image()
+        image._construct(imsize=img.imsize, pixsize=img.pixsize,
+                         pixref=img.pixref, stokes=stokes,
+                         freq=img.freq, pixrefval=img.pixrefval)
         image.image = hdis
         return image
 

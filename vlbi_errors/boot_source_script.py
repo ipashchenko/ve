@@ -384,9 +384,9 @@ def analyze_source(uv_fits_paths, n_boot, imsizes=None, common_imsize=None,
         for stoke in stokes:
             outfname = 'cs_{}_{}_cc.fits'.format(freq, stoke)
             outpath = os.path.join(outdir, outfname)
-            clean_difmap(uv_fname, outfname, stoke, common_imsize,
-                         path=uv_dir, path_to_script=path_to_script,
-                         outpath=outdir, show_difmap_output=False)
+            # clean_difmap(uv_fname, outfname, stoke, common_imsize,
+            #              path=uv_dir, path_to_script=path_to_script,
+            #              outpath=outdir, show_difmap_output=False)
             cc_cs_fits_dict[freq].update({stoke: os.path.join(outdir,
                                                               outfname)})
             image = create_image_from_fits_file(outpath)
@@ -431,9 +431,9 @@ def analyze_source(uv_fits_paths, n_boot, imsizes=None, common_imsize=None,
     print("6. Bootstrap self-calibrated uv-data with CLEAN-models...")
     uv_boot_fits_dict = dict()
     for freq, uv_fits_path in uv_fits_dict.items():
-        cc_fits_paths = [cc_fits_dict[freq][stoke] for stoke in stokes]
-        bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n_boot, outpath=outdir,
-                          outname=('boot_{}'.format(freq), '_uv.fits'))
+        # cc_fits_paths = [cc_fits_dict[freq][stoke] for stoke in stokes]
+        # bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n_boot, outpath=outdir,
+        #                   outname=('boot_{}'.format(freq), '_uv.fits'))
         files = glob.glob(os.path.join(outdir, 'boot_{}*.fits'.format(freq)))
         uv_boot_fits_dict.update({freq: sorted(files)})
 
@@ -458,12 +458,12 @@ def analyze_source(uv_fits_paths, n_boot, imsizes=None, common_imsize=None,
             for i, uv_fits_path in enumerate(uv_fits_paths):
                 uv_dir, uv_fname = os.path.split(uv_fits_path)
                 outfname = 'boot_{}_{}_cc_{}.fits'.format(freq, stoke,
-                                                          str(i).zfill(3))
-                clean_difmap(uv_fname, outfname, stoke, common_imsize,
-                             path=uv_dir, path_to_script=path_to_script,
-                             outpath=outdir, show_difmap_output=False)
+                                                          str(i + 1).zfill(3))
+                # clean_difmap(uv_fname, outfname, stoke, common_imsize,
+                #              path=uv_dir, path_to_script=path_to_script,
+                #              outpath=outdir, show_difmap_output=False)
             files = sorted(glob.glob(os.path.join(outdir,
-                                                  'boot_{}_{}_cc_*.fits')))
+                                                  'boot_{}_{}_cc_*.fits'.format(freq, stoke))))
             cc_boot_fits_dict[freq].update({stoke: files})
 
     # 9. Optionally estimate RM map and it's error
@@ -476,7 +476,7 @@ def analyze_source(uv_fits_paths, n_boot, imsizes=None, common_imsize=None,
     # Find rough mask for creating bootstrap images of RM, alpha, ...
     print("Finding rough mask for creating bootstrap images of RM, alpha, ...")
     cs_mask = pol_mask({stoke: cc_cs_image_dict[freqs[-1]][stoke] for
-                        stoke in stokes}, n_sigma=2.)
+                        stoke in stokes}, n_sigma=3.)
 
     rotm_image, _ = original_cs_images.create_rotm_image(mask=cs_mask)
 
@@ -484,7 +484,7 @@ def analyze_source(uv_fits_paths, n_boot, imsizes=None, common_imsize=None,
     fnames = sorted(glob.glob(os.path.join(data_dir, "boot_*_*_cc_*.fits")))
     for freq in freqs:
         for stoke in stokes:
-            boot_images.add_from_fits(cc_boot_fits_dict[freq][stoke])
+                boot_images.add_from_fits(cc_boot_fits_dict[freq][stoke])
     boot_rotm_images = boot_images.create_rotm_images(mask=cs_mask)
     s_rotm_image = boot_rotm_images.create_error_image(cred_mass=0.95)
 
@@ -564,6 +564,6 @@ if __name__ == '__main__':
     uv_fits_paths = [os.path.join(data_dir, uv_fits_fname) for uv_fits_fname in
                      uv_fits_fnames]
 
-    analyze_source(uv_fits_paths, n_boot=3, outdir=data_dir,
+    analyze_source(uv_fits_paths, n_boot=30, outdir=data_dir,
                    path_to_script=path_to_script, imsizes=mapsize_dict.values(),
                    common_imsize=mapsize_common, find_shifts=False)

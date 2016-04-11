@@ -7,7 +7,7 @@ from mojave import (get_all_mojave_sources, download_mojave_uv_fits,
 from from_fits import create_clean_image_from_fits_file
 from beam import CleanBeam
 from utils import mas_to_rad
-from image_ops import (pol_map, jet_direction)
+from image_ops import (pol_map, jet_direction, pol_mask)
 
 
 def map_fname(source, epoch, stokes):
@@ -62,15 +62,16 @@ if __name__ == '__main__':
             beam = i_image.beam
             pixsize = abs(i_image.pixsize[0]) / mas_to_rad
             beam = (beam[0] / pixsize, beam[1] / pixsize, beam[2])
+            print beam
             circ_beam = CleanBeam()
             circ_beam._construct(bmaj=beam[0], bmin=beam[0], bpa=0.,
                                  imsize=imsize)
             i_image_circ = i_image.convolve(circ_beam.image)
+            i_image_circ[mask] = 0.
             fig = plt.figure()
             ax = fig.add_subplot(1, 1, 1)
             ax.matshow(i_image_circ)
             fig.show()
-
 
             # Creating PPOL image with circular beam
             q_image = create_clean_image_from_fits_file(os.path.join(data_dir,
@@ -81,23 +82,22 @@ if __name__ == '__main__':
                                                                      map_fname(source,
                                                                                epoch,
                                                                                'U')))
-            q_image_circ = q_image.convolve(circ_beam.beam)
-            u_image_circ = u_image.convolve(circ_beam.beam)
+            stokes_image_dict = {'I': i_image, 'Q': q_image, 'U': u_image}
+            mask = pol_mask(stokes_image_dict, n_sigma=3)
+            q_image_circ = q_image.convolve(circ_beam.image)
+            u_image_circ = u_image.convolve(circ_beam.image)
             p_image_circ = pol_map(q_image_circ, u_image_circ)
+            p_image_circ[mask] = 0.
             fig = plt.figure()
             ax = fig.add_subplot(1, 1, 1)
-            ax.matshow(q_image_circ)
-            fig.show()
-            fig = plt.figure()
-            ax = fig.add_subplot(1, 1, 1)
-            ax.matshow(u_image_circ)
+            ax.matshow(p_image_circ)
             fig.show()
 
             # Calculate ridge line for I and PPOL
             i_rs, i_phis, i_fluxes = jet_direction(i_image_circ, rmin=beam[0],
-                                                   rmax=max_dist)
+                                                   rmax=max_dist, dr=2)
             p_rs, p_phis, p_fluxes = jet_direction(p_image_circ, rmin=beam[0],
-                                                   rmax=max_dist)
+                                                   rmax=max_dist, dr=2)
             print i_rs, p_rs
             print i_phis, p_phis
             print i_fluxes, p_fluxes

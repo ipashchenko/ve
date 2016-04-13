@@ -136,6 +136,7 @@ def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan,
 
 
 # FIXME: This functions just use ``rotm`` function for each pixel.
+# TODO: Add outputting PA at zero frequency
 def rotm_map(freqs, chis, s_chis=None, mask=None, outfile=None, outdir=None,
              ext='png', mask_on_chisq=True):
     """
@@ -505,6 +506,10 @@ def rotm(freqs, chis, s_chis=None, p0=None):
 #         pcov = np.nan
 
 #     return p, pcov, s_sq
+
+
+def spix_map(freqs, i_maps, s_i_maps=None, mask=None, mask_on_chisq=False):
+    raise NotImplementedError
 
 
 def jet_direction(image, rmin=0, rmax=200, dr=4, plots=False):

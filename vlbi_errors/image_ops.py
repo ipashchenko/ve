@@ -11,10 +11,24 @@ def rotm_model(p, freqs):
     lambdasq = (3. * 10 ** 8 / freqs) ** 2
     return p[0] * lambdasq + p[1]
 
-def weighted_residuals(p, freqs, chis, s_chis):
+
+def spix_model(p, freqs):
+    return p[0] * np.log(freqs) + p[1]
+
+
+def spix_weighted_residuals(p, freqs, fluxes, s_fluxes):
+    return (np.log(fluxes) - spix_model(p, freqs)) / (s_fluxes / fluxes)
+
+
+def spix_residuals(p, freqs, fluxes):
+    return np.log(fluxes) - spix_model(p, freqs)
+
+
+def rotm_weighted_residuals(p, freqs, chis, s_chis):
     return (chis - rotm_model(p, freqs)) / s_chis
 
-def residuals(p, freqs, chis):
+
+def rotm_residuals(p, freqs, chis):
     return chis - rotm_model(p, freqs)
 
 
@@ -429,9 +443,9 @@ def rotm(freqs, chis, s_chis=None, p0=None):
     chis = resolver_chisq(lambdasq, chis, s_chi=s_chis, p0=p0)
 
     if s_chis is None:
-        func, args = residuals, (freqs, chis,)
+        func, args = rotm_residuals, (freqs, chis,)
     else:
-        func, args = weighted_residuals, (freqs, chis, s_chis,)
+        func, args = rotm_weighted_residuals, (freqs, chis, s_chis,)
     fit = leastsq(func, p0, args=args, full_output=True)
     (p, pcov, infodict, errmsg, ier) = fit
 
@@ -449,67 +463,195 @@ def rotm(freqs, chis, s_chis=None, p0=None):
     return p, pcov, s_sq
 
 
-# def spix(freqs, fluxes, s_fluxes=None, p0=None):
-#     """
-#     Function that calculates SPectral IndeX.
-#
-#     :param freqs:
-#         Iterable of frequencies [Hz].
-#     :param fluxes:
-#         Iterable of flux values [Jy].
-#     :param s_fluxes: (optional)
-#         Iterable of fluxes uncertainties estimates [Jy].
-#     :param p0:
-#         Starting value for minimization (SPIX []).
-#
-#     :return:
-#         Tuple of value of SPIX [] and numpy array of covariance matrix.
-#
-#     """
-#
-#     if p0 is None:
-#         p0 = [0.]
-#
-#     if s_fluxes is not None:
-#         assert len(freqs) == len(fluxes) == len(s_fluxes)
-#     else:
-#         assert len(freqs) == len(fluxes)
-#
-#     p0 = np.array(p0)
-#     freqs = np.array(freqs)
-#     chis = np.array(chis)
-#     if s_chis is not None:
-#         s_chis = np.array(s_chis)
-#
-#     # Try to unwrap angles
-#     chis = unwrap_phases(chis)
-#     # Resolve ``n pi`` ambiguity resolved
-#     lambdasq = (3. * 10 ** 8 / freqs) ** 2
-#     chis = resolver_chisq(lambdasq, chis, s_chi=s_chis, p0=p0)
-#
-#     if s_chis is None:
-#         func, args = residuals, (freqs, chis,)
-#     else:
-#         func, args = weighted_residuals, (freqs, chis, s_chis,)
-#     fit = leastsq(func, p0, args=args, full_output=True)
-#     (p, pcov, infodict, errmsg, ier) = fit
-#
-#     if ier not in [1, 2, 3, 4]:
-#         msg = "Optimal parameters not found: " + errmsg
-#         raise RuntimeError(msg)
-#
-#     s_sq = (func(p, *args) ** 2.).sum() / (len(chis) - len(p0))
-#     if (len(chis) > len(p0)) and pcov is not None:
-#         # Residual variance
-#         pcov *= s_sq
-#     else:
-#         pcov = np.nan
+def spix(freqs, fluxes, s_fluxes=None, p0=None):
+    """
+    Function that calculates SPectral IndeX.
 
-#     return p, pcov, s_sq
+    :param freqs:
+        Iterable of frequencies [Hz].
+    :param fluxes:
+        Iterable of flux values [Jy].
+    :param s_fluxes: (optional)
+        Iterable of fluxes uncertainties estimates [Jy].
+    :param p0:
+        Starting value for minimization (SPIX []).
+
+    :return:
+        Tuple of value of SPIX [] and numpy array of covariance matrix.
+
+    """
+
+    if p0 is None:
+        p0 = [0.]
+
+    if s_fluxes is not None:
+        assert len(freqs) == len(fluxes) == len(s_fluxes)
+    else:
+        assert len(freqs) == len(fluxes)
+
+    p0 = np.array(p0)
+    freqs = np.array(freqs)
+    chis = np.array(fluxes)
+    if s_fluxes is not None:
+        s_fluxes = np.array(s_fluxes)
+
+    if s_fluxes is None:
+        func, args = spix_residuals, (freqs, fluxes,)
+    else:
+        func, args = spix_weighted_residuals, (freqs, fluxes, s_fluxes,)
+    fit = leastsq(func, p0, args=args, full_output=True)
+    (p, pcov, infodict, errmsg, ier) = fit
+
+    if ier not in [1, 2, 3, 4]:
+        msg = "Optimal parameters not found: " + errmsg
+        raise RuntimeError(msg)
+
+    s_sq = (func(p, *args) ** 2.).sum() / (len(chis) - len(p0))
+    if (len(chis) > len(p0)) and pcov is not None:
+        # Residual variance
+        pcov *= s_sq
+    else:
+        pcov = np.nan
+
+    return p, pcov, s_sq
 
 
-def spix_map(freqs, i_maps, s_i_maps=None, mask=None, mask_on_chisq=False):
-    raise NotImplementedError
+def spix_map(freqs, flux_maps, s_flux_maps=None, mask=None, outfile=None,
+             outdir=None, ext='png', mask_on_chisq=False):
+    """
+    Function that calculates SPectral IndeX map.
+
+    :param freqs:
+        Iterable of frequencies [Hz].
+    :param flux_maps:
+        Iterable of 2D numpy arrays with fluxes [Jy].
+    :param s_flux_maps: (optional)
+        Iterable of 2D numpy arrays with flux uncertainties estimates [Jy].
+    :param mask: (optional)
+        Mask to be applied to arrays before calculation. If ``None`` then don't
+        apply mask. Note that ``mask`` must have dimensions of only one image,
+        that is it should be 2D array.
+    :param mask_on_chisq: (optional)
+        Mask chi squared values that are larger then critical value? (default:
+        ``False``)
+
+    :return:
+        Tuple of 2D numpy array with values of Spectral Index [], 2D numpy array
+        with uncertainties map [] and 2D numpy array with chi squared values of
+        log-log linear fit.
+
+    """
+    # Critical values (alpha=0.05) of chi-squared distribution for different]
+    # dofs.
+    chisq_crit_values = {1: 3.841, 2: 5.991, 3: 7.815, 4: 9.488, 5: 11.070,
+                         6: 12.592, 7: 14.067, 8: 15.507, 9: 16.919, 10: 18.307}
+    freqs = np.array(freqs)
+
+    # Asserts on data consistency
+    if s_flux_maps is not None:
+        assert len(freqs) == len(flux_maps) == len(s_flux_maps)
+    else:
+        assert len(freqs) == len(flux_maps)
+
+    flux_cube = np.dstack(flux_maps)
+    if s_flux_maps is not None:
+        s_flux_cube = np.dstack(s_flux_maps)
+
+    # Initialize arrays for storing results and fill them with NaNs
+    spix_array = np.empty(np.shape(flux_cube[:, :, 0]))
+    s_spix_array = np.empty(np.shape(flux_cube[:, :, 0]))
+    chisq_array = np.empty(np.shape(flux_cube[:, :, 0]))
+    spix_array[:] = np.nan
+    s_spix_array[:] = np.nan
+    chisq_array[:] = np.nan
+
+    if mask is None:
+        mask = np.zeros(spix_array.shape, dtype=int)
+
+    # If saving output then create figure with desired number of cells.
+    if outfile:
+        if outdir is None:
+            outdir = '.'
+        # If the directory does not exist, create it
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+
+        # Calculate how many pixels there should be
+        npixels = len(np.where(mask.ravel() == 0)[0])
+        print "{} pixels with fit will be plotted".format(npixels)
+        nrows = int(np.sqrt(npixels) + 1)
+        print "Plot will have dims: {} by {}".format(nrows, nrows)
+
+        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, sharex=True,
+                                 sharey=True)
+        fig.set_size_inches(18.5, 18.5)
+        plt.rcParams.update({'axes.titlesize': 'small'})
+        i, j = 0, 0
+
+    # Cycle SPIX calculation for each unmasked pixel
+    for (x, y), value in np.ndenumerate(spix_array):
+        # If pixel should be masked then just pass by and leave NaN as value
+        if mask[x, y]:
+            continue
+
+        if s_flux_maps is not None:
+            p, pcov, s_sq = spix(freqs, flux_cube[x, y, :], s_flux_cube[x, y, :])
+        else:
+            p, pcov, s_sq = spix(freqs, flux_cube[x, y, :])
+
+        if mask_on_chisq and s_sq > chisq_crit_values[len(flux_maps) - 2]:
+            chisq_array[x, y] = s_sq
+            spix_array[x, y] = np.nan
+            s_spix_array[x, y] = np.nan
+        if pcov is not np.nan:
+            chisq_array[x, y] = s_sq
+            spix_array[x, y] = p[0]
+            s_spix_array[x, y] = np.sqrt(pcov[0, 0])
+        else:
+            chisq_array[x, y] = s_sq
+            spix_array[x, y] = p[0]
+            s_spix_array[x, y] = np.nan
+
+        # Plot to file
+        if outfile:
+            if s_flux_maps is not None:
+                axes[i, j].errorbar(freqs, flux_cube[x, y, :],
+                                    s_flux_cube[x, y, :], fmt='.k')
+            else:
+                axes[i, j].plot(freqs, flux_cube[x, y, :], '.k')
+            freqs_ = np.linspace(freqs[0], freqs[-1], 10)
+            axes[i, j].plot(freqs_,
+                            np.exp(spix_model(p, np.log(freqs_))),
+                            'r', lw=2, label="SPIX={0:.1f}".format(p[0]))
+            axes[i, j].set_title("{}-{}".format(x, y))
+            axes[i, j].legend(prop={'size': 6}, loc='best', fancybox=True,
+                              framealpha=0.5)
+            # Check this text box
+            # ax.hist(x, 50)
+            # # these are matplotlib.patch.Patch properties
+            # props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+
+            # # place a text box in upper left in axes coords
+            # ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14,
+            # verticalalignment='top', bbox=props)
+
+            axes[i, j].set_xticks([freqs_[0], freqs_[-1]])
+            # axes[i, j].set_ylim(-np.pi, np.pi)
+            j += 1
+            # Plot first row first
+            if j // nrows > 0:
+                # Then second row, etc...
+                i += 1
+                j = 0
+
+    # Save to file plotted figure
+    if outfile:
+        path = os.path.join(outdir, outfile)
+        print "Saving linear fits to {}.{}".format(path, ext)
+        fig.show()
+        fig.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=200)
+
+    return spix_array, s_spix_array, chisq_array
 
 
 def jet_direction(image, rmin=0, rmax=200, dr=4, plots=False):

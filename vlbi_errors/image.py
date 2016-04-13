@@ -311,7 +311,10 @@ class BasicImage(object):
                 raise Exception("Images have incompatible parameters!")
         # If ``image`` is array-like
         else:
-            self._image = np.atleast_2d(image).copy()
+            image = np.atleast_2d(image).copy()
+            if not self.imsize == np.shape(image):
+                raise Exception("Images have incompatible parameters!")
+            self._image = image
 
     def __eq__(self, other):
         """
@@ -607,6 +610,7 @@ class Image(BasicImage):
         #      factor=factor, plot_color=plot_color)
 
 
+# TODO: ``cc`` attribute should be collection of ``Model`` instances!
 # TODO: Add method ``shift`` that shifts image (CCs and residulas). Is it better
 # to shift in uv-domain?
 class CleanImage(Image):
@@ -706,12 +710,15 @@ class CleanImage(Image):
     def image(self, image):
         if isinstance(image, Image):
             if self == image:
-                self._image_original = image.image.copy()
+                self._image = image.image.copy()
             else:
                 raise Exception("Images have incompatible parameters!")
         # If ``image`` is array-like
         else:
-            self._image_original = np.atleast_2d(image).copy()
+            image = np.atleast_2d(image).copy()
+            if not self.imsize == np.shape(image):
+                raise Exception("Images have incompatible parameters!")
+            self._image = image
 
     @property
     def cc_image(self):

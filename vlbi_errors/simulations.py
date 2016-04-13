@@ -361,6 +361,8 @@ class MFSimulation(object):
         return [uvdata.frequency for uvdata in self.observed_uv]
 
 
+# TODO: This function only simulates. To analyzes simulations use other funcs
+# TODO: Use ``image_ops.pol_map`` function to create mask for ROTM calculation
 # FIXME: ``MFSimulation`` & ``Images`` instances use different frequencies.
 # TODO: Add function to create realistic FPOL & Q/U distribution
 # TODO: Make ``mapsize_dict`` the required argument
@@ -370,7 +372,8 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
              rotm_grad_value=40., rotm_value_0=200., path_to_script=None,
              base_dir=None, mapsize_common=None, mapsize_dict=None,
              rotm_slice=((216, 276), (296, 276)), n_beam=0,
-             download_mojave=False, conf_band_alpha=0.95, rotm_clim_model=None):
+             download_mojave=False, conf_band_alpha=0.95,
+             rotm_clim_model=None):
     """
     :param source:
         Source name [B1950].
@@ -522,6 +525,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     rm_simulation.save_fits(fnames_dict)
 
     # CLEAN uv-fits with simulated data
+    # FIXME: Calculate mask for each frequency and logically OR them
     for freq in rm_simulation.freqs:
         uv_fits_fname = fnames_dict[freq]
         print "Cleaning {}".format(uv_fits_fname)

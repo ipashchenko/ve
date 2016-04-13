@@ -9,7 +9,7 @@ from image import BasicImage, Image
 from images import Images
 from utils import (mask_region, mas_to_rad, find_card_from_header, create_grid,
                    gaussian, gaussian_beam)
-from image_ops import pol_map, pang_map
+from image_ops import (pol_map, pang_map, rotm_map, spix_map)
 from from_fits import create_clean_image_from_fits_file
 from model import Model
 from uv_data import UVData
@@ -261,13 +261,15 @@ class ModelGenerator(object):
         Get stokes images for given frequency.
 
         :param frequency:
-            Frequency on which to plot models.
+            Frequency on which to calculate models [Hz]
         :param i_cut_frac: (optional)
             Fraction of stokes `I` intensity to create mask. If ``None`` then
             don't mask images.
         :param beam: (optional)
             Iterable of 3 beam parameters - bmaj [mas], bmean [mas], bpa [deg]
             to optionally convolve images
+        :param mask_before_convolve: (optional)
+            Boolean. Mask maps with ``i_cut_frac`` before or after convolution?
 
         :return:
             Dictionary with keys specifying stokes and values - 2D numpy arrays
@@ -278,6 +280,8 @@ class ModelGenerator(object):
         if i_cut_frac is not None:
             do_mask = True
             mask = i_image < i_cut_frac * np.max(i_image)
+        else:
+            do_mask = False
         if beam:
             beam_image = gaussian_beam(self.size[0], beam[0], beam[1],
                                        beam[2] + 90., self.size[1])
@@ -304,6 +308,100 @@ class ModelGenerator(object):
         pola = pang_map(images['Q'], images['U'])
         poli = pol_map(images['Q'], images['U'])
         return {'PPOL': poli, 'PANG': pola}
+
+    def create_i_mask(self, frequency, i_cut_frac, beam=None,
+                      mask_before_convolve=True):
+        """
+        Create mask base on stokes `I` flux on specified frequency.
+
+        :param frequency:
+            Frequency on which to calculate models [Hz]
+        :param i_cut_frac:
+            Fraction of stokes `I` intensity to create mask.
+        :param beam: (optional)
+            Iterable of 3 beam parameters - bmaj [mas], bmean [mas], bpa [deg]
+            to optionally convolve images
+        :param mask_before_convolve:
+            Boolean. Mask maps with ``i_cut_frac`` before or after convolution?
+
+        :return:
+            Mask array.
+        """
+        image = self.get_stokes_images(frequency, beam=beam)['I']
+        if mask_before_convolve:
+            mask = image < i_cut_frac * np.max(image)
+        else:
+            beam_image = gaussian_beam(self.size[0], beam[0], beam[1],
+                                       beam[2] + 90., self.size[1])
+            image = signal.fftconvolve(image, beam_image, mode='same')
+            mask = image < i_cut_frac * np.max(image)
+
+        return mask
+
+    def get_rotm_map(self, frequencies, i_cut_frac=None, beam=None,
+                     mask_before_convolve=True, rotm_mask=None):
+        """
+        Calculate model ROTM map (optionally for convolved `Q` & `U` images) for
+        a user-specified frequencies.
+
+        :param frequencies:
+            Iterable of frequencies [Hz].
+        :param i_cut_frac: (optional)
+            Fraction of stokes `I` intensity to create mask. If ``None`` then
+            don't mask images.
+        :param beam: (optional)
+            Iterable of 3 beam parameters - bmaj [mas], bmean [mas], bpa [deg]
+            to optionally convolve images
+        :param mask_before_convolve:
+            Boolean. Mask maps with ``i_cut_frac`` before or after convolution?
+        :param rotm_mask: (optional)
+            Mask used when creating ROTM map. If ``None`` the don't use mask.
+            (default: ``None``)
+
+        :return:
+            Output of ``images_ops.rotm_map`` for model for given frequencies.
+            Tuple of 2D numpy array with values of Rotation Measure [rad/m**2],
+            2D numpy array with uncertainties map [rad/m**2] and 2D numpy array
+            with chi squared values of linear fit.
+        """
+        from collections import OrderedDict
+        images = OrderedDict()
+        for frequency in sorted(frequencies):
+            images[frequency] = self.get_pol_maps(frequency,
+                                                  i_cut_frac=i_cut_frac,
+                                                  beam=beam,
+                                                  mask_before_convolve=mask_before_convolve)['PANG']
+        return rotm_map(frequencies, images.values(), mask=rotm_mask)
+
+
+    def get_spix_map(self, frequencies, i_cut_frac=None, beam=None,
+                     mask_before_convolve=True):
+        """
+        Calculate model SPIX map (optionally for convolved `I` images) for a
+        user-specified frequencies.
+
+        :param frequencies:
+            Iterable of frequencies [Hz].
+        :param i_cut_frac: (optional)
+            Fraction of stokes `I` intensity to create mask. If ``None`` then
+            don't mask images.
+        :param beam: (optional)
+            Iterable of 3 beam parameters - bmaj [mas], bmean [mas], bpa [deg]
+            to optionally convolve images
+        :param mask_before_convolve:
+            Boolean. Mask maps with ``i_cut_frac`` before or after convolution?
+
+        :return:
+            Output of ``images_ops.spix_map`` for model for given frequency.
+        """
+        from collections import OrderedDict
+        images = OrderedDict()
+        for frequency in sorted(frequencies):
+            images[frequency] = self.get_stokes_images(frequency,
+                                                       i_cut_frac=i_cut_frac,
+                                                       beam=beam,
+                                                       mask_before_convolve=mask_before_convolve)['I']
+        return spix_map(frequencies, images.values())
 
 
 class Simulation(object):
@@ -803,4 +901,8 @@ if __name__ == '__main__':
                                              i_cut_frac=0.01)
     pol_images = mod_generator.get_pol_maps(frequency=8.*10**9.,
                                             i_cut_frac=0.01)
+    frequencies = [5. * 10 ** 9, 8. * 10 ** 9, 12. * 10 ** 9, 15. * 10 ** 9]
+    mask = mod_generator.create_i_mask(frequencies[-1], i_cut_frac=0.01)
+    rm_map, s_rm_map, chsq_map = mod_generator.get_rotm_map(frequencies,
+                                                            rotm_mask=mask)
 

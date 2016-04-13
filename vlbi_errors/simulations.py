@@ -3,11 +3,13 @@ import copy
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import signal
 from utils import get_fits_image_info, degree_to_rad, hdi_of_arrays
 from image import BasicImage, Image
 from images import Images
 from utils import (mask_region, mas_to_rad, find_card_from_header, create_grid,
-                   gaussian)
+                   gaussian, gaussian_beam)
+from image_ops import pol_map, pang_map
 from from_fits import create_clean_image_from_fits_file
 from model import Model
 from uv_data import UVData
@@ -108,6 +110,8 @@ def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
     return image
 
 
+# TODO: Models could consist of many components - ``stokes_models`` shouls be
+# ``Model`` instances, not numpy arrays
 class ModelGenerator(object):
     """
     # TODO: Rename to ``stokes_model_images``
@@ -136,6 +140,7 @@ class ModelGenerator(object):
         images = stokes_models.values()
         if not images:
             raise Exception("Need at least one model")
+        # TODO: Can model images have different parameters (size, pixels)?
         shape = images[0].shape
         self.image_shape = shape
         self._x = x
@@ -167,15 +172,15 @@ class ModelGenerator(object):
         Create instances of ``Model`` class using current model images.
 
         :return:
-            List of ``Model`` instances.
+            Dictionary of ``Model`` instances.
         """
-        models = list()
+        models = dict()
         stokes_models = stokes_models or self.stokes_models
         for stokes, image in stokes_models.items():
             model = Model(stokes=stokes)
             image_component = ImageComponent(image, self._x, self._y)
             model.add_components(image_component)
-            models.append(model)
+            models.update({stokes: model})
         return models
 
     def create_models_for_frequency(self, freq):
@@ -186,7 +191,7 @@ class ModelGenerator(object):
             Frequency at which evaluate and return models [Hz].
 
         :return:
-            List of ``Model`` isntances.
+            Dictionary of ``Model`` isntances.
         """
         stokes_models = self.move_for_freq(freq)
         return self.create_models(stokes_models)
@@ -247,6 +252,58 @@ class ModelGenerator(object):
     @property
     def stokes(self):
         return self.stokes_models.keys()
+
+    # TODO: Models could consists of several components. Don't use
+    # ``Model._compnents``
+    def get_stokes_images(self, frequency, i_cut_frac=None, beam=None,
+                          mask_before_convolve=True):
+        """
+        Get stokes images for given frequency.
+
+        :param frequency:
+            Frequency on which to plot models.
+        :param i_cut_frac: (optional)
+            Fraction of stokes `I` intensity to create mask. If ``None`` then
+            don't mask images.
+        :param beam: (optional)
+            Iterable of 3 beam parameters - bmaj [mas], bmean [mas], bpa [deg]
+            to optionally convolve images
+
+        :return:
+            Dictionary with keys specifying stokes and values - 2D numpy arrays
+            (optionally masked) with images.
+        """
+        models = self.create_models_for_frequency(frequency)
+        i_image = models['I']._components[0].image
+        if i_cut_frac is not None:
+            do_mask = True
+            mask = i_image < i_cut_frac * np.max(i_image)
+        if beam:
+            beam_image = gaussian_beam(self.size[0], beam[0], beam[1],
+                                       beam[2] + 90., self.size[1])
+        result = dict()
+        for stokes in self.stokes:
+            image = models[stokes]._components[0].image
+            if do_mask and mask_before_convolve:
+                image = np.ma.array(image, mask=mask)
+            if beam:
+                image = signal.fftconvolve(image, beam_image, mode='same')
+                if do_mask and not mask_before_convolve:
+                    image = np.ma.array(image, mask=mask)
+            result.update({stokes: image})
+
+        return result
+
+    def get_pol_maps(self, frequency, i_cut_frac=None, beam=None,
+                     mask_before_convolve=True):
+        assert 'Q' in self.stokes
+        assert 'U' in self.stokes
+        images = self.get_stokes_images(frequency, i_cut_frac=i_cut_frac,
+                                        beam=beam,
+                                        mask_before_convolve=mask_before_convolve)
+        pola = pang_map(images['Q'], images['U'])
+        poli = pol_map(images['Q'], images['U'])
+        return {'PPOL': poli, 'PANG': pola}
 
 
 class Simulation(object):
@@ -345,7 +402,7 @@ class MFSimulation(object):
         for simulation in self.simulations:
             frequency = simulation.frequency
             models = self.model_generator.create_models_for_frequency(frequency)
-            simulation.add_true_models(models)
+            simulation.add_true_models(models.values())
 
     def simulate(self):
         for simulation in self.simulations:
@@ -678,33 +735,72 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
 
 if __name__ == '__main__':
 
-    from mojave import get_epochs_for_source
-    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
-    base_dir = '/home/ilya/code/vlbi_errors/examples/mojave/0d005'
-    # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
-    #            '1749+701', '0454+844']
-    mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
-                    'u': (512, 0.1)}
-    mapsize_common = (512, 0.1)
-    source_epoch_dict = dict()
-    # for source in sources:
-    #     epochs = get_epochs_for_source(source, use_db='multifreq')
-    #     print "Found epochs for source {}".format(source)
-    #     print epochs
-    #     source_epoch_dict.update({source: epochs[-1]})
-    # for source in sources:
-    #     print "Simulating source {}".format(source)
-    #     simulate(source, source_epoch_dict[source], ['x', 'y', 'j', 'u'],
-    #              n_sample=3, rotm_clim=[-200, 200],
-    #              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
-    #              mapsize_common=mapsize_common, base_dir=base_dir,
-    #              rotm_value_0=0., max_jet_flux=0.005)
+    # ############################################################################
+    # # Test simulate
+    # from mojave import get_epochs_for_source
+    # path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    # base_dir = '/home/ilya/code/vlbi_errors/examples/mojave/0d005'
+    # # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
+    # #            '1749+701', '0454+844']
+    # mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
+    #                 'u': (512, 0.1)}
+    # mapsize_common = (512, 0.1)
+    # source_epoch_dict = dict()
+    # # for source in sources:
+    # #     epochs = get_epochs_for_source(source, use_db='multifreq')
+    # #     print "Found epochs for source {}".format(source)
+    # #     print epochs
+    # #     source_epoch_dict.update({source: epochs[-1]})
+    # # for source in sources:
+    # #     print "Simulating source {}".format(source)
+    # #     simulate(source, source_epoch_dict[source], ['x', 'y', 'j', 'u'],
+    # #              n_sample=3, rotm_clim=[-200, 200],
+    # #              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
+    # #              mapsize_common=mapsize_common, base_dir=base_dir,
+    # #              rotm_value_0=0., max_jet_flux=0.005)
 
-    source = '1055+018'
-    epoch = '2006_11_10'
-    simulate(source, epoch, ['x', 'y', 'j', 'u'],
-             n_sample=5, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
-             path_to_script=path_to_script, mapsize_dict=mapsize_dict,
-             mapsize_common=mapsize_common, base_dir=base_dir,
-             rotm_value_0=0., rotm_grad_value=60., n_rms=4.,
-             download_mojave=True)
+    # source = '1055+018'
+    # epoch = '2006_11_10'
+    # simulate(source, epoch, ['x', 'y', 'j', 'u'],
+    #          n_sample=5, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
+    #          path_to_script=path_to_script, mapsize_dict=mapsize_dict,
+    #          mapsize_common=mapsize_common, base_dir=base_dir,
+    #          rotm_value_0=0., rotm_grad_value=60., n_rms=4.,
+    #          download_mojave=True)
+
+    ############################################################################
+    # Test for ModelGenerator
+    # Create jet model, ROTM & alpha images
+    imsize = (512, 512)
+    center = (256, 256)
+    # from `y`  band
+    pixsize = 4.848136191959676e-10
+    x, y = create_grid(imsize)
+    x -= center[0]
+    y -= center[1]
+    x *= pixsize
+    y *= pixsize
+    max_jet_flux = 0.01
+    qu_fraction = 0.1
+    rotm_grad_value = 40.
+    rotm_value_0 = 0.
+    model_freq = 20. * 10. ** 9.
+    jet_image = create_jet_model_image(30, 60, 10, max_jet_flux,
+                                       (imsize[0], imsize[0]),
+                                       (imsize[0] / 2, imsize[0] / 2),
+                                       gauss_peak=0.001, dist_from_core=20,
+                                       cut=0.0002)
+    rotm_image = rotm((imsize[0], imsize[0]),
+                      (imsize[0] / 2, imsize[0] / 2),
+                      grad_value=rotm_grad_value, rm_value_0=rotm_value_0)
+    alpha_image = alpha((imsize[0], imsize[0]),
+                        (imsize[0] / 2, imsize[0] / 2), 0.)
+    stokes_models = {'I': jet_image, 'Q': qu_fraction * jet_image,
+                     'U': qu_fraction * jet_image}
+    mod_generator = ModelGenerator(stokes_models, x, y, rotm=rotm_image,
+                                   alpha=alpha_image, freq=model_freq)
+    images = mod_generator.get_stokes_images(frequency=8.*10**9.,
+                                             i_cut_frac=0.01)
+    pol_images = mod_generator.get_pol_maps(frequency=8.*10**9.,
+                                            i_cut_frac=0.01)
+

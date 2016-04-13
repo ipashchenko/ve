@@ -703,7 +703,8 @@ if __name__ == '__main__':
     source = '1055+018'
     epoch = '2006_11_10'
     simulate(source, epoch, ['x', 'y', 'j', 'u'],
-             n_sample=5, max_jet_flux=0.003, rotm_clim=[-300, 300],
+             n_sample=5, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
              mapsize_common=mapsize_common, base_dir=base_dir,
-             rotm_value_0=0., rotm_grad_value=60., n_rms=4.)
+             rotm_value_0=0., rotm_grad_value=60., n_rms=4.,
+             download_mojave=True)

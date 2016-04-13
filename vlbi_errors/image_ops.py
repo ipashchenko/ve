@@ -448,6 +448,65 @@ def rotm(freqs, chis, s_chis=None, p0=None):
     return p, pcov, s_sq
 
 
+# def spix(freqs, fluxes, s_fluxes=None, p0=None):
+#     """
+#     Function that calculates SPectral IndeX.
+#
+#     :param freqs:
+#         Iterable of frequencies [Hz].
+#     :param fluxes:
+#         Iterable of flux values [Jy].
+#     :param s_fluxes: (optional)
+#         Iterable of fluxes uncertainties estimates [Jy].
+#     :param p0:
+#         Starting value for minimization (SPIX []).
+#
+#     :return:
+#         Tuple of value of SPIX [] and numpy array of covariance matrix.
+#
+#     """
+#
+#     if p0 is None:
+#         p0 = [0.]
+#
+#     if s_fluxes is not None:
+#         assert len(freqs) == len(fluxes) == len(s_fluxes)
+#     else:
+#         assert len(freqs) == len(fluxes)
+#
+#     p0 = np.array(p0)
+#     freqs = np.array(freqs)
+#     chis = np.array(chis)
+#     if s_chis is not None:
+#         s_chis = np.array(s_chis)
+#
+#     # Try to unwrap angles
+#     chis = unwrap_phases(chis)
+#     # Resolve ``n pi`` ambiguity resolved
+#     lambdasq = (3. * 10 ** 8 / freqs) ** 2
+#     chis = resolver_chisq(lambdasq, chis, s_chi=s_chis, p0=p0)
+#
+#     if s_chis is None:
+#         func, args = residuals, (freqs, chis,)
+#     else:
+#         func, args = weighted_residuals, (freqs, chis, s_chis,)
+#     fit = leastsq(func, p0, args=args, full_output=True)
+#     (p, pcov, infodict, errmsg, ier) = fit
+#
+#     if ier not in [1, 2, 3, 4]:
+#         msg = "Optimal parameters not found: " + errmsg
+#         raise RuntimeError(msg)
+#
+#     s_sq = (func(p, *args) ** 2.).sum() / (len(chis) - len(p0))
+#     if (len(chis) > len(p0)) and pcov is not None:
+#         # Residual variance
+#         pcov *= s_sq
+#     else:
+#         pcov = np.nan
+
+#     return p, pcov, s_sq
+
+
 def jet_direction(image, rmin=0, rmax=200, dr=4, plots=False):
     """ Find jet direction. Return array [radius, polar angle]"""
 

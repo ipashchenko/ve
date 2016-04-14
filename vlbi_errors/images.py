@@ -10,7 +10,8 @@ from from_fits import (create_image_from_fits_file,
 from utils import (mask_region, mas_to_rad, hdi_of_mcmc, flatten,
                    nested_dict_itervalue, mask_region)
 from image import BasicImage, Image, CleanImage, plot
-from image_ops import add_dterm_evpa, pol_map, fpol_map, pang_map, rotm_map
+from image_ops import add_dterm_evpa, pol_map, fpol_map, pang_map, rotm_map, \
+    spix_map
 
 
 # TODO: Option for using only CCc w/o residuals for building images
@@ -484,6 +485,137 @@ class Images(object):
             rotm_image, s_rotm_image = self.create_rotm_image(s_pang_arrays,
                                                               freqs, mask, i)
             images.add_image(rotm_image)
+
+        return images
+
+    def create_spix_image(self, s_flux_arrays=None, freqs=None, mask=None, n=0,
+                          outfile=None, outdir=None, ext='png'):
+        """
+        Method that creates image of Spectral Index for current collection of
+        instances.
+
+        :param s_pang_arrays: (optional)
+            Iterable of 2D numpy arrays with uncertainty estimates of flux [Jy].
+            Number of arrays must be equal to number of frequencies used in spix
+            calculation. If ``None`` then don't use errors in minimization.
+            (default: ``None``)
+        :param freqs: (optional)
+             What frequencies to use. If ``None`` then use all available in
+             instance's containter. (default: ``None``)
+        :param mask: (optional)
+            Mask to be applied to arrays before calculation. If ``None`` then
+            don't apply mask. Note that ``mask`` must have dimensions of only
+            one image, that is it should be 2D array.
+        :param n: (optional)
+            Sequence number of I images to use for each frequency. (default:
+            ``0``)
+
+        :return:
+           Tuple of two ``Image`` instances with Spectral Index values and
+           it's uncertainties estimates.
+
+        """
+        required_stokeses = ('I')
+
+        # Check that collection of images isn't empty
+        if not self.images:
+            raise Exception("First, add some images to instance!")
+
+        # Choose frequencies
+        if freqs is None:
+            freqs = self.freqs
+        if len(freqs) < 2:
+            raise Exception("Not enough frequencies for SPIX calculation!")
+
+        # Check that all frequencies have I maps
+        for freq in freqs:
+            stokeses = self.stokeses(freq)
+            for stokes in required_stokeses:
+                if stokes not in stokeses:
+                    raise Exception("No stokes " + stokes + " parameter for " +
+                                    freq + " frequency!")
+
+        # Get some image from stacked to use it parameters for saving output. It
+        # doesn't matter what image - they all are checked to have the same
+        # basic parameters
+        img = self._images_dict[freq][stokes][n]
+
+        # Create container for stokes `I` maps
+        flux_arrays = list()
+        # Fill it with stokes `I` arrays - one array for each frequency
+        for freq in freqs:
+            i_image = self._images_dict[freq]['I'][n].image
+            flux_arrays.append(i_image)
+
+        # Calculate Rotation Measure array and write it to ``BasicImage``
+        # isntance
+        spix_array, s_spix_array, chisq_array = spix_map(freqs, flux_arrays,
+                                                         s_flux_arrays,
+                                                         mask=mask,
+                                                         outfile=outfile,
+                                                         outdir=outdir, ext=ext)
+        spix_image = Image()
+        spix_image._construct(imsize=img.imsize, pixsize=img.pixsize,
+                              pixref=img.pixref, stokes='SPIX',
+                              freq=tuple(freqs), pixrefval=img.pixrefval)
+        spix_image.image = spix_array
+        # FIXME: use ``tuple`` for frequency container cause it is hashable
+        s_spix_image = Image()
+        s_spix_image._construct(imsize=img.imsize, pixsize=img.pixsize,
+                                pixref=img.pixref, stokes='SPIX',
+                                freq=tuple(freqs), pixrefval=img.pixrefval)
+        s_spix_image.image = s_spix_array
+
+        return spix_image, s_spix_image
+
+    def create_spix_images(self, s_flux_arrays=None, freqs=None, mask=None):
+        """
+        Method that creates SPIX images from series of bootstrapped data.
+
+        :param s_spix_arrays:
+        :param freqs:
+        :param mask:
+        :return:
+            Instance of ``Images`` class with calculated SPIX images.
+        """
+        required_stokeses = ('I')
+
+        # Check that collection of images isn't empty
+        if not self.images:
+            raise Exception("First, add some images to instance!")
+
+        # Choose frequencies
+        if freqs is None:
+            freqs = self.freqs
+        if len(freqs) < 2:
+            raise Exception("Not enough frequencies for SPIX calculation!")
+
+        # Check that all frequencies have Q & U maps
+        for freq in freqs:
+            stokeses = self.stokeses(freq)
+            for stokes in required_stokeses:
+                if stokes not in stokeses:
+                    raise Exception("No stokes " + stokes + " parameter for " +
+                                    freq + " frequency!")
+        n_replications = None
+        for freq in freqs:
+            i_images = self._images_dict[freq]['I']
+            # Check that we got the same number of ``Q`` and ``U`` images
+            if n_replications is None:
+                n_replications = len(i_images)
+            else:
+                if n_replications != len(i_images):
+                    raise Exception("Each frequency must contains the same # of"
+                                    " I images!")
+
+        # For each replication create SPIX map and add it to ``Images`` instance
+        images = Images()
+        for i in range(n_replications):
+            print "Creating {} image of {} replications".format(i + 1,
+                                                                n_replications)
+            spix_image, s_spix_image = self.create_spix_image(s_flux_arrays,
+                                                              freqs, mask, i)
+            images.add_image(spix_image)
 
         return images
 

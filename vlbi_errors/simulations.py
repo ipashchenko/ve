@@ -158,7 +158,7 @@ class ModelGenerator(object):
         if rotm is None:
             self.rotm = np.zeros(shape, dtype=float)
 
-    def _get_chi(self):
+    def _get_chi_0(self):
         if 'PANG' in self.stokes:
             chi_0 = self.stokes_models['PANG']
         elif 'Q' in self.stokes and 'U' in self.stokes:
@@ -283,8 +283,8 @@ class ModelGenerator(object):
         else:
             do_mask = False
         if beam:
-            beam_image = gaussian_beam(self.size[0], beam[0], beam[1],
-                                       beam[2] + 90., self.size[1])
+            beam_image = gaussian_beam(self.image_shape[0], beam[0], beam[1],
+                                       beam[2] + 90., self.image_shape[1])
         result = dict()
         for stokes in self.stokes:
             image = models[stokes]._components[0].image
@@ -628,7 +628,13 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     map_info = get_fits_image_info(cc_fits_fname_beam)
     beam_common = (map_info['bmaj'] / mas_to_rad, map_info['bmin'] / mas_to_rad,
                    map_info['bpa'] / degree_to_rad)
-    print "Common beam: ", beam_common
+    print "Common beam [mas, mas, deg]: ", beam_common
+    # Common beam in pixels
+    pix_size_common = abs(map_info['pixsize'][0])
+    beam_common_pxl = (beam_common[0] * mas_to_rad / pix_size_common,
+                       beam_common[1] * mas_to_rad / pix_size_common,
+                       beam_common[2])
+    print"Common beam [pix, pix, deg] : ", beam_common_pxl
 
     # Choose image on highest frequency for jet model construction
     map_info = get_fits_image_info(cc_fits_fname_high)
@@ -706,20 +712,21 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     # Create masks for ROTM and SPIX
     rotm_mask = None
     from from_fits import create_image_from_fits_file
+    # looping through simulated cleaned images
     for i_fname in sorted(glob.glob(os.path.join(data_dir, '*_I.fits'))):
         i_image = create_image_from_fits_file(i_fname)
         r_rms = mapsize_common[0] / 10
         rms = i_image.rms(region=(r_rms, r_rms, r_rms, None))
-        freq_highest = sorted(sym_images.freqs, reverse=True)[0]
-        ppol_image = sym_images.create_pol_images(freq=freq_highest)[0]
+        freq = i_image.freq
+        ppol_image = sym_images.create_pol_images(freq=freq)[0]
         mask = ppol_image.image < n_rms * rms
         if rotm_mask is None:
             rotm_mask = mask
         else:
             rotm_mask = np.logical_or(rotm_mask, mask)
 
-
     spix_mask = None
+    # looping through simulated cleaned images
     for i_fname in sorted(glob.glob(os.path.join(data_dir, '*_I.fits'))):
         i_image = create_image_from_fits_file(i_fname)
         r_rms = mapsize_common[0] / 10
@@ -756,37 +763,60 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     iplot(i_image.image, rotm_image_sym.image, x=i_image.x, y=i_image.y,
           min_abs_level=3. * rms, colors_mask=rotm_mask,
           outfile='rotm_image_sym', outdir=data_dir, color_clim=rotm_clim_sym,
-          blc=(210, 200), trc=(350, 320), beam=(beam_common[0], beam_common[1],
-                                                beam_common[2]),
+          blc=(210, 200), trc=(350, 320), beam=beam_common,
           colorbar_label='RM, [rad/m/m]', slice_points=((-2, -4), (-2, 4)),
           show=False)
     # Plotting simulated high-freq stokes I contours with SPIX values.
     iplot(i_image.image, spix_image_sym.image, x=i_image.x, y=i_image.y,
           min_abs_level=3. * rms, colors_mask=spix_mask,
           outfile='spix_image_sym', outdir=data_dir, color_clim=spix_clim_sym,
-          blc=(210, 200), trc=(350, 320), beam=(beam_common[0], beam_common[1],
-                                                beam_common[2]),
+          blc=(210, 200), trc=(350, 320), beam=beam_common,
           colorbar_label='SPIX', show=False)
 
-    # Plotting model of ROTM
+    # Plotting non-convolved (generating) model of ROTM
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
     mrotm_image = np.ma.array(rotm_image, mask=rotm_mask)
     ri = ax.matshow(mrotm_image, clim=rotm_clim_model)
     fig.colorbar(ri)
-    fig.savefig(os.path.join(data_dir, 'rotm_image_model.png'),
+    fig.savefig(os.path.join(data_dir, 'rotm_image_model_original.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
 
-    # Plot model of SPIX
+    # Plotting convolved model of ROTM
+    freqs = sorted([float(freq) for freq in rm_simulation.freqs])
+    freq = freqs[-1]
+    i_image_mod = mod_generator.get_stokes_images(freq, i_cut_frac=0.01,
+                                                  beam=beam_common_pxl)['I']
+    rotm_image_mod, _, _ = mod_generator.get_rotm_map(freqs,
+
+                                                      rotm_mask=rotm_mask)
+    iplot(i_image_mod, rotm_image_mod, x=i_image.x, y=i_image.y,
+          min_abs_level=3. * rms, colors_mask=rotm_mask,
+          outfile='rotm_image_model_convolved', outdir=data_dir,
+          color_clim=rotm_clim_model, blc=(210, 200), trc=(350, 320),
+          beam=beam_common, colorbar_label='RM, [rad/m/m]',
+          slice_points=((-2, -4), (-2, 4)), show=False)
+
+    # Plot non-convolved (generating) model of SPIX
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
     malpha_image = np.ma.array(alpha_image, mask=rotm_mask)
     ri = ax.matshow(malpha_image)
     fig.colorbar(ri)
-    fig.savefig(os.path.join(data_dir, 'alpha_image_model.png'),
+    fig.savefig(os.path.join(data_dir, 'spix_image_model_original.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
+
+    # Plotting convolved model of SPIX
+    spix_image_mod, _, _ = mod_generator.get_spix_map(freqs,
+                                                      spix_mask=spix_mask,
+                                                      beam=beam_common_pxl)
+    iplot(i_image_mod, spix_image_mod, x=i_image.x, y=i_image.y,
+          min_abs_level=3. * rms, colors_mask=spix_mask,
+          outfile='spix_image_model_convolved', outdir=data_dir,
+          color_clim=spix_clim_sym, blc=(210, 200), trc=(350, 320),
+          beam=beam_common, colorbar_label='SPIX', show=False)
 
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
@@ -866,6 +896,45 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
                 bbox_inches='tight', dpi=200)
     plt.close()
 
+    # Create SPIX images of simulated sample
+    spix_images_sym = sym_images.create_spix_images(mask=spix_mask)
+
+    # Calculate simultaneous confidence bands
+    # Bootstrap slices
+    slices = list()
+    for image in spix_images_sym.images:
+        slice_ = image.slice((256, 216), (256, 376))
+        slices.append(slice_[~np.isnan(slice_)])
+
+    # Find means
+    obs_slice = spix_image_sym.slice((256, 216), (256, 376))
+    x = np.arange(216, 376, 1)
+    x = x[~np.isnan(obs_slice)]
+    obs_slice = obs_slice[~np.isnan(obs_slice)]
+    # Find sigmas
+    slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices]
+    sigmas = hdi_of_arrays(slices_).squeeze()
+    means = np.mean(np.vstack(slices), axis=0)
+    diff = obs_slice - means
+    # Move bootstrap curves to original simulated centers
+    slices_ = [slice_ + diff for slice_ in slices]
+    # Find low and upper confidence band
+    low, up = create_sim_conf_band(slices_, obs_slice, sigmas,
+                                   alpha=conf_band_alpha)
+
+    # Plot confidence bands and model values
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ax.plot(x, low[::-1], 'g')
+    ax.plot(x, up[::-1], 'g')
+    [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
+    ax.plot(x, obs_slice[::-1], '.k')
+    # Plot SPIX model
+    alphas = -1. / (1. + np.exp(-0.5 * (x - 256))) - (-0.5)
+    ax.plot(np.arange(216, 376, 1), alphas)
+    fig.savefig(os.path.join(data_dir, 'spix_slice_spread.png'),
+                bbox_inches='tight', dpi=200)
+    plt.close()
 
 if __name__ == '__main__':
 
@@ -900,8 +969,8 @@ if __name__ == '__main__':
              rotm_clim_model=[-900, 900],
              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
              mapsize_common=mapsize_common, base_dir=base_dir,
-             rotm_value_0=0., rotm_grad_value=60., n_rms=4.,
-             download_mojave=True, spix_clim_sym=[-1, 1])
+             rotm_value_0=0., rotm_grad_value=60., n_rms=3.,
+             download_mojave=False, spix_clim_sym=[-1, 1])
 
     # ############################################################################
     # # Test for ModelGenerator

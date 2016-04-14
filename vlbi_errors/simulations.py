@@ -9,7 +9,7 @@ from image import BasicImage, Image
 from images import Images
 from utils import (mask_region, mas_to_rad, find_card_from_header, create_grid,
                    gaussian, gaussian_beam)
-from image_ops import (pol_map, pang_map, rotm_map, spix_map)
+from image_ops import (pol_map, pang_map, rotm_map, spix_map, image_slice)
 from from_fits import create_clean_image_from_fits_file
 from model import Model
 from uv_data import UVData
@@ -669,13 +669,13 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     alpha_image = alpha((imsize_high[0], imsize_high[0]),
                         (imsize_high[0] / 2, imsize_high[0] / 2), 0.)
 
-    # Optionally plot models
-    fig1 = plt.figure()
-    ax1 = fig1.add_subplot(1, 1, 1)
-    ax1.matshow(jet_image)
-    fig1.savefig(os.path.join(data_dir, 'jet_model_image.png'),
-                 bbox_inches='tight', dpi=200)
-    plt.close()
+    # # Optionally plot models
+    # fig1 = plt.figure()
+    # ax1 = fig1.add_subplot(1, 1, 1)
+    # ax1.matshow(jet_image)
+    # fig1.savefig(os.path.join(data_dir, 'jet_model_image.png'),
+    #              bbox_inches='tight', dpi=200)
+    # plt.close()
 
     stokes_models = {'I': jet_image, 'Q': qu_fraction * jet_image,
                      'U': qu_fraction * jet_image}
@@ -774,7 +774,8 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
           min_abs_level=3. * rms, colors_mask=spix_mask,
           outfile='spix_image_sym', outdir=data_dir, color_clim=spix_clim_sym,
           blc=(210, 200), trc=(350, 320), beam=beam_common,
-          colorbar_label='SPIX', show=False, show_beam=True)
+          colorbar_label='SPIX', show=False, show_beam=True,
+          slice_points=((4, 0), (-6, 0)))
 
     # Plotting convolved model of ROTM
     freqs = sorted([float(freq) for freq in rm_simulation.freqs])
@@ -783,18 +784,21 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
                                                   beam=beam_common_pxl)['I']
     rotm_image_mod, _, _ = mod_generator.get_rotm_map(freqs,
                                                       rotm_mask=rotm_mask,
-                                                      beam= beam_common_pxl)
+                                                      beam=beam_common_pxl)
     iplot(i_image_mod, rotm_image_mod, x=i_image.x, y=i_image.y,
           min_abs_level=3. * rms, colors_mask=rotm_mask,
           outfile='rotm_image_model_convolved', outdir=data_dir, blc=(210, 200),
           trc=(350, 320), beam=beam_common, colorbar_label='RM, [rad/m/m]',
           slice_points=((-2, -4), (-2, 4)), show=False, show_beam=True)
 
-    # # Plotting non-convolved (generating) model of ROTM
+    # Plotting non-convolved (generating) model of ROTM
+    # TODO: Should i use original model array for ROTM (not I cause frequency
+    # changed)? Original array of ROTM model ``rotm_image`` could have much
+    # smaller pixel - so probably not.
     i_image_mod_nc = mod_generator.get_stokes_images(freq, i_cut_frac=0.01)['I']
-    rotm_image_mod_nc, _, _ = mod_generator.get_rotm_map(freqs,
-                                                         rotm_mask=rotm_mask)
     mask_nc = mod_generator.create_i_mask(freq, i_cut_frac=0.01)
+    rotm_image_mod_nc, _, _ = mod_generator.get_rotm_map(freqs,
+                                                         rotm_mask=mask_nc)
     iplot(i_image_mod_nc, rotm_image_mod_nc, x=i_image.x, y=i_image.y,
           min_abs_level=0.005 * np.max(i_image_mod_nc), colors_mask=mask_nc,
           outfile='rotm_image_model_original', outdir=data_dir,
@@ -810,27 +814,62 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
           min_abs_level=3. * rms, colors_mask=spix_mask,
           outfile='spix_image_model_convolved', outdir=data_dir,
           color_clim=spix_clim_sym, blc=(210, 200), trc=(350, 320),
-          beam=beam_common, colorbar_label='SPIX', show=False, show_beam=True)
+          beam=beam_common, colorbar_label='SPIX', show=False, show_beam=True,
+          slice_points=((4, 0), (-6, 0)))
 
-    # # Plot non-convolved (generating) model of SPIX
+    # Plot non-convolved (generating) model of SPIX
+    # TODO: Should i use original model array for SPIX? (not I cause frequency
+    # changed)? Original array of SPIX model ``alpha_image`` could have much
+    # smaller pixel - so probably not.
     spix_image_mod_nc, _, _ = mod_generator.get_spix_map(freqs,
-                                                         spix_mask=spix_mask)
+                                                         spix_mask=mask_nc)
     iplot(i_image_mod_nc, spix_image_mod_nc, x=i_image.x, y=i_image.y,
           min_abs_level=0.005 * np.max(i_image_mod_nc), colors_mask=mask_nc,
           outfile='spix_image_model_original', outdir=data_dir,
           color_clim=spix_clim_model, blc=(210, 200), trc=(350, 320),
-          colorbar_label='SPIX', show=False)
+          colorbar_label='SPIX', show=False, slice_points=((4, 0), (-6, 0)))
 
-    # TODO:
     # Plotting simulated slices with model values (convolved and non-convolved)
+    # Simulated ROTM slice & model value
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
+    # Simulated values with formal errorbars
     ax.errorbar(np.arange(216, 296, 1),
                 rotm_image_sym.slice((216, 276), (296, 276)),
                 s_rotm_image_sym.slice((216, 276), (296, 276)), fmt='.k')
+    # ax.plot(np.arange(216, 296, 1),
+    #         rotm_grad_value * (np.arange(216, 296, 1) - 256.) + rotm_value_0)
+    # Model convolved values
     ax.plot(np.arange(216, 296, 1),
-            rotm_grad_value * (np.arange(216, 296, 1) - 256.) + rotm_value_0)
+            image_slice(rotm_image_mod, (216, 276), (296, 276)), 'g')
+    # Model non-convolved values
+    ax.plot(np.arange(216, 296, 1),
+            image_slice(rotm_image, (216, 276), (296, 276)), 'r')
+    ax.set_xlabel("pixel")
+    ax.set_ylabel("ROTM, [rad/m/m]")
     fig.savefig(os.path.join(data_dir, 'rotm_slice.png'),
+                bbox_inches='tight', dpi=200)
+    plt.close()
+
+    # Simulated SPIX slice & model value
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    # Simulated values with formal errorbars
+    ax.errorbar(np.arange(216, 336, 1),
+                spix_image_sym.slice((256, 216), (256, 336)),
+                s_spix_image_sym.slice((256, 216), (256, 336)),
+                fmt='.k')
+    # Model convolved values
+    ax.plot(np.arange(216, 336, 1),
+            image_slice(spix_image_mod, (256, 216), (256, 336)), 'g')
+    # Model non-convolved values
+    ax.plot(np.arange(216, 336, 1),
+            image_slice(alpha_image, (256, 216), (256, 336)), 'r')
+    # ax.plot(np.arange(216, 296, 1),
+    #         rotm_grad_value * (np.arange(216, 296, 1) - 256.) + rotm_value_0)
+    ax.set_xlabel("pixel")
+    ax.set_ylabel("SPIX")
+    fig.savefig(os.path.join(data_dir, 'spix_slice.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
 
@@ -893,10 +932,14 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     ax.plot(x, up[::-1], 'g')
     [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
     ax.plot(x, obs_slice[::-1], '.k')
-    # Plot ROTM model
+    # Model convolved values
     ax.plot(np.arange(216, 296, 1),
-            rotm_grad_value * (np.arange(216, 296, 1) - 256.)[::-1] +
-            rotm_value_0)
+            image_slice(rotm_image_mod, (216, 276), (296, 276)), 'g')
+    # Model non-convolved values
+    ax.plot(np.arange(216, 296, 1),
+            image_slice(rotm_image, (216, 276), (296, 276)), 'r')
+    ax.set_xlabel("pixel")
+    ax.set_ylabel("ROTM, [rad/m/m]")
     fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
@@ -908,12 +951,12 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     # Bootstrap slices
     slices = list()
     for image in spix_images_sym.images:
-        slice_ = image.slice((256, 216), (256, 376))
+        slice_ = image.slice((256, 216), (256, 336))
         slices.append(slice_[~np.isnan(slice_)])
 
     # Find means
-    obs_slice = spix_image_sym.slice((256, 216), (256, 376))
-    x = np.arange(216, 376, 1)
+    obs_slice = spix_image_sym.slice((256, 216), (256, 336))
+    x = np.arange(216, 336, 1)
     x = x[~np.isnan(obs_slice)]
     obs_slice = obs_slice[~np.isnan(obs_slice)]
     # Find sigmas
@@ -934,9 +977,14 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     ax.plot(x, up[::-1], 'g')
     [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
     ax.plot(x, obs_slice[::-1], '.k')
-    # Plot SPIX model
-    alphas = -1. / (1. + np.exp(-0.5 * (x - 256))) - (-0.5)
-    ax.plot(np.arange(216, 376, 1), alphas)
+    # Model convolved values
+    ax.plot(np.arange(216, 336, 1),
+            image_slice(spix_image_mod, (256, 216), (256, 336)), 'g')
+    # Model non-convolved values
+    ax.plot(np.arange(216, 336, 1),
+            image_slice(alpha_image, (256, 216), (256, 336)), 'r')
+    ax.set_xlabel("pixel")
+    ax.set_ylabel("SPIX")
     fig.savefig(os.path.join(data_dir, 'spix_slice_spread.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
@@ -970,7 +1018,7 @@ if __name__ == '__main__':
     source = '1055+018'
     epoch = '2006_11_10'
     simulate(source, epoch, ['x', 'y', 'j', 'u'],
-             n_sample=1, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
+             n_sample=5, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
              rotm_clim_model=[-900, 900],
              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
              mapsize_common=mapsize_common, base_dir=base_dir,

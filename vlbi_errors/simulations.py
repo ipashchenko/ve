@@ -375,7 +375,7 @@ class ModelGenerator(object):
 
 
     def get_spix_map(self, frequencies, i_cut_frac=None, beam=None,
-                     mask_before_convolve=True):
+                     mask_before_convolve=True, spix_mask=None):
         """
         Calculate model SPIX map (optionally for convolved `I` images) for a
         user-specified frequencies.
@@ -390,6 +390,9 @@ class ModelGenerator(object):
             to optionally convolve images
         :param mask_before_convolve:
             Boolean. Mask maps with ``i_cut_frac`` before or after convolution?
+        :param spix_mask: (optional)
+            Mask used when creating SPIX map. If ``None`` the don't use mask.
+            (default: ``None``)
 
         :return:
             Output of ``images_ops.spix_map`` for model for given frequency.
@@ -401,7 +404,7 @@ class ModelGenerator(object):
                                                        i_cut_frac=i_cut_frac,
                                                        beam=beam,
                                                        mask_before_convolve=mask_before_convolve)['I']
-        return spix_map(frequencies, images.values())
+        return spix_map(frequencies, images.values(), mask=spix_mask)
 
 
 class Simulation(object):
@@ -524,11 +527,11 @@ class MFSimulation(object):
 # TODO: Implement possibility of using several slice to analyze ROTM gradients
 def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
              qu_fraction=0.1, model_freq=20. * 10 ** 9, rotm_clim_sym=None,
-             rotm_grad_value=40., rotm_value_0=200., path_to_script=None,
-             base_dir=None, mapsize_common=None, mapsize_dict=None,
-             rotm_slice=((216, 276), (296, 276)), n_beam=0,
+             spix_clim_sym=None, rotm_grad_value=40., rotm_value_0=200.,
+             path_to_script=None, base_dir=None, mapsize_common=None,
+             mapsize_dict=None, rotm_slice=((216, 276), (296, 276)), n_beam=0,
              download_mojave=False, conf_band_alpha=0.95,
-             rotm_clim_model=None):
+             rotm_clim_model=None, spix_clim_model=None):
     """
     :param source:
         Source name [B1950].
@@ -645,7 +648,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
             observed_uv_fits.remove(path)
 
     observed_uv = [UVData(fits_file) for fits_file in observed_uv_fits]
-    # Create jet model, ROTM & alpha images
+    # Create jet model, ROTM & SPIX images
     jet_image = create_jet_model_image(30, 60, 10, max_jet_flux,
                                        (imsize_high[0], imsize_high[0]),
                                        (imsize_high[0] / 2, imsize_high[0] / 2),
@@ -685,9 +688,9 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
         uv_fits_fname = fnames_dict[freq]
         print "Cleaning {}".format(uv_fits_fname)
         for stokes in rm_simulation.stokes:
-            # Clean stokes I only for highest frequency. Use it for rms calc.
-            if stokes == 'I' and freq != rm_simulation.freqs[-1]:
-                continue
+            # # Clean stokes I only for highest frequency. Use it for rms calc.
+            # if stokes == 'I' and freq != rm_simulation.freqs[-1]:
+            #     continue
             print "Stokes {}".format(stokes)
             cc_fits_fname = str(freq) + '_' + stokes + '.fits'
             clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
@@ -695,11 +698,14 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
                          path_to_script=path_to_script, outpath=data_dir,
                          beam_restore=beam_common)
 
-    # Create ROTM image
+    # Create simulated ROTM & SPIX image
     from images import Images
     sym_images = Images()
     fnames = glob.glob(os.path.join(data_dir, "*.0_*.fits"))
     sym_images.add_from_fits(fnames=fnames)
+
+    # TODO: Create SPIX mask using independent criteria from ROTM mask
+    # Create masks for ROTM and SPIX
     from from_fits import create_image_from_fits_file
     # Use highest frequency
     i_fname = sorted(glob.glob(os.path.join(data_dir, '*_I.fits')))[0]
@@ -710,6 +716,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     freq_highest = sorted(sym_images.freqs, reverse=True)[0]
     ppol_image = sym_images.create_pol_images(freq=freq_highest)[0]
     rotm_mask = ppol_image.image < n_rms * rms
+    spix_mask = rotm_mask
 
     # Optionally plot ROTM mask
     fig = plt.figure()
@@ -718,10 +725,20 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     fig.savefig(os.path.join(data_dir, 'rotm_mask.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
+    # Optionally plot SPIX mask
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ax.matshow(spix_mask)
+    fig.savefig(os.path.join(data_dir, 'spix_mask.png'),
+                bbox_inches='tight', dpi=200)
+    plt.close()
 
-    print "Calculating ROTM image"
+    print "Calculating simulated ROTM image"
     rotm_image_sym, s_rotm_image_sym = \
         sym_images.create_rotm_image(mask=rotm_mask)
+    print "Calculating simulated SPIX image"
+    spix_image_sym, s_spix_image_sym = \
+        sym_images.create_spix_image(mask=rotm_mask)
 
     # Plotting simulated high-freq stokes I contours with RM values.
     iplot(i_image.image, rotm_image_sym.image, x=i_image.x, y=i_image.y,
@@ -731,6 +748,13 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
                                                 beam_common[2]),
           colorbar_label='RM, [rad/m/m]', slice_points=((-2, -4), (-2, 4)),
           show=False)
+    # Plotting simulated high-freq stokes I contours with SPIX values.
+    iplot(i_image.image, spix_image_sym.image, x=i_image.x, y=i_image.y,
+          min_abs_level=3. * rms, colors_mask=spix_mask,
+          outfile='spix_image_sym', outdir=data_dir, color_clim=spix_clim_sym,
+          blc=(210, 200), trc=(350, 320), beam=(beam_common[0], beam_common[1],
+                                                beam_common[2]),
+          colorbar_label='SPIX', show=False)
 
     # Plotting model of ROTM
     fig = plt.figure()
@@ -792,7 +816,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     sym_images.add_from_fits(fnames)
     rotm_images_sym = sym_images.create_rotm_images(mask=rotm_mask)
 
-    # Calculate simulataneous confidence bands
+    # Calculate simultaneous confidence bands
     # Bootstrap slices
     slices = list()
     for image in rotm_images_sym.images:
@@ -833,76 +857,78 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
 
 if __name__ == '__main__':
 
-    # ############################################################################
-    # # Test simulate
-    # from mojave import get_epochs_for_source
-    # path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
-    # base_dir = '/home/ilya/code/vlbi_errors/examples/mojave/0d005'
-    # # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
-    # #            '1749+701', '0454+844']
-    # mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
-    #                 'u': (512, 0.1)}
-    # mapsize_common = (512, 0.1)
-    # source_epoch_dict = dict()
-    # # for source in sources:
-    # #     epochs = get_epochs_for_source(source, use_db='multifreq')
-    # #     print "Found epochs for source {}".format(source)
-    # #     print epochs
-    # #     source_epoch_dict.update({source: epochs[-1]})
-    # # for source in sources:
-    # #     print "Simulating source {}".format(source)
-    # #     simulate(source, source_epoch_dict[source], ['x', 'y', 'j', 'u'],
-    # #              n_sample=3, rotm_clim=[-200, 200],
-    # #              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
-    # #              mapsize_common=mapsize_common, base_dir=base_dir,
-    # #              rotm_value_0=0., max_jet_flux=0.005)
-
-    # source = '1055+018'
-    # epoch = '2006_11_10'
-    # simulate(source, epoch, ['x', 'y', 'j', 'u'],
-    #          n_sample=5, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
-    #          path_to_script=path_to_script, mapsize_dict=mapsize_dict,
-    #          mapsize_common=mapsize_common, base_dir=base_dir,
-    #          rotm_value_0=0., rotm_grad_value=60., n_rms=4.,
-    #          download_mojave=True)
-
     ############################################################################
-    # Test for ModelGenerator
-    # Create jet model, ROTM & alpha images
-    imsize = (512, 512)
-    center = (256, 256)
-    # from `y`  band
-    pixsize = 4.848136191959676e-10
-    x, y = create_grid(imsize)
-    x -= center[0]
-    y -= center[1]
-    x *= pixsize
-    y *= pixsize
-    max_jet_flux = 0.01
-    qu_fraction = 0.1
-    rotm_grad_value = 40.
-    rotm_value_0 = 0.
-    model_freq = 20. * 10. ** 9.
-    jet_image = create_jet_model_image(30, 60, 10, max_jet_flux,
-                                       (imsize[0], imsize[0]),
-                                       (imsize[0] / 2, imsize[0] / 2),
-                                       gauss_peak=0.001, dist_from_core=20,
-                                       cut=0.0002)
-    rotm_image = rotm((imsize[0], imsize[0]),
-                      (imsize[0] / 2, imsize[0] / 2),
-                      grad_value=rotm_grad_value, rm_value_0=rotm_value_0)
-    alpha_image = alpha((imsize[0], imsize[0]),
-                        (imsize[0] / 2, imsize[0] / 2), 0.)
-    stokes_models = {'I': jet_image, 'Q': qu_fraction * jet_image,
-                     'U': qu_fraction * jet_image}
-    mod_generator = ModelGenerator(stokes_models, x, y, rotm=rotm_image,
-                                   alpha=alpha_image, freq=model_freq)
-    images = mod_generator.get_stokes_images(frequency=8.*10**9.,
-                                             i_cut_frac=0.01)
-    pol_images = mod_generator.get_pol_maps(frequency=8.*10**9.,
-                                            i_cut_frac=0.01)
-    frequencies = [5. * 10 ** 9, 8. * 10 ** 9, 12. * 10 ** 9, 15. * 10 ** 9]
-    mask = mod_generator.create_i_mask(frequencies[-1], i_cut_frac=0.01)
-    rm_map, s_rm_map, chsq_map = mod_generator.get_rotm_map(frequencies,
-                                                            rotm_mask=mask)
+    # Test simulate
+    from mojave import get_epochs_for_source
+    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    base_dir = '/home/ilya/code/vlbi_errors/examples/mojave/0d005'
+    # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
+    #            '1749+701', '0454+844']
+    mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
+                    'u': (512, 0.1)}
+    mapsize_common = (512, 0.1)
+    source_epoch_dict = dict()
+    # for source in sources:
+    #     epochs = get_epochs_for_source(source, use_db='multifreq')
+    #     print "Found epochs for source {}".format(source)
+    #     print epochs
+    #     source_epoch_dict.update({source: epochs[-1]})
+    # for source in sources:
+    #     print "Simulating source {}".format(source)
+    #     simulate(source, source_epoch_dict[source], ['x', 'y', 'j', 'u'],
+    #              n_sample=3, rotm_clim=[-200, 200],
+    #              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
+    #              mapsize_common=mapsize_common, base_dir=base_dir,
+    #              rotm_value_0=0., max_jet_flux=0.005)
+
+    source = '1055+018'
+    epoch = '2006_11_10'
+    simulate(source, epoch, ['x', 'y', 'j', 'u'],
+             n_sample=5, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
+             path_to_script=path_to_script, mapsize_dict=mapsize_dict,
+             mapsize_common=mapsize_common, base_dir=base_dir,
+             rotm_value_0=0., rotm_grad_value=60., n_rms=4.,
+             download_mojave=True, rotm_clim_sym=[-300, 300], spix_clim_sym=)
+
+    # ############################################################################
+    # # Test for ModelGenerator
+    # # Create jet model, ROTM & alpha images
+    # imsize = (512, 512)
+    # center = (256, 256)
+    # # from `y`  band
+    # pixsize = 4.848136191959676e-10
+    # x, y = create_grid(imsize)
+    # x -= center[0]
+    # y -= center[1]
+    # x *= pixsize
+    # y *= pixsize
+    # max_jet_flux = 0.01
+    # qu_fraction = 0.1
+    # rotm_grad_value = 40.
+    # rotm_value_0 = 0.
+    # model_freq = 20. * 10. ** 9.
+    # jet_image = create_jet_model_image(30, 60, 10, max_jet_flux,
+    #                                    (imsize[0], imsize[0]),
+    #                                    (imsize[0] / 2, imsize[0] / 2),
+    #                                    gauss_peak=0.001, dist_from_core=20,
+    #                                    cut=0.0002)
+    # rotm_image = rotm((imsize[0], imsize[0]),
+    #                   (imsize[0] / 2, imsize[0] / 2),
+    #                   grad_value=rotm_grad_value, rm_value_0=rotm_value_0)
+    # alpha_image = alpha((imsize[0], imsize[0]),
+    #                     (imsize[0] / 2, imsize[0] / 2), 0.)
+    # stokes_models = {'I': jet_image, 'Q': qu_fraction * jet_image,
+    #                  'U': qu_fraction * jet_image}
+    # mod_generator = ModelGenerator(stokes_models, x, y, rotm=rotm_image,
+    #                                alpha=alpha_image, freq=model_freq)
+    # images = mod_generator.get_stokes_images(frequency=8.*10**9.,
+    #                                          i_cut_frac=0.01)
+    # pol_images = mod_generator.get_pol_maps(frequency=8.*10**9.,
+    #                                         i_cut_frac=0.01)
+    # frequencies = [5. * 10 ** 9, 8. * 10 ** 9, 12. * 10 ** 9, 15. * 10 ** 9]
+    # mask = mod_generator.create_i_mask(frequencies[-1], i_cut_frac=0.01)
+    # rm_map, s_rm_map, chsq_map = mod_generator.get_rotm_map(frequencies,
+    #                                                         rotm_mask=mask)
+    # sp_map, s_sp_map, chsq_map = mod_generator.get_spix_map(frequencies,
+    #                                                         spix_mask=mask)
 

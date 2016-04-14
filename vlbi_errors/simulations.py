@@ -530,7 +530,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
              path_to_script=None, base_dir=None, mapsize_common=None,
              mapsize_dict=None, rotm_slice=((216, 276), (296, 276)), n_beam=0,
              download_mojave=False, conf_band_alpha=0.95,
-             rotm_clim_model=None, spix_clim_model=None):
+             rotm_clim_model=None, spix_clim_model=None, n_freq_model=-1):
     """
     :param source:
         Source name [B1950].
@@ -584,6 +584,10 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     :param conf_band_alpha: (optional)
         Significance of the simultaneous confidence bands constructed for ROTM
         slices. (default: ``0.95``)
+    :param n_freq_model: (optional)
+        Sequence number of frequency in sorted frequency list to display stokes
+        `I` contours overlayed with beam-convolved ROTM or SPIX images. Default
+        corresponds to highest frequency. (default: ``-1``)
 
     """
 
@@ -688,7 +692,6 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     rm_simulation.save_fits(fnames_dict)
 
     # CLEAN uv-fits with simulated data
-    # FIXME: Calculate mask for each frequency and logically OR them
     for freq in rm_simulation.freqs:
         uv_fits_fname = fnames_dict[freq]
         print "Cleaning {}".format(uv_fits_fname)
@@ -765,48 +768,39 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
           outfile='rotm_image_sym', outdir=data_dir, color_clim=rotm_clim_sym,
           blc=(210, 200), trc=(350, 320), beam=beam_common,
           colorbar_label='RM, [rad/m/m]', slice_points=((-2, -4), (-2, 4)),
-          show=False)
+          show=False, show_beam=True)
     # Plotting simulated high-freq stokes I contours with SPIX values.
     iplot(i_image.image, spix_image_sym.image, x=i_image.x, y=i_image.y,
           min_abs_level=3. * rms, colors_mask=spix_mask,
           outfile='spix_image_sym', outdir=data_dir, color_clim=spix_clim_sym,
           blc=(210, 200), trc=(350, 320), beam=beam_common,
-          colorbar_label='SPIX', show=False)
-
-    # Plotting non-convolved (generating) model of ROTM
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    mrotm_image = np.ma.array(rotm_image, mask=rotm_mask)
-    ri = ax.matshow(mrotm_image, clim=rotm_clim_model)
-    fig.colorbar(ri)
-    fig.savefig(os.path.join(data_dir, 'rotm_image_model_original.png'),
-                bbox_inches='tight', dpi=200)
-    plt.close()
+          colorbar_label='SPIX', show=False, show_beam=True)
 
     # Plotting convolved model of ROTM
     freqs = sorted([float(freq) for freq in rm_simulation.freqs])
-    freq = freqs[-1]
+    freq = freqs[n_freq_model]
     i_image_mod = mod_generator.get_stokes_images(freq, i_cut_frac=0.01,
                                                   beam=beam_common_pxl)['I']
     rotm_image_mod, _, _ = mod_generator.get_rotm_map(freqs,
-
-                                                      rotm_mask=rotm_mask)
+                                                      rotm_mask=rotm_mask,
+                                                      beam= beam_common_pxl)
     iplot(i_image_mod, rotm_image_mod, x=i_image.x, y=i_image.y,
           min_abs_level=3. * rms, colors_mask=rotm_mask,
-          outfile='rotm_image_model_convolved', outdir=data_dir,
-          color_clim=rotm_clim_model, blc=(210, 200), trc=(350, 320),
-          beam=beam_common, colorbar_label='RM, [rad/m/m]',
-          slice_points=((-2, -4), (-2, 4)), show=False)
+          outfile='rotm_image_model_convolved', outdir=data_dir, blc=(210, 200),
+          trc=(350, 320), beam=beam_common, colorbar_label='RM, [rad/m/m]',
+          slice_points=((-2, -4), (-2, 4)), show=False, show_beam=True)
 
-    # Plot non-convolved (generating) model of SPIX
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    malpha_image = np.ma.array(alpha_image, mask=rotm_mask)
-    ri = ax.matshow(malpha_image)
-    fig.colorbar(ri)
-    fig.savefig(os.path.join(data_dir, 'spix_image_model_original.png'),
-                bbox_inches='tight', dpi=200)
-    plt.close()
+    # # Plotting non-convolved (generating) model of ROTM
+    i_image_mod_nc = mod_generator.get_stokes_images(freq, i_cut_frac=0.01)['I']
+    rotm_image_mod_nc, _, _ = mod_generator.get_rotm_map(freqs,
+                                                         rotm_mask=rotm_mask)
+    mask_nc = mod_generator.create_i_mask(freq, i_cut_frac=0.01)
+    iplot(i_image_mod_nc, rotm_image_mod_nc, x=i_image.x, y=i_image.y,
+          min_abs_level=0.005 * np.max(i_image_mod_nc), colors_mask=mask_nc,
+          outfile='rotm_image_model_original', outdir=data_dir,
+          color_clim=rotm_clim_model, blc=(210, 200), trc=(350, 320),
+          colorbar_label='RM, [rad/m/m]', slice_points=((-2, -4), (-2, 4)),
+          show=False)
 
     # Plotting convolved model of SPIX
     spix_image_mod, _, _ = mod_generator.get_spix_map(freqs,
@@ -816,8 +810,19 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
           min_abs_level=3. * rms, colors_mask=spix_mask,
           outfile='spix_image_model_convolved', outdir=data_dir,
           color_clim=spix_clim_sym, blc=(210, 200), trc=(350, 320),
-          beam=beam_common, colorbar_label='SPIX', show=False)
+          beam=beam_common, colorbar_label='SPIX', show=False, show_beam=True)
 
+    # # Plot non-convolved (generating) model of SPIX
+    spix_image_mod_nc, _, _ = mod_generator.get_spix_map(freqs,
+                                                         spix_mask=spix_mask)
+    iplot(i_image_mod_nc, spix_image_mod_nc, x=i_image.x, y=i_image.y,
+          min_abs_level=0.005 * np.max(i_image_mod_nc), colors_mask=mask_nc,
+          outfile='spix_image_model_original', outdir=data_dir,
+          color_clim=spix_clim_model, blc=(210, 200), trc=(350, 320),
+          colorbar_label='SPIX', show=False)
+
+    # TODO:
+    # Plotting simulated slices with model values (convolved and non-convolved)
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
     ax.errorbar(np.arange(216, 296, 1),

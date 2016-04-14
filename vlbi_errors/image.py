@@ -221,35 +221,36 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         if colorbar_label is not None:
             cb.set_label(colorbar_label)
 
-    from matplotlib.patches import Ellipse
-    e_height = beam[0]
-    e_width = beam[1]
-    r_min = e_height / 2
-    if beam_place == 'lr':
-        y_c = y[0] + r_min
-        x_c = x[-1] - r_min
-    elif beam_place == 'll':
-        if y[0] > 0:
-            y_c = y[0] - r_min
-        else:
+    if show_beam:
+        from matplotlib.patches import Ellipse
+        e_height = beam[0]
+        e_width = beam[1]
+        r_min = e_height / 2
+        if beam_place == 'lr':
             y_c = y[0] + r_min
-        if x[0] > 0:
-            x_c = x[0] - r_min
-        else:
+            x_c = x[-1] - r_min
+        elif beam_place == 'll':
+            if y[0] > 0:
+                y_c = y[0] - r_min
+            else:
+                y_c = y[0] + r_min
+            if x[0] > 0:
+                x_c = x[0] - r_min
+            else:
+                x_c = x[0] + r_min
+        elif beam_place == 'ul':
+            y_c = y[-1] - r_min
             x_c = x[0] + r_min
-    elif beam_place == 'ul':
-        y_c = y[-1] - r_min
-        x_c = x[0] + r_min
-    elif beam_place == 'ur':
-        y_c = y[-1] - r_min
-        x_c = x[-1] - r_min
-    else:
-        raise Exception
+        elif beam_place == 'ur':
+            y_c = y[-1] - r_min
+            x_c = x[-1] - r_min
+        else:
+            raise Exception
 
-    # FIXME: check how ``bpa`` should be plotted
-    e = Ellipse((y_c, x_c), e_width, e_height, angle=beam[2], edgecolor='black',
-                facecolor='green', alpha=0.3)
-    ax.add_patch(e)
+        # FIXME: check how ``bpa`` should be plotted
+        e = Ellipse((y_c, x_c), e_width, e_height, angle=beam[2],
+                    edgecolor='black', facecolor='green', alpha=0.3)
+        ax.add_patch(e)
 
     # Saving output
     if outfile:

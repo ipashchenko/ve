@@ -482,7 +482,7 @@ def spix(freqs, fluxes, s_fluxes=None, p0=None):
     """
 
     if p0 is None:
-        p0 = [0.]
+        p0 = [0., 0.]
 
     if s_fluxes is not None:
         assert len(freqs) == len(fluxes) == len(s_fluxes)

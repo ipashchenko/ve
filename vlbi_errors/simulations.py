@@ -428,7 +428,7 @@ class Simulation(object):
         Shortcut to frequency in Hz.
         :return:
         """
-        return self.observed_uv.frequency
+        return self.observed_uv.band_center
 
     def add_true_model(self, model):
         """
@@ -516,12 +516,11 @@ class MFSimulation(object):
 
     @property
     def freqs(self):
-        return [uvdata.frequency for uvdata in self.observed_uv]
+        return [simulation.frequency for simulation in self.simulations]
 
 
 # TODO: This function only simulates. To analyzes simulations use other funcs
 # TODO: Use ``image_ops.pol_map`` function to create mask for ROTM calculation
-# FIXME: ``MFSimulation`` & ``Images`` instances use different frequencies.
 # TODO: Add function to create realistic FPOL & Q/U distribution
 # TODO: Make ``mapsize_dict`` the required argument
 # TODO: Implement possibility of using several slice to analyze ROTM gradients
@@ -704,19 +703,32 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     fnames = glob.glob(os.path.join(data_dir, "*.0_*.fits"))
     sym_images.add_from_fits(fnames=fnames)
 
-    # TODO: Create SPIX mask using independent criteria from ROTM mask
     # Create masks for ROTM and SPIX
+    rotm_mask = None
     from from_fits import create_image_from_fits_file
-    # Use highest frequency
-    i_fname = sorted(glob.glob(os.path.join(data_dir, '*_I.fits')))[0]
-    i_image = create_image_from_fits_file(i_fname)
-    r_rms = mapsize_common[0] / 10
-    rms = i_image.rms(region=(r_rms, r_rms, r_rms, None))
-    print "RMS : ", rms
-    freq_highest = sorted(sym_images.freqs, reverse=True)[0]
-    ppol_image = sym_images.create_pol_images(freq=freq_highest)[0]
-    rotm_mask = ppol_image.image < n_rms * rms
-    spix_mask = rotm_mask
+    for i_fname in sorted(glob.glob(os.path.join(data_dir, '*_I.fits'))):
+        i_image = create_image_from_fits_file(i_fname)
+        r_rms = mapsize_common[0] / 10
+        rms = i_image.rms(region=(r_rms, r_rms, r_rms, None))
+        freq_highest = sorted(sym_images.freqs, reverse=True)[0]
+        ppol_image = sym_images.create_pol_images(freq=freq_highest)[0]
+        mask = ppol_image.image < n_rms * rms
+        if rotm_mask is None:
+            rotm_mask = mask
+        else:
+            rotm_mask = np.logical_or(rotm_mask, mask)
+
+
+    spix_mask = None
+    for i_fname in sorted(glob.glob(os.path.join(data_dir, '*_I.fits'))):
+        i_image = create_image_from_fits_file(i_fname)
+        r_rms = mapsize_common[0] / 10
+        rms = i_image.rms(region=(r_rms, r_rms, r_rms, None))
+        mask = i_image.image < n_rms * rms
+        if spix_mask is None:
+            spix_mask = mask
+        else:
+            spix_mask = np.logical_or(spix_mask, mask)
 
     # Optionally plot ROTM mask
     fig = plt.figure()
@@ -884,11 +896,12 @@ if __name__ == '__main__':
     source = '1055+018'
     epoch = '2006_11_10'
     simulate(source, epoch, ['x', 'y', 'j', 'u'],
-             n_sample=5, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
+             n_sample=1, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
+             rotm_clim_model=[-900, 900],
              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
              mapsize_common=mapsize_common, base_dir=base_dir,
              rotm_value_0=0., rotm_grad_value=60., n_rms=4.,
-             download_mojave=True, rotm_clim_sym=[-300, 300], spix_clim_sym=)
+             download_mojave=True, spix_clim_sym=[-1, 1])
 
     # ############################################################################
     # # Test for ModelGenerator

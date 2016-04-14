@@ -2,7 +2,8 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import leastsq
-from utils import gen_rand_vecs, hdi_of_arrays, unwrap_phases, create_mask
+from utils import (gen_rand_vecs, hdi_of_arrays, unwrap_phases, create_mask,
+                   v_round)
 from pixel import resolver_chisq
 from conf_bands import create_sim_conf_band
 
@@ -811,3 +812,27 @@ def plot_image_correlation(image, fname='correlation.png', show=True,
         plt.close()
 
 
+def image_slice(image, pix1, pix2):
+    """
+    Returns slice of image along line.
+
+    :param image:
+        Numpy 2D array of image.
+    :param pix1:
+        Iterable of coordinates of first pixel.
+    :param pix2:
+        Iterable of coordinates of second pixel.
+    :return:
+        Numpy array of image values for given slice.
+    """
+    length = int(round(np.hypot(pix2[0] - pix1[0], pix2[1] - pix1[1])))
+    if pix2[0] < pix1[0]:
+        x = np.linspace(pix2[0], pix1[0], length)[::-1]
+    else:
+        x = np.linspace(pix1[0], pix2[0], length)
+    if pix2[1] < pix1[1]:
+        y = np.linspace(pix2[1], pix1[1], length)[::-1]
+    else:
+        y = np.linspace(pix1[1], pix2[1], length)
+
+    return image[v_round(x).astype(np.int), v_round(y).astype(np.int)]

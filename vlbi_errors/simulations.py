@@ -760,7 +760,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
         sym_images.create_rotm_image(mask=rotm_mask)
     print "Calculating simulated SPIX image"
     spix_image_sym, s_spix_image_sym = \
-        sym_images.create_spix_image(mask=rotm_mask)
+        sym_images.create_spix_image(mask=spix_mask)
 
     # Plotting simulated high-freq stokes I contours with RM values.
     iplot(i_image.image, rotm_image_sym.image, x=i_image.x, y=i_image.y,
@@ -845,7 +845,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     # Model non-convolved values
     ax.plot(np.arange(216, 296, 1),
             image_slice(rotm_image, (216, 276), (296, 276)), 'r')
-    ax.set_xlabel("pixel")
+    ax.set_xlabel("slice pixel")
     ax.set_ylabel("ROTM, [rad/m/m]")
     fig.savefig(os.path.join(data_dir, 'rotm_slice.png'),
                 bbox_inches='tight', dpi=200)
@@ -867,7 +867,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
             image_slice(alpha_image, (256, 216), (256, 336)), 'r')
     # ax.plot(np.arange(216, 296, 1),
     #         rotm_grad_value * (np.arange(216, 296, 1) - 256.) + rotm_value_0)
-    ax.set_xlabel("pixel")
+    ax.set_xlabel("slice pixel")
     ax.set_ylabel("SPIX")
     fig.savefig(os.path.join(data_dir, 'spix_slice.png'),
                 bbox_inches='tight', dpi=200)
@@ -875,7 +875,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
 
     # Creating sample
     for i in range(n_sample):
-        print "Creating sample {} of {}".format(i + 1, n_sample)
+        print "Creating sample {}-th of {}".format(i + 1, n_sample)
         fnames_dict_i = fnames_dict.copy()
         fnames_dict_i.update({freq: name + '_' + str(i + 1).zfill(3) for
                               freq, name in fnames_dict.items()})
@@ -888,7 +888,6 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
             uv_fits_fname = fnames_dict[freq] + '_' + str(i + 1).zfill(3)
             print "Cleaning {}".format(uv_fits_fname)
             for stokes in rm_simulation.stokes:
-                if stokes != 'I':
                     print "Stokes {}".format(stokes)
                     cc_fits_fname = str(freq) + '_' + stokes + '_{}.fits'.format(str(i + 1).zfill(3))
                     clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
@@ -928,17 +927,17 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     # Plot confidence bands and model values
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
-    ax.plot(x, low[::-1], 'g')
-    ax.plot(x, up[::-1], 'g')
-    [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
-    ax.plot(x, obs_slice[::-1], '.k')
+    ax.plot(x, low, 'g')
+    ax.plot(x, up, 'g')
+    [ax.plot(x, slice_, 'r', lw=0.15) for slice_ in slices_]
+    ax.plot(x, obs_slice, '.k')
     # Model convolved values
     ax.plot(np.arange(216, 296, 1),
             image_slice(rotm_image_mod, (216, 276), (296, 276)), 'g')
     # Model non-convolved values
     ax.plot(np.arange(216, 296, 1),
             image_slice(rotm_image, (216, 276), (296, 276)), 'r')
-    ax.set_xlabel("pixel")
+    ax.set_xlabel("slice pixel")
     ax.set_ylabel("ROTM, [rad/m/m]")
     fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
                 bbox_inches='tight', dpi=200)
@@ -973,17 +972,17 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     # Plot confidence bands and model values
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
-    ax.plot(x, low[::-1], 'g')
-    ax.plot(x, up[::-1], 'g')
-    [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
-    ax.plot(x, obs_slice[::-1], '.k')
+    ax.plot(x, low, 'g')
+    ax.plot(x, up, 'g')
+    [ax.plot(x, slice_, 'r', lw=0.15) for slice_ in slices_]
+    ax.plot(x, obs_slice, '.k')
     # Model convolved values
     ax.plot(np.arange(216, 336, 1),
             image_slice(spix_image_mod, (256, 216), (256, 336)), 'g')
     # Model non-convolved values
     ax.plot(np.arange(216, 336, 1),
             image_slice(alpha_image, (256, 216), (256, 336)), 'r')
-    ax.set_xlabel("pixel")
+    ax.set_xlabel("slice pixel")
     ax.set_ylabel("SPIX")
     fig.savefig(os.path.join(data_dir, 'spix_slice_spread.png'),
                 bbox_inches='tight', dpi=200)
@@ -1018,7 +1017,7 @@ if __name__ == '__main__':
     source = '1055+018'
     epoch = '2006_11_10'
     simulate(source, epoch, ['x', 'y', 'j', 'u'],
-             n_sample=5, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
+             n_sample=100, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
              rotm_clim_model=[-900, 900],
              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
              mapsize_common=mapsize_common, base_dir=base_dir,

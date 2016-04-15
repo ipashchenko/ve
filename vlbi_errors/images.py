@@ -392,7 +392,7 @@ class Images(object):
             for stokes in required_stokeses:
                 if stokes not in stokeses:
                     raise Exception("No stokes " + stokes + " parameter for " +
-                                    freq + " frequency!")
+                                    str(freq) + " frequency!")
 
         # Get some image from stacked to use it parameters for saving output. It
         # doesn't matter what image - they all are checked to have the same
@@ -461,7 +461,7 @@ class Images(object):
             for stokes in required_stokeses:
                 if stokes not in stokeses:
                     raise Exception("No stokes " + stokes + " parameter for " +
-                                    freq + " frequency!")
+                                    str(freq) + " frequency!")
         n_replications = None
         for freq in freqs:
             q_images = self._images_dict[freq]['Q']
@@ -480,7 +480,7 @@ class Images(object):
         # For each replication create ROTM map and add it to ``Images`` instance
         images = Images()
         for i in range(n_replications):
-            print "Creating {} image of {} replications".format(i + 1,
+            print "Creating {}-th image of {} replications".format(i + 1,
                                                                 n_replications)
             rotm_image, s_rotm_image = self.create_rotm_image(s_pang_arrays,
                                                               freqs, mask, i)
@@ -533,7 +533,7 @@ class Images(object):
             for stokes in required_stokeses:
                 if stokes not in stokeses:
                     raise Exception("No stokes " + stokes + " parameter for " +
-                                    freq + " frequency!")
+                                    str(freq) + " frequency!")
 
         # Get some image from stacked to use it parameters for saving output. It
         # doesn't matter what image - they all are checked to have the same
@@ -578,7 +578,7 @@ class Images(object):
         :return:
             Instance of ``Images`` class with calculated SPIX images.
         """
-        required_stokeses = ('I')
+        required_stokeses = ('I',)
 
         # Check that collection of images isn't empty
         if not self.images:
@@ -590,13 +590,13 @@ class Images(object):
         if len(freqs) < 2:
             raise Exception("Not enough frequencies for SPIX calculation!")
 
-        # Check that all frequencies have Q & U maps
+        # Check that all frequencies have I maps
         for freq in freqs:
             stokeses = self.stokeses(freq)
             for stokes in required_stokeses:
                 if stokes not in stokeses:
                     raise Exception("No stokes " + stokes + " parameter for " +
-                                    freq + " frequency!")
+                                    str(freq) + " frequency!")
         n_replications = None
         for freq in freqs:
             i_images = self._images_dict[freq]['I']
@@ -611,7 +611,7 @@ class Images(object):
         # For each replication create SPIX map and add it to ``Images`` instance
         images = Images()
         for i in range(n_replications):
-            print "Creating {} image of {} replications".format(i + 1,
+            print "Creating {}-th image of {} replications".format(i + 1,
                                                                 n_replications)
             spix_image, s_spix_image = self.create_spix_image(s_flux_arrays,
                                                               freqs, mask, i)

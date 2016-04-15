@@ -26,7 +26,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          show_beam=False, beam_corner='ll', beam=None, contours_mask=None,
          colors_mask=None, vectors_mask=None, plot_title=None, color_clim=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
-         beam_place='ll', colorbar_label=None, show=True):
+         beam_place='ll', colorbar_label=None, show=True, contour_color='k',
+         beam_edge_color='black', beam_face_color='green', beam_alpha=0.3):
     """
     Plot image(s).
 
@@ -183,11 +184,11 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                                              range(n_max)]
             print "Constructed absolute levels are: ", abs_levels
         co = ax.contour(y, x, contours[x_slice, y_slice], abs_levels,
-                        colors='k')
+                        colors=contour_color)
     if colors is not None:
         im = ax.imshow(colors[x_slice, y_slice], interpolation='none',
                        origin='lower', extent=[y[0], y[-1], x[0], x[-1]],
-                       cmap=plt.get_cmap('hsv'), clim=color_clim)
+                       cmap=plt.get_cmap(cmap), clim=color_clim)
     if vectors is not None:
         if vectors_values is not None:
             # TODO: Does "-" sign because of RA increases to the left actually?
@@ -249,7 +250,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
 
         # FIXME: check how ``bpa`` should be plotted
         e = Ellipse((y_c, x_c), e_width, e_height, angle=beam[2],
-                    edgecolor='black', facecolor='green', alpha=0.3)
+                    edgecolor=beam_edge_color, facecolor=beam_face_color,
+                    alpha=beam_alpha)
         ax.add_patch(e)
 
     # Saving output

@@ -583,14 +583,35 @@ def create_coverage_map_classic(original_uv_fits_path, ci_type,
 
 
 if __name__ == '__main__':
-    base_dir = '/home/ilya/code/vlbi_errors/examples/L/'
-    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
-    from mojave import (download_mojave_uv_fits, mojave_uv_fits_fname)
-    source = '1038+064'
+    # Parameters to choose
+    source = '1633+382'
     epochs = ['2010_05_21']
     bands = ['l18']
-    # download_mojave_uv_fits(source, epochs=epochs, bands=bands,
-    #                          download_dir=base_dir)
+    ci_type = 'rms'
+    n_rms = 1
+    if n_rms not in [1, 2, 3]:
+        raise Exception("n_rms must be 1, 2 or 3")
+    alpha = 0.68
+    base_dir = '/home/ilya/vlbi_errors/examples/L/'
+
+    # Not supposed to change anything below
+    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    from mojave import (download_mojave_uv_fits, mojave_uv_fits_fname)
+
+    if ci_type == 'boot':
+        perc = int(alpha * 100)
+        outfile = 'cov_{}_boot200_cov100'.format(perc)
+    elif ci_type == 'rms':
+        perc = {1: 68, 2: 95, 3: 99}[n_rms]
+        outfile = 'cov_{}_cov100'.format(perc)
+    else:
+        raise Exception("ci_type must be rms or boot!")
+
+    data_dir = os.path.join(base_dir, source, ci_type, str(perc))
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    download_mojave_uv_fits(source, epochs=epochs, bands=bands,
+                            download_dir=data_dir)
 
     # # Working
     # original_uv_fits_path = os.path.join(base_dir, '2230+114.x.2006_02_12.uvf')
@@ -609,23 +630,36 @@ if __name__ == '__main__':
 
     # Classic coverage analysis
     fname = mojave_uv_fits_fname(source, bands[0], epochs[0])
-    original_uv_fits_path = os.path.join(base_dir, fname)
+    original_uv_fits_path = os.path.join(data_dir, fname)
     # sample_uv_fits_paths, sample_cc_fits_paths =\
-    #     create_sample(original_uv_fits_path, imsize=(256, 1.), outdir=base_dir,
+    #     create_sample(original_uv_fits_path, imsize=(256, 1.), outdir=data_dir,
     #                   path_to_script=path_to_script)
-    sample_cc_fits_paths = sorted(glob.glob(os.path.join(base_dir,
-                                                         'sample_cc_*.fits')))
-    # sample_cc_fits_paths = None
-    sample_uv_fits_paths = sorted(glob.glob(os.path.join(base_dir,
-                                                         'sample_uv_*.uvf')))
-    # sample_uv_fits_paths = None
-    original_cc_fits_path = os.path.join(base_dir, 'original_cc.fits')
-    # original_cc_fits_path = None
+    # sample_cc_fits_paths = sorted(glob.glob(os.path.join(base_dir,
+    #                                                      'sample_cc_*.fits')))
+    sample_cc_fits_paths = None
+    # sample_uv_fits_paths = sorted(glob.glob(os.path.join(base_dir,
+    #                                                      'sample_uv_*.uvf')))
+    sample_uv_fits_paths = None
+    # original_cc_fits_path = os.path.join(data_dir, 'original_cc.fits')
+    original_cc_fits_path = None
     coverage_map =\
-        create_coverage_map_classic(original_uv_fits_path, ci_type='rms',
+        create_coverage_map_classic(original_uv_fits_path, ci_type=ci_type,
                                     original_cc_fits_path=original_cc_fits_path,
-                                    imsize=(256, 1.), outdir=base_dir,
+                                    imsize=(256, 1.), outdir=data_dir,
                                     path_to_script=path_to_script,
                                     sample_cc_fits_paths=sample_cc_fits_paths,
                                     sample_uv_fits_paths=sample_uv_fits_paths,
-                                    n_rms=3., alpha=0.95, n_boot=100)
+                                    n_rms=n_rms, alpha=alpha, n_boot=100)
+    np.savetxt(os.path.join(data_dir, "{}.txt".format(outfile)), coverage_map)
+
+    from image import plot as iplot
+    from from_fits import create_clean_image_from_fits_file
+    original_cc_fits_path = os.path.join(data_dir, 'original_cc.fits')
+    i_image_cc = create_clean_image_from_fits_file(original_cc_fits_path)
+    i_image = create_image_from_fits_file(original_cc_fits_path)
+    rms = i_image.rms(region=(25, 25, 25, None))
+    iplot(i_image.image, coverage_map, x=i_image.x, y=i_image.y,
+          min_abs_level=4. * rms, outfile=outfile, outdir=data_dir,
+          blc=(110, 105), trc=(256, 250), beam=i_image_cc.beam,
+          colorbar_label='Coverage', show=False, show_beam=True, cmap='hot',
+          color_clim=[0, 1])

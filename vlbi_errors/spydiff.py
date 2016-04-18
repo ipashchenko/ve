@@ -98,7 +98,17 @@ def import_difmap_model(mdl_fname, mdl_dir):
         if line.startswith('!'):
             continue
         line = line.strip('\n ')
-        flux, radius, theta, major, axial, phi, type_, freq, spec = line.split()
+        try:
+            flux, radius, theta, major, axial, phi, type_, freq, spec = line.split()
+        except ValueError:
+            try:
+                flux, radius, theta, major, axial, phi, type_ = line.split()
+            except ValueError:
+                flux, radius, theta = line.split()
+                axial = 1.0
+                major = 0.0
+                type_ = 0
+
         x = -float(radius[:-1]) * np.sin(np.deg2rad(float(theta[:-1])))
         y = -float(radius[:-1]) * np.cos(np.deg2rad(float(theta[:-1])))
         flux = float(flux[:-1])

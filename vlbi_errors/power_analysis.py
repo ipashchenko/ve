@@ -7,6 +7,7 @@ from uv_data import UVData
 from from_fits import (create_model_from_fits_file, create_image_from_fits_file)
 from bootstrap import CleanBootstrap
 from utils import (hdi_of_mcmc, get_fits_image_info, mas_to_rad, bc_endpoint)
+from image_ops import rms_image
 
 
 def bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n, outpath=None,
@@ -310,6 +311,7 @@ def create_coverage_map(original_uv_fits_path, ci_type,
     return cov_array / n_cov
 
 
+# TODO: Extend to polarization (Q & U together)
 def create_sample(original_uv_fits_path, original_cc_fits_path=None,
                   imsize=None, outdir=None, path_to_script=None,
                   n_sample=100, stokes='I'):
@@ -407,6 +409,7 @@ def create_sample(original_uv_fits_path, original_cc_fits_path=None,
     return sample_uv_fits_paths, sample_cc_fits_paths
 
 
+# TODO: Extend to polarization (Q & U together)
 def create_coverage_map_classic(original_uv_fits_path, ci_type,
                                 original_cc_fits_path=None, imsize=None,
                                 outdir=None, n_boot=200, path_to_script=None,
@@ -553,8 +556,8 @@ def create_coverage_map_classic(original_uv_fits_path, ci_type,
                              path=uv_fits_dir, path_to_script=path_to_script,
                              outpath=outdir)
 
-            boot_cc_fits_paths = glob.glob(os.path.join(outdir,
-                                                        'sample_cc_boot_*.fits'))
+            boot_cc_fits_paths = sorted(glob.glob(os.path.join(outdir,
+                                                               'sample_cc_boot_*.fits')))
 
             # Calculate bootstrap CI for current `sample`
             # hdi_low, hdi_high = boot_ci_bc(boot_cc_fits_paths,
@@ -565,7 +568,7 @@ def create_coverage_map_classic(original_uv_fits_path, ci_type,
             # Calculate ``n_rms`` CI
             print("Calculating rms...")
             sample_image = create_image_from_fits_file(sample_cc_fits_path)
-            rms = sample_image.rms(region=(25, 25, 25, None))
+            rms = rms_image(sample_image)
             rms = np.sqrt(rms ** 2. + (0.0 * rms ** 2.) ** 2.)
             hdi_low = sample_image.image - n_rms * rms
             hdi_high = sample_image.image + n_rms * rms
@@ -584,15 +587,19 @@ def create_coverage_map_classic(original_uv_fits_path, ci_type,
 
 if __name__ == '__main__':
     # Parameters to choose
-    source = '1633+382'
-    epochs = ['2010_05_21']
-    bands = ['l18']
+    source = '1226+023'
+    stokes = 'I'
+    epochs = ['2006_06_15']
+    bands = ['x']
     ci_type = 'rms'
     n_rms = 1
     if n_rms not in [1, 2, 3]:
         raise Exception("n_rms must be 1, 2 or 3")
     alpha = 0.68
-    base_dir = '/home/ilya/vlbi_errors/examples/L/'
+    n_boot = 100
+    n_cov = 50
+    imsize = (1024, 0.1)
+    base_dir = '/home/ilya/vlbi_errors/examples/X/'
 
     # Not supposed to change anything below
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
@@ -600,44 +607,29 @@ if __name__ == '__main__':
 
     if ci_type == 'boot':
         perc = int(alpha * 100)
-        outfile = 'cov_{}_boot200_cov100'.format(perc)
+        outfile = 'cov_{}_boot{}_cov{}_{}'.format(perc, n_boot, n_cov, stokes)
     elif ci_type == 'rms':
         perc = {1: 68, 2: 95, 3: 99}[n_rms]
-        outfile = 'cov_{}_cov100'.format(perc)
+        outfile = 'cov_{}_cov{}_{}'.format(perc, n_cov, stokes)
     else:
         raise Exception("ci_type must be rms or boot!")
 
-    data_dir = os.path.join(base_dir, source, ci_type, str(perc))
+    data_dir = os.path.join(base_dir, source, stokes, ci_type, str(perc))
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
     download_mojave_uv_fits(source, epochs=epochs, bands=bands,
                             download_dir=data_dir)
 
-    # # Working
-    # original_uv_fits_path = os.path.join(base_dir, '2230+114.x.2006_02_12.uvf')
-    # original_cc_fits_path = os.path.join(base_dir, 'cc.fits')
-    # sample_cc_fits_paths = glob.glob(os.path.join(base_dir, 'sample_cc_*.fits'))
-    # boot_cc_fits_paths = glob.glob(os.path.join(base_dir, 'observed_cc_*.fits'))
-    # coverage_map = create_coverage_map(original_uv_fits_path, ci_type='rms',
-    #                                    original_cc_fits_path=original_cc_fits_path,
-    #                                    outdir=base_dir,
-    #                                    sample_cc_fits_paths=sample_cc_fits_paths,
-    #                                    boot_cc_fits_paths=boot_cc_fits_paths,
-    #                                    path_to_script=path_to_script,
-    #                                    n_cov=100, n_rms=2., stokes='I',
-    #                                    n_boot=200,
-    #                                    alpha=0.95)
-
     # Classic coverage analysis
     fname = mojave_uv_fits_fname(source, bands[0], epochs[0])
     original_uv_fits_path = os.path.join(data_dir, fname)
     # sample_uv_fits_paths, sample_cc_fits_paths =\
-    #     create_sample(original_uv_fits_path, imsize=(256, 1.), outdir=data_dir,
+    #     create_sample(original_uv_fits_path, imsize=imsize, outdir=data_dir,
     #                   path_to_script=path_to_script)
-    # sample_cc_fits_paths = sorted(glob.glob(os.path.join(base_dir,
+    # sample_cc_fits_paths = sorted(glob.glob(os.path.join(data_dir,
     #                                                      'sample_cc_*.fits')))
     sample_cc_fits_paths = None
-    # sample_uv_fits_paths = sorted(glob.glob(os.path.join(base_dir,
+    # sample_uv_fits_paths = sorted(glob.glob(os.path.join(data_dir,
     #                                                      'sample_uv_*.uvf')))
     sample_uv_fits_paths = None
     # original_cc_fits_path = os.path.join(data_dir, 'original_cc.fits')
@@ -645,11 +637,12 @@ if __name__ == '__main__':
     coverage_map =\
         create_coverage_map_classic(original_uv_fits_path, ci_type=ci_type,
                                     original_cc_fits_path=original_cc_fits_path,
-                                    imsize=(256, 1.), outdir=data_dir,
+                                    imsize=imsize, outdir=data_dir,
                                     path_to_script=path_to_script,
                                     sample_cc_fits_paths=sample_cc_fits_paths,
                                     sample_uv_fits_paths=sample_uv_fits_paths,
-                                    n_rms=n_rms, alpha=alpha, n_boot=100)
+                                    n_rms=n_rms, alpha=alpha, n_boot=n_boot,
+                                    n_cov=n_cov, stokes=stokes)
     np.savetxt(os.path.join(data_dir, "{}.txt".format(outfile)), coverage_map)
 
     from image import plot as iplot
@@ -657,9 +650,10 @@ if __name__ == '__main__':
     original_cc_fits_path = os.path.join(data_dir, 'original_cc.fits')
     i_image_cc = create_clean_image_from_fits_file(original_cc_fits_path)
     i_image = create_image_from_fits_file(original_cc_fits_path)
-    rms = i_image.rms(region=(25, 25, 25, None))
+    from image_ops import rms_image
+    rms = rms_image(i_image)
+    # blc=(110, 105), trc=(256, 250) for 1633
     iplot(i_image.image, coverage_map, x=i_image.x, y=i_image.y,
           min_abs_level=4. * rms, outfile=outfile, outdir=data_dir,
-          blc=(110, 105), trc=(256, 250), beam=i_image_cc.beam,
-          colorbar_label='Coverage', show=False, show_beam=True, cmap='hot',
-          color_clim=[0, 1])
+          beam=i_image_cc.beam, colorbar_label='Coverage', show=False,
+          show_beam=True, cmap='hot')

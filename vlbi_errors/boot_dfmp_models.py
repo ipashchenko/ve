@@ -1,7 +1,7 @@
 import os
 import glob
 try:
-    import triangle
+    import corner as triangle
 except ImportError:
     triangle = None
 import numpy as np

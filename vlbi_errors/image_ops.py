@@ -677,12 +677,62 @@ def jet_direction(image, rmin=0, rmax=200, dr=4, plots=False):
     f = np.array(phis)
     if plots:
         plt.figure()
-        plt.imshow(image)
+        plt.imshow(np.log(image))
         plt.plot(rads*np.cos(f)+leny/2, rads*np.sin(f)+lenx/2, '.k')
         plt.xlim(0, lenx)
         plt.ylim(0, leny)
 
     return rads, f, fluxes
+
+
+def jet_ridge_line(image, n_rms=3.):
+    # Find maximum
+    image = image_.copy()
+    max_flux = np.max(image)
+    y_max, x_max = np.where(image == max_flux)
+    y_max = int(y_max)
+    x_max = int(x_max)
+    x_cur = x_max
+    y_cur = y_max
+    proceed = True
+    x_list = []
+    y_list = []
+    x_list.append(x_max)
+    y_list.append(y_max)
+    previous_flux = max_flux
+    patch = image[y_cur - 1: y_cur + 2, x_cur - 1: x_cur + 2]
+    max_flux = np.max(patch)
+    diff_patch = abs(patch - max_flux)
+    min_delta = np.sort(diff_patch.ravel())[1]
+    dy, dx = np.where(diff_patch == min_delta)
+    dy = int(dy) - 1
+    dx = int(dx) - 1
+    print "Found direction: ", dy, dx
+    x_cur += dx
+    y_cur += dy
+    print "Now current point at ", y_cur, x_cur
+    x_list.append(x_cur)
+    y_list.append(y_cur)
+    previous_max = max_flux
+    while proceed:
+        patch = image[y_cur - 1: y_cur + 2, x_cur - 1: x_cur + 2]
+        patch[dy + 1 + 1, dx + 1 + 1] = 0.
+        max_flux = np.max(patch)
+        diff_patch = abs(patch - max_flux)
+        min_delta = np.sort(diff_patch.ravel())[1]
+        dy, dx = np.where(diff_patch == min_delta)
+        dy = int(dy) - 1
+        dx = int(dx) - 1
+        print "Found direction: ", dy, dx
+        x_cur += dx
+        y_cur += dy
+        print "Now current point at ", y_cur, x_cur
+        x_list.append(x_cur)
+        y_list.append(y_cur)
+        previous_max = max_flux
+
+
+
 
 
 # TODO: Add as method to ``images.Images``

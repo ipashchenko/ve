@@ -1,6 +1,10 @@
 import os
+import numpy as np
 from simulations import simulate
-
+from mojave import download_mojave_uv_fits, mojave_uv_fits_fname
+from spydiff import clean_difmap
+from from_fits import create_clean_image_from_fits_file
+from utils import mas_to_rad
 
 # TODO: Get typical MOJAVE fluxes
 # TODO: Get typical MOJAVE jet widths
@@ -13,6 +17,7 @@ if __name__ == '__main__':
     base_dir = '/home/ilya/vlbi_errors/mojave_rm'
     sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
                '1749+701', '0454+844']
+    bands = ['x', 'y', 'j', 'u']
     mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
                     'u': (512, 0.1)}
     mapsize_common = (512, 0.1)
@@ -32,8 +37,42 @@ if __name__ == '__main__':
 
     for source, epoch in source_epoch_dict.items():
         data_dir = os.path.join(base_dir, source)
-        epoch = '2006_11_10'
-        simulate(source, epoch, ['x', 'y', 'j', 'u'],
+        # First, download lowest frequency band and find beam width
+        download_mojave_uv_fits(source, epochs=[epoch], bands=[bands[0]],
+                                download_dir=data_dir)
+        uv_fits_fname = mojave_uv_fits_fname(source, bands[0], epoch)
+        cc_fits_fname = "{}_{}_{}_{}_naitive_cc.fits".format(source, epoch,
+                                                             bands[0], 'I')
+        clean_difmap(uv_fits_fname, cc_fits_fname, 'I',
+                     mapsize_dict[bands[0]], path=data_dir,
+                     path_to_script=path_to_script, outpath=data_dir)
+        cc_image = create_clean_image_from_fits_file(os.path.join(data_dir,
+                                                                  cc_fits_fname))
+        # Beam in mas, mas, deg
+        beam = cc_image.beam
+        print "BW [mas, mas, deg] : ", beam
+        # pixel size in mas
+        pixsize = abs(cc_image.pixsize[0]) / mas_to_rad
+        # This is characteristic jet width in pixels (half of that)
+        width = 0.5 * (beam[0] + beam[1]) / pixsize
+        print "BW scale [pixels] : ", width
+
+        # Now find flux at distance > 1 BW from core & maximum flux at core
+        len_y = cc_image.imsize[0]
+        len_x = cc_image.imsize[1]
+        y, x = np.mgrid[-len_y/2: len_y/2, -len_x/2: len_x/2]
+        r = beam[0] / pixsize
+        dr = 1
+        mask = np.logical_and(r**2 <= x*x+y*y, x*x+y*y <= (r+dr)**2)
+        image_circle = cc_image.image[mask]
+        max_circle_flux = np.max(image_circle)
+        print "Maximum flux at 1 BW from core : ", max_circle_flux
+        max_flux = np.max(cc_image.image)
+        print "Maximum flux : ", max_flux
+
+
+
+        simulate(source, epoch, bands,
                  n_sample=100, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
                  rotm_clim_model=[-900, 900],
                  path_to_script=path_to_script, mapsize_dict=mapsize_dict,

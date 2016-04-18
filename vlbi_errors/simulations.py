@@ -110,6 +110,49 @@ def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
     return image
 
 
+def create_jet_model_image_mojave(width, j_length, cj_length, max_flux, imsize,
+                                  center, gauss_peak=0.001, dist_from_core=24,
+                                  gauss_bmaj=10, gauss_e=1., gauss_bpa=0.,
+                                  cut=0.0001):
+    """
+    Function that returns image of jet.
+
+    :param width:
+        Width of jet [pxl].
+    :param j_length:
+        Length of jet [pxl].
+    :param cj_length:
+        Length of contr-jet [pxl].
+    :param max_flux:
+        Peak flux at maximum [pxl].
+    :param imsize:
+        Tuple of image size.
+    :param center:
+        Tuple of image center.
+    :return:
+        2D numpy array with jet image.
+    """
+    x, y = create_grid(imsize)
+    x -= center[0]
+    y -= center[1]
+    max_flux = float(max_flux)
+    along = np.where(x > 0, 0,
+                     -(max_flux / cj_length ** 2.) * x ** 2.)
+    along[x > j_length] = -max_flux
+    perp = -(max_flux / (width / 2) ** 2.) * y ** 2.
+    image = max_flux + along + perp
+    image[image < 0] = 0
+
+    # Jet feature
+    if gauss_peak:
+        gaussian_ = gaussian(gauss_peak, dist_from_core, 0, gauss_bmaj, gauss_e,
+                             gauss_bpa)
+        image += gaussian_(x, y)
+        image[image < cut] = 0.
+
+    return image
+
+
 # TODO: Models could consist of many components - ``stokes_models`` shouls be
 # ``Model`` instances, not numpy arrays
 class ModelGenerator(object):

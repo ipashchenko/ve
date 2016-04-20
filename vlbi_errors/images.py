@@ -344,7 +344,8 @@ class Images(object):
     # frequency like in ``Images.create_pang_images``
     # TODO: Option for plotting PANG vs. wavelength squared for pixels
     def create_rotm_image(self, s_pang_arrays=None, freqs=None, mask=None, n=0,
-                          outfile=None, outdir=None, ext='png'):
+                          outfile=None, outdir=None, ext='png',
+                          mask_on_chisq=True):
         """
         Method that creates image of Rotation Measure for current collection of
         instances.
@@ -418,7 +419,8 @@ class Images(object):
                                                          s_pang_arrays,
                                                          mask=mask,
                                                          outfile=outfile,
-                                                         outdir=outdir, ext=ext)
+                                                         outdir=outdir, ext=ext,
+                                                         mask_on_chisq=mask_on_chisq)
         rotm_image = Image()
         rotm_image._construct(imsize=img.imsize, pixsize=img.pixsize,
                               pixref=img.pixref, stokes='ROTM',
@@ -433,7 +435,8 @@ class Images(object):
 
         return rotm_image, s_rotm_image
 
-    def create_rotm_images(self, s_pang_arrays=None, freqs=None, mask=None):
+    def create_rotm_images(self, s_pang_arrays=None, freqs=None, mask=None,
+                           mask_on_chisq=True):
         """
         Method that creates ROTM images from series of bootstrapped data.
 
@@ -483,7 +486,8 @@ class Images(object):
             print "Creating {}-th image of {} replications".format(i + 1,
                                                                 n_replications)
             rotm_image, s_rotm_image = self.create_rotm_image(s_pang_arrays,
-                                                              freqs, mask, i)
+                                                              freqs, mask, i,
+                                                              mask_on_chisq=mask_on_chisq)
             images.add_image(rotm_image)
 
         return images

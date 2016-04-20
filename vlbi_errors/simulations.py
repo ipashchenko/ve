@@ -71,7 +71,10 @@ def rotm(imsize, center, grad_value=5., rm_value_0=0.0):
 
 def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
                            center, gauss_peak=0.001, dist_from_core=24,
-                           gauss_bmaj=10, gauss_e=1., gauss_bpa=0., cut=0.0001):
+                           gauss_bmaj=10, gauss_e=1., gauss_bpa=0.,
+                           gauss_peak_jet=0.0, dist_from_core_jet=24,
+                           gauss_bmaj_jet=10, gauss_e_jet=1., gauss_bpa_jet=0.,
+                           cut=0.0001, transverse='quadratic'):
     """
     Function that returns image of jet.
 
@@ -94,9 +97,17 @@ def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
     x -= center[0]
     y -= center[1]
     max_flux = float(max_flux)
-    along = np.where(x > 0, -(max_flux / j_length) * x,
+    along = np.where(x > 0, -(max_flux / np.sqrt(j_length)) * np.sqrt(x),
                      -(max_flux / cj_length ** 2.) * x ** 2.)
-    perp = -(max_flux / (width / 2) ** 2.) * y ** 2.
+    if transverse == 'linear':
+        perp = -(2 * max_flux / width) * abs(y)
+    elif transverse == 'quadratic':
+        perp = -(max_flux / (width / 2) ** 2.) * y ** 2.
+    elif transverse == 'sqrt':
+        perp = -(max_flux / np.sqrt(width / 2.)) * np.sqrt(abs(y))
+
+    else:
+        raise Exception("transverse must be `linear`, `quadratic` or `sqrt`")
     image = max_flux + along + perp
     image[image < 0] = 0
 
@@ -107,13 +118,19 @@ def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
         image += gaussian_(x, y)
         image[image < cut] = 0.
 
+    if gauss_peak_jet:
+        gaussian_ = gaussian(gauss_peak_jet, dist_from_core_jet, 0,
+                             gauss_bmaj_jet, gauss_e_jet, gauss_bpa_jet)
+        image += gaussian_(x, y)
+        image[image < cut] = 0.
+
     return image
 
 
 def create_jet_model_image_mojave(width, j_length, cj_length, max_flux, imsize,
                                   center, gauss_peak=0.001, dist_from_core=24,
                                   gauss_bmaj=10, gauss_e=1., gauss_bpa=0.,
-                                  cut=0.0001):
+                                  cut=0.0001, transverse='linear'):
     """
     Function that returns image of jet.
 
@@ -139,7 +156,12 @@ def create_jet_model_image_mojave(width, j_length, cj_length, max_flux, imsize,
     along = np.where(x > 0, 0,
                      -(max_flux / cj_length ** 2.) * x ** 2.)
     along[x > j_length] = -max_flux
-    perp = -(max_flux / (width / 2) ** 2.) * y ** 2.
+    if transverse == 'linear':
+        perp = -(2 * max_flux / width) * abs(y)
+    elif transverse == 'quadratic':
+        perp = -(max_flux / (width / 2) ** 2.) * y ** 2.
+    else:
+        raise Exception("transverse must be `linear` or `quadratic`")
     image = max_flux + along + perp
     image[image < 0] = 0
 
@@ -414,8 +436,8 @@ class ModelGenerator(object):
                                                   i_cut_frac=i_cut_frac,
                                                   beam=beam,
                                                   mask_before_convolve=mask_before_convolve)['PANG']
-        return rotm_map(frequencies, images.values(), mask=rotm_mask)
-
+        return rotm_map(frequencies, images.values(), mask=rotm_mask,
+                        mask_on_chisq=False)
 
     def get_spix_map(self, frequencies, i_cut_frac=None, beam=None,
                      mask_before_convolve=True, spix_mask=None):
@@ -568,7 +590,7 @@ class MFSimulation(object):
 # TODO: Make ``mapsize_dict`` the required argument
 # TODO: Implement possibility of using several slice to analyze ROTM gradients
 def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
-             qu_fraction=0.1, model_freq=20. * 10 ** 9, rotm_clim_sym=None,
+             qu_fraction=0.2, model_freq=20. * 10 ** 9, rotm_clim_sym=None,
              spix_clim_sym=None, rotm_grad_value=40., rotm_value_0=200.,
              path_to_script=None, base_dir=None, mapsize_common=None,
              mapsize_dict=None, rotm_slice=((216, 276), (296, 276)), n_beam=0,
@@ -701,11 +723,17 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
 
     observed_uv = [UVData(fits_file) for fits_file in observed_uv_fits]
     # Create jet model, ROTM & SPIX images
-    jet_image = create_jet_model_image(30, 60, 10, max_jet_flux,
+    # jet_image = create_jet_model_image(30, 60, 10, max_jet_flux,
+    #                                    (imsize_high[0], imsize_high[0]),
+    #                                    (imsize_high[0] / 2, imsize_high[0] / 2),
+    #                                    gauss_peak=0.001, dist_from_core=20,
+    #                                    cut=0.0002)
+    jet_image = create_jet_model_image(30, 100, 10, max_jet_flux,
                                        (imsize_high[0], imsize_high[0]),
                                        (imsize_high[0] / 2, imsize_high[0] / 2),
-                                       gauss_peak=0.001, dist_from_core=20,
-                                       cut=0.0002)
+                                       gauss_peak=0.045, dist_from_core=0,
+                                       gauss_bmaj=3, gauss_e=0.2, gauss_bpa=0,
+                                       gauss_peak_jet=0.0)
     rotm_image = rotm((imsize_high[0], imsize_high[0]),
                       (imsize_high[0] / 2, imsize_high[0] / 2),
                       grad_value=rotm_grad_value, rm_value_0=rotm_value_0)
@@ -809,14 +837,14 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     iplot(i_image.image, rotm_image_sym.image, x=i_image.x, y=i_image.y,
           min_abs_level=3. * rms, colors_mask=rotm_mask,
           outfile='rotm_image_sym', outdir=data_dir, color_clim=rotm_clim_sym,
-          blc=(210, 200), trc=(350, 320), beam=beam_common,
+          blc=(220, 200), trc=(360, 320), beam=beam_common,
           colorbar_label='RM, [rad/m/m]', slice_points=((-2, -4), (-2, 4)),
           show=False, show_beam=True)
     # Plotting simulated high-freq stokes I contours with SPIX values.
     iplot(i_image.image, spix_image_sym.image, x=i_image.x, y=i_image.y,
           min_abs_level=3. * rms, colors_mask=spix_mask,
           outfile='spix_image_sym', outdir=data_dir, color_clim=spix_clim_sym,
-          blc=(210, 200), trc=(350, 320), beam=beam_common,
+          blc=(220, 200), trc=(360, 320), beam=beam_common,
           colorbar_label='SPIX', show=False, show_beam=True,
           slice_points=((4, 0), (-6, 0)))
 
@@ -830,9 +858,10 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
                                                       beam=beam_common_pxl)
     iplot(i_image_mod, rotm_image_mod, x=i_image.x, y=i_image.y,
           min_abs_level=3. * rms, colors_mask=rotm_mask,
-          outfile='rotm_image_model_convolved', outdir=data_dir, blc=(210, 200),
-          trc=(350, 320), beam=beam_common, colorbar_label='RM, [rad/m/m]',
-          slice_points=((-2, -4), (-2, 4)), show=False, show_beam=True)
+          outfile='rotm_image_model_convolved', outdir=data_dir, blc=(220, 200),
+          trc=(360, 320), beam=beam_common, colorbar_label='RM, [rad/m/m]',
+          slice_points=((-2, -4), (-2, 4)), show=False, show_beam=True,
+          color_clim=rotm_clim_sym)
 
     # Plotting non-convolved (generating) model of ROTM
     # TODO: Should i use original model array for ROTM (not I cause frequency
@@ -845,7 +874,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     iplot(i_image_mod_nc, rotm_image_mod_nc, x=i_image.x, y=i_image.y,
           min_abs_level=0.005 * np.max(i_image_mod_nc), colors_mask=mask_nc,
           outfile='rotm_image_model_original', outdir=data_dir,
-          color_clim=rotm_clim_model, blc=(210, 200), trc=(350, 320),
+          color_clim=rotm_clim_model, blc=(220, 200), trc=(360, 320),
           colorbar_label='RM, [rad/m/m]', slice_points=((-2, -4), (-2, 4)),
           show=False)
 
@@ -856,7 +885,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     iplot(i_image_mod, spix_image_mod, x=i_image.x, y=i_image.y,
           min_abs_level=3. * rms, colors_mask=spix_mask,
           outfile='spix_image_model_convolved', outdir=data_dir,
-          color_clim=spix_clim_sym, blc=(210, 200), trc=(350, 320),
+          color_clim=spix_clim_sym, blc=(220, 200), trc=(360, 320),
           beam=beam_common, colorbar_label='SPIX', show=False, show_beam=True,
           slice_points=((4, 0), (-6, 0)))
 
@@ -869,7 +898,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     iplot(i_image_mod_nc, spix_image_mod_nc, x=i_image.x, y=i_image.y,
           min_abs_level=0.005 * np.max(i_image_mod_nc), colors_mask=mask_nc,
           outfile='spix_image_model_original', outdir=data_dir,
-          color_clim=spix_clim_model, blc=(210, 200), trc=(350, 320),
+          color_clim=spix_clim_model, blc=(220, 200), trc=(360, 320),
           colorbar_label='SPIX', show=False, slice_points=((4, 0), (-6, 0)))
 
     # Plotting simulated slices with model values (convolved and non-convolved)
@@ -1037,7 +1066,7 @@ if __name__ == '__main__':
     # Test simulate
     from mojave import get_epochs_for_source
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
-    base_dir = '/home/ilya/code/vlbi_errors/examples/mojave/0d005'
+    base_dir = '/home/ilya/vlbi_errors/mojave_rm/test'
     # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
     #            '1749+701', '0454+844']
     mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
@@ -1057,15 +1086,27 @@ if __name__ == '__main__':
     #              mapsize_common=mapsize_common, base_dir=base_dir,
     #              rotm_value_0=0., max_jet_flux=0.005)
 
-    source = '1055+018'
-    epoch = '2006_11_10'
-    simulate(source, epoch, ['x', 'y', 'j', 'u'],
-             n_sample=100, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
-             rotm_clim_model=[-900, 900],
-             path_to_script=path_to_script, mapsize_dict=mapsize_dict,
-             mapsize_common=mapsize_common, base_dir=base_dir,
-             rotm_value_0=0., rotm_grad_value=60., n_rms=3.,
-             download_mojave=False, spix_clim_sym=[-1, 1])
+    source = '0454+844'
+    epoch = '2006_03_09'
+    sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
+               '1749+701', '0454+844']
+    max_jet_fluxes = np.linspace(0.001, 0.002, len(sources))[::-1]
+    from collections import OrderedDict
+    source_epoch_dict = OrderedDict()
+    for source in sources:
+        epochs = get_epochs_for_source(source, use_db='multifreq')
+        print "Found epochs for source {}".format(source)
+        print epochs
+        source_epoch_dict.update({source: epochs[-1]})
+    for (source, epoch), max_jet_flux in zip(source_epoch_dict.items(), max_jet_fluxes):
+        simulate(source, epoch, ['x', 'y', 'j', 'u'],
+                 n_sample=100, max_jet_flux=max_jet_flux, rotm_clim_sym=[-300, 300],
+                 rotm_clim_model=[-300, 300],
+                 path_to_script=path_to_script, mapsize_dict=mapsize_dict,
+                 mapsize_common=mapsize_common, base_dir=base_dir,
+                 rotm_value_0=0., rotm_grad_value=0., n_rms=2.,
+                 download_mojave=True, spix_clim_sym=[-1.5, 1],
+                 spix_clim_model=[-1.5, 1], qu_fraction=0.3)
 
     # ############################################################################
     # # Test for ModelGenerator
@@ -1079,16 +1120,17 @@ if __name__ == '__main__':
     # y -= center[1]
     # x *= pixsize
     # y *= pixsize
-    # max_jet_flux = 0.01
-    # qu_fraction = 0.1
-    # rotm_grad_value = 40.
+    # max_jet_flux = 0.001
+    # qu_fraction = 0.2
+    # rotm_grad_value = 0.
     # rotm_value_0 = 0.
     # model_freq = 20. * 10. ** 9.
-    # jet_image = create_jet_model_image(30, 60, 10, max_jet_flux,
+    # jet_image = create_jet_model_image(20, 100, 10, 0.001,
     #                                    (imsize[0], imsize[0]),
     #                                    (imsize[0] / 2, imsize[0] / 2),
-    #                                    gauss_peak=0.001, dist_from_core=20,
-    #                                    cut=0.0002)
+    #                                    gauss_peak=0.045, dist_from_core=0,
+    #                                    gauss_bmaj=3, gauss_e=0.2, gauss_bpa=0,
+    #                                    gauss_peak_jet=0.0, transverse='linear')
     # rotm_image = rotm((imsize[0], imsize[0]),
     #                   (imsize[0] / 2, imsize[0] / 2),
     #                   grad_value=rotm_grad_value, rm_value_0=rotm_value_0)

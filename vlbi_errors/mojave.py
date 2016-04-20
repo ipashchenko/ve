@@ -5,6 +5,7 @@ import urllib2
 import fnmatch
 import numpy as np
 
+# TODO: check connection to MOJAVE servers
 mojave_multifreq_url = "http://www.cv.nrao.edu/2cmVLBA/data/multifreq/"
 # Path to u-frequency file: dir/source/epoch/fname
 mojave_u_url = "http://www.cv.nrao.edu/2cmVLBA/data/"

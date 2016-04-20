@@ -17,7 +17,7 @@ except ImportError:
     triangle = None
 
 base_dir = '/home/ilya/vlbi_errors/mojave_mod'
-n_boot = 10
+n_boot = 50
 outname = 'boot_uv'
 names = ['source', 'id', 'trash', 'epoch', 'flux', 'r', 'pa', 'bmaj', 'e',
          'bpa']
@@ -45,6 +45,12 @@ for source in df['source'].unique()[:1]:
     for (flux, r, pa, bmaj, e, bpa) in np.asarray(model_df[['flux', 'r', 'pa',
                                                             'bmaj', 'e',
                                                             'bpa']]):
+        print flux, r, pa, bmaj, e, bpa
+        if not r.strip(' '):
+            r = '0.0'
+        if not pa.strip(' '):
+            pa = '0.0'
+
         if not bmaj.strip(' '):
             bmaj = '0.0'
         if not e.strip(' '):
@@ -131,13 +137,16 @@ for source in df['source'].unique()[:1]:
     if triangle:
         # Show one component
         fig, axes = plt.subplots(nrows=4, ncols=4)
-        triangle.corner(params.reshape((n_pars_true, n_boot)).T[:, :4],
-                        # extents=extents[:4],
-                        # labels=labels,
-                        truths=params0.reshape(n_pars_true)[:4], fig=fig,
-                        plot_contours=False)
-        fig.savefig(os.path.join(data_dir, '{}_{}_core.png'.format(source, last_epoch)),
-                    bbox_inches='tight', dpi=300)
+        try:
+            triangle.corner(params.reshape((n_pars_true, n_boot)).T[:, :4],
+                            # extents=extents[:4],
+                            # labels=labels,
+                            truths=params0.reshape(n_pars_true)[:4], fig=fig,
+                            plot_contours=False)
+            fig.savefig(os.path.join(data_dir, '{}_{}_core.png'.format(source, last_epoch)),
+                        bbox_inches='tight', dpi=300)
+        except ValueError:
+            print "Failed to plot..."
     else:
         print "Install ``corner`` for corner-plots"
 

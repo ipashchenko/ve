@@ -53,6 +53,7 @@ def rotm_leastsq(lambda_sq, chi, s_chi=None, p0=None):
         pcov *= s_sq
     else:
         pcov = np.nan
+        s_sq = np.nan
 
     return p, pcov, s_sq
 

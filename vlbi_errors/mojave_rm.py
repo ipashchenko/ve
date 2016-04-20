@@ -3,11 +3,12 @@ import numpy as np
 from simulations import simulate
 from mojave import download_mojave_uv_fits, mojave_uv_fits_fname
 from spydiff import clean_difmap
-from from_fits import create_clean_image_from_fits_file
+from from_fits import create_clean_image_from_fits_file, \
+    create_image_from_fits_file
 from utils import mas_to_rad
 
 # TODO: Get typical MOJAVE fluxes
-# TODO: Get typical MOJAVE jet widths
+# TODO: Get typical MOJAVE jet widths ~ 1 BW
 if __name__ == '__main__':
 
     ############################################################################
@@ -36,7 +37,10 @@ if __name__ == '__main__':
     #              rotm_value_0=0., max_jet_flux=0.005)
 
     for source, epoch in source_epoch_dict.items():
+        print "Source {}, epoch {}".format(source, epoch)
         data_dir = os.path.join(base_dir, source)
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
         # First, download lowest frequency band and find beam width
         download_mojave_uv_fits(source, epochs=[epoch], bands=[bands[0]],
                                 download_dir=data_dir)
@@ -48,6 +52,8 @@ if __name__ == '__main__':
                      path_to_script=path_to_script, outpath=data_dir)
         cc_image = create_clean_image_from_fits_file(os.path.join(data_dir,
                                                                   cc_fits_fname))
+        image = create_image_from_fits_file(os.path.join(data_dir,
+                                                         cc_fits_fname))
         # Beam in mas, mas, deg
         beam = cc_image.beam
         print "BW [mas, mas, deg] : ", beam
@@ -61,25 +67,24 @@ if __name__ == '__main__':
         len_y = cc_image.imsize[0]
         len_x = cc_image.imsize[1]
         y, x = np.mgrid[-len_y/2: len_y/2, -len_x/2: len_x/2]
-        r = beam[0] / pixsize
+        r = 2 * beam[0] / pixsize
         dr = 1
         mask = np.logical_and(r**2 <= x*x+y*y, x*x+y*y <= (r+dr)**2)
-        image_circle = cc_image.image[mask]
+        image_circle = image.image[mask]
         max_circle_flux = np.max(image_circle)
-        print "Maximum flux at 1 BW from core : ", max_circle_flux
-        max_flux = np.max(cc_image.image)
-        print "Maximum flux : ", max_flux
-
-
+        max_circle_flux_beam = max_circle_flux / (np.pi * beam[0] * beam[1] / pixsize ** 2)
+        print "Maximum flux at 2 BW from core : ", max_circle_flux, max_circle_flux_beam
+        max_flux = np.max(image.image)
+        max_flux_beam = max_flux / (np.pi * beam[0] * beam[1] / pixsize ** 2)
+        print "Maximum flux : ", max_flux, max_flux_beam
 
         simulate(source, epoch, bands,
-                 n_sample=100, max_jet_flux=0.003, rotm_clim_sym=[-300, 300],
-                 rotm_clim_model=[-900, 900],
+                 n_sample=100, max_jet_flux=0.05, rotm_clim_sym=[-300, 300],
                  path_to_script=path_to_script, mapsize_dict=mapsize_dict,
                  mapsize_common=mapsize_common, base_dir=data_dir,
                  rotm_value_0=0., rotm_grad_value=0., n_rms=3.,
                  download_mojave=True, spix_clim_sym=[-1, 1])
-
+        break
     # ############################################################################
     # # Test for ModelGenerator
     # # Create jet model, ROTM & alpha images

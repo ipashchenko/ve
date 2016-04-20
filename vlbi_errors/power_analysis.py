@@ -591,7 +591,7 @@ if __name__ == '__main__':
     stokes = 'I'
     epochs = ['2006_06_15']
     bands = ['x']
-    ci_type = 'rms'
+    ci_type = 'boot'
     n_rms = 1
     if n_rms not in [1, 2, 3]:
         raise Exception("n_rms must be 1, 2 or 3")

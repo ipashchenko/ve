@@ -4,6 +4,8 @@ import BeautifulSoup
 import urllib2
 import fnmatch
 import numpy as np
+from spydiff import clean_difmap
+from from_fits import create_image_from_fits_file
 
 # TODO: check connection to MOJAVE servers
 mojave_multifreq_url = "http://www.cv.nrao.edu/2cmVLBA/data/multifreq/"
@@ -180,6 +182,44 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
                               " Skipping...".format(fname, download_dir))
                         continue
                     urllib.urlretrieve(url, os.path.join(download_dir, fname))
+
+
+def get_stacked_map(source, path=None, out_dir=None, imsize=(512, 0.1),
+                    path_to_script=None):
+    """
+    Functions that returns stacked image of given source using MOJAVE 15 GHz
+    data downloading it directly from MOJAVE DB or getting it from
+    user-specified directory.
+
+    :param source:
+        Source name [B1950].
+    :param path: (optional)
+        Path to directory with MOJAVE 15 GHz data. If ``None`` then download
+        from MOJAVE DB. (default: ``None``)
+
+    :return:
+        Numpy 2D array with stacked image.
+    """
+    images = list()
+    if path_to_script is None:
+        path_to_script = os.getcwd()
+    epochs = get_epochs_for_source(source)
+    if out_dir is None:
+        out_dir = os.getcwd()
+    elif not os.path.exists(out_dir):
+        os.makedirs(out_dir)
+    download_mojave_uv_fits(source, epochs, bands=['u'], download_dir=out_dir)
+    for epoch in sorted(epochs):
+        uv_fits_fname = mojave_uv_fits_fname(source, 'u', epoch)
+        im_fits_fname = "{}_{}_{}_{}.fits".format(source, 'U', epoch, 'I')
+        clean_difmap(uv_fits_fname, im_fits_fname, 'I', imsize,
+                     path=out_dir, path_to_script=path_to_script,
+                     outpath=out_dir)
+        image = create_image_from_fits_file(os.path.join(out_dir,
+                                                         im_fits_fname))
+    images.append(image.image)
+    images = np.dstack(images)
+    return np.mean(images, axis=0)
 
 
 if __name__ == '__main__':

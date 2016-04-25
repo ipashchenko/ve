@@ -685,54 +685,53 @@ def jet_direction(image, rmin=0, rmax=200, dr=4, plots=False):
     return rads, f, fluxes
 
 
-def jet_ridge_line(image, n_rms=3.):
-    # Find maximum
-    image = image_.copy()
-    max_flux = np.max(image)
-    y_max, x_max = np.where(image == max_flux)
-    y_max = int(y_max)
-    x_max = int(x_max)
-    x_cur = x_max
-    y_cur = y_max
-    proceed = True
-    x_list = []
-    y_list = []
-    x_list.append(x_max)
-    y_list.append(y_max)
-    previous_flux = max_flux
-    patch = image[y_cur - 1: y_cur + 2, x_cur - 1: x_cur + 2]
-    max_flux = np.max(patch)
-    diff_patch = abs(patch - max_flux)
-    min_delta = np.sort(diff_patch.ravel())[1]
-    dy, dx = np.where(diff_patch == min_delta)
-    dy = int(dy) - 1
-    dx = int(dx) - 1
-    print "Found direction: ", dy, dx
-    x_cur += dx
-    y_cur += dy
-    print "Now current point at ", y_cur, x_cur
-    x_list.append(x_cur)
-    y_list.append(y_cur)
-    previous_max = max_flux
-    while proceed:
-        patch = image[y_cur - 1: y_cur + 2, x_cur - 1: x_cur + 2]
-        patch[dy + 1 + 1, dx + 1 + 1] = 0.
-        max_flux = np.max(patch)
-        diff_patch = abs(patch - max_flux)
-        min_delta = np.sort(diff_patch.ravel())[1]
-        dy, dx = np.where(diff_patch == min_delta)
-        dy = int(dy) - 1
-        dx = int(dx) - 1
-        print "Found direction: ", dy, dx
-        x_cur += dx
-        y_cur += dy
-        print "Now current point at ", y_cur, x_cur
-        x_list.append(x_cur)
-        y_list.append(y_cur)
-        previous_max = max_flux
+def jet_ridge_line(image, r_max, beam=None, dr=1, n=1.):
+    """
+
+    :param image:
+    :param r_max:
+    :param beam:
+        Iterable of ``bmaj``, ``bmin``, ``bpa`` [pxl, pxl, rad]. If ``(r, None,
+        None)`` then use ``circular_mean``.
+    :param dr:
+    :param n:
+        Scale factor to decrease beam size to average before ridge line
+        construction.
+    :return:
+    """
+    from utils import circular_mean, elliptical_mean
+    try:
+        if beam[1] is None:
+            mean_image = circular_mean(image, beam[0])
+            print "Using circular filter with r = {}".format(beam[0])
+        else:
+            mean_image = elliptical_mean(image, beam[0] / n, beam[1] / n, beam[2])
+            print "Using elliptical filter with bmaj = {}, bmin = {}, bpa =" \
+                  " {}".format(beam[0]/n, beam[1]/n, beam[2])
+    except TypeError:
+        print "No filter"
+        mean_image = image
+    leny, lenx = np.shape(mean_image)
+    y, x = np.mgrid[-leny/2: leny/2, -lenx/2: lenx/2]
+    coords = list()
+    xy_max = np.unravel_index(np.argmax(mean_image), np.shape(mean_image))
+    coords.append(xy_max)
+    for r in range(1, r_max):
+        mask = np.logical_and(r**2 < x * x + y * y, x * x + y * y <=
+                              (r + dr) ** 2)
+        img1 = np.ma.array(mean_image, mask=~mask)
+        xy_max = np.unravel_index(np.ma.argmax(img1), np.shape(mean_image))
+        coords.append(xy_max)
+
+    return coords
 
 
-
+def image_ridge_line(image):
+    rms = rms_image(image)
+    im = image.image.copy()
+    im[im < 5. * rms] = 0
+    grad = np.gradient(im)
+    
 
 
 # TODO: Add as method to ``images.Images``

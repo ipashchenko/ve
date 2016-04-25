@@ -788,11 +788,13 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     from from_fits import create_image_from_fits_file
     # looping through simulated cleaned images
     for i_fname in sorted(glob.glob(os.path.join(data_dir, '*_I.fits'))):
+    # for i_fname in fnames:
         i_image = create_image_from_fits_file(i_fname)
         r_rms = mapsize_common[0] / 10
         rms = i_image.rms(region=(r_rms, r_rms, r_rms, None))
         freq = i_image.freq
         ppol_image = sym_images.create_pol_images(freq=freq)[0]
+        # ppol_image = orig_images.create_pol_images(freq=freq)[0]
         mask = ppol_image.image < n_rms * rms
         if rotm_mask is None:
             rotm_mask = mask
@@ -978,22 +980,25 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     slices = list()
     for image in rotm_images_sym.images:
         slice_ = image.slice((216, 276), (296, 276))
-        slices.append(slice_[~np.isnan(slice_)])
+        # print slice_, np.max(abs(slice_))
+        if np.nanmax(abs(slice_)) < 1000:
+            slices.append(slice_[~np.isnan(slice_)])
 
     # Find means
     obs_slice = rotm_image_sym.slice((216, 276), (296, 276))
     x = np.arange(216, 296, 1)
     x = x[~np.isnan(obs_slice)]
     obs_slice = obs_slice[~np.isnan(obs_slice)]
+    obs_slice_0 = np.zeros((len(obs_slice)))
     # Find sigmas
-    slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices]
+    slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices if (abs(arr[0]) < 1000 and abs(arr[-1] < 1000))]
     sigmas = hdi_of_arrays(slices_).squeeze()
     means = np.mean(np.vstack(slices), axis=0)
-    diff = obs_slice - means
+    diff = obs_slice_0 - means
     # Move bootstrap curves to original simulated centers
     slices_ = [slice_ + diff for slice_ in slices]
     # Find low and upper confidence band
-    low, up = create_sim_conf_band(slices_, obs_slice, sigmas,
+    low, up = create_sim_conf_band(slices_, obs_slice_0, sigmas,
                                    alpha=conf_band_alpha)
 
     # Plot confidence bands and model values
@@ -1002,15 +1007,16 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
     ax.plot(x, low, 'g')
     ax.plot(x, up, 'g')
     [ax.plot(x, slice_, 'r', lw=0.15) for slice_ in slices_]
-    ax.plot(x, obs_slice, '.k')
-    # Model convolved values
-    ax.plot(np.arange(216, 296, 1),
-            image_slice(rotm_image_mod, (216, 276), (296, 276)), 'g')
-    # Model non-convolved values
-    ax.plot(np.arange(216, 296, 1),
-            image_slice(rotm_image, (216, 276), (296, 276)), 'r')
+    ax.plot(x, obs_slice_0, 'k')
+    ## Model convolved values
+    #ax.plot(np.arange(216, 296, 1),
+    #        image_slice(rotm_image_mod, (216, 276), (296, 276)), 'g')
+    ## Model non-convolved values
+    #ax.plot(np.arange(216, 296, 1),
+    #        image_slice(rotm_image, (216, 276), (296, 276)), 'r')
     ax.set_xlabel("slice pixel")
     ax.set_ylabel("ROTM, [rad/m/m]")
+    ax.axhline(-400, 0.2, 0.48, color='k', lw=2)
     fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
                 bbox_inches='tight', dpi=200)
     plt.close()
@@ -1090,10 +1096,10 @@ if __name__ == '__main__':
     epoch = '2006_03_09'
     sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
                '1749+701', '0454+844']
-    max_jet_fluxes = np.linspace(0.001, 0.002, len(sources))[::-1]
+    max_jet_fluxes = np.linspace(0.001, 0.002, len(sources))
     from collections import OrderedDict
     source_epoch_dict = OrderedDict()
-    for source in sources:
+    for source in sources[::-1]:
         epochs = get_epochs_for_source(source, use_db='multifreq')
         print "Found epochs for source {}".format(source)
         print epochs

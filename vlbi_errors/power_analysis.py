@@ -80,6 +80,38 @@ def boot_ci(boot_cc_fits_paths, original_cc_fits_path, alpha=0.68):
     return hdi_low, hdi_high
 
 
+def boot_ci_asymm(boot_cc_fits_paths, original_cc_fits_path, alpha=0.68):
+    """
+    Calculate bootstrap CI.
+
+    :param boot_cc_fits_paths:
+        Iterable of paths to bootstrapped CC FITS-files.
+    :param original_cc_fits_path:
+        Path to original CC FITS-file.
+    :return:
+        Two numpy arrays with low and high CI borders for each pixel.
+
+    """
+    original_image = create_image_from_fits_file(original_cc_fits_path)
+    boot_images = list()
+    for boot_cc_fits_path in boot_cc_fits_paths:
+        print("Reading image from {}".format(boot_cc_fits_path))
+        image = create_image_from_fits_file(boot_cc_fits_path)
+        boot_images.append(image.image)
+
+    images_cube = np.dstack(boot_images)
+    boot_ci = np.zeros(np.shape(images_cube[:, :, 0]))
+    print("calculating CI intervals")
+    for (x, y), value in np.ndenumerate(boot_ci):
+        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=alpha)
+        mean_boot = np.mean(images_cube[x, y, :])
+
+    hdi_low = original_image.image - (mean_boot - hdi[0])
+    hdi_high = original_image.image + hdi[1] - mean_boot
+
+    return hdi_low, hdi_high
+
+
 def boot_ci_bc(boot_cc_fits_paths, original_cc_fits_path, alpha=0.68):
     """
     Calculate bootstrap CI.
@@ -562,8 +594,8 @@ def create_coverage_map_classic(original_uv_fits_path, ci_type,
             # Calculate bootstrap CI for current `sample`
             # hdi_low, hdi_high = boot_ci_bc(boot_cc_fits_paths,
             #                                observed_cc_fits_path, alpha=alpha)
-            hdi_low, hdi_high = boot_ci(boot_cc_fits_paths, sample_cc_fits_path,
-                                        alpha=alpha)
+            hdi_low, hdi_high = boot_ci_asymm(boot_cc_fits_paths,
+                                              sample_cc_fits_path, alpha=alpha)
         elif ci_type == 'rms':
             # Calculate ``n_rms`` CI
             print("Calculating rms...")
@@ -596,10 +628,10 @@ if __name__ == '__main__':
     if n_rms not in [1, 2, 3]:
         raise Exception("n_rms must be 1, 2 or 3")
     alpha = 0.68
-    n_boot = 100
+    n_boot = 50
     n_cov = 50
-    imsize = (1024, 0.1)
-    base_dir = '/home/ilya/vlbi_errors/examples/X/'
+    imsize = (512, 0.1)
+    base_dir = '/home/ilya/vlbi_errors/examples/X/512x512'
 
     # Not supposed to change anything below
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'

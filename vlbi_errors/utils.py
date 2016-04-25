@@ -755,7 +755,7 @@ def create_mask(shape, region):
 
     :param region:
         Tuple (blc[0], blc[1], trc[0], trc[1],) or (center[0], center[1], r,
-        None,) or (center[0], center[1], bmaj, e, bpa).
+        None,) or (center[0], center[1], bmaj, e, bpa). Where ``bpa`` [rad].
     :return:
         Numpy 2D bool array.
     """
@@ -793,6 +793,106 @@ def create_mask(shape, region):
     else:
         raise Exception
     return mask
+
+
+def sector_mask(shape, centre, radius, angle_range):
+    """
+    Return a boolean mask for a circular sector. The start/stop angles in
+    `angle_range` should be given in clockwise order.
+    http://stackoverflow.com/questions/18352973/mask-a-circular-sector-in-a-numpy-array
+    """
+
+    x, y = np.ogrid[:shape[0], :shape[1]]
+    cx, cy = centre
+    tmin, tmax = np.deg2rad(angle_range)
+
+    # ensure stop angle > start angle
+    if tmax < tmin:
+            tmax += 2*np.pi
+
+    # convert cartesian --> polar coordinates
+    r2 = (x-cx)*(x-cx) + (y-cy)*(y-cy)
+    theta = np.arctan2(x-cx, y-cy) - tmin
+
+    # wrap angles between 0 and 2*pi
+    theta %= (2*np.pi)
+
+    # circular mask
+    circmask = r2 <= radius*radius
+
+    # angular mask
+    anglemask = theta <= (tmax-tmin)
+
+    return circmask*anglemask
+
+
+def circular_mean(data, radius):
+    """
+    http://stackoverflow.com/questions/8647024/how-to-apply-a-disc-shaped-mask-to-a-numpy-array
+
+    To apply this circular kernel to compute the mean of all the values
+    surrounding each point in a 2D matrix.
+
+    :param data:
+    :param radius:
+    :return:
+    """
+    from scipy.ndimage.filters import generic_filter as gf
+
+    kernel = np.zeros((2 * radius + 1, 2 * radius + 1))
+    y, x = np.ogrid[-radius: radius + 1, -radius: radius + 1]
+    mask = x**2 + y**2 <= radius ** 2
+    kernel[mask] = 1
+    return gf(data, np.mean, footprint=kernel)
+
+
+def elliptical_mean(data, bmaj, bmin, bpa):
+    """
+    To apply this elliptical kernel to compute the mean of all the values
+    surrounding each point in a 2D matrix.
+
+    :param data:
+    :param bpa:
+        Positional angle [rad].
+    :return:
+    """
+    from scipy.ndimage.filters import generic_filter as gf
+
+    kernel = np.zeros((4 * bmaj + 1, 4 * bmaj + 1))
+    y, x = np.ogrid[-2 * bmaj: 2 * bmaj + 1, -2 * bmaj: 2 * bmaj + 1]
+    bpa = -bpa + np.pi/2.
+    a = math.cos(bpa) ** 2. / (2. * bmaj ** 2.) + \
+        math.sin(bpa) ** 2. / (2. * bmin ** 2.)
+    b = math.sin(2. * bpa) / (2. * bmaj ** 2.) - \
+        math.sin(2. * bpa) / (2. * bmin ** 2.)
+    c = math.sin(bpa) ** 2. / (2. * bmaj ** 2.) + \
+        math.cos(bpa) ** 2. / (2. * bmin ** 2.)
+    mask = a * x ** 2 + b * x * y + c * y ** 2 <= 1
+    kernel[mask] = 1
+
+    return gf(data, np.mean, footprint=kernel)
+
+
+def hessian(x):
+    """
+    Calculate the hessian matrix with finite differences
+    Parameters:
+       - x : ndarray
+    Returns:
+       an array of shape (x.dim, x.ndim) + x.shape
+       where the array[i, j, ...] corresponds to the second derivative x_ij
+
+    http://stackoverflow.com/questions/31206443/numpy-second-derivative-of-a-ndimensional-array
+    """
+    x_grad = np.gradient(x)
+    hessian = np.empty((x.ndim, x.ndim) + x.shape, dtype=x.dtype)
+    for k, grad_k in enumerate(x_grad):
+        # iterate over dimensions
+        # apply gradient again to every component of the first derivative.
+        tmp_grad = np.gradient(grad_k)
+        for l, grad_kl in enumerate(tmp_grad):
+            hessian[k, l, :, :] = grad_kl
+    return hessian
 
 
 def mask_region(data, region):

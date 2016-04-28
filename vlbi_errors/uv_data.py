@@ -969,6 +969,10 @@ class UVData(object):
         uv = self.uvw[indxs, :2]
 
         uv_correlations = get_uv_correlations(uv, models)
+        # FIXME: This will cause `IndexError: index 1 is out of bounds for axis
+        # 2 with size 1` if uv-data has just one parallel stokes (et. `LL`).
+        # I should check that my uv-data has Stokes that model provides
+        # otherwise ignore that Stokes. Implement ``stokes`` property!
         for i, hand in enumerate(['RR', 'LL', 'RL', 'LR']):
             try:
                 self.uvdata[indxs, :, i] = \

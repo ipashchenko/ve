@@ -33,7 +33,6 @@ class UVData(object):
         complex representation ``self._uvdata``. I need this because i don't
         know how to make a complex view to real numpy.ndarray
         """
-        print("Syncing internal representation!")
         slices_dict = self.slices_dict.copy()
         slices_dict.update({'COMPLEX': 0})
         self.hdu.data.data[slices_dict.values()] = self.uvdata.real

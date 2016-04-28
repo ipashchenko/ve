@@ -279,10 +279,16 @@ class UVData(object):
             v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
             w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
         except KeyError:
-            suffix = '---SIN'
-            u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
-            v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
-            w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
+            try:
+                suffix = '---SIN'
+                u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
+                v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
+                w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
+            except KeyError:
+                suffix = ''
+                u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
+                v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
+                w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
         return np.vstack((u, v, w)).T
 
     @property

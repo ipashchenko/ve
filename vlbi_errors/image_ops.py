@@ -729,9 +729,17 @@ def jet_ridge_line(image, r_max, beam=None, dr=1, n=1.):
 def image_ridge_line(image):
     rms = rms_image(image)
     im = image.image.copy()
+    im_shape = np.shape(im)
     im[im < 5. * rms] = 0
-    grad = np.gradient(im)
-    
+    # (2, imsize, imsize) array with gradient (in x & y -directions)
+    grad = np.gradient(im, edge_order=2)
+    from utils import hessian
+    # (2, 2, imsize, imsize) array with second derivates
+    hess = hessian(im)
+    det_ar = np.zeros(im_shape)
+    for i in range(im_shape[0]):
+        for j in range(im_shape[1]):
+            det_ar[i, j] = np.linalg.det(hess[:, :, i, j])
 
 
 # TODO: Add as method to ``images.Images``

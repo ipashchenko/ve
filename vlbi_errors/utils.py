@@ -846,6 +846,19 @@ def circular_mean(data, radius):
     return gf(data, np.mean, footprint=kernel)
 
 
+def circular_median(data, radius):
+    """
+    :param data:
+    :param radius:
+    :return:
+    """
+    from scipy.ndimage.filters import generic_filter as gf
+    from skimage.morphology import disk
+
+    kernel = disk(radius)
+    return gf(data, np.median, footprint=kernel)
+
+
 def elliptical_mean(data, bmaj, bmin, bpa):
     """
     To apply this elliptical kernel to compute the mean of all the values
@@ -889,7 +902,7 @@ def hessian(x):
     for k, grad_k in enumerate(x_grad):
         # iterate over dimensions
         # apply gradient again to every component of the first derivative.
-        tmp_grad = np.gradient(grad_k)
+        tmp_grad = np.gradient(grad_k, edge_order=2)
         for l, grad_kl in enumerate(tmp_grad):
             hessian[k, l, :, :] = grad_kl
     return hessian

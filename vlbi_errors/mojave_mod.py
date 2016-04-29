@@ -4,12 +4,14 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from utils import hdi_of_mcmc
+from image_ops import rms_image
 from mojave import download_mojave_uv_fits, mojave_uv_fits_fname
-from spydiff import import_difmap_model, modelfit_difmap
+from spydiff import import_difmap_model, modelfit_difmap, clean_difmap
 from uv_data import UVData
 from model import Model
 from bootstrap import CleanBootstrap
 from components import DeltaComponent, CGComponent, EGComponent
+from from_fits import create_image_from_fits_file
 
 try:
     import corner as triangle
@@ -17,7 +19,7 @@ except ImportError:
     triangle = None
 
 base_dir = '/home/ilya/vlbi_errors/mojave_mod'
-n_boot = 200
+n_boot = 300
 outname = 'boot_uv'
 names = ['source', 'id', 'trash', 'epoch', 'flux', 'r', 'pa', 'bmaj', 'e',
          'bpa']
@@ -40,6 +42,15 @@ for source in df['source'].unique():
         open('problem_download_from_mojave', 'a').close()
         continue
     uv_fits_fname = mojave_uv_fits_fname(source, 'u', last_epoch)
+
+    # Clean uv-data
+    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    clean_difmap(uv_fits_fname, 'original_cc.fits', 'I', (1024, 0.1),
+                 path=data_dir, path_to_script=path_to_script,
+                 outpath=data_dir)
+    image = create_image_from_fits_file(os.path.join(data_dir,
+                                                     'original_cc.fits'))
+    rms = rms_image(image)
 
     # Create instance of Model and bootstrap uv-data
     dfm_model_fname = 'dfmp_original_model.mdl'
@@ -71,7 +82,8 @@ for source in df['source'].unique():
         else:
             bmaj = bmaj + 'v'
             type_ = 1
-        fn.write("{}v {}v {}v {} {} {} {} {} {}".format(flux, r, pa, bmaj, e, bpa, type_, "0", "0\n"))
+        fn.write("{}v {}v {}v {} {} {} {} {} {}".format(flux, r, pa, bmaj, e,
+                                                        bpa, type_, "0", "0\n"))
     fn.close()
 
     try:
@@ -102,92 +114,83 @@ for source in df['source'].unique():
                         dfm_model_fname + '_' + i,
                         path=path, mdl_path=data_dir, out_path=data_dir)
 
+    # Get params of initial model used for bootstrap
+    comps = import_difmap_model(dfm_model_fname, data_dir)
+    comps_params0 = {i: [] for i in range(len(comps))}
+    for i, comp in enumerate(comps):
+        comps_params0[i].extend(list(comp.p))
+
     # Load models and plot
-    params = list()
     booted_mdl_paths = glob.glob(os.path.join(data_dir, dfm_model_fname + "_*"))
+    comps_params = {i: [] for i in range(len(comps))}
     for booted_mdl_path in booted_mdl_paths:
         path, booted_mdl_file = os.path.split(booted_mdl_path)
         comps = import_difmap_model(booted_mdl_file, path)
-        comps_params = list()
-        for comp in comps:
-            if isinstance(comp, CGComponent):
-                comps_params.append(np.array(list(comp.p) + [0., 0.]))
-            elif isinstance(comp, EGComponent) and not isinstance(comp,
-                                                                  CGComponent):
-                comps_params.append(comp.p)
-            elif isinstance(comp, DeltaComponent):
-                comps_params.append(np.array(list(comp.p) + [0., 0., 0.]))
-        params.append(comps_params)
-    # (#comp, 6, #boot)
-    params = np.dstack(params)
+        for i, comp in enumerate(comps):
+            comps_params[i].extend(list(comp.p))
 
-    # Get params of initial model used for bootstrap
-    comps = import_difmap_model(dfm_model_fname, data_dir)
-    params0 = list()
-    extents = list()
-    for comp in comps:
-        if isinstance(comp, CGComponent):
-            params0.append(np.array(list(comp.p) + [0., 0.]))
-        if isinstance(comp, EGComponent) and not isinstance(comp, CGComponent):
-            params0.append(comp.p)
-        elif isinstance(comp, DeltaComponent):
-            params0.append(np.array(list(comp.p) + [0., 0., 0.]))
-    for comp in comps:
-        if isinstance(comp, CGComponent):
-            extents.append([1., 1., 1., 1., (-0.5, 0.5), (-0.5, 0.5)])
-        if isinstance(comp, EGComponent) and not isinstance(comp, CGComponent):
-            extents.append([1., 1., 1., 1., 1., 1.])
-        elif isinstance(comp, DeltaComponent):
-            extents.append([1., 1., 1., (-0.5, 0.5), (-0.5, 0.5),
-                            (-0.5, 0.5)])
-    extents = [val for sublist in extents for val in sublist]
-    # (#comps, #params)
-    params0 = np.vstack(params0)
-
-    n_pars_true = len(params0.flatten())
+    n_pars = sum([len(comp) for comp in comps])
     labels = {0: "flux", 1: "x", 2: "y", 3: "FWHM"}
-    # labels = {0: "flux", 1: "x", 2: "y"}
+
+    # Optionally plot
     if triangle:
-        # Show one component
-        fig, axes = plt.subplots(nrows=4, ncols=4)
-        try:
-            triangle.corner(params.reshape((n_pars_true, n_boot)).T[:, :4],
-                            # extents=extents[:4],
-                            # labels=labels,
-                            truths=params0.reshape(n_pars_true)[:4], fig=fig,
-                            plot_contours=False)
-            fig.savefig(os.path.join(data_dir, '{}_{}_core.png'.format(source, last_epoch)),
-                        bbox_inches='tight', dpi=300)
-        except ValueError:
-            print "Failed to plot..."
+        lens = list(np.cumsum([len(comp) for comp in comps]))
+        lens.insert(0, 0)
+        for i, comp in enumerate(comps):
+            # Show one component
+            # fig, axes = plt.subplots(nrows=len(comp), ncols=len(comp))
+            #try:
+            figure = triangle.corner(np.array(comps_params[i]).reshape((n_boot,
+                                                                        len(comp))),
+                                     labels=[r"${}$".format(lab) for lab in
+                                             comp._parnames],
+                                     truths=comps_params0[i],
+                                     title_kwargs={"fontsize": 12},
+                                     quantiles=[0.16, 0.5, 0.84])
+            figure.gca().annotate("Source {}, component {}".format(source, i),
+                                  xy=(0.5, 1.0), xycoords="figure fraction",
+                                  xytext=(0, -5), textcoords="offset points",
+                                  ha="center", va="top")
+            figure.savefig(os.path.join(data_dir,
+                                        '{}_{}_comp{}.png'.format(source,
+                                                                  last_epoch,
+                                                                  i)),
+                           bbox_inches='tight', dpi=300)
+            #except ValueError:
+            #    print "Failed to plot..."
     else:
         print "Install ``corner`` for corner-plots"
 
-    labels = {0: "flux", 1: "x", 2: "y", 3: "FWHM"}
     # Print 65-% intervals (1 sigma)
-    errors_fname = '68_{}_{}.txt'.format(source, last_epoch)
-    fn = open(os.path.join(data_dir, errors_fname), 'w')
-    for i in range(len(comps)):
+    for i, comp in enumerate(comps):
+        errors_fname = '68_{}_{}_comp{}_rms_{}.txt'.format(source, last_epoch, i,
+                                                       "{0:.5f}".format(rms))
+        fn = open(os.path.join(data_dir, errors_fname), 'w')
         print "Component #{}".format(i + 1)
-        for j in range(4):
-            low, high = hdi_of_mcmc(params[i, j, :], cred_mass=0.68)
-            fn.write("{} ".format(high - low))
-            print "68% hdi of {0}: [{1:.4f}, {2:.4f}]".format(labels[j], low,
-                                                              high)
-        fn.write("\n")
-    fn.close()
+        for j in range(len(comp)):
+            low, high, mean, median = hdi_of_mcmc(np.array(comps_params[i]).reshape((n_boot,
+                                                                                     len(comp))).T[j],
+                                                  cred_mass=0.68,
+                                                  return_mean_median=True)
+            fn.write("{} {} {} {} {}".format(comp.p[j], low, high, mean,
+                                             median))
+            fn.write("\n")
+        fn.close()
     # Print 95-% intervals (2 sigma)
-    errors_fname = '95_{}_{}.txt'.format(source, last_epoch)
-    fn = open(os.path.join(data_dir, errors_fname), 'w')
-    for i in range(len(comps)):
+    for i, comp in enumerate(comps):
+        errors_fname = '95_{}_{}_comp{}_rms_{}.txt'.format(source, last_epoch, i,
+                                                       "{0:.5f}".format(rms))
+        fn = open(os.path.join(data_dir, errors_fname), 'w')
         print "Component #{}".format(i + 1)
-        for j in range(4):
-            low, high = hdi_of_mcmc(params[i, j, :])
-            fn.write("{} ".format(high - low))
-            print "95% hdi of {0}: [{1:.4f}, {2:.4f}]".format(labels[j], low,
-                                                              high)
-        fn.write("\n")
-    fn.close()
+        for j in range(len(comp)):
+            low, high, mean, median = hdi_of_mcmc(np.array(comps_params[i]).reshape((n_boot,
+                                                                                     len(comp))).T[j],
+                                                  cred_mass=0.95,
+                                                  return_mean_median=True)
+            fn.write("{} {} {} {} {}".format(comp.p[j], low, high, mean,
+                                             median))
+            fn.write("\n")
+        fn.close()
 
     # Cleaning up
     for booted_uv_path in booted_uv_paths:

@@ -19,7 +19,7 @@ except ImportError:
     triangle = None
 
 base_dir = '/home/ilya/vlbi_errors/mojave_mod'
-n_boot = 300
+n_boot = 30
 outname = 'boot_uv'
 names = ['source', 'id', 'trash', 'epoch', 'flux', 'r', 'pa', 'bmaj', 'e',
          'bpa']
@@ -138,15 +138,14 @@ for source in df['source'].unique():
         lens.insert(0, 0)
         for i, comp in enumerate(comps):
             # Show one component
-            # fig, axes = plt.subplots(nrows=len(comp), ncols=len(comp))
-            #try:
-            figure = triangle.corner(np.array(comps_params[i]).reshape((n_boot,
-                                                                        len(comp))),
-                                     labels=[r"${}$".format(lab) for lab in
-                                             comp._parnames],
-                                     truths=comps_params0[i],
-                                     title_kwargs={"fontsize": 12},
-                                     quantiles=[0.16, 0.5, 0.84])
+            figure, axes = plt.subplots(nrows=len(comp), ncols=len(comp))
+            triangle.corner(np.array(comps_params[i]).reshape((n_boot,
+                                                               len(comp))),
+                            labels=[r"${}$".format(lab) for lab in
+                                    comp._parnames],
+                            truths=comps_params0[i],
+                            title_kwargs={"fontsize": 12},
+                            quantiles=[0.16, 0.5, 0.84], fig=figure)
             figure.gca().annotate("Source {}, component {}".format(source, i),
                                   xy=(0.5, 1.0), xycoords="figure fraction",
                                   xytext=(0, -5), textcoords="offset points",

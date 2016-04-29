@@ -2,6 +2,7 @@ import matplotlib
 matplotlib.use('Agg')
 label_size = 8
 matplotlib.rcParams['xtick.labelsize'] = label_size
+matplotlib.rcParams['ytick.labelsize'] = label_size
 import glob
 import os
 import pandas as pd

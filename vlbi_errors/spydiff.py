@@ -78,18 +78,21 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     os.system(shell_command)
 
 
-def import_difmap_model(mdl_fname, mdl_dir):
+def import_difmap_model(mdl_fname, mdl_dir=None):
     """
     Function that reads difmap-format model and returns list of ``Components``
     instances.
 
     :param mdl_fname:
         File name with difmap model.
-    :param mdl_dir:
-        Directory with difmap model.
+    :param mdl_dir: (optional)
+        Directory with difmap model. If ``None`` then use CWD. (default:
+        ``None``)
     :return:
         List of ``Components`` instances.
     """
+    if mdl_dir is None:
+        mdl_dir = os.getcwd()
     mdl = os.path.join(mdl_dir, mdl_fname)
     mdlo = open(mdl)
     lines = mdlo.readlines()

@@ -2,7 +2,6 @@ import glob
 import os
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from utils import hdi_of_mcmc
 from image_ops import rms_image
 from mojave import download_mojave_uv_fits, mojave_uv_fits_fname
@@ -14,6 +13,7 @@ from components import DeltaComponent, CGComponent, EGComponent
 from from_fits import create_image_from_fits_file
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 try:
     import corner as triangle

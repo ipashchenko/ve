@@ -23,7 +23,7 @@ except ImportError:
     triangle = None
 
 base_dir = '/home/ilya/vlbi_errors/mojave_mod'
-n_boot = 10
+n_boot = 300
 outname = 'boot_uv'
 names = ['source', 'id', 'trash', 'epoch', 'flux', 'r', 'pa', 'bmaj', 'e',
          'bpa']

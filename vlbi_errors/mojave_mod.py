@@ -12,6 +12,8 @@ from model import Model
 from bootstrap import CleanBootstrap
 from components import DeltaComponent, CGComponent, EGComponent
 from from_fits import create_image_from_fits_file
+import matplotlib
+matplotlib.use('Agg')
 
 try:
     import corner as triangle

@@ -1,5 +1,7 @@
 import matplotlib
 matplotlib.use('Agg')
+label_size = 8
+matplotlib.rcParams['xtick.labelsize'] = label_size
 import glob
 import os
 import pandas as pd
@@ -139,25 +141,26 @@ for source in df['source'].unique():
         lens.insert(0, 0)
         for i, comp in enumerate(comps):
             # Show one component
-            figure, axes = matplotlib.pyplot.subplots(nrows=len(comp), ncols=len(comp))
-            triangle.corner(np.array(comps_params[i]).reshape((n_boot,
-                                                               len(comp))),
-                            labels=[r"${}$".format(lab) for lab in
-                                    comp._parnames],
-                            truths=comps_params0[i],
-                            title_kwargs={"fontsize": 12},
-                            quantiles=[0.16, 0.5, 0.84], fig=figure)
-            figure.gca().annotate("Source {}, component {}".format(source, i),
-                                  xy=(0.5, 1.0), xycoords="figure fraction",
-                                  xytext=(0, -5), textcoords="offset points",
-                                  ha="center", va="top")
-            figure.savefig(os.path.join(data_dir,
-                                        '{}_{}_comp{}.png'.format(source,
-                                                                  last_epoch,
-                                                                  i)),
-                           bbox_inches='tight', dpi=300)
-            #except ValueError:
-            #    print "Failed to plot..."
+            try:
+                figure, axes = matplotlib.pyplot.subplots(nrows=len(comp), ncols=len(comp))
+                triangle.corner(np.array(comps_params[i]).reshape((n_boot,
+                                                                   len(comp))),
+                                labels=[r"${}$".format(lab) for lab in
+                                        comp._parnames],
+                                truths=comps_params0[i],
+                                title_kwargs={"fontsize": 10},
+                                quantiles=[0.16, 0.5, 0.84], fig=figure)
+                figure.gca().annotate("Source {}, component {}".format(source, i),
+                                      xy=(0.5, 1.0), xycoords="figure fraction",
+                                      xytext=(0, -5), textcoords="offset points",
+                                      ha="center", va="top")
+                figure.savefig(os.path.join(data_dir,
+                                            '{}_{}_comp{}.png'.format(source,
+                                                                      last_epoch,
+                                                                      i)),
+                               bbox_inches='tight', dpi=300)
+            except ValueError:
+                print "Failed to plot... ValueError"
     else:
         print "Install ``corner`` for corner-plots"
 

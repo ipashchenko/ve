@@ -17,7 +17,7 @@ except ImportError:
     triangle = None
 
 base_dir = '/home/ilya/vlbi_errors/mojave_mod'
-n_boot = 50
+n_boot = 200
 outname = 'boot_uv'
 names = ['source', 'id', 'trash', 'epoch', 'flux', 'r', 'pa', 'bmaj', 'e',
          'bpa']
@@ -26,15 +26,19 @@ df = pd.read_table(os.path.join(base_dir, 'asu.tsv'), sep=';', header=None,
                    index_col=False)
 
 # Mow for all sources get the latest epoch and create directory for analysis
-for source in df['source'].unique()[:1]:
+for source in df['source'].unique():
     epochs = df.loc[df['source'] == source]['epoch']
     last_epoch_ = list(epochs)[-1]
     last_epoch = last_epoch_.replace('-', '_')
     data_dir = os.path.join(base_dir, source, last_epoch)
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
-    download_mojave_uv_fits(source, epochs=[last_epoch], bands=['u'],
-                            download_dir=data_dir)
+    try:
+        download_mojave_uv_fits(source, epochs=[last_epoch], bands=['u'],
+                                download_dir=data_dir)
+    except:
+        open('problem_download_from_mojave', 'a').close()
+        continue
     uv_fits_fname = mojave_uv_fits_fname(source, 'u', last_epoch)
 
     # Create instance of Model and bootstrap uv-data
@@ -70,11 +74,20 @@ for source in df['source'].unique()[:1]:
         fn.write("{}v {}v {}v {} {} {} {} {} {}".format(flux, r, pa, bmaj, e, bpa, type_, "0", "0\n"))
     fn.close()
 
-    comps = import_difmap_model(dfm_model_fname, data_dir)
+    try:
+        comps = import_difmap_model(dfm_model_fname, data_dir)
+    except ValueError:
+        open('problem_import_difmap_model', 'a').close()
+        continue
     uvdata = UVData(os.path.join(data_dir, uv_fits_fname))
     model = Model(stokes='I')
     model.add_components(*comps)
-    boot = CleanBootstrap([model], uvdata)
+    try:
+        boot = CleanBootstrap([model], uvdata)
+    # If uv-data contains only one Stokes parameter (e.g. `0838+133`)
+    except IndexError:
+        open('problem_bootstrapping', 'a').close()
+        continue
     curdir = os.getcwd()
     os.chdir(data_dir)
     boot.run(n=n_boot, nonparametric=True, outname=[outname, '.fits'])
@@ -175,3 +188,8 @@ for source in df['source'].unique()[:1]:
                                                               high)
         fn.write("\n")
     fn.close()
+
+    # Cleaning up
+    for booted_uv_path in booted_uv_paths:
+        print("Removing file {}".format(booted_uv_path))
+        os.unlink(booted_uv_path)

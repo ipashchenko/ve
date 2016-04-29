@@ -1090,7 +1090,7 @@ def get_uv_correlations(uv, models):
 
 
 # FIXME: Seems it doesn't work for multimodal densities.
-def hdi_of_mcmc(sample_vec, cred_mass=0.95):
+def hdi_of_mcmc(sample_vec, cred_mass=0.95, return_mean_median=False):
     """
     Highest density interval of sample.
     """
@@ -1106,7 +1106,12 @@ def hdi_of_mcmc(sample_vec, cred_mass=0.95):
     hdi_min = sorted_pts[min_idx]
     hdi_max = sorted_pts[min_idx + ci_idx_inc]
 
-    return hdi_min, hdi_max
+    if return_mean_median:
+        mean = np.mean(sample_vec)
+        median = np.median(sample_vec)
+        return hdi_min, hdi_max, mean, median
+    else:
+        return hdi_min, hdi_max
 
 
 def bc_endpoint(sample_vec, sample_val, alpha):

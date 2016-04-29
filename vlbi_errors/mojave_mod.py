@@ -13,7 +13,6 @@ from components import DeltaComponent, CGComponent, EGComponent
 from from_fits import create_image_from_fits_file
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 try:
     import corner as triangle
@@ -140,7 +139,7 @@ for source in df['source'].unique():
         lens.insert(0, 0)
         for i, comp in enumerate(comps):
             # Show one component
-            figure, axes = plt.subplots(nrows=len(comp), ncols=len(comp))
+            figure, axes = matplotlib.pyplot.subplots(nrows=len(comp), ncols=len(comp))
             triangle.corner(np.array(comps_params[i]).reshape((n_boot,
                                                                len(comp))),
                             labels=[r"${}$".format(lab) for lab in

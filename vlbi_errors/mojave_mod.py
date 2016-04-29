@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')
 import glob
 import os
 import pandas as pd
@@ -11,8 +13,6 @@ from model import Model
 from bootstrap import CleanBootstrap
 from components import DeltaComponent, CGComponent, EGComponent
 from from_fits import create_image_from_fits_file
-import matplotlib
-matplotlib.use('Agg')
 
 try:
     import corner as triangle
@@ -20,7 +20,7 @@ except ImportError:
     triangle = None
 
 base_dir = '/home/ilya/vlbi_errors/mojave_mod'
-n_boot = 30
+n_boot = 10
 outname = 'boot_uv'
 names = ['source', 'id', 'trash', 'epoch', 'flux', 'r', 'pa', 'bmaj', 'e',
          'bpa']

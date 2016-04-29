@@ -21,6 +21,9 @@ class Component(object):
         self._fixed = np.array([False, False, False])
         self._lnprior = dict()
 
+    def __len__(self):
+        return len(self._parnames)
+
     def add_prior(self, **lnprior):
         """
         Add prior for some parameters.

@@ -11,6 +11,8 @@ try:
 except ImportError:
     pylab = None
 
+import matplotlib
+
 vec_complex = np.vectorize(np.complex)
 vec_int = np.vectorize(np.int)
 
@@ -301,6 +303,7 @@ class UVData(object):
         """
         return self.uvw[:, :2]
 
+    # FIXME: shape depends on ``stokes``! Must be ``(N, #IF, #stokes)``
     def _choose_uvdata(self, times=None, baselines=None, IF=None, stokes=None,
                        freq_average=False, indx_only=False):
         """
@@ -679,18 +682,21 @@ class UVData(object):
         u = self.hdu.columns[self.par_dict['UU--']].array[indxs]
         v = self.hdu.columns[self.par_dict['VV--']].array[indxs]
         uv = np.vstack((u, v)).T
-        pylab.subplot(1, 1, 1)
-        pylab.plot(uv[:, 0], uv[:, 1], sym)
+        matplotlib.pyplot.subplot(1, 1, 1)
+        matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], sym)
         # FIXME: This is right only for RR/LL!
-        pylab.plot(-uv[:, 0], -uv[:, 1], sym)
+        matplotlib.pyplot.plot(-uv[:, 0], -uv[:, 1], sym)
         # Find max(u & v)
         umax = max(abs(u))
         vmax = max(abs(v))
         uvmax = max(umax, vmax)
         uv_range = [-1.1 * uvmax, 1.1 * uvmax]
-        pylab.xlim(uv_range)
-        pylab.ylim(uv_range)
-        pylab.show()
+        matplotlib.pyplot.xlim(uv_range)
+        matplotlib.pyplot.ylim(uv_range)
+        matplotlib.pyplot.axes().set_aspect('equal')
+        matplotlib.pyplot.xlabel('U, wavelengths')
+        matplotlib.pyplot.ylabel('V, wavelengths')
+        matplotlib.pyplot.show()
 
     def __copy__(self):
         return self
@@ -1070,26 +1076,28 @@ class UVData(object):
     # ``UVData.noise()`` method for finding noise values.)
     # TODO: implement antennas/baselines arguments as in ``uv_coverage``.
     def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p',
-               freq_average=False, sym=None):
+               freq_average=False, sym=None, phase_range=None, amp_range=None,
+               re_range=None, im_range=None, colors=None, color='#4682b4'):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
 
-        :param baselines (optional):
+        :param baselines: (optional)
             One or iterable of baselines numbers or ``None``. If ``None`` then
             use all baselines. (default: ``None``)
-
         :parm IF (optional):
             One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
             use all IFs. (default: ``None``)
-
-        :param stokes (optional):
+        :param stokes: (optional)
             Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
             ``LR`` or ``None``. If ``None`` then use ``I``.
             (default: ``None``)
-
-        :param style (optional):
+        :param style: (optional)
             How to plot complex visibilities - real and imaginary part
             (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
+        :param color: (optional)
+            Default color.
+        :param colors: (optional)
+            Default colors for multi IF plotting.
 
         .. note:: All checks are in ``_choose_uvdata`` method.
         """
@@ -1105,7 +1113,7 @@ class UVData(object):
                                             freq_average=freq_average)
 
         # TODO: i need function choose parameters
-        uvw_data = self.uvw
+        uvw_data = self.uvw[indxs]
         uv_radius = np.sqrt(uvw_data[:, 0] ** 2 + uvw_data[:, 1] ** 2)
 
         if style == 'a&p':
@@ -1117,43 +1125,77 @@ class UVData(object):
         else:
             raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
 
+        fig, axes = matplotlib.pyplot.subplots(nrows=2, ncols=1, sharex=True,
+                                               sharey=False)
         if not freq_average:
             # # of chosen IFs
             # TODO: Better use len(IF) if ``data`` shape will change sometimes.
-            try:
-                # If ``IF`` is at least iterable
-                n_if = len(IF)
-            except TypeError:
-                # If ``IF`` is just a number
-                n_if = 1
+            if IF is None:
+                n_if = self.nif
+            else:
+                try:
+                    # If ``IF`` is at least iterable
+                    n_if = len(IF)
+                except TypeError:
+                    # If ``IF`` is just a number
+                    n_if = 1
 
             # TODO: define colors
-            try:
-                syms = self.__color_list[:n_if]
-            except AttributeError:
-                print "Define self.__color_list to show in different colors!"
-                syms = ['.k'] * n_if
+            if colors is not None:
+                assert n_if <= len(colors)
+                syms = colors[:n_if]
+                syms = [".{}".format(color) for color in syms]
+            else:
+                print "Provide ``colors`` argument to show in different" \
+                      " colors!"
+                syms = ['.'] * n_if
 
-            pylab.subplot(2, 1, 1)
             for _if in range(n_if):
                 # TODO: plot in different colors and make a legend
-                pylab.plot(uv_radius, a2[:, _if], syms[_if])
-            pylab.subplot(2, 1, 2)
+                axes[0].plot(uv_radius, a2[:, _if], syms[_if], color=color)
             for _if in range(n_if):
-                pylab.plot(uv_radius, a1[:, _if], syms[_if])
-                if style == 'a&p':
-                    pylab.ylim([-math.pi, math.pi])
-            pylab.show()
+                axes[1].plot(uv_radius, a1[:, _if], syms[_if], color=color)
+            if style == 'a&p':
+                axes[1].set_ylim([-math.pi, math.pi])
+                axes[0].set_ylabel('Amplitude, [Jy]')
+                axes[1].set_ylabel('Phase, [rad]')
+                if amp_range is not None:
+                    axes[0].set_ylim(amp_range)
+                if phase_range is not None:
+                    axes[1].set_ylim(phase_range)
+            elif style == 're&im':
+                axes[0].set_ylabel('Re, [Jy]')
+                axes[1].set_ylabel('Im, [Jy]')
+                if re_range is not None:
+                    axes[0].set_ylim(re_range)
+                if im_range is not None:
+                    axes[1].set_ylim(im_range)
+            matplotlib.pyplot.xlabel('UV-radius, wavelengths')
+            fig.show()
         else:
             if not sym:
-                sym = '.k'
-            pylab.subplot(2, 1, 1)
-            pylab.plot(uv_radius, a2, sym)
-            pylab.subplot(2, 1, 2)
-            pylab.plot(uv_radius, a1, sym)
+                sym = '.'
+            axes[0].plot(uv_radius, a2, sym, color=color)
+            axes[1].plot(uv_radius, a1, sym, color=color)
+            matplotlib.pyplot.xlabel('UV-radius, wavelengths')
             if style == 'a&p':
-                pylab.ylim([-math.pi, math.pi])
-            pylab.show()
+                axes[1].set_ylim([-math.pi, math.pi])
+                axes[0].set_ylabel('Amplitude, [Jy]')
+                axes[1].set_ylabel('Phase, [rad]')
+                if amp_range is not None:
+                    axes[0].set_ylim(amp_range)
+                if phase_range is not None:
+                    axes[1].set_ylim(phase_range)
+
+            elif style == 're&im':
+                axes[0].set_ylabel('Re, [Jy]')
+                axes[1].set_ylabel('Im, [Jy]')
+                if re_range is not None:
+                    axes[0].set_ylim(re_range)
+                if im_range is not None:
+                    axes[1].set_ylim(im_range)
+
+            fig.show()
 
     def uvplot_model(self, model, baselines=None, stokes=None, style='a&p'):
         """
@@ -1209,8 +1251,14 @@ class UVData(object):
 
 
 if __name__ == '__main__':
-    fname = '/home/ilya/code/vlbi_errors/examples/2230+114.x.2006_02_12.uvf'
+    fname = '/home/ilya/sandbox/heteroboot/0945+408.u.2007_04_18.uvf'
     uvdata = UVData(fname)
-    noise = uvdata.noise(split_scans=False)
-    print noise
-    uvdata.noise_add(noise)
+    uvdata.uvplot(style='re&im', freq_average=True)
+    uvdata.uvplot(style='re&im')
+    uvdata.uvplot(style='a&p', freq_average=True)
+    uvdata.uvplot(style='a&p', IF=[1, 2], freq_average=True)
+    uvdata.uvplot(style='a&p', amp_range=[0, 2], phase_range=[-0.5, 0.5],
+                  colors=['b', 'g', 'r', 'y'], baselines=uvdata.baselines[:4])
+    uvdata.uvplot(style='a&p', amp_range=[0, 2], phase_range=[-0.5, 0.5],
+                  colors=['b', 'g', 'r', 'y'], baselines=uvdata.baselines[:4],
+                  IF=[1, 2])

@@ -384,7 +384,7 @@ def analyze_source(uv_fits_paths, n_boot, imsizes=None, common_imsize=None,
         for stoke in stokes:
             outfname = 'cs_{}_{}_cc.fits'.format(freq, stoke)
             outpath = os.path.join(outdir, outfname)
-            # clean_difmap(uv_fname, outfname, stoke, common_imsize,
+            # clean_difmap(uv_fname_cc, outfname, stoke, common_imsize,
             #              path=uv_dir, path_to_script=path_to_script,
             #              outpath=outdir, show_difmap_output=False)
             cc_cs_fits_dict[freq].update({stoke: os.path.join(outdir,
@@ -459,7 +459,7 @@ def analyze_source(uv_fits_paths, n_boot, imsizes=None, common_imsize=None,
                 uv_dir, uv_fname = os.path.split(uv_fits_path)
                 outfname = 'boot_{}_{}_cc_{}.fits'.format(freq, stoke,
                                                           str(i + 1).zfill(3))
-                # clean_difmap(uv_fname, outfname, stoke, common_imsize,
+                # clean_difmap(uv_fname_cc, outfname, stoke, common_imsize,
                 #              path=uv_dir, path_to_script=path_to_script,
                 #              outpath=outdir, show_difmap_output=False)
             files = sorted(glob.glob(os.path.join(outdir,

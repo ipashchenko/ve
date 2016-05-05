@@ -200,3 +200,120 @@ for source in df['source'].unique():
     for booted_uv_path in booted_uv_paths:
         print("Removing file {}".format(booted_uv_path))
         os.unlink(booted_uv_path)
+
+
+def process_flux_components():
+    names = ['source', 'id', 'trash', 'epoch', 'flux', 'r', 'pa', 'bmaj', 'e',
+             'bpa']
+    base_dir = '/home/ilya/vlbi_errors/mojave_mod/mojave_mod'
+    import pandas as pd
+    df = pd.read_table(os.path.join(base_dir, 'asu.tsv'), sep=';', header=None,
+                       names=names, dtype={key: str for key in names},
+                       index_col=False)
+    fluxes = list()
+    for source in df['source'].unique():
+        print "Checking {}".format(source)
+        epochs = df.loc[df['source'] == source]['epoch']
+        last_epoch_ = list(epochs)[-1]
+        last_epoch = last_epoch_.replace('-', '_')
+        data_dir = os.path.join(base_dir, source, last_epoch)
+        import glob
+        files = sorted(glob.glob(os.path.join(data_dir, "68*comp*txt")))
+        print files
+        if not files:
+            print "No componen files"
+            continue
+        for file_ in files:
+            if "comp1" in file_:
+                print "Checking file {}".format(file_)
+                try:
+                    with open(file_) as fo:
+                        pars = fo.readlines()
+                        flux_line = pars[0].strip().split(' ')
+                        boot_sigma = float(flux_line[2]) - float(flux_line[1])
+                        flux = float(flux_line[0])
+                        if flux < 0:
+                            print "Negative flux"
+                            continue
+                        if flux > 10:
+                            print "Too big flux"
+                            continue
+                        if boot_sigma > 100.*flux:
+                            print "Too big boot_sigma for source {}".format(source)
+                            continue
+                        rms = float(file_.split('_')[-1][:-4])
+                        fluxes.append([flux, boot_sigma, rms])
+                except IOError:
+                    print "Failed reading file {}".format(file_)
+                    continue
+    fluxes = np.atleast_2d(fluxes)
+    return fluxes
+
+
+def process_position_components():
+    names = ['source', 'id', 'trash', 'epoch', 'flux', 'r', 'pa', 'bmaj', 'e',
+             'bpa']
+    base_dir = '/home/ilya/vlbi_errors/mojave_mod/mojave_mod'
+    import pandas as pd
+    df = pd.read_table(os.path.join(base_dir, 'asu.tsv'), sep=';', header=None,
+                       names=names, dtype={key: str for key in names},
+                       index_col=False)
+    from from_fits import create_clean_image_from_fits_file
+    params = list()
+    for source in df['source'].unique():
+        print "Checking {}".format(source)
+        epochs = df.loc[df['source'] == source]['epoch']
+        last_epoch_ = list(epochs)[-1]
+        last_epoch = last_epoch_.replace('-', '_')
+        data_dir = os.path.join(base_dir, source, last_epoch)
+        import glob
+        try:
+            ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
+                                                                     'original_cc.fits'))
+            beam = ccimage.beam[0] * ccimage.beam[1] / 2.
+        except IOError:
+            print "No image"
+            continue
+        files = sorted(glob.glob(os.path.join(data_dir, "68*comp*txt")))
+        print files
+        if not files:
+            print "No componen files"
+            continue
+        for file_ in [files[-1]]:
+            if "comp" in file_:
+                print "Checking file {}".format(file_)
+                try:
+                    with open(file_) as fo:
+                        pars = fo.readlines()
+                        flux_line = pars[0].strip().split(' ')
+                        xs_line = pars[1].strip().split(' ')
+                        ys_line = pars[2].strip().split(' ')
+                        # Flux sigma
+                        boot_sigma = float(flux_line[2]) - float(flux_line[1])
+                        boot_x = 0.5 * abs(float(xs_line[2]) - float(xs_line[1]))
+                        boot_y = 0.5 * abs(float(ys_line[2]) - float(ys_line[1]))
+                        # Distance
+                        radius = np.sqrt(float(xs_line[0]) ** 2. +
+                                         float(ys_line[0]) ** 2.)
+                        # Sigma position
+                        boot_xy = np.sqrt(float(boot_x) ** 2. + float(boot_y) ** 2)
+                        # Flux
+                        flux = float(flux_line[0])
+                        if flux < 0:
+                            print "Negative flux"
+                            continue
+                        if flux > 10:
+                            print "Too big flux"
+                            continue
+                        if boot_sigma > 100.*flux:
+                            print "Too big boot_sigma for source {}".format(source)
+                            continue
+                        # RMS
+                        rms = float(file_.split('_')[-1][:-4])
+                        params.append([flux, boot_sigma, radius, boot_xy, beam,
+                                       rms])
+                except IOError:
+                    print "Failed reading file {}".format(file_)
+                    continue
+    params = np.atleast_2d(params)
+    return params

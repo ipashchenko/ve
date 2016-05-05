@@ -1252,13 +1252,13 @@ class UVData(object):
 
 if __name__ == '__main__':
     fname = '/home/ilya/sandbox/heteroboot/0945+408.u.2007_04_18.uvf'
-    uvdata = UVData(fname)
-    uvdata.uvplot(style='re&im', freq_average=True)
-    uvdata.uvplot(style='re&im')
-    uvdata.uvplot(style='a&p', freq_average=True)
-    uvdata.uvplot(style='a&p', IF=[1, 2], freq_average=True)
-    uvdata.uvplot(style='a&p', amp_range=[0, 2], phase_range=[-0.5, 0.5],
-                  colors=['b', 'g', 'r', 'y'], baselines=uvdata.baselines[:4])
-    uvdata.uvplot(style='a&p', amp_range=[0, 2], phase_range=[-0.5, 0.5],
-                  colors=['b', 'g', 'r', 'y'], baselines=uvdata.baselines[:4],
-                  IF=[1, 2])
+    # uvdata = UVData(fname)
+    # uvdata.uvplot(style='re&im', freq_average=True)
+    # uvdata.uvplot(style='re&im')
+    # uvdata.uvplot(style='a&p', freq_average=True)
+    # uvdata.uvplot(style='a&p', IF=[1, 2], freq_average=True)
+    # uvdata.uvplot(style='a&p', amp_range=[0, 2], phase_range=[-0.5, 0.5],
+    #               colors=['b', 'g', 'r', 'y'], baselines=uvdata.baselines[:4])
+    # uvdata.uvplot(style='a&p', amp_range=[0, 2], phase_range=[-0.5, 0.5],
+    #               colors=['b', 'g', 'r', 'y'], baselines=uvdata.baselines[:4],
+    #               IF=[1, 2])

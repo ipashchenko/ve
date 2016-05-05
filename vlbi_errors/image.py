@@ -217,8 +217,10 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         title = ax.set_title(plot_title, fontsize='large')
     # Add colorbar if plotting colors
     if colors is not None:
-        colorbar_ax = fig.add_axes([0.80, 0.10, 0.05, 0.80])
-        cb = fig.colorbar(im, cax=colorbar_ax)
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="10%", pad=0.00)
+        cb = fig.colorbar(im, cax=cax)
         if colorbar_label is not None:
             cb.set_label(colorbar_label)
 

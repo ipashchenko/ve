@@ -41,7 +41,7 @@ if __name__ == '__main__':
     # uvdata.uvplot(style='a&p', sym='.r')
 
     # # Radplot residuals
-    # uvdata_ = create_uvdata_from_fits_file(os.path.join(data_dir, uv_fname))
+    # uvdata_ = create_uvdata_from_fits_file(os.path.join(data_dir, uv_fname_cc))
     # res_uvdata = uvdata_ - uvdata
     # res_uvdata.uvplot(style='re&im')
 

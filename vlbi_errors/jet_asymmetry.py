@@ -14,6 +14,32 @@ def map_fname(source, epoch, stokes):
     return "{}_{}_{}.fits".format(source, epoch, stokes)
 
 
+def jet_medial_axis(image):
+    from image_ops import rms_image
+    rms = rms_image(image)
+    mask = image.image < 5. * rms
+    data = image.image.copy()
+    data[mask] = 0
+    data[~mask] = 1
+    from scipy import ndimage as ndi
+    from skimage.morphology import medial_axis
+    import matplotlib.pyplot as plt
+    # Compute the medial axis (skeleton) and the distance transform
+    skel, distance = medial_axis(data, return_distance=True)
+    # Distance to the background for pixels of the skeleton
+    dist_on_skel = distance * skel
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4), sharex=True, sharey=True,
+                               subplot_kw={'adjustable': 'box-forced'})
+    ax1.imshow(data, cmap=plt.cm.gray, interpolation='nearest')
+    ax1.axis('off')
+    ax2.imshow(dist_on_skel, cmap=plt.cm.spectral, interpolation='nearest')
+    ax2.contour(data, [0.5], colors='w')
+    ax2.axis('off')
+
+    fig.tight_layout()
+    plt.show()
+
+
 if __name__ == '__main__':
     base_dir = '/home/ilya/code/vlbi_errors/examples/mojave/asymmetry'
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'

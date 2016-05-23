@@ -5,7 +5,10 @@ import urllib2
 import fnmatch
 import numpy as np
 from spydiff import clean_difmap
-from from_fits import create_image_from_fits_file
+from from_fits import create_image_from_fits_file, \
+    create_clean_image_from_fits_file
+from uv_data import UVData
+
 
 # TODO: check connection to MOJAVE servers
 mojave_multifreq_url = "http://www.cv.nrao.edu/2cmVLBA/data/multifreq/"
@@ -184,8 +187,8 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
                     urllib.urlretrieve(url, os.path.join(download_dir, fname))
 
 
-def get_stacked_map(source, path=None, out_dir=None, imsize=(512, 0.1),
-                    path_to_script=None):
+def get_stacked_map(source, mojave_dir=None, out_dir=None, imsize=(512, 0.1),
+                    path_to_script=None, epochs_slice=None):
     """
     Functions that returns stacked image of given source using MOJAVE 15 GHz
     data downloading it directly from MOJAVE DB or getting it from
@@ -193,33 +196,98 @@ def get_stacked_map(source, path=None, out_dir=None, imsize=(512, 0.1),
 
     :param source:
         Source name [B1950].
-    :param path: (optional)
+    :param mojave_dir: (optional)
         Path to directory with MOJAVE 15 GHz data. If ``None`` then download
         from MOJAVE DB. (default: ``None``)
+    :param out_dir: (optional)
+        Directory where to store files. If ``None`` then use CWD. (default:
+        ``None``)
+    :param imsize: (optional)
+        Tuple of image size [pix], pixel size [mas] to put to difmap. (default:
+        ``(512, 0.1)``)
+    :param path_to_script: (optional)
+        Path to difmap CLEANing script. If ``None`` then use CWD. (default:
+        ``None``)
+    :param epochs_slice: (optional)
+        Slice of epochs sorted to process. If ``None`` then use all available
+        epochs. (default: ``None``)
 
     :return:
         Numpy 2D array with stacked image.
     """
-    images = list()
     if path_to_script is None:
         path_to_script = os.getcwd()
     epochs = get_epochs_for_source(source)
+    if epochs_slice is not None:
+        epochs = epochs[::-1][epochs_slice]
     if out_dir is None:
         out_dir = os.getcwd()
     elif not os.path.exists(out_dir):
         os.makedirs(out_dir)
-    download_mojave_uv_fits(source, epochs, bands=['u'], download_dir=out_dir)
+
+    if mojave_dir is None:
+        download_mojave_uv_fits(source, epochs, bands=['u'],
+                                download_dir=out_dir)
+    else:
+        out_dir = mojave_dir
+    beams_dict = dict()
+
+    print "Output directory : {}".format(out_dir)
+
+    # First clean and restore with native beam
+    epoch_stokes_dict = dict()
     for epoch in sorted(epochs):
+        print "Cleaning epoch {} with naitive restoring beam".format(epoch)
         uv_fits_fname = mojave_uv_fits_fname(source, 'u', epoch)
-        im_fits_fname = "{}_{}_{}_{}.fits".format(source, 'U', epoch, 'I')
-        clean_difmap(uv_fits_fname, im_fits_fname, 'I', imsize,
+        uvdata = UVData(os.path.join(out_dir, uv_fits_fname))
+        uv_stokes = uvdata.stokes
+        if 'RR' in uv_stokes and 'LL' in uv_stokes:
+            stokes = 'I'
+        elif 'RR' in uv_stokes and 'LL' not in uv_stokes:
+            stokes = 'RR'
+        elif 'LL' in uv_stokes and 'RR' not in uv_stokes:
+            stokes = 'LL'
+        else:
+            continue
+        epoch_stokes_dict.update({epoch: stokes})
+        im_fits_fname = "{}_{}_{}_{}.fits".format(source, 'U', epoch, stokes)
+        print "Difmap params: "
+        print "uv_fits_fname : {}".format(uv_fits_fname)
+        print "im_fits_fname : {}".format(im_fits_fname)
+        print "path : {}".format(out_dir)
+        print "outpath: {}".format(out_dir)
+        clean_difmap(uv_fits_fname, im_fits_fname, stokes, imsize,
                      path=out_dir, path_to_script=path_to_script,
                      outpath=out_dir)
+        ccimage = create_clean_image_from_fits_file(os.path.join(out_dir,
+                                                                 im_fits_fname))
+        beam = ccimage.beam
+        print "Beam for epoch {} : {} [mas, mas, deg]".format(epoch, beam)
+        beams_dict.update({epoch: (beam[0], beam[0], 0)})
+
+    circ_beam = np.mean([beam[0] for beam in beams_dict.values()])
+
+    # Now clean and restore with circular beam
+    images = list()
+    for epoch in sorted(epochs):
+        stokes = epoch_stokes_dict[epoch]
+        uv_fits_fname = mojave_uv_fits_fname(source, 'u', epoch)
+        im_fits_fname = "{}_{}_{}_{}_circ.fits".format(source, 'U', epoch,
+                                                       stokes)
+        print "Difmap params: "
+        print "uv_fits_fname : {}".format(uv_fits_fname)
+        print "im_fits_fname : {}".format(im_fits_fname)
+        print "path : {}".format(out_dir)
+        print "outpath: {}".format(out_dir)
+        clean_difmap(uv_fits_fname, im_fits_fname, stokes, imsize,
+                     path=out_dir, path_to_script=path_to_script,
+                     outpath=out_dir, beam_restore=(circ_beam, circ_beam, 0))
         image = create_image_from_fits_file(os.path.join(out_dir,
                                                          im_fits_fname))
-    images.append(image.image)
+        images.append(image.image.copy())
+
     images = np.dstack(images)
-    return np.mean(images, axis=0)
+    return np.mean(images, axis=2)
 
 
 if __name__ == '__main__':

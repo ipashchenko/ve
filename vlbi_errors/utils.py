@@ -189,6 +189,21 @@ def get_hdu_from_hdulist(hdulist, extname=None, ver=1):
 
 def find_card_from_header(header, value=None, keyword=None,
                           comment_contens=None):
+    """
+    Find card from header specified be several possible ways.
+
+    :param header:
+        Instance of ``astropy.io.fits.Header`` class.
+    :param value:
+        Value of header's card that specifies card.
+    :param keyword:
+        Keyword of header's card that specifies card.
+    :param comment_contens:
+        Comment of header's card that specifies card.
+
+    :return:
+        Instance of ``astropy.io.fits.card.Card`` class.
+    """
     if comment_contens is not None:
         search = [card for card in header.cards if comment_contens in
                   card.comment]
@@ -201,11 +216,29 @@ def find_card_from_header(header, value=None, keyword=None,
         result = [card for card in search if card.keyword == keyword]
     elif value is not None and keyword is not None:
         result = [card for card in search if (card.keyword == keyword and
-                  card.value == value)]
+                                              card.value == value)]
     else:
         result = search
 
     return result
+
+
+def get_key(header, value, keyword):
+    """
+    Get some keyword value from header.
+
+    :param header:
+        Instance of ``astropy.io.fits.Header`` class.
+    :param value:
+        Value of header's card that specifies parameter.
+    :param keyword:
+        Key to value to return.
+
+    :return:
+        Value for specified key.
+    """
+    freq_card = find_card_from_header(header, value=value)[0]
+    return header[keyword + '{}'.format(freq_card[0][-1])]
 
 
 class AbsentHduExtensionError(Exception):

@@ -4,7 +4,7 @@ import numpy as np
 import astropy.io.fits as pf
 from collections import OrderedDict
 from utils import (baselines_2_ants, index_of, get_uv_correlations,
-                   find_card_from_header)
+                   find_card_from_header, get_key)
 
 try:
     import pylab
@@ -15,6 +15,8 @@ import matplotlib
 
 vec_complex = np.vectorize(np.complex)
 vec_int = np.vectorize(np.int)
+stokes_dict = {-4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR', 1: 'I', 2: 'Q', 3: 'U',
+               4: 'V'}
 
 
 class UVData(object):
@@ -121,6 +123,18 @@ class UVData(object):
         for key, key_slice in new_slices_dict.items():
             slices_dict.update({key: key_slice})
         return self.hdu.data.data[slices_dict.values()]
+
+    @property
+    def stokes(self):
+        """
+        Shortcut to correlations present (or Stokes parameters).
+        """
+        ref_val = get_key(self.hdu.header, 'STOKES', 'CRVAL')
+        ref_pix = get_key(self.hdu.header, 'STOKES', 'CRPIX')
+        delta = get_key(self.hdu.header, 'STOKES', 'CDELT')
+        n_stokes = get_key(self.hdu.header, 'STOKES', 'NAXIS')
+        return [stokes_dict[ref_val + (i - ref_pix) * delta] for i in
+                range(1, n_stokes + 1)]
 
     @property
     def uvdata(self):

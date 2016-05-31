@@ -21,28 +21,30 @@ errors_fname = 'bootstrap_errors.txt'
 
 if __name__ == "__main__":
     print(sys.argv)
-    if len(sys.argv) != 5 and len(sys.argv) != 6:
+    if len(sys.argv) != 6 and len(sys.argv) != 7:
         print("Usage: python misha_mod.py uv-fits-path dfm-model-path n_boot"
-              " cred_value [data_dir]")
+              " n_iter cred_value [data_dir]")
         sys.exit(1)
 
-    if len(sys.argv) == 6:
-        data_dir = sys.argv[5]
+    if len(sys.argv) == 7:
+        data_dir = sys.argv[6]
     else:
         data_dir = os.getcwd()
     print("Data directory: {}".format(data_dir))
 
-    cred_value = float(sys.argv[4])
+    cred_value = float(sys.argv[5])
 
     uv_fits_path = sys.argv[1]
     uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
     dfm_model_path = sys.argv[2]
     dfm_model_dir, dfm_model_fname = os.path.split(dfm_model_path)
     n_boot = int(sys.argv[3])
+    niter = int(sys.argv[4])
     print("==================================")
     print("Bootstrap uv-data: {}".format(uv_fits_fname))
     print("With model: {}".format(dfm_model_fname))
     print("Using {} replications".format(n_boot))
+    print("Using {} iterations".format(niter))
     print("Finding {}-confidence regions".format(cred_value))
     print("==================================")
 
@@ -72,7 +74,8 @@ if __name__ == "__main__":
         i = booted_uv_file.split('_')[-1].split('.')[0]
         modelfit_difmap(booted_uv_file, dfm_model_fname,
                         dfm_model_fname + '_' + i,
-                        path=path, mdl_path=dfm_model_dir, out_path=data_dir)
+                        path=path, mdl_path=dfm_model_dir, out_path=data_dir,
+                        niter=niter)
 
     # Get params of initial model used for bootstrap
     comps = import_difmap_model(dfm_model_fname, dfm_model_dir)

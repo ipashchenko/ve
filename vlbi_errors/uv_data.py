@@ -304,6 +304,10 @@ class UVData(object):
                 u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
                 v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
                 w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
+        if abs(np.mean(u)) < 1.:
+            u *= self.frequency
+            v *= self.frequency
+            w *= self.frequency
         return np.vstack((u, v, w)).T
 
     @property

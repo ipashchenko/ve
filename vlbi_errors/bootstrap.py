@@ -131,8 +131,8 @@ class CleanBootstrap(Bootstrap):
                 # ``anormvars`` to add:
                 lnormvars = list()
                 for std in noise_residuals[baseline].flatten():
-                    lnormvars.append(np.random.normal(std, size=len(indxs)))
-                anormvars = np.dstack(lnormvars).reshape((len(indxs), nif,
+                    lnormvars.append(np.random.normal(std, size=np.count_nonzero(indxs)))
+                anormvars = np.dstack(lnormvars).reshape((np.count_nonzero(indxs), nif,
                                                           nstokes,))
                 # Add normal random variables to data on current baseline
                 copy_of_model_data.uvdata[indxs] += anormvars

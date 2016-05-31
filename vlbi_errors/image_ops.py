@@ -722,6 +722,10 @@ def jet_ridge_line(image, r_max, beam=None, dr=1, n=1.):
         img1 = np.ma.array(mean_image, mask=~mask)
         xy_max = np.unravel_index(np.ma.argmax(img1), np.shape(mean_image))
         coords.append(xy_max)
+    plt.figure()
+    plt.imshow(np.log(image))
+    coords_ = np.atleast_2d(coords)
+    plt.scatter(coords_[:, 1], coords_[:, 0])
 
     return coords
 
@@ -775,7 +779,7 @@ def pol_mask(stokes_image_dict, n_sigma=2.):
     :return:
         Logical array of mask.
     """
-    quantile_dict = {1: 0.68, 2: 0.95, 3: 0.99}
+    quantile_dict = {1: 0.6827, 2: 0.9545, 3: 0.9973, 4: 0.99994}
     rms_cs_dict = {stokes: rms_image(stokes_image_dict[stokes]) for stokes in
                    ('I', 'Q', 'U')}
     qu_rms = np.mean([rms_cs_dict[stoke] for stoke in ('Q', 'U')])

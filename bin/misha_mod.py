@@ -19,6 +19,10 @@ outname = 'boot_uv'
 errors_fname = 'bootstrap_errors.txt'
 
 
+if 'DIFMAP_LOGIN' in os.environ:
+    del os.environ['DIFMAP_LOGIN']
+
+
 if __name__ == "__main__":
     print(sys.argv)
     if len(sys.argv) != 6 and len(sys.argv) != 7:

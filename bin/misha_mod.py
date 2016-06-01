@@ -54,6 +54,9 @@ if __name__ == "__main__":
     parser.add_argument('-errors_file', action='store', nargs='?',
                         default='bootstrap_errors.txt', type=str,
                         help='File name to store bootstrap errors')
+    parser.add_argument('-res_file', action='store', nargs='?', default=None,
+                        type=str, help='File name to store residuals plot in'
+                                       ' output directory')
 
     args = parser.parse_args()
 
@@ -84,6 +87,8 @@ if __name__ == "__main__":
     print("Finding {}-confidence regions".format(cred_value))
     print("Using directory {} for storing output".format(data_dir))
     print("Saving errors to file {}".format(errors_fname))
+    if args.res_file:
+        print("Saving residuals plot to file {}".format(args.res_file))
     print("==================================")
 
     try:
@@ -100,6 +105,9 @@ if __name__ == "__main__":
     except IndexError:
         print("Problem in bootstrapping data...")
         sys.exit(1)
+    if args.res_file:
+        print("Plotting histograms of residuals...")
+        boot.plot_residuals(args.res_file)
     curdir = os.getcwd()
     os.chdir(data_dir)
     boot.run(n=n_boot, nonparametric=nonparametric, outname=[outname, '.fits'])

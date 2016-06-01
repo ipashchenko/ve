@@ -32,6 +32,10 @@ if __name__ == "__main__":
                         default=False,
                         help='Use parametric bootstrap instead of'
                              ' nonparametric (nonparametric is the default)')
+    parser.add_argument('-clean_after', action='store_true', dest='clean_after',
+                        default=False,
+                        help='Remove bootstrapped data & model files in the'
+                             ' end')
     parser.add_argument('uv_fits_path', type=str, metavar='uv_fits_path',
                         help='- path to FITS-file with self-calibrated UV-data')
     parser.add_argument('dfm_model_path', type=str, metavar='dfm_model_path',
@@ -56,6 +60,8 @@ if __name__ == "__main__":
     data_dir = args.out_dir
     if data_dir is None:
         data_dir = os.getcwd()
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
     print("Data directory: {}".format(data_dir))
 
     cred_value = args.cred_value
@@ -100,14 +106,15 @@ if __name__ == "__main__":
     os.chdir(curdir)
 
     booted_uv_paths = sorted(glob.glob(os.path.join(data_dir, outname + "*")))
+    booted_mdl_paths = list()
     # Modelfit bootstrapped uvdata
     for booted_uv_path in booted_uv_paths:
         path, booted_uv_file = os.path.split(booted_uv_path)
         i = booted_uv_file.split('_')[-1].split('.')[0]
-        modelfit_difmap(booted_uv_file, dfm_model_fname,
-                        dfm_model_fname + '_' + i,
-                        path=path, mdl_path=dfm_model_dir, out_path=data_dir,
-                        niter=niter)
+        out_fname = dfm_model_fname + '_' + i
+        modelfit_difmap(booted_uv_file, dfm_model_fname, out_fname, path=path,
+                        mdl_path=dfm_model_dir, out_path=data_dir, niter=niter)
+        booted_mdl_paths.append(os.path.join(data_dir, out_fname))
 
     # Get params of initial model used for bootstrap
     comps = import_difmap_model(dfm_model_fname, dfm_model_dir)
@@ -116,7 +123,6 @@ if __name__ == "__main__":
         comps_params0[i].extend(list(comp.p))
 
     # Load bootstrap models
-    booted_mdl_paths = glob.glob(os.path.join(data_dir, dfm_model_fname + "_*"))
     comps_params = {i: [] for i in range(len(comps))}
     for booted_mdl_path in booted_mdl_paths:
         path, booted_mdl_file = os.path.split(booted_mdl_path)
@@ -151,3 +157,9 @@ if __name__ == "__main__":
 
         fn.write("\n")
     fn.close()
+
+    if args.clean_after:
+        for rmfile in booted_uv_paths:
+            os.unlink(rmfile)
+        for rmfile in booted_mdl_paths:
+            os.unlink(rmfile)

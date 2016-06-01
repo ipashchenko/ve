@@ -1,6 +1,7 @@
 import copy
 import numpy as np
 from gains import Absorber
+import matplotlib
 
 
 # TODO: detach format of data storage (use instances of UV_Data and Model
@@ -32,6 +33,79 @@ class Bootstrap(object):
             Residuals between model and data.
         """
         raise NotImplementedError
+
+    def plot_residuals(self, save_file, vis_range=None, ticks=None,
+                       stokes='I'):
+        """
+        Plot histograms of the residuals.
+
+        :param save_file:
+            File to save plot.
+        :param vis_range: (optional)
+            Iterable of min & max range for plotting residuals Re & Im.
+            Eg. ``[-0.15, 0.15]``. If ``None`` then choose one from data.
+            (default: ``None``)
+        :param ticks: (optional)
+            Iterable of X-axis ticks to plot. Eg. ``[-0.1, 0.1]``. If ``None``
+            then choose one from data. (default: ``None``)
+        :param stokes:
+            Stokes parameter to plot. (default: ``I``)
+        """
+        uvdata_r = self.residuals
+        label_size = 6
+        matplotlib.rcParams['xtick.labelsize'] = label_size
+        matplotlib.rcParams['ytick.labelsize'] = label_size
+        nrows = int(np.sqrt(2. * len(uvdata_r.baselines)))
+
+        # Optionally choose range & ticks
+        if vis_range is None:
+            res = uvdata_r._choose_uvdata(stokes=stokes, freq_average=True)[0]
+            range_ = min(abs(np.array([max(res.real), max(res.imag),
+                                       min(res.real), min(res.imag)])))
+            vis_range = [-range_, range_]
+        print "Vis_range {}".format(vis_range)
+        if ticks is None:
+            tick = min(abs(np.array(vis_range)))
+            tick = float("{:.2f}".format(tick / 2.))
+            ticks = [-tick, tick]
+        print "Ticks {}".format(ticks)
+
+        fig, axes = matplotlib.pyplot.subplots(nrows=nrows, ncols=nrows,
+                                               sharex=True, sharey=True)
+        fig.set_size_inches(18.5, 18.5)
+        matplotlib.pyplot.rcParams.update({'axes.titlesize': 'small'})
+        i, j = 0, 0
+
+        for baseline in uvdata_r.baselines:
+            try:
+                res = uvdata_r._choose_uvdata(baselines=[baseline],
+                                              freq_average=True,
+                                              stokes=stokes)[0]
+                bins = min([10, np.sqrt(len(res.imag))])
+                axes[i, j].hist(res.real, range=vis_range, color="#4682b4")
+                axes[i, j].axvline(0.0, lw=1, color='r')
+                axes[i, j].set_xticks(ticks)
+                j += 1
+                # Plot first row first
+                if j // nrows > 0:
+                    # Then second row, etc...
+                    i += 1
+                    j = 0
+                bins = min([10, np.sqrt(len(res.imag))])
+                axes[i, j].hist(res.imag, range=vis_range, color="#4682b4")
+                axes[i, j].axvline(0.0, lw=1, color='r')
+                axes[i, j].set_xticks(ticks)
+                j += 1
+                # Plot first row first
+                if j // nrows > 0:
+                    # Then second row, etc...
+                    i += 1
+                    j = 0
+            except IndexError:
+                break
+        fig.show()
+        fig.savefig("{}".format(save_file), bbox_inches='tight', dpi=400)
+        matplotlib.pyplot.close()
 
     def resample(self, outname, nonparametric=True, **kwargs):
         """

@@ -5,6 +5,7 @@ from __future__ import (print_function)
 import os
 import sys
 import warnings
+import argparse
 path = os.path.normpath(os.path.join(os.path.dirname(sys.argv[0]), '..'))
 sys.path.insert(0, path)
 import glob
@@ -24,32 +25,59 @@ if 'DIFMAP_LOGIN' in os.environ:
 
 
 if __name__ == "__main__":
-    print(sys.argv)
-    if len(sys.argv) != 6 and len(sys.argv) != 7:
-        print("Usage: python misha_mod.py uv-fits-path dfm-model-path n_boot"
-              " n_iter cred_value [data_dir]")
-        sys.exit(1)
+    parser = \
+        argparse.ArgumentParser(description='Bootstrap Difmap models')
 
-    if len(sys.argv) == 7:
-        data_dir = sys.argv[6]
-    else:
+    parser.add_argument('-parametric', action='store_true', dest='parametric',
+                        default=False,
+                        help='Use parametric bootstrap instead of'
+                             ' nonparametric (nonparametric is the default)')
+    parser.add_argument('uv_fits_path', type=str, metavar='uv_fits_path',
+                        help='- path to FITS-file with self-calibrated UV-data')
+    parser.add_argument('dfm_model_path', type=str, metavar='dfm_model_path',
+                        help='- path to Difmap-format file with model')
+    parser.add_argument('-n_boot', action='store', nargs='?', default=100,
+                        type=int, help='Number of bootstrap realizations')
+    parser.add_argument('-n_iter', action='store', nargs='?', default=50,
+                        type=int, help='Number of iterations in fitting')
+    parser.add_argument('-cred_value', action='store', nargs='?', default=0.68,
+                        type=float, help='Credible interval specification.'
+                                         ' Float from (0, 1) interval')
+    parser.add_argument('-out_dir', action='store', nargs='?',
+                        default=None, type=str, help='Directory to store'
+                                                     ' bootstrap files, models'
+                                                     ' & results.')
+    parser.add_argument('-errors_file', action='store', nargs='?',
+                        default='bootstrap_errors.txt', type=str,
+                        help='File name to store bootstrap errors')
+
+    args = parser.parse_args()
+
+    data_dir = args.out_dir
+    if data_dir is None:
         data_dir = os.getcwd()
     print("Data directory: {}".format(data_dir))
 
-    cred_value = float(sys.argv[5])
+    cred_value = args.cred_value
+    uv_fits_path = args.uv_fits_path
+    dfm_model_path = args.dfm_model_path
+    n_boot = args.n_boot
+    niter = args.n_iter
+    nonparametric = not args.parametric
+    errors_fname = args.errors_file
 
-    uv_fits_path = sys.argv[1]
     uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
-    dfm_model_path = sys.argv[2]
     dfm_model_dir, dfm_model_fname = os.path.split(dfm_model_path)
-    n_boot = int(sys.argv[3])
-    niter = int(sys.argv[4])
+    boot_type_dict = {True: "non-parametric", False: "parametric"}
     print("==================================")
     print("Bootstrap uv-data: {}".format(uv_fits_fname))
     print("With model: {}".format(dfm_model_fname))
-    print("Using {} replications".format(n_boot))
-    print("Using {} iterations".format(niter))
+    print("Using {} bootstrap".format(boot_type_dict[nonparametric]))
+    print("Using {} bootstrap replications".format(n_boot))
+    print("Using {} fitting iterations".format(niter))
     print("Finding {}-confidence regions".format(cred_value))
+    print("Using directory {} for storing output".format(data_dir))
+    print("Saving errors to file {}".format(errors_fname))
     print("==================================")
 
     try:
@@ -68,7 +96,7 @@ if __name__ == "__main__":
         sys.exit(1)
     curdir = os.getcwd()
     os.chdir(data_dir)
-    boot.run(n=n_boot, nonparametric=True, outname=[outname, '.fits'])
+    boot.run(n=n_boot, nonparametric=nonparametric, outname=[outname, '.fits'])
     os.chdir(curdir)
 
     booted_uv_paths = sorted(glob.glob(os.path.join(data_dir, outname + "*")))
@@ -106,14 +134,16 @@ if __name__ == "__main__":
                                                                                      len(comp))).T[j],
                                                   cred_mass=cred_value,
                                                   return_mean_median=True)
-            print("par, low, high : {} {} {}".format(comp.p[j], low, high))
-            fn.write("{} {} {} ".format(comp.p[j], abs(mean - low),
-                                        abs(high - mean)))
+            print("par, low, high : {:.4f} {:.4f} {:.4f}".format(comp.p[j], low,
+                                                                 high))
+            fn.write("{:.4f} {:.4f} {:.4f} ".format(comp.p[j], abs(mean - low),
+                                                    abs(high - mean)))
         if j == 2:
-            fn.write(" {} {} {} {} {} {} {} {} {}".format(0, 0, 0, 0, 0, 0, 0,
-                                                          0, 0))
+            fn.write(" {:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}"
+                     " {:.4f}".format(0, 0, 0, 0, 0, 0, 0, 0, 0))
         elif j == 3:
-            fn.write(" {} {} {} {} {} {}".format(0, 0, 0, 0, 0, 0))
+            fn.write(" {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}"
+                     " {:.4f}".format(0, 0, 0, 0, 0, 0))
         elif j == 5:
             pass
         else:

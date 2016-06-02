@@ -1,6 +1,8 @@
 import copy
 import numpy as np
+from scipy.stats import t
 from gains import Absorber
+from utils import fit_2d_gmm, vcomplex, nested_ddict
 import matplotlib
 
 
@@ -25,6 +27,17 @@ class Bootstrap(object):
         self.model_data = copy.deepcopy(uvdata)
         self.model_data.substitute(models)
         self.residuals = self.get_residuals()
+        self._residuals_fits = nested_ddict()
+        # Dictionary with keys - baselines & values - boolean numpy arrays with
+        # indexes of that baseline in ``UVData.uvdata`` array
+        self._indxs_visibilities = dict()
+        # Dictionary with keys - baselines & values - shapes of part for that
+        # baseline in ``UVData.uvdata`` array
+        self._shapes_visibilities = dict()
+        # Dictionary with keys - baselines & values - tuples with centers of
+        # real & imag residuals for that baseline
+        self._residuals_centers = nested_ddict()
+        self.get_baselines_info()
 
     def get_residuals(self):
         """
@@ -33,6 +46,44 @@ class Bootstrap(object):
             Residuals between model and data.
         """
         raise NotImplementedError
+
+    def get_baselines_info(self):
+        """
+        Count indexes of visibilities on each single baseline (for single IF &
+        Stokes) in ``uvdata`` array.
+        """
+        for baseline in self.residuals.baselines:
+            bl_data, indxs = self.residuals._choose_uvdata(baselines=[baseline])
+            self._indxs_visibilities[baseline] = indxs
+            self._shapes_visibilities[baseline] = np.shape(bl_data)
+
+    def fit_residuals(self):
+        """
+        Fit residuals with Gaussian Mixture Model.
+
+        :note:
+            At each baseline residuals are fitted with Gaussian Mixture Model
+            where number of mixture components is chosen based on BIC.
+        """
+        for baseline in self.residuals.baselines:
+            baseline_data, _ =\
+                self.residuals._choose_uvdata(baselines=[baseline])
+            for if_ in range(baseline_data.shape[1]):
+                for stokes in range(baseline_data.shape[2]):
+                    data = baseline_data[:, if_, stokes]
+
+                    # If data are zeros
+                    if not np.any(data):
+                        self._residuals_fits[baseline][if_][stokes] = None
+                        continue
+
+                    print "Baseline {}, IF {}, Stokes {}".format(baseline, if_,
+                                                                 stokes)
+                    clf = fit_2d_gmm(data)
+                    self._residuals_fits[baseline][if_][stokes] = clf
+                    x_c = np.sum(data.real) / len(data)
+                    y_c = np.sum(data.imag) / len(data)
+                    self._residuals_centers[baseline][if_][stokes] = (x_c, y_c)
 
     def plot_residuals(self, save_file, vis_range=None, ticks=None,
                        stokes='I'):
@@ -131,6 +182,15 @@ class Bootstrap(object):
         Generate ``n`` data sets.
 
         """
+        if not nonparametric:
+            print "Using parametric bootstrap"
+            if not self._residuals_fits:
+                print "Fitting residuals with GMM for each" \
+                      " baseline/IF/Stokes..."
+                self.fit_residuals()
+            else:
+                print "Residuals were already fitted with GMM on each" \
+                      " baseline/IF/Stokes"
         for i in range(n):
             outname_ = outname[0] + '_' + str(i + 1).zfill(3) + outname[1]
             self.resample(outname=outname_, nonparametric=nonparametric,
@@ -155,23 +215,25 @@ class CleanBootstrap(Bootstrap):
         return self.data - self.model_data
 
     def resample(self, outname, nonparametric=True, split_scans=False,
-                 use_V=True):
+                 use_V=True, recenter=False):
         """
         Sample from residuals with replacement or sample from normal random
         noise and adds samples to model to form n bootstrap samples.
 
         :param outname:
             Output file name to save bootstrapped data.
-        :param outnam:
-            Output file name.
-        :param nonparametric (optional):
+        :param nonparametric: (optional)
             If ``True`` then use actual residuals between model and data. If
             ``False`` then use gaussian noise fitted to actual residuals for
             parametric bootstrapping. (default: ``True``)
-        :params split_scans (optional):
+        :params split_scans: (optional)
             Calculate noise for each scan individually? Not implemented yet.
-        :param use_V (optional):
+        :param use_V: (optional)
             Use stokes V for calculation of noise? (default: ``True``)
+        :param recenter: (optional)
+            Boolean. Re-center sampled from fitted GMM residuals? (default:
+            False)
+
         :return:
             Just save bootstrapped data to file with specified ``outname``.
         """
@@ -179,37 +241,46 @@ class CleanBootstrap(Bootstrap):
         if split_scans:
             raise NotImplementedError('Implement split_scans=True option!')
 
-        noise_residuals = self.residuals.noise(split_scans=split_scans,
-                                               use_V=use_V)
+        # TODO: Put this to method
+        noise_residuals = self.data.noise(split_scans=split_scans, use_V=use_V)
         # To make ``noise_residuals`` shape (nstokes, nif,)
         if use_V:
             nstokes = self.residuals.nstokes
-            nif = self.residuals.nif
             for key, value in noise_residuals.items():
                 noise_residuals[key] = \
                     (value.repeat(nstokes).reshape((len(value), nstokes)))
 
         # Do resampling
         if not nonparametric:
-            # Use noise_residuals as std of gaussian noise to add.
-            # shape(noise_residuals[key]) = (8,4,)
-            # shape(self.residuals._data[i]['hands']) = (8,4,)
-            # for each baseline create (8,4,) normal random variables with
-            # specified by noise_residuals[baseline] std
             copy_of_model_data = copy.deepcopy(self.model_data)
             for baseline in self.residuals.baselines:
-                # Find data from one baseline
-                indxs = self.residuals._choose_uvdata(baselines=[baseline],
-                                                      indx_only=True)[1]
-                # Generate (len(indxs),8,4,) array of random variables
-                # ``anormvars`` to add:
-                lnormvars = list()
-                for std in noise_residuals[baseline].flatten():
-                    lnormvars.append(np.random.normal(std, size=np.count_nonzero(indxs)))
-                anormvars = np.dstack(lnormvars).reshape((np.count_nonzero(indxs), nif,
-                                                          nstokes,))
-                # Add normal random variables to data on current baseline
-                copy_of_model_data.uvdata[indxs] += anormvars
+                indxs = self._indxs_visibilities[baseline]
+                shape = self._shapes_visibilities[baseline]
+                to_add = np.zeros(shape, complex)
+                for if_ in range(shape[1]):
+                    for stokes in range(shape[2]):
+                        clf = self._residuals_fits[baseline][if_][stokes]
+
+                        # If zeros on that baseline/IF/Stokes => just add zeros
+                        if clf is None:
+                            to_add[:, if_, stokes] += np.zeros(shape[0],
+                                                               complex)
+                            continue
+
+                        clf_sample = clf.sample(shape[0])
+
+                        if recenter:
+                            # Center residuals
+                            centers =\
+                                self._residuals_centers[baseline][if_][stokes]
+                            clf_sample[:, 0] -= centers[0]
+                            clf_sample[:, 1] -= centers[1]
+
+                        to_add[:, if_, stokes] = vcomplex(clf_sample[:, 0],
+                                                          clf_sample[:, 1])
+
+                # Add random variables to data on current baseline
+                copy_of_model_data.uvdata[indxs] += to_add
                 copy_of_model_data.sync()
         else:
             # TODO: should i resample all stokes and IFs together? Yes
@@ -217,24 +288,24 @@ class CleanBootstrap(Bootstrap):
             copy_of_model_data = copy.deepcopy(self.model_data)
             for baseline in self.residuals.baselines:
                 # Find indexes of data from current baseline
-                indx = self.residuals._choose_uvdata(baselines=[baseline],
-                                                     indx_only=True)[1]
-                indx = np.where(indx)[0]
+                indxs = self._indxs_visibilities[baseline]
+                indxs = np.where(indxs)[0]
                 # Resample them
-                indx_ = np.random.choice(indx, len(indx))
+                indxs_ = np.random.choice(indxs, len(indxs))
 
                 # Add to residuals.substitute(model)
-                copy_of_model_data.uvdata[indx] =\
-                    copy_of_model_data.uvdata[indx] +\
-                    self.residuals.uvdata[indx_]
+                copy_of_model_data.uvdata[indxs] =\
+                    copy_of_model_data.uvdata[indxs] +\
+                    self.residuals.uvdata[indxs_]
                 copy_of_model_data.sync()
 
         self.model_data.save(data=copy_of_model_data.hdu.data, fname=outname)
 
     def run(self, n, outname=['bootstrapped_data', '.fits'], nonparametric=True,
-            split_scans=False, use_V=True):
+            split_scans=False, use_V=True, recenter=False):
         super(CleanBootstrap, self).run(n, outname, nonparametric,
-                                        split_scans=split_scans, use_V=use_V)
+                                        split_scans=split_scans, use_V=use_V,
+                                        recenter=recenter)
 
 
 class SelfCalBootstrap(object):

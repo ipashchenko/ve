@@ -32,6 +32,10 @@ if __name__ == "__main__":
                         default=False,
                         help='Use parametric bootstrap instead of'
                              ' nonparametric (nonparametric is the default)')
+    parser.add_argument('-recenter', action='store_true', dest='recenter',
+                        default=False,
+                        help='Recenter GMM-fitted residuals on each baseline in'
+                             ' parametric bootstrap')
     parser.add_argument('-clean_after', action='store_true', dest='clean_after',
                         default=False,
                         help='Remove bootstrapped data & model files in the'
@@ -74,6 +78,7 @@ if __name__ == "__main__":
     niter = args.n_iter
     nonparametric = not args.parametric
     errors_fname = args.errors_file
+    recenter = args.recenter
 
     uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
     dfm_model_dir, dfm_model_fname = os.path.split(dfm_model_path)
@@ -82,6 +87,11 @@ if __name__ == "__main__":
     print("Bootstrap uv-data: {}".format(uv_fits_fname))
     print("With model: {}".format(dfm_model_fname))
     print("Using {} bootstrap".format(boot_type_dict[nonparametric]))
+    if not nonparametric:
+        if recenter:
+            print("Recentering GMM-fitted residuals")
+        else:
+            print("Using fitted Geussian Mixture Model to generate resamples")
     print("Using {} bootstrap replications".format(n_boot))
     print("Using {} fitting iterations".format(niter))
     print("Finding {}-confidence regions".format(cred_value))
@@ -110,7 +120,8 @@ if __name__ == "__main__":
         boot.plot_residuals(args.res_file)
     curdir = os.getcwd()
     os.chdir(data_dir)
-    boot.run(n=n_boot, nonparametric=nonparametric, outname=[outname, '.fits'])
+    boot.run(n=n_boot, nonparametric=nonparametric, outname=[outname, '.fits'],
+             recenter=recenter)
     os.chdir(curdir)
 
     booted_uv_paths = sorted(glob.glob(os.path.join(data_dir, outname + "*")))

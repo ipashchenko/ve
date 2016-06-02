@@ -8,6 +8,7 @@ import astropy.io.fits as pf
 import string
 from math import floor
 from scipy import optimize
+from sklearn.mixture import GMM
 try:
     # Python 3 moved reduce to the functools module
     from functools import reduce
@@ -41,6 +42,37 @@ class SyncArray(np.ndarray):
 
     def __setitem__(self, coords, value):
         super(SyncArray, self).__setitem__(coords, value)
+
+
+def nested_ddict():
+    """
+    Defaultdict with arbitrary number of levels.
+    """
+    return collections.defaultdict(nested_ddict)
+
+
+def fit_2d_gmm(cdata, n_max=5):
+    """
+    Fit complex array on complex plane with number of gaussians.
+
+    :param cdata:
+        Complex numpy array.
+    :param n_max: (optional)
+        Maximum number of gaussian components in mixture. (default: ``5``)
+    :return:
+        Instance of ``sklearn.mixture.GMM`` class with best model.
+    """
+    re = cdata.real
+    im = cdata.imag
+    reim = np.vstack((re, im)).T
+    clf_dict = dict()
+    for n in range(1, n_max + 1):
+        clf = GMM(n_components=n, covariance_type='full', min_covar=0.00001)
+        clf.fit(reim)
+        clf_dict.update({n: clf})
+    n_mixture = sorted(clf_dict, key=lambda x: clf_dict[x].bic(reim))[0]
+    print "Best n_mixture = {}".format(n_mixture)
+    return clf_dict[n_mixture]
 
 
 def get_fits_image_info(fname):

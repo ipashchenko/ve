@@ -19,6 +19,7 @@ stokes_dict = {-4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR', 1: 'I', 2: 'Q', 3: 'U',
                4: 'V'}
 
 
+# TODO: Implement iterator over IF/Stokes
 class UVData(object):
 
     def __init__(self, fname):

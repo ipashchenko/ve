@@ -27,6 +27,9 @@ class Bootstrap(object):
         self.model_data = copy.deepcopy(uvdata)
         self.model_data.substitute(models)
         self.residuals = self.get_residuals()
+        # Dictionary with keys - baselines/IFs/Stokes & values - instances of
+        # ``sklearn.mixture.GMM`` class fitted on residuals (Re&Im) of key
+        # baselines
         self._residuals_fits = nested_ddict()
         # Dictionary with keys - baselines & values - boolean numpy arrays with
         # indexes of that baseline in ``UVData.uvdata`` array
@@ -114,12 +117,10 @@ class Bootstrap(object):
             range_ = min(abs(np.array([max(res.real), max(res.imag),
                                        min(res.real), min(res.imag)])))
             vis_range = [-range_, range_]
-        print "Vis_range {}".format(vis_range)
         if ticks is None:
             tick = min(abs(np.array(vis_range)))
             tick = float("{:.2f}".format(tick / 2.))
             ticks = [-tick, tick]
-        print "Ticks {}".format(ticks)
 
         fig, axes = matplotlib.pyplot.subplots(nrows=nrows, ncols=nrows,
                                                sharex=True, sharey=True)
@@ -154,7 +155,6 @@ class Bootstrap(object):
                     j = 0
             except IndexError:
                 break
-        fig.show()
         fig.savefig("{}".format(save_file), bbox_inches='tight', dpi=400)
         matplotlib.pyplot.close()
 

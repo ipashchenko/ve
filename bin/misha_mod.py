@@ -115,10 +115,11 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
         fn = open(txt_file, 'w')
         fn.write("# parameter original.value low.boot high.boot mean.boot"
                  " median.boot (mean-low).boot (high-mean).boot\n")
+        recorded = 0
         for i in plot_comps:
             comp = comps[i]
             for j in range(len(comp)):
-                low, high, mean, median = hdi_of_mcmc(boot_data[:, j],
+                low, high, mean, median = hdi_of_mcmc(boot_data[:, recorded+j],
                                                       cred_mass=cred_mass,
                                                       return_mean_median=True)
                 fn.write("{:<4} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}"
@@ -126,6 +127,7 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                                           high, mean, median, abs(mean - low),
                                           abs(high - mean)))
                 fn.write("\n")
+            recorded += (j + 1)
         fn.close()
 
 
@@ -233,13 +235,14 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Check that component numbers in input are among model components
-    for c in plot_comps:
-        if int(c) not in range(len(comps)):
-            raise Exception("No such component {} in current model!".format(c))
+    if plot_comps:
+        for c in plot_comps:
+            if int(c) not in range(len(comps)):
+                raise Exception("No such component {} in current"
+                                " model!".format(c))
     for c in txt_comps:
         if int(c) not in range(len(comps)):
             raise Exception("No such component {} in current model!".format(c))
-
 
     if uv_fits_path:
         print("Bootstrapping uv-data")

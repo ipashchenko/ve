@@ -6,9 +6,7 @@ from utils import fit_2d_gmm, vcomplex, nested_ddict
 import matplotlib
 
 
-# TODO: detach format of data storage (use instances of UV_Data and Model
-# classes as arguments in constructors. But for ``calibs`` argument of
-# ``SelfCalBootstrap`` we need paths to files as gain info is in tables.
+# TODO: Add 0.632-estimate of extra-sample error.
 class Bootstrap(object):
     """
     Basic class for bootstrapping data using specified model.

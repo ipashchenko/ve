@@ -55,6 +55,9 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
     :param txt_file: (optional)
         File to save credible intervals for parameters. If ``None`` then don't
         save credible intervals. (default: ``None``)
+    :param cred_mass: (optional)
+        Value of credible interval mass. Float in range (0., 1.). (default:
+        ``0.68``)
     """
     n_boot = len(booted_mdl_paths)
     # Get params of initial model used for bootstrap
@@ -157,6 +160,10 @@ if __name__ == "__main__":
                         default=False,
                         help='Remove bootstrapped data & model files in the'
                              ' end')
+    parser.add_argument('-bic', action='store_true', dest='bic',
+                        default=False,
+                        help='Calculate BIC criterion value for original model'
+                             ' and bootstrapped samples')
     parser.add_argument('-uv_fits_path', action='store', nargs='?', type=str,
                         metavar='PATH TO UV-DATA FITS FILE', default=None,
                         help='- path to FITS-file with self-calibrated UV-data')
@@ -222,6 +229,7 @@ if __name__ == "__main__":
     recenter = args.recenter
     plot_comps = args.plot_comps
     txt_comps = args.txt_comps
+    bic = args.bic
 
     if par_plot and not plot_comps:
         raise Exception("Use -plot_comps argument to specify # of components"
@@ -279,6 +287,11 @@ if __name__ == "__main__":
         uvdata = UVData(uv_fits_path)
         model = Model(stokes='I')
         model.add_components(*comps)
+
+        if bic:
+            bic_orig = model.bic(uvdata)
+            bic_booted = list()
+
         try:
             boot = CleanBootstrap([model], uvdata)
         # If uv-data contains only one Stokes parameter (e.g. `0838+133`)
@@ -307,6 +320,20 @@ if __name__ == "__main__":
                             path=path, mdl_path=dfm_model_dir,
                             out_path=data_dir, niter=niter)
             booted_mdl_paths.append(os.path.join(data_dir, out_fname))
+            if bic:
+                uvdata_ = UVData(booted_uv_path)
+                model_ = Model(stokes='I')
+                comps_ = import_difmap_model(out_fname, data_dir)
+                model_.add_components(comps_)
+                bic_booted.append(model_.bic(uvdata_))
+
+        if bic:
+            low_, high_, mean_, median_ = hdi_of_mcmc(bic_booted,
+                                                      cred_mass=0.68,
+                                                      return_mean_median=True)
+            print("Model BIC with bootstrapped 68% interval = {:.2f}"
+                  " -{:.2f} +{:.2f}".format(bic_orig, abs(mean_ - low_),
+                                            abs(high_ - mean_)))
 
     elif booted_mdl_card:
         print("Using already bootstrapped uv-data")

@@ -32,6 +32,10 @@ class UVData(object):
             1j * self.view_uvdata({'COMPLEX': 1})
         self._error = None
 
+    @property
+    def sample_size(self):
+        raise NotImplementedError
+
     def sync(self):
         """
         Sync internal representation with complex representation and update
@@ -595,6 +599,8 @@ class UVData(object):
                 self.uvdata[bl_indxs] = baseline_uvdata
         self.sync()
 
+    # TODO: Calculate noise also by differences optionally of if only one
+    # parallel hand is available and V can't be calculated
     def error(self, average_freq=False):
         """
         Shortcut for error associated with each visibility.

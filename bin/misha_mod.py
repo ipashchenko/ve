@@ -33,9 +33,22 @@ if 'DIFMAP_LOGIN' in os.environ:
     del os.environ['DIFMAP_LOGIN']
 
 
+def xy_2_rtheta(params):
+    flux, x, y = params[:3]
+    r = np.sqrt(x ** 2 + y ** 2)
+    theta = np.rad2deg(np.arctan(x / y))
+    result = [flux, r, theta]
+    try:
+        result.extend(params[3:])
+    except IndexError:
+        pass
+    return result
+
+
 def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                               dfm_model_dir=None, plot_comps=None,
-                              plot_file=None, txt_file=None, cred_mass=0.68):
+                              plot_file=None, txt_file=None, cred_mass=0.68,
+                              coordinates='xy'):
     """
     Plot bootstrap distribution of model component parameters.
 
@@ -58,37 +71,63 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
     :param cred_mass: (optional)
         Value of credible interval mass. Float in range (0., 1.). (default:
         ``0.68``)
+    :param coordinates: (optional)
+        Type of coordinates to use. ``xy`` or ``rtheta``. (default: ``xy``)
     """
     n_boot = len(booted_mdl_paths)
     # Get params of initial model used for bootstrap
-    comps = import_difmap_model(dfm_model_fname, dfm_model_dir)
-    comps_params0 = {i: [] for i in range(len(comps))}
-    for i, comp in enumerate(comps):
-        comps_params0[i].extend(list(comp.p))
+    comps_orig = import_difmap_model(dfm_model_fname, dfm_model_dir)
+    comps_params0 = {i: [] for i in range(len(comps_orig))}
+    for i, comp in enumerate(comps_orig):
+        # FIXME: Move (x, y) <-> (r, theta) mapping to ``Component``
+        if coordinates == 'xy':
+            params = comp.p
+        elif coordinates == 'rtheta':
+            params = xy_2_rtheta(comp.p)
+        else:
+            raise Exception
+        comps_params0[i].extend(list(params))
 
     # Load bootstrap models
-    comps_params = {i: [] for i in range(len(comps))}
+    comps_params = {i: [] for i in range(len(comps_orig))}
     for booted_mdl_path in booted_mdl_paths:
         path, booted_mdl_file = os.path.split(booted_mdl_path)
         comps = import_difmap_model(booted_mdl_file, path)
         for i, comp in enumerate(comps):
-            comps_params[i].extend(list(comp.p))
+            # FIXME: Move (x, y) <-> (r, theta) mapping to ``Component``
+            if coordinates == 'xy':
+                params = comp.p
+            elif coordinates == 'rtheta':
+                params = xy_2_rtheta(comp.p)
+            else:
+                raise Exception
+            comps_params[i].extend(list(params))
 
-    comps_to_plot = [comps[k] for k in plot_comps]
+    comps_to_plot = [comps_orig[k] for k in plot_comps]
     # (#boot, #parameters)
     boot_data = np.hstack(np.array(comps_params[i]).reshape((n_boot,
-                                                             len(comps[i]))) for
+                                                             len(comps_orig[i]))) for
                           i in plot_comps)
 
     # Optionally plot
     if plot_file:
         if triangle:
-            lens = list(np.cumsum([len(comp) for comp in comps]))
+            lens = list(np.cumsum([len(comp) for comp in comps_orig]))
             lens.insert(0, 0)
 
             labels = list()
             for comp in comps_to_plot:
                 for lab in comp._parnames:
+                    # FIXME: Move (x, y) <-> (r, theta) mapping to ``Component``
+                    if coordinates == 'rtheta':
+                        if lab == 'x':
+                            lab = 'r'
+                        if lab == 'y':
+                            lab = 'theta'
+                    elif coordinates == 'xy':
+                        pass
+                    else:
+                        raise Exception
                     labels.append(lab)
 
             try:
@@ -120,13 +159,23 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                  " median.boot (mean-low).boot (high-mean).boot\n")
         recorded = 0
         for i in plot_comps:
-            comp = comps[i]
+            comp = comps_orig[i]
             for j in range(len(comp)):
                 low, high, mean, median = hdi_of_mcmc(boot_data[:, recorded+j],
                                                       cred_mass=cred_mass,
                                                       return_mean_median=True)
+                # FIXME: Move (x, y) <-> (r, theta) mapping to ``Component``
+                parnames = comp._parnames
+                if coordinates == 'xy':
+                    params = comp.p
+                elif coordinates == 'rtheta':
+                    params = xy_2_rtheta(comp.p)
+                    parnames[1] = 'r'
+                    parnames[2] = 'theta'
+                else:
+                    raise Exception
                 fn.write("{:<4} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}"
-                         " {:.4f}".format(comp._parnames[j], comp.p[j], low,
+                         " {:.4f}".format(parnames[j], params[j], low,
                                           high, mean, median, abs(mean - low),
                                           abs(high - mean)))
                 fn.write("\n")
@@ -209,6 +258,9 @@ if __name__ == "__main__":
                         type=str, help='Components numbers to output parameters'
                                        ' in a text file ``errors_file``',
                         metavar='COMPONENT #')
+    parser.add_argument('-rtheta', action='store_true', dest='use_rtheta',
+                        default=False,
+                        help='Use `r-theta` coordinates instead of `xy`')
 
     args = parser.parse_args()
 
@@ -229,7 +281,12 @@ if __name__ == "__main__":
     recenter = args.recenter
     plot_comps = args.plot_comps
     txt_comps = args.txt_comps
+
     bic = args.bic
+    if args.use_rtheta:
+        coordinates = 'rtheta'
+    else:
+        coordinates = 'xy'
 
     if par_plot and not plot_comps:
         raise Exception("Use -plot_comps argument to specify # of components"
@@ -248,6 +305,10 @@ if __name__ == "__main__":
             if int(c) not in range(len(comps)):
                 raise Exception("No such component {} in current"
                                 " model!".format(c))
+    if not txt_comps:
+        txt_comps = range(len(comps))
+    else:
+        txt_comps = [int(k) for k in txt_comps]
     for c in txt_comps:
         if int(c) not in range(len(comps)):
             raise Exception("No such component {} in current model!".format(c))
@@ -359,11 +420,6 @@ if __name__ == "__main__":
         raise Exception("Use -uv_fits_path or -booted_mdl_card to create/get"
                         " bootstrapped models.")
 
-    if not txt_comps:
-        txt_comps = range(len(comps))
-    else:
-        txt_comps = [int(k) for k in txt_comps]
-
     # Optionally plot component parameters
     if par_plot:
         plot_comps = [int(k) for k in plot_comps]
@@ -371,56 +427,13 @@ if __name__ == "__main__":
                                   dfm_model_dir=dfm_model_dir,
                                   plot_comps=plot_comps,
                                   plot_file=os.path.join(data_dir, par_plot),
-                                  cred_mass=cred_value)
+                                  cred_mass=cred_value,
+                                  coordinates=coordinates)
     analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                               dfm_model_dir=dfm_model_dir,
                               plot_comps=txt_comps,
                               txt_file=os.path.join(data_dir, errors_fname),
-                              cred_mass=cred_value)
-
-    # # Get params of initial model used for bootstrap
-    # comps = import_difmap_model(dfm_model_fname, dfm_model_dir)
-    # comps_params0 = {i: [] for i in range(len(comps))}
-    # for i, comp in enumerate(comps):
-    #     comps_params0[i].extend(list(comp.p))
-
-    # # Load bootstrap models
-    # comps_params = {i: [] for i in range(len(comps))}
-    # for booted_mdl_path in booted_mdl_paths:
-    #     path, booted_mdl_file = os.path.split(booted_mdl_path)
-    #     comps = import_difmap_model(booted_mdl_file, path)
-    #     for i, comp in enumerate(comps):
-    #         comps_params[i].extend(list(comp.p))
-
-    # # Optionally plot bootstrap samples
-
-    # # Print 65-% intervals (1 sigma)
-    # comps = import_difmap_model(dfm_model_fname, dfm_model_dir)
-    # fn = open(os.path.join(data_dir, errors_fname), 'w')
-    # for i, comp in enumerate(comps):
-    #     print("Component #{}".format(i + 1))
-    #     for j in range(len(comp)):
-    #         low, high, mean, median = hdi_of_mcmc(np.array(comps_params[i]).reshape((n_boot,
-    #                                                                                  len(comp))).T[j],
-    #                                               cred_mass=cred_value,
-    #                                               return_mean_median=True)
-    #         print("par, low, high : {:.4f} {:.4f} {:.4f}".format(comp.p[j], low,
-    #                                                              high))
-    #         fn.write("{:.4f} {:.4f} {:.4f} ".format(comp.p[j], abs(mean - low),
-    #                                                 abs(high - mean)))
-    #     if j == 2:
-    #         fn.write(" {:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}"
-    #                  " {:.4f}".format(0, 0, 0, 0, 0, 0, 0, 0, 0))
-    #     elif j == 3:
-    #         fn.write(" {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}"
-    #                  " {:.4f}".format(0, 0, 0, 0, 0, 0))
-    #     elif j == 5:
-    #         pass
-    #     else:
-    #         raise Exception
-
-    #     fn.write("\n")
-    # fn.close()
+                              cred_mass=cred_value, coordinates=coordinates)
 
     if args.clean_after:
         for rmfile in booted_uv_paths:

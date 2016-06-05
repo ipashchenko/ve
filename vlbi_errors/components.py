@@ -11,6 +11,7 @@ except ImportError:
 
 
 # TODO: Add optional argument ``beam`` to ``add_to_image`` methods.
+# FIXME: Implement (x, y) <-> (r, theta)
 class Component(object):
     """
     Basic class that implements single component of model.

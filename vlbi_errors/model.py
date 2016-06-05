@@ -197,6 +197,23 @@ class Model(object):
         for component in self._components:
             component.add_to_image(image, beam=beam)
 
+    # FIXME: Nonlinear models can't use AIC/BIC?
+    def bic(self, uvdata, average_freq=True):
+        """
+        Returns BIC for current model and given instance of ``UVData`` class.
+
+        :param uvdata:
+            Instance of ``UVData`` class.
+        :param average_freq: (optional)
+            Boolean. Average frequency when calculating BIC? (default: ``True``)
+
+        :return:
+            Value of BIC criterion (the lower - the better)
+        """
+        from stats import LnLikelihood
+        lnlik = LnLikelihood(uvdata, self, average_freq=average_freq)
+        return -2. * lnlik(self.p) + self.size * uvdata.sample_size
+
 
 if __name__ == "__main__":
 

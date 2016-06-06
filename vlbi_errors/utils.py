@@ -75,6 +75,28 @@ def fit_2d_gmm(cdata, n_max=5):
     return clf_dict[n_mixture]
 
 
+def make_ellipses(gmm, ax):
+    """
+    Add ellipses representing components of Gaussian Mixture Model.
+
+    :param gmm:
+        Fitted instance of ``sklearn.mixture.GMM`` class.
+    :param ax:
+        Matplotlib axes object.
+    """
+    for n, color in enumerate('rgb'):
+        v, w = np.linalg.eigh(gmm._get_covars()[n][:2, :2])
+        u = w[0] / np.linalg.norm(w[0])
+        angle = np.arctan2(u[1], u[0])
+        angle = 180 * angle / np.pi  # convert to degrees
+        v *= 9
+        ell = mpl.patches.Ellipse(gmm.means_[n, :2], v[0], v[1],
+                                  180 + angle, color=color)
+        ell.set_clip_box(ax.bbox)
+        ell.set_alpha(0.5)
+        ax.add_artist(ell)
+
+
 def get_fits_image_info(fname):
     """
     Returns image parameters from FITS-file.

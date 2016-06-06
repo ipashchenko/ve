@@ -196,42 +196,26 @@ if __name__ == "__main__":
                                             ' ``-res_plot`` are not used.')
 
     parser.add_argument('dfm_model_path', type=str, metavar='dfm_model_path',
-                        help='Path to Difmap-format file with model')
-    parser.add_argument('-parametric', action='store_true', dest='parametric',
-                        default=False,
-                        help='Use parametric bootstrap instead of'
-                             ' nonparametric (nonparametric is the default)')
-    parser.add_argument('-recenter', action='store_true', dest='recenter',
-                        default=False,
-                        help='Recenter GMM-fitted residuals on each baseline in'
-                             ' parametric bootstrap')
-    parser.add_argument('-clean_after', action='store_true', dest='clean_after',
-                        default=False,
-                        help='Remove bootstrapped data & model files in the'
-                             ' end')
-    parser.add_argument('-bic', action='store_true', dest='bic',
-                        default=False,
-                        help='Calculate BIC criterion value for original model'
-                             ' and bootstrapped samples')
+                        help='Path to Difmap-format file with model.')
     parser.add_argument('-uv_fits_path', action='store', nargs='?', type=str,
                         metavar='PATH TO UV-DATA FITS FILE', default=None,
-                        help='- path to FITS-file with self-calibrated UV-data')
+                        help='Path to FITS-file with self-calibrated UV-data.')
     parser.add_argument('-booted_mdl_card', action='store', nargs='?', type=str,
                         default=None,
-                        help='- glob.glob wildcard to find bootstrapped model'
+                        help='Wildcard to find bootstrapped model'
                              ' files', metavar='WILCARD WITH FULL PATH')
     parser.add_argument('-n_boot', action='store', nargs='?', default=100,
                         type=int, help='Number of bootstrap realizations.'
                                        ' Default value = 100',
                         metavar='INT')
     parser.add_argument('-n_iter', action='store', nargs='?', default=50,
-                        type=int, help='Number of iterations in fitting.'
-                                       ' Default value = 50',
+                        type=int, help='Number of iterations in difmap internal'
+                                       ' fitting. Default is 50.',
                         metavar='INT')
     parser.add_argument('-cred_value', action='store', nargs='?', default=0.68,
                         type=float, help='Credible interval specification.'
                                          ' Float from (0, 1) interval. Default'
-                                         ' value = 0.68',
+                                         ' is 0.68.',
                         metavar='FLOAT FROM (0, 1)')
     parser.add_argument('-out_dir', action='store', nargs='?',
                         default=os.getcwd(), type=str, help='Directory to store'
@@ -240,27 +224,44 @@ if __name__ == "__main__":
                         metavar='DIRECTORY')
     parser.add_argument('-errors_file', action='store', nargs='?',
                         default='bootstrap_errors.txt', type=str,
-                        help='File name to store bootstrap errors',
+                        help='File name to store bootstrap errors. Default is'
+                             '`bootstrap_errors.txt`.',
                         metavar='FILE NAME')
     parser.add_argument('-res_plot', action='store', nargs='?', default=None,
                         type=str, help='File name to store IF-averages'
                                        ' residuals of Stokes I real & imag part'
-                                       ' plot in output directory',
+                                       ' plot in output directory.',
                         metavar='FILE NAME')
     parser.add_argument('-par_plot', action='store', nargs='?', default=None,
                         type=str, help='File name to store parameters plot in'
-                                       ' output directory',
+                                       ' output directory.',
                         metavar='FILE NAME')
     parser.add_argument('-plot_comps', action='store', nargs='+', default=None,
-                        type=str, help='Components numbers to plot',
+                        type=str, help='Components numbers to plot.',
                         metavar='COMPONENT #')
     parser.add_argument('-txt_comps', action='store', nargs='*', default=None,
-                        type=str, help='Components numbers to output parameters'
-                                       ' in a text file ``errors_file``',
+                        type=str, help='Components numbers to output'
+                                       ' parameters in a text file.',
                         metavar='COMPONENT #')
+    parser.add_argument('-parametric', action='store_true', dest='parametric',
+                        default=False,
+                        help='Use parametric bootstrap instead of'
+                             ' nonparametric (nonparametric is the default).')
+    parser.add_argument('-recenter', action='store_true', dest='recenter',
+                        default=False,
+                        help='Recenter GMM-fitted residuals on each baseline in'
+                             ' parametric bootstrap.')
+    parser.add_argument('-clean_after', action='store_true', dest='clean_after',
+                        default=False,
+                        help='Remove bootstrapped data & model files in the'
+                             ' end.')
+    parser.add_argument('-bic', action='store_true', dest='bic',
+                        default=False,
+                        help='Calculate BIC criterion value for original model'
+                             ' and bootstrapped samples.')
     parser.add_argument('-rtheta', action='store_true', dest='use_rtheta',
                         default=False,
-                        help='Use `r-theta` coordinates instead of `xy`')
+                        help='Use `r-theta` coordinates instead of `xy`.')
 
     args = parser.parse_args()
 

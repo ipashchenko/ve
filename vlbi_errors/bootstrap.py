@@ -173,6 +173,79 @@ class Bootstrap(object):
         fig.savefig("{}".format(save_file), bbox_inches='tight', dpi=400)
         matplotlib.pyplot.close()
 
+    def plot_residuals_2d(self, vis_range=None, ticks=None):
+        """
+        Plot 2D distribution of complex residuals.
+
+        :param vis_range: (optional)
+            Iterable of min & max range for plotting residuals Re & Im.
+            Eg. ``[-0.15, 0.15]``. If ``None`` then choose one from data.
+            (default: ``None``)
+        :param ticks: (optional)
+            Iterable of X-axis ticks to plot. Eg. ``[-0.1, 0.1]``. If ``None``
+            then choose one from data. (default: ``None``)
+        """
+        uvdata_r = self.residuals
+
+        for baseline in uvdata_r.baselines:
+            # n_if = self._residuals_fits[baseline]
+            # n_stokes = self._residuals_fits[baseline]
+            nrows = 4
+            fig, axes = matplotlib.pyplot.subplots(nrows=4,
+                                                   ncols=4,
+                                                   sharex=True,
+                                                   sharey=True)
+            i, j = 0, 0
+            fig.set_size_inches(18.5, 18.5)
+            matplotlib.pyplot.rcParams.update({'axes.titlesize':
+                                                   'small'})
+            n_if = len(self._residuals_fits[baseline].keys())
+            for if_ in self._residuals_fits[baseline].keys():
+                n_stokes = len([val for val in
+                                self._residuals_fits[baseline][if_].values() if
+                                val is not None])
+                for stoke in self._residuals_fits[baseline][if_].keys():
+                    stoke_par = uvdata_r.stokes[stoke]
+
+                    try:
+                        clf = self._residuals_fits[baseline][if_][stoke]
+                        if clf is None:
+                            # No fitted residuals for this IF/Stokes
+                            continue
+                        res = uvdata_r._choose_uvdata(baselines=[baseline],
+                                                      IF=if_+1,
+                                                      stokes=stoke_par)[0][:, 0]
+                        print "Baseline {}, IF {}, Stokes {}".format(baseline,
+                                                                     if_,
+                                                                     stoke)
+                        print "Shape: {}".format(res.shape)
+                        re = res.real
+                        im = res.imag
+                        reim = np.vstack((re, im)).T
+                        y = clf.predict(reim)
+                        for i_mix in range(clf.n_components):
+                            color = "rgbyk"[i_mix]
+                            re_ = re[np.where(y == i_mix)]
+                            im_ = im[np.where(y == i_mix)]
+                            axes[i, j].scatter(re_, im_, color=color)
+                            make_ellipses(clf, axes[i, j])
+                        # axes[i, j].set_xticks(ticks)
+                        # axes[i, j].set_xlim(vis_range)
+                        # axes[i, j].set_ylim(vis_range)
+                        # axes[i, j].set_xticks(ticks)
+                        # axes[i, j].set_yticks(ticks)
+                        j += 1
+                        # Plot first row first
+                        if j // nrows > 0:
+                            # Then second row, etc...
+                            i += 1
+                            j = 0
+                    except IndexError:
+                        break
+            fig.savefig("res_2d_{}_{}_{}".format(baseline, if_, stoke),
+                        bbox_inches='tight', dpi=400)
+            matplotlib.pyplot.close()
+
     def resample(self, outname, nonparametric=True, **kwargs):
         """
         Sample from residuals with replacement or sample from normal random
@@ -272,15 +345,10 @@ class CleanBootstrap(Bootstrap):
                 indxs = self._indxs_visibilities[baseline]
                 shape = self._shapes_visibilities[baseline]
                 to_add = np.zeros(shape, complex)
-                for if_ in range(shape[1]):
-                    for stokes in range(shape[2]):
+                # FIXME: Here iterate over keys with not None values
+                for if_ in self._residuals_fits[baseline]:
+                    for stokes in self._residuals_fits[baseline][if_]:
                         clf = self._residuals_fits[baseline][if_][stokes]
-
-                        # If zeros on that baseline/IF/Stokes => just add zeros
-                        if clf is None:
-                            to_add[:, if_, stokes] += np.zeros(shape[0],
-                                                               complex)
-                            continue
 
                         clf_sample = clf.sample(shape[0])
 

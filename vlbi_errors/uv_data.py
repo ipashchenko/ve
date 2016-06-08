@@ -2,6 +2,8 @@ import math
 import copy
 import numpy as np
 import astropy.io.fits as pf
+from astropy.time import Time, TimeDelta
+from sklearn.cluster import DBSCAN
 from collections import OrderedDict
 from utils import (baselines_2_ants, index_of, get_uv_correlations,
                    find_card_from_header, get_key)
@@ -219,6 +221,15 @@ class UVData(object):
         return self.frequency + self.freq_width_if * (self.nif / 2. - 0.5)
 
     @property
+    def times(self):
+        """
+        Returns array of astropy.time.Time instances.
+        """
+        times = Time(self.hdu.data['DATE'] + self.hdu.data['_DATE'],
+                     format='jd')
+        return times.utc.datetime
+
+    @property
     def scans(self):
         """
         Returns list of times that separates different scans. If NX table is
@@ -250,7 +261,7 @@ class UVData(object):
     # FIXME: It would be better to output indexes of different scans for each
     # baselines
     @property
-    def scans_bl(self):
+    def _scans_bl(self):
         """
         Calculate scans for each baseline separately.
 
@@ -284,6 +295,34 @@ class UVData(object):
                                    bl_times[-1]])
                 scans_dict.update({bl: np.asarray(scans_list)})
 
+        return scans_dict
+
+    @property
+    def scans_bl(self):
+        scans_dict = dict()
+        for bl in self.baselines:
+            bl_scans = list()
+            bl_indxs = self._choose_uvdata(baselines=bl, indx_only=True)[1]
+            # JD-formated times for current baseline
+            bl_times = self.hdu.data['DATE'][bl_indxs] +\
+                       self.hdu.data['_DATE'][bl_indxs]
+            bl_times = bl_times.reshape((bl_times.size, 1))
+            db = DBSCAN(eps=TimeDelta(100., format='sec').jd, min_samples=10,
+                        leaf_size=5).fit(bl_times)
+            core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
+            core_samples_mask[db.core_sample_indices_] = True
+            labels = db.labels_
+            if -1 in set(labels):
+                ant1, ant2 = baselines_2_ants([bl])
+                print "Non-typical scan structure for baseline" \
+                      " {}-{}".format(ant1, ant2)
+                scans_dict[bl] = bl_indxs
+            else:
+                bl_indxs_ = np.array(bl_indxs, dtype=int)
+                bl_indxs_[bl_indxs] = labels + 1
+                for i in set(labels):
+                    bl_scans.append(bl_indxs_ == i + 1)
+                scans_dict[bl] = bl_scans
         return scans_dict
 
     @property

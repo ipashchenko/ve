@@ -247,6 +247,8 @@ class UVData(object):
     # FIXME: doesn't work for ``J0005+3820_X_1998_06_24_fey_vis.fits``
     # FIXME: Sometimes only 1 measurement in `scan`. It results in noise =
     # ``nan`` for that scan
+    # FIXME: It would be better to output indexes of different scans for each
+    # baselines
     @property
     def scans_bl(self):
         """
@@ -633,6 +635,7 @@ class UVData(object):
         return self._error
 
     # TODO: use different stokes and symmetry!
+    # FIXME:
     def uv_coverage(self, antennas=None, baselines=None, sym='.k', xinc=1,
                     times=None, x_range=None, y_range=None):
         """

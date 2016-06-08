@@ -2,8 +2,13 @@ import copy
 import numpy as np
 from scipy.stats import t
 from gains import Absorber
-from utils import fit_2d_gmm, vcomplex, nested_ddict
+from utils import (fit_2d_gmm, vcomplex, nested_ddict, make_ellipses,
+                   baselines_2_ants)
 import matplotlib
+matplotlib.use('Agg')
+label_size = 6
+matplotlib.rcParams['xtick.labelsize'] = label_size
+matplotlib.rcParams['ytick.labelsize'] = label_size
 
 
 # TODO: Add 0.632-estimate of extra-sample error.
@@ -58,6 +63,9 @@ class Bootstrap(object):
             self._indxs_visibilities[baseline] = indxs
             self._shapes_visibilities[baseline] = np.shape(bl_data)
 
+    # FIXME: Refactor using ``UVData._choose_uvdata`` API (not ``range``s)
+    # FIXME: Use real Stokes parameters as keys. Only Stokes with fitted
+    # residuals must be in dict.
     def fit_residuals(self):
         """
         Fit residuals with Gaussian Mixture Model.
@@ -75,12 +83,16 @@ class Bootstrap(object):
 
                     # If data are zeros
                     if not np.any(data):
-                        self._residuals_fits[baseline][if_][stokes] = None
                         continue
 
                     print "Baseline {}, IF {}, Stokes {}".format(baseline, if_,
                                                                  stokes)
-                    clf = fit_2d_gmm(data)
+                    print "Shape: {}".format(baseline_data.shape)
+                    try:
+                        clf = fit_2d_gmm(data)
+                    # This occurs when baseline has 1 point only
+                    except ValueError:
+                        continue
                     self._residuals_fits[baseline][if_][stokes] = clf
                     x_c = np.sum(data.real) / len(data)
                     y_c = np.sum(data.imag) / len(data)
@@ -104,21 +116,21 @@ class Bootstrap(object):
             Stokes parameter to plot. (default: ``I``)
         """
         uvdata_r = self.residuals
-        label_size = 6
-        matplotlib.rcParams['xtick.labelsize'] = label_size
-        matplotlib.rcParams['ytick.labelsize'] = label_size
-        nrows = int(np.sqrt(2. * len(uvdata_r.baselines)))
+        nrows = int(np.ceil(np.sqrt(2. * len(uvdata_r.baselines))))
 
         # Optionally choose range & ticks
         if vis_range is None:
             res = uvdata_r._choose_uvdata(stokes=stokes, freq_average=True)[0]
             range_ = min(abs(np.array([max(res.real), max(res.imag),
                                        min(res.real), min(res.imag)])))
+            range_ = float("{:.3f}".format(range_))
             vis_range = [-range_, range_]
+        print("vis_range", vis_range)
         if ticks is None:
             tick = min(abs(np.array(vis_range)))
-            tick = float("{:.2f}".format(tick / 2.))
+            tick = float("{:.3f}".format(tick / 2.))
             ticks = [-tick, tick]
+        print("ticks", ticks)
 
         fig, axes = matplotlib.pyplot.subplots(nrows=nrows, ncols=nrows,
                                                sharex=True, sharey=True)
@@ -132,9 +144,12 @@ class Bootstrap(object):
                                               freq_average=True,
                                               stokes=stokes)[0]
                 bins = min([10, np.sqrt(len(res.imag))])
-                axes[i, j].hist(res.real, range=vis_range, color="#4682b4")
+                ant1, ant2 = baselines_2_ants([baseline])
+                axes[i, j].hist(res.real, range=vis_range, color="#4682b4",
+                                label="Re {}-{}".format(ant1, ant2))
                 axes[i, j].axvline(0.0, lw=1, color='r')
                 axes[i, j].set_xticks(ticks)
+                legend = axes[i, j].legend(fontsize='small')
                 j += 1
                 # Plot first row first
                 if j // nrows > 0:
@@ -142,7 +157,9 @@ class Bootstrap(object):
                     i += 1
                     j = 0
                 bins = min([10, np.sqrt(len(res.imag))])
-                axes[i, j].hist(res.imag, range=vis_range, color="#4682b4")
+                axes[i, j].hist(res.imag, range=vis_range, color="#4682b4",
+                                label="Im {}-{}".format(ant1, ant2))
+                legend = axes[i, j].legend(fontsize='small')
                 axes[i, j].axvline(0.0, lw=1, color='r')
                 axes[i, j].set_xticks(ticks)
                 j += 1

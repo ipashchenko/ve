@@ -9,7 +9,14 @@ import matplotlib as mpl
 import string
 from math import floor
 from scipy import optimize
+from scipy.stats import scoreatpercentile
 from sklearn.mixture import GMM
+from sklearn.grid_search import GridSearchCV
+from sklearn.neighbors import KernelDensity
+from sklearn import svm
+from sklearn.covariance import EllipticEnvelope, MinCovDet
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import StandardScaler
 try:
     # Python 3 moved reduce to the functools module
     from functools import reduce
@@ -74,6 +81,102 @@ def fit_2d_gmm(cdata, n_max=5):
     n_mixture = sorted(clf_dict, key=lambda x: clf_dict[x].bic(reim))[0]
     print "Best n_mixture = {}".format(n_mixture)
     return clf_dict[n_mixture]
+
+
+def fit_2d_kde(cdata):
+    """
+    Fit 2D density, representing number of points on complex plane with gaussian
+    KDE.
+
+    :param cdata:
+        Complex numpy array.
+    :return:
+        Instance of ``sklearn.neighbors.KernelDensity`` class with best density
+        estimate choosen by 5-fold CV.
+    """
+
+    re = cdata.real
+    im = cdata.imag
+    reim = np.vstack((re, im)).T
+    params = {'bandwidth': np.logspace(-3, 1, 10)}
+    grid = GridSearchCV(KernelDensity(), params, cv=5)
+    grid.fit(reim)
+
+    return grid.best_estimator_
+
+
+def find_outliers_2d_svm(data, outliers_fraction):
+    """
+    Found outliers in complex data using one class SVM.
+
+    :param data:
+        Complex numpy array.
+    :param outliers_fraction:
+        Fraction of outliers suggested.
+    :return:
+        Boolean numpy array with outliers.
+    """
+    re = data.real
+    im = data.imag
+    reim = np.vstack((re, im)).T
+    clf = svm.OneClassSVM(nu=outliers_fraction,
+                          kernel='rbf', gamma=0.1)
+    clf.fit(reim)
+    y_pred = clf.decision_function(reim).ravel()
+    threshold = scoreatpercentile(y_pred,
+                                  100 * outliers_fraction)
+    return y_pred < threshold
+
+
+def find_outliers_2d_mincov(data, mahalanobis_max):
+    """
+    Found outliers in complex data using Minimum Covariance Determinant.
+
+    :param data:
+        Complex numpy array.
+    :param mahalanobis_max:
+        Maximum mahalanobis distance to count data point as outlier.
+    :return:
+        Boolean numpy array with outliers.
+    """
+    re = data.real
+    im = data.imag
+    reim = np.vstack((re, im)).T
+    clf = MinCovDet().fit(reim)
+    mahalanobis_dist = clf.mahalanobis(reim)
+
+    return mahalanobis_dist > mahalanobis_max
+
+
+def find_outliers_2d_dbscan(data, eps, min_samples):
+    """
+    Found outliers in complex data using DBSCAN clustering algorithm.
+
+    :param data:
+        Complex numpy array.
+    :param eps:
+        The maximum distance between two samples for them to be considered as in
+        the same neighborhood.
+    :param min_samples:
+        The number of samples (or total weight) in a neighborhood for a point to
+        be considered as a core point. This includes the point itself.
+
+    :return:
+        Boolean numpy array with outliers.
+
+    :note:
+        Common sense suggests that ``min_samples`` parameter should be ~ the
+        number of visibilities in one scan (~15) if outliers are searched in
+        baseline data. If outliers are searched in single scan's data then it
+        is also should be the number of scan's visibilities.
+    """
+    re = data.real
+    im = data.imag
+    reim = np.vstack((re, im)).T
+    X = StandardScaler().fit_transform(reim)
+    db = DBSCAN(eps=eps, min_samples=min_samples, algorithm='brute').fit(X)
+
+    return db.labels_ == -1
 
 
 def make_ellipses(gmm, ax, colors="rgbyk"):

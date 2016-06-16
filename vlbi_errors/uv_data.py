@@ -521,10 +521,10 @@ class UVData(object):
             Use IF-averaged data for calculating noise? (default: ``False``)
 
         :return:
-            Dictionary with keys that are baseline numbers and values are
-            arrays of noise std for each IF (if ``use_V==True``), or array with
-            shape (#stokes, #if) with noise std values for each IF for each
-            stokes parameter (eg. RR, LL, ...).
+            Dictionary with keys - baseline numbers & values - arrays of shape
+            ([#scans], [#IF], [#stokes]). It means (#scans, #IF) if
+            ``split_scans=True`` & ``use_V=True``, (#IF, #stokes) if
+            ``split_scans=False`` & ``use_V=False`` etc.
         """
         baselines_noises = dict()
         if use_V:
@@ -1022,6 +1022,7 @@ class UVData(object):
 
         return sum(baselines_cv_scores)
 
+    # TODO: Use for-cycle on baseline indexes
     def substitute(self, models, baselines=None):
         """
         Method that substitutes visibilities of ``self`` with model values.
@@ -1324,8 +1325,9 @@ class UVData(object):
 
 if __name__ == '__main__':
     import os
-    data_dir = '/home/ilya/Dropbox/vlbi_errors/test_data/misha_1253/'
-    uvdata = UVData(os.path.join(data_dir, '1253-055.Q1.2010_01_26.UV_CAL'))
-    noises = uvdata.noise(split_scans=True, use_V=False, average_freq=True)
+    data_dir = '/home/ilya/code/vlbi_errors/bin'
+    uvdata = UVData(os.path.join(data_dir, '0125+487_L.uvf_difmap'))
+    noises = uvdata.noise(split_scans=False, use_V=True, average_freq=True)
     for bl in uvdata.baselines:
         print np.shape(noises[bl])
+    print noises

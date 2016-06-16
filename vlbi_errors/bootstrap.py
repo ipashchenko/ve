@@ -714,7 +714,11 @@ class CleanBootstrap(Bootstrap):
                                               sample[len(to_add):])
                         else:
                             kde = self._residuals_fits_scans[baseline][i][if_][stokes]
-                            sample = kde.sample(len(to_add))
+                            # If no KDE was fitted for some IF/Stokes - pass it
+                            try:
+                                sample = kde.sample(len(to_add))
+                            except AttributeError:
+                                continue
                             sample = sample[:, 0] + 1j * sample[:, 1]
 
                         to_add[:, if_, stokes] = sample

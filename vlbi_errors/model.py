@@ -6,6 +6,7 @@ from stats import LnPost
 from components import CGComponent, EGComponent, DeltaComponent
 from utils import get_hdu_from_hdulist, get_fits_image_info_from_hdulist,\
     degree_to_mas
+import matplotlib
 
 try:
     import pylab
@@ -138,7 +139,7 @@ class Model(object):
             ft += component.ft(uv)
         return ft
 
-    def uvplot(self, uv, style='a&p', sym='.r'):
+    def uvplot(self, uv, style='a&p', sym='.r', fig=None):
         """
         Plot FT of model (visibilities) vs uv-radius.
         """
@@ -154,15 +155,25 @@ class Model(object):
             raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
 
         uv_radius = np.sqrt(uv[:, 0] ** 2 + uv[:, 1] ** 2)
-        pylab.subplot(2, 1, 1)
-        pylab.plot(uv_radius, a2, sym)
+        if fig is None:
+            fig, axes = matplotlib.pyplot.subplots(nrows=2, ncols=1, sharex=True,
+                                                   sharey=False)
+        else:
+            axes = fig.get_axes()
+
+        axes[0].plot(uv_radius, a2, sym)
         if style == 'a&p':
-            pylab.ylim([0., 1.3 * max(a2)])
-        pylab.subplot(2, 1, 2)
-        pylab.plot(uv_radius, a1, sym)
+            axes[0].set_ylim([0., 1.3 * max(a2)])
+            axes[0].set_ylabel('Re, [Jy]')
+            axes[1].set_ylabel('Im, [Jy]')
+        axes[1].plot(uv_radius, a1, sym)
         if style == 'a&p':
-            pylab.ylim([-math.pi, math.pi])
-        pylab.show()
+            axes[1].set_ylim([-math.pi, math.pi])
+            axes[0].set_ylabel('Amplitude, [Jy]')
+            axes[1].set_ylabel('Phase, [rad]')
+        matplotlib.pyplot.xlabel('UV-radius, wavelengths')
+        fig.show()
+        return fig
 
     @property
     def p(self):

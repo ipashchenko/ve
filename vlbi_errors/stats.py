@@ -53,7 +53,7 @@ class CrossValidation(object):
                 model = Model()
                 model.add_from_txt(models[j], stoke=stokes)
                 print "using test file " + str(testfile)
-                data = create_uvdata_from_fits_file(testfile)
+                data = UVData(testfile)
                 cv_score = data.cv_score(model, stokes=stokes)
                 print "cv_score for one testing sample is " + str(cv_score)
                 cv_scores.append(cv_score)
@@ -165,26 +165,34 @@ class LnPost(object):
 if __name__ == '__main__':
     # Test LS_estimates
     import sys
-    from from_fits import create_uvdata_from_fits_file
-    from components import CGComponent
+    from components import CGComponent, EGComponent
+    from uv_data import UVData
     from model import Model
     try:
         from scipy.optimize import minimize, fmin
     except ImportError:
         sys.exit("install scipy for ml estimation")
-    uv_fname = '1633+382.l22.2010_05_21.uvf'
-    uvdata = create_uvdata_from_fits_file(uv_fname)
+    uv_fname = '/home/ilya/vlbi_errors/examples/L/1633+382/1633+382.l18.2010_05_21.uvf'
+    uvdata = UVData(uv_fname)
     # Create model
-    cg1 = CGComponent(1.0, 0.0, 0.0, 1.)
+    cg1 = EGComponent(1.0, -0.8, 0.2, .7, 0.5, 0)
+    cg2 = CGComponent(0.8, 2.0, -.3, 2.3)
+    cg3 = CGComponent(0.2, 5.0, .0, 2.)
     mdl = Model(stokes='I')
-    mdl.add_component(cg1)
+    mdl.add_components(cg1, cg2, cg3)
     # Create log of likelihood function
     lnlik = LnLikelihood(uvdata, mdl, average_freq=True, amp_only=False)
     # Nelder-Mead simplex algorithm
     p_ml = fmin(lambda p: -lnlik(p), mdl.p)
     # Various methods of minimization (some require jacobians)
     # TODO: Implement analitical grad of likelihood (it's gaussian)
-    fit = minimize(lambda p: -lnlik(p), mdl.p, method='Nelder-Mead')
+    fit = minimize(lambda p: -lnlik(p), mdl.p, method='L-BFGS-B',
+                   options={'maxiter': 30000, 'maxfev': 1000000, 'xtol': 0.001,
+                            'ftol': 0.001, 'approx_grad': True},
+                   bounds=[(0., 2), (None, None), (None, None), (0., +np.inf),
+                           (0., 1.), (None, None),
+                           (0., 2), (None, None), (None, None), (0., 5),
+                           (0., 1), (None, None), (None, None), (0., 20)])
     if fit['success']:
         print "Succesful fit!"
         p_ml = fit['x']

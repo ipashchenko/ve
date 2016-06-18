@@ -616,8 +616,8 @@ class UVData(object):
             Use IF-averaged data for calculating errors? (default: ``False``)
 
         :return:
-            Numpy.ndarray with shape (#N, #IF, #stokes,) that repeats the shape
-            of self.data['hands'] array.
+            Numpy.ndarray with shape (#N, #IF, #stokes,) where #N - number of
+            groups.
         """
         if self._error is None:
             noise_dict = self.noise(use_V=False, split_scans=False,
@@ -629,7 +629,7 @@ class UVData(object):
                 self._error = np.empty((len(self.uvdata), self.nstokes,),
                                        dtype=float)
 
-            for i, baseline in enumerate(self.data['baseline']):
+            for i, baseline in enumerate(self.hdu.data['BASELINE']):
                 self._error[i] = noise_dict[baseline]
 
         return self._error

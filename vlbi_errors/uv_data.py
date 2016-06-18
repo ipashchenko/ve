@@ -1105,7 +1105,8 @@ class UVData(object):
     # TODO: implement antennas/baselines arguments as in ``uv_coverage``.
     def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p',
                freq_average=False, sym=None, phase_range=None, amp_range=None,
-               re_range=None, im_range=None, colors=None, color='#4682b4'):
+               re_range=None, im_range=None, colors=None, color='#4682b4',
+               fig=None):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
 
@@ -1153,8 +1154,12 @@ class UVData(object):
         else:
             raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
 
-        fig, axes = matplotlib.pyplot.subplots(nrows=2, ncols=1, sharex=True,
-                                               sharey=False)
+        if fig is None:
+            fig, axes = matplotlib.pyplot.subplots(nrows=2, ncols=1, sharex=True,
+                                                   sharey=False)
+        else:
+            axes = fig.get_axes()
+
         if not freq_average:
             # # of chosen IFs
             # TODO: Better use len(IF) if ``data`` shape will change sometimes.
@@ -1224,6 +1229,7 @@ class UVData(object):
                     axes[1].set_ylim(im_range)
 
             fig.show()
+        return fig
 
     def uvplot_model(self, model, baselines=None, stokes=None, style='a&p'):
         """

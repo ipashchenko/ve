@@ -481,7 +481,7 @@ class UVData(object):
         :return:
             Dictionary with keys that are baseline numbers and values are
             arrays of noise std for each IF (if ``use_V==True``), or array with
-            shape (#stokes, #if) with noise std values for each IF for each
+            shape (#if, #stokes) with noise std values for each IF for each
             stokes parameter (eg. RR, LL, ...).
         """
         baselines_noises = dict()
@@ -601,9 +601,8 @@ class UVData(object):
                 self.uvdata[bl_indxs] = baseline_uvdata
         self.sync()
 
-    # TODO: Calculate noise also by differences optionally of if only one
-    # parallel hand is available and V can't be calculated
-    def error(self, average_freq=False):
+    # TODO: Optionally calculate noise by scans.
+    def error(self, average_freq=False, use_V=True):
         """
         Shortcut for error associated with each visibility.
 
@@ -614,13 +613,16 @@ class UVData(object):
 
         :param average_freq: (optional)
             Use IF-averaged data for calculating errors? (default: ``False``)
+        :param use_V: (optional)
+            Boolean. Calculate noise using Stokes `V` or successive differences?
+            (default: ``True``)
 
         :return:
-            Numpy.ndarray with shape (#N, #IF, #stokes,) where #N - number of
+            Numpy.ndarray with shape (#N, [#IF,] #stokes,) where #N - number of
             groups.
         """
         if self._error is None:
-            noise_dict = self.noise(use_V=False, split_scans=False,
+            noise_dict = self.noise(use_V=use_V, split_scans=False,
                                     average_freq=average_freq)
             if not average_freq:
                 self._error = np.empty((len(self.uvdata), self.nif,
@@ -630,6 +632,9 @@ class UVData(object):
                                        dtype=float)
 
             for i, baseline in enumerate(self.hdu.data['BASELINE']):
+                # FIXME: Until ``UVData.noise`` always returns (#, [#IF],
+                # #Stokes) even for ``use_V=True`` - i must repeat array for
+                # each Stokes if ``use_V=True`` is used!
                 self._error[i] = noise_dict[baseline]
 
         return self._error
@@ -1285,7 +1290,9 @@ class UVData(object):
 
 
 if __name__ == '__main__':
-    fname = '/home/ilya/sandbox/heteroboot/0945+408.u.2007_04_18.uvf'
+    uv_fname = '/home/ilya/vlbi_errors/examples/L/1633+382/1633+382.l18.2010_05_21.uvf'
+    uvdata = UVData(uv_fname)
+    # fname = '/home/ilya/sandbox/heteroboot/0945+408.u.2007_04_18.uvf'
     # uvdata = UVData(fname)
     # uvdata.uvplot(style='re&im', freq_average=True)
     # uvdata.uvplot(style='re&im')

@@ -331,7 +331,9 @@ class CleanBootstrap(Bootstrap):
 
         # TODO: Put this to method
         noise_residuals = self.data.noise(split_scans=split_scans, use_V=use_V)
-        # To make ``noise_residuals`` shape (nstokes, nif,)
+        # FIXME: RM this if UVData.noise returns (nif, nstokes) even for
+        # use_V=True
+        # To make ``noise_residuals`` shape (nif, nstokes)
         if use_V:
             nstokes = self.residuals.nstokes
             for key, value in noise_residuals.items():

@@ -148,6 +148,7 @@ def find_outliers_2d_mincov(data, mahalanobis_max):
     return mahalanobis_dist > mahalanobis_max
 
 
+# FIXME: Choose ``eps`` using robust std estimate
 def find_outliers_2d_dbscan(data, eps, min_samples):
     """
     Found outliers in complex data using DBSCAN clustering algorithm.

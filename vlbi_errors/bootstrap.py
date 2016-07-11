@@ -860,9 +860,9 @@ if __name__ == "__main__":
     model = Model(stokes='I')
     model.add_components(*comps)
     boot = CleanBootstrap([model], uvdata)
-    boot.run(10, nonparametric=False, split_scans=True,
-             recenter=True, combine_scans=False, use_kde=True,
-             use_V=True)
+    # boot.run(10, nonparametric=False, split_scans=True,
+    #          recenter=True, combine_scans=False, use_kde=True,
+    #          use_V=True)
 
 
     # # Self-calibration bootstrap

@@ -1225,9 +1225,17 @@ class UVData(object):
 
             for _if in range(n_if):
                 # TODO: plot in different colors and make a legend
-                axes[0].plot(uv_radius, a2[:, _if], syms[_if], color=color)
+                # Ignore default color if colors list is supplied
+                if colors is not None:
+                    axes[0].plot(uv_radius, a2[:, _if], syms[_if])
+                else:
+                    axes[0].plot(uv_radius, a2[:, _if], syms[_if], color=color)
             for _if in range(n_if):
-                axes[1].plot(uv_radius, a1[:, _if], syms[_if], color=color)
+                # Ignore default color if colors list is supplied
+                if colors is not None:
+                    axes[1].plot(uv_radius, a1[:, _if], syms[_if])
+                else:
+                    axes[1].plot(uv_radius, a1[:, _if], syms[_if], color=color)
             if style == 'a&p':
                 axes[1].set_ylim([-math.pi, math.pi])
                 axes[0].set_ylabel('Amplitude, [Jy]')

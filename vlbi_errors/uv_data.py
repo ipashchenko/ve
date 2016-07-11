@@ -2,6 +2,8 @@ import math
 import copy
 import numpy as np
 import astropy.io.fits as pf
+from astropy.time import Time, TimeDelta
+from sklearn.cluster import DBSCAN
 from collections import OrderedDict
 from utils import (baselines_2_ants, index_of, get_uv_correlations,
                    find_card_from_header, get_key)
@@ -31,6 +33,7 @@ class UVData(object):
         self._uvdata = self.view_uvdata({'COMPLEX': 0}) +\
             1j * self.view_uvdata({'COMPLEX': 1})
         self._error = None
+        self._scans_bl = None
 
     @property
     def sample_size(self):
@@ -219,6 +222,15 @@ class UVData(object):
         return self.frequency + self.freq_width_if * (self.nif / 2. - 0.5)
 
     @property
+    def times(self):
+        """
+        Returns array of astropy.time.Time instances.
+        """
+        times = Time(self.hdu.data['DATE'] + self.hdu.data['_DATE'],
+                     format='jd')
+        return times.utc.datetime
+
+    @property
     def scans(self):
         """
         Returns list of times that separates different scans. If NX table is
@@ -250,7 +262,7 @@ class UVData(object):
     # FIXME: It would be better to output indexes of different scans for each
     # baselines
     @property
-    def scans_bl(self):
+    def __scans_bl(self):
         """
         Calculate scans for each baseline separately.
 
@@ -285,6 +297,36 @@ class UVData(object):
                 scans_dict.update({bl: np.asarray(scans_list)})
 
         return scans_dict
+
+    @property
+    def scans_bl(self):
+        if self._scans_bl is None:
+            scans_dict = dict()
+            for bl in self.baselines:
+                bl_scans = list()
+                bl_indxs = self._choose_uvdata(baselines=bl, indx_only=True)[1]
+                # JD-formated times for current baseline
+                bl_times = self.hdu.data['DATE'][bl_indxs] +\
+                           self.hdu.data['_DATE'][bl_indxs]
+                bl_times = bl_times.reshape((bl_times.size, 1))
+                db = DBSCAN(eps=TimeDelta(100., format='sec').jd, min_samples=10,
+                            leaf_size=5).fit(bl_times)
+                core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
+                core_samples_mask[db.core_sample_indices_] = True
+                labels = db.labels_
+                if -1 in set(labels):
+                    ant1, ant2 = baselines_2_ants([bl])
+                    print "Non-typical scan structure for baseline" \
+                          " {}-{}".format(ant1, ant2)
+                    scans_dict[bl] = None
+                else:
+                    bl_indxs_ = np.array(bl_indxs, dtype=int)
+                    bl_indxs_[bl_indxs] = labels + 1
+                    for i in set(labels):
+                        bl_scans.append(bl_indxs_ == i + 1)
+                    scans_dict[bl] = bl_scans
+            self._scans_bl = scans_dict
+        return self._scans_bl
 
     @property
     def uvw(self):
@@ -479,10 +521,10 @@ class UVData(object):
             Use IF-averaged data for calculating noise? (default: ``False``)
 
         :return:
-            Dictionary with keys that are baseline numbers and values are
-            arrays of noise std for each IF (if ``use_V==True``), or array with
-            shape (#if, #stokes) with noise std values for each IF for each
-            stokes parameter (eg. RR, LL, ...).
+            Dictionary with keys - baseline numbers & values - arrays of shape
+            ([#scans], [#IF], [#stokes]). It means (#scans, #IF) if
+            ``split_scans=True`` & ``use_V=True``, (#IF, #stokes) if
+            ``split_scans=False`` & ``use_V=False`` etc.
         """
         baselines_noises = dict()
         if use_V:
@@ -502,23 +544,24 @@ class UVData(object):
                 # Use each scan
                 for baseline in self.baselines:
                     baseline_noise = list()
-                    for scan in self.scans_bl[baseline]:
-                        # (#obs in scan, #nif, #nstokes,)
-                        scan_baseline_uvdata = self._choose_uvdata(baselines=baseline,
-                                                                   times=(scan[0],
-                                                                          scan[1],))[0]
-                        if average_freq:
-                            # (#obs in scan, #nstokes,)
-                            scan_baseline_uvdata = np.mean(scan_baseline_uvdata,
-                                                           axis=1)
-                        v = (scan_baseline_uvdata[..., 0] -
-                             scan_baseline_uvdata[..., 1]).real
-                        mask = ~np.isnan(v)
-                        scan_noise = np.asarray(np.std(np.ma.array(v,
-                                                                   mask=np.invert(mask)).data,
-                                                       axis=0))
-                        baseline_noise.append(scan_noise)
-                    baselines_noises[baseline] = np.asarray(baseline_noise)
+                    try:
+                        for scan_bl_indxs in self.scans_bl[baseline]:
+                            # (#obs in scan, #nif, #nstokes,)
+                            scan_baseline_uvdata = self.uvdata[scan_bl_indxs]
+                            if average_freq:
+                                # (#obs in scan, #nstokes,)
+                                scan_baseline_uvdata = np.mean(scan_baseline_uvdata,
+                                                               axis=1)
+                            v = (scan_baseline_uvdata[..., 0] -
+                                 scan_baseline_uvdata[..., 1]).real
+                            mask = ~np.isnan(v)
+                            scan_noise = np.asarray(np.std(np.ma.array(v,
+                                                                       mask=np.invert(mask)).data,
+                                                           axis=0))
+                            baseline_noise.append(scan_noise)
+                        baselines_noises[baseline] = np.asarray(baseline_noise)
+                    except TypeError:
+                        baselines_noises[baseline] = None
 
         else:
             if not split_scans:
@@ -537,26 +580,27 @@ class UVData(object):
                 # Use each scan
                 for baseline in self.baselines:
                     baseline_noise = list()
-                    for scan in self.scans_bl[baseline]:
-                        # shape = (#obs in scan, #nif, #nstokes,)
-                        scan_baseline_uvdata = self._choose_uvdata(baselines=baseline,
-                                                                   times=(scan[0],
-                                                                          scan[1],))[0]
-                        if average_freq:
-                            # shape = (#obs in scan, #nstokes,)
-                            scan_baseline_uvdata = np.mean(scan_baseline_uvdata,
-                                                           axis=1)
-                        # (#obs in scan, #nif, #nstokes,)
-                        differences = (scan_baseline_uvdata[:-1, ...] -
-                                       scan_baseline_uvdata[1:, ...])
-                        mask = ~np.isnan(differences)
-                        # (nif, nstokes,)
-                        scan_noise = np.asarray([np.std(np.ma.array(differences,
-                                                                    mask=np.invert(mask)).real[..., i],
-                                                        axis=0) for i in
-                                                 range(self.nstokes)]).T
-                        baseline_noise.append(scan_noise)
-                    baselines_noises[baseline] = np.asarray(baseline_noise)
+                    try:
+                        for scan_bl_indxs in self.scans_bl[baseline]:
+                            # (#obs in scan, #nif, #nstokes,)
+                            scan_baseline_uvdata = self.uvdata[scan_bl_indxs]
+                            if average_freq:
+                                # shape = (#obs in scan, #nstokes,)
+                                scan_baseline_uvdata = np.mean(scan_baseline_uvdata,
+                                                               axis=1)
+                            # (#obs in scan, #nif, #nstokes,)
+                            differences = (scan_baseline_uvdata[:-1, ...] -
+                                           scan_baseline_uvdata[1:, ...])
+                            mask = ~np.isnan(differences)
+                            # (nif, nstokes,)
+                            scan_noise = np.asarray([np.std(np.ma.array(differences,
+                                                                        mask=np.invert(mask)).real[..., i],
+                                                            axis=0) for i in
+                                                     range(self.nstokes)]).T
+                            baseline_noise.append(scan_noise)
+                        baselines_noises[baseline] = np.asarray(baseline_noise)
+                    except TypeError:
+                        baselines_noises[baseline] = None
 
         return baselines_noises
 
@@ -983,6 +1027,7 @@ class UVData(object):
 
         return sum(baselines_cv_scores)
 
+    # TODO: Use for-cycle on baseline indexes
     def substitute(self, models, baselines=None):
         """
         Method that substitutes visibilities of ``self`` with model values.
@@ -1190,9 +1235,17 @@ class UVData(object):
 
             for _if in range(n_if):
                 # TODO: plot in different colors and make a legend
-                axes[0].plot(uv_radius, a2[:, _if], syms[_if], color=color)
+                # Ignore default color if colors list is supplied
+                if colors is not None:
+                    axes[0].plot(uv_radius, a2[:, _if], syms[_if])
+                else:
+                    axes[0].plot(uv_radius, a2[:, _if], syms[_if], color=color)
             for _if in range(n_if):
-                axes[1].plot(uv_radius, a1[:, _if], syms[_if], color=color)
+                # Ignore default color if colors list is supplied
+                if colors is not None:
+                    axes[1].plot(uv_radius, a1[:, _if], syms[_if])
+                else:
+                    axes[1].plot(uv_radius, a1[:, _if], syms[_if], color=color)
             if style == 'a&p':
                 axes[1].set_ylim([-math.pi, math.pi])
                 axes[0].set_ylabel('Amplitude, [Jy]')
@@ -1290,16 +1343,10 @@ class UVData(object):
 
 
 if __name__ == '__main__':
-    uv_fname = '/home/ilya/vlbi_errors/examples/L/1633+382/1633+382.l18.2010_05_21.uvf'
-    uvdata = UVData(uv_fname)
-    # fname = '/home/ilya/sandbox/heteroboot/0945+408.u.2007_04_18.uvf'
-    # uvdata = UVData(fname)
-    # uvdata.uvplot(style='re&im', freq_average=True)
-    # uvdata.uvplot(style='re&im')
-    # uvdata.uvplot(style='a&p', freq_average=True)
-    # uvdata.uvplot(style='a&p', IF=[1, 2], freq_average=True)
-    # uvdata.uvplot(style='a&p', amp_range=[0, 2], phase_range=[-0.5, 0.5],
-    #               colors=['b', 'g', 'r', 'y'], baselines=uvdata.baselines[:4])
-    # uvdata.uvplot(style='a&p', amp_range=[0, 2], phase_range=[-0.5, 0.5],
-    #               colors=['b', 'g', 'r', 'y'], baselines=uvdata.baselines[:4],
-    #               IF=[1, 2])
+    import os
+    data_dir = '/home/ilya/code/vlbi_errors/bin'
+    uvdata = UVData(os.path.join(data_dir, '0125+487_L.uvf_difmap'))
+    noises = uvdata.noise(split_scans=False, use_V=True, average_freq=True)
+    for bl in uvdata.baselines:
+        print np.shape(noises[bl])
+    print noises

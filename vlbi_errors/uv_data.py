@@ -35,6 +35,37 @@ class UVData(object):
         self._error = None
         self._scans_bl = None
 
+        # Dictionary with keys - baselines & values - boolean numpy arrays or
+        # lists of boolean numpy arrays with indexes of that baseline (or it's
+        # scans) in ``UVData.uvdata`` array
+        self._indxs_baselines = dict()
+        self._indxs_baselines_scans = dict()
+        # Dictionary with keys - baselines & values - tuples or lists of tuples
+        # of shapes of part for that baseline (or it's scans) in
+        # ``UVData.uvdata`` array
+        self._shapes_baselines = dict()
+        self._shapes_baselines_scans = dict()
+        self._get_baselines_info()
+
+    def _get_baselines_info(self):
+        """
+        Count indexes of visibilities on each single baseline (for single IF &
+        Stokes) in ``uvdata`` array.
+        """
+        self._indxs_baselines_scans = self.scans_bl
+        for baseline in self.baselines:
+            bl_data, indxs = self._choose_uvdata(baselines=[baseline])
+            self._indxs_baselines[baseline] = indxs
+            self._shapes_baselines[baseline] = np.shape(bl_data)
+            self._shapes_baselines_scans[baseline] = list()
+            try:
+                for scan_indxs in self._indxs_baselines_scans[baseline]:
+                    bl_scan_data = self.uvdata[scan_indxs]
+                    self._shapes_baselines_scans[baseline].append(np.shape(bl_scan_data))
+            except TypeError:
+                print "Skipping baseline # {}".format(baseline)
+                pass
+
     @property
     def sample_size(self):
         raise NotImplementedError
@@ -524,7 +555,8 @@ class UVData(object):
             Dictionary with keys - baseline numbers & values - arrays of shape
             ([#scans], [#IF], [#stokes]). It means (#scans, #IF) if
             ``split_scans=True`` & ``use_V=True``, (#IF, #stokes) if
-            ``split_scans=False`` & ``use_V=False`` etc.
+            ``split_scans=False`` & ``use_V=False``, (#scans, #IF, #stokes) if
+             ``split_scans=True``, ``use_V=False`` & ``average_freq=False`` etc.
         """
         baselines_noises = dict()
         if use_V:
@@ -1346,7 +1378,4 @@ if __name__ == '__main__':
     import os
     data_dir = '/home/ilya/code/vlbi_errors/bin'
     uvdata = UVData(os.path.join(data_dir, '0125+487_L.uvf_difmap'))
-    noises = uvdata.noise(split_scans=False, use_V=True, average_freq=True)
-    for bl in uvdata.baselines:
-        print np.shape(noises[bl])
-    print noises
+    noises = uvdata.noise(split_scans=True, use_V=False, average_freq=False)

@@ -83,6 +83,25 @@ def fit_2d_gmm(cdata, n_max=5):
     return clf_dict[n_mixture]
 
 
+def fit_kde(data):
+    """
+    Fit 1D density, representing number of points (Re/Im of visibility) with
+    gaussian KDE.
+
+    :param data:
+        Numpy array.
+    :return:
+        Instance of ``sklearn.neighbors.KernelDensity`` class with best density
+        estimate choosen by 5-fold CV.
+    """
+
+    params = {'bandwidth': np.logspace(-3, 1, 10)}
+    grid = GridSearchCV(KernelDensity(), params, cv=5)
+    grid.fit(data[:, np.newaxis])
+
+    return grid.best_estimator_
+
+
 def fit_2d_kde(cdata):
     """
     Fit 2D density, representing number of points on complex plane with gaussian
@@ -175,6 +194,37 @@ def find_outliers_2d_dbscan(data, eps, min_samples):
     im = data.imag
     reim = np.vstack((re, im)).T
     X = StandardScaler().fit_transform(reim)
+    db = DBSCAN(eps=eps, min_samples=min_samples, algorithm='brute').fit(X)
+
+    return db.labels_ == -1
+
+
+# FIXME: Choose ``eps`` using robust std estimate
+def find_outliers_dbscan(data, eps, min_samples):
+    """
+    Found outliers in real/imag data using DBSCAN clustering algorithm.
+
+    :param data:
+        Numpy array with real/imaginary visibility parts.
+    :param eps:
+        The maximum distance between two samples for them to be considered as in
+        the same neighborhood.
+    :param min_samples:
+        The number of samples (or total weight) in a neighborhood for a point to
+        be considered as a core point. This includes the point itself.
+
+    :return:
+        Boolean numpy array with outliers.
+
+    :note:
+        Common sense suggests that ``min_samples`` parameter should be ~ the
+        number of visibilities in one scan (~15) if outliers are searched in
+        baseline data. If outliers are searched in single scan's data then it
+        is also should be the number of scan's visibilities.
+    """
+    data = np.asarray(data)
+    data = data.reshape(-1, 1)
+    X = StandardScaler().fit_transform(data)
     db = DBSCAN(eps=eps, min_samples=min_samples, algorithm='brute').fit(X)
 
     return db.labels_ == -1

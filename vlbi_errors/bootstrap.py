@@ -3,7 +3,7 @@ import numpy as np
 from gains import Absorber
 from utils import (fit_2d_gmm, vcomplex, nested_ddict, make_ellipses,
                    baselines_2_ants, find_outliers_2d_mincov,
-                   find_outliers_2d_svm, find_outliers_2d_dbscan)
+                   find_outliers_2d_dbscan, find_outliers_dbscan, fit_kde)
 import matplotlib
 matplotlib.use('Agg')
 label_size = 6
@@ -39,17 +39,6 @@ class Bootstrap(object):
         # instances of ``sklearn.neighbors.KernelDensity`` class fitted on the
         # residuals (Re&Im)
         self._residuals_fits_scans = nested_ddict()
-        # Dictionary with keys - baselines & values - boolean numpy arrays with
-        # indexes of that baseline in ``UVData.uvdata`` array
-        self._indxs_visibilities = dict()
-        # Dictionary with keys - baselines & values - lists of boolean numpy
-        # arrays with indexes of scans for that baseline in ``UVData.uvdata``
-        # array
-        self._indxs_visibilities_scans = dict()
-        # Dictionary with keys - baselines & values - shapes of part for that
-        # baseline in ``UVData.uvdata`` array
-        self._shapes_visibilities = dict()
-        self._shapes_visibilities_scans = dict()
         # Dictionary with keys - baselines & values - tuples with centers of
         # real & imag residuals for that baseline
         self._residuals_centers = nested_ddict()
@@ -60,7 +49,6 @@ class Bootstrap(object):
         # Dictionary with keys - baseline, #scan, #IF, #Stokes and value -
         # boolean numpy array with outliers
         self._residuals_outliers_scans = nested_ddict()
-        self.get_baselines_info()
 
     def get_residuals(self):
         """
@@ -70,29 +58,194 @@ class Bootstrap(object):
         """
         raise NotImplementedError
 
-    # TODO: This should be in ``UVData`` class!
-    def get_baselines_info(self):
-        """
-        Count indexes of visibilities on each single baseline (for single IF &
-        Stokes) in ``uvdata`` array.
-        """
-        self._indxs_visibilities_scans = self.residuals.scans_bl
+    def plot_residuals_trio(self, split_scans=True, freq_average=False, IF=None,
+                            stokes=['RR']):
+        if IF is None:
+            IF = range(self.residuals.nif)
+        if stokes is None:
+            stokes = range(self.residuals.nstokes)
+        else:
+            stokes_list = list()
+            for stoke in stokes:
+                print "Parsing {}".format(stoke)
+                print self.residuals.stokes
+                stokes_list.append(self.residuals.stokes.index(stoke))
+            stokes = stokes_list
+
+        print "Plotting IFs {}".format(IF)
+        print "Plotting Stokes {}".format(stokes)
+
         for baseline in self.residuals.baselines:
-            bl_data, indxs = self.residuals._choose_uvdata(baselines=[baseline])
-            self._indxs_visibilities[baseline] = indxs
-            self._shapes_visibilities[baseline] = np.shape(bl_data)
-            self._shapes_visibilities_scans[baseline] = list()
-            try:
-                for scan_indxs in self._indxs_visibilities_scans[baseline]:
-                    bl_scan_data = self.residuals.uvdata[scan_indxs]
-                    self._shapes_visibilities_scans[baseline].append(np.shape(bl_scan_data))
-            except TypeError:
-                print "Skipping baseline # {}".format(baseline)
-                pass
+            print baseline
+            ant1, ant2 = baselines_2_ants([baseline])
+
+            if split_scans:
+                try:
+                    for i, indxs in enumerate(self.residuals._indxs_baselines_scans[baseline]):
+                        # Complex (#, #IF, #stokes)
+                        data = self.residuals.uvdata[indxs]
+
+                        if freq_average:
+                            raise NotImplementedError
+                            # # FIXME: Aberage w/o outliers
+                            # # Complex (#, #stokes)
+                            # data = np.mean(data, axis=1)
+                            # for stoke in stokes:
+                            #     # Complex 1D array to plot
+                            #     data_ = data[:, stoke]
+                            #     fig, axes = matplotlib.pyplot.subplots(nrows=2,
+                            #                                            ncols=2)
+                            #     matplotlib.pyplot.rcParams.update({'axes.titlesize':
+                            #                                         'small'})
+                            #     axes[1, 0].plot(data_.real, data_.imag, '.k')
+                            #     axes[1, 0].axvline(0.0, lw=0.2, color='g')
+                            #     axes[1, 0].axhline(0.0, lw=0.2, color='g')
+                            #     axes[0, 0].hist(data_.real, bins=10,
+                            #                     label="Re {}-{}".format(ant1, ant2),
+                            #                     color="#4682b4")
+                            #     legend = axes[0, 0].legend(fontsize='small')
+                            #     axes[0, 0].axvline(0.0, lw=1, color='g')
+                            #     axes[1, 1].hist(data_.imag, bins=10, color="#4682b4",
+                            #                     orientation='horizontal',
+                            #                     label="Im {}-{}".format(ant1, ant2))
+                            #     legend = axes[1, 1].legend(fontsize='small')
+                            #     axes[1, 1].axhline(0.0, lw=1, color='g')
+                            #     fig.savefig("res_2d_bl{}_st{}_scan_{}".format(baseline, stoke, i),
+                            #                 bbox_inches='tight', dpi=400)
+                            #     matplotlib.pyplot.close()
+                        else:
+                            for IF_ in IF:
+                                for stoke in stokes:
+                                    # Complex 1D array to plot
+                                    data_ = data[:, IF_, stoke]
+                                    data_out = data_[self._residuals_outliers_scans[baseline][i][IF_][stoke]]
+                                    fig, axes = matplotlib.pyplot.subplots(nrows=2,
+                                                                           ncols=2)
+                                    matplotlib.pyplot.rcParams.update({'axes.titlesize':
+                                                                           'small'})
+                                    axes[1, 0].plot(data_.real, data_.imag, '.k')
+                                    axes[1, 0].plot(data_out.real, data_out.imag, '.r')
+                                    try:
+                                        x_c, y_c = self._residuals_centers_scans[baseline][i][IF_][stoke]
+                                        axes[1, 0].plot(x_c, y_c, '.y')
+                                    except ValueError:
+                                        pass
+                                    axes[1, 0].axvline(0.0, lw=0.2, color='g')
+                                    axes[1, 0].axhline(0.0, lw=0.2, color='g')
+                                    axes[0, 0].hist(data_.real, bins=10,
+                                                    label="Re {}-{}".format(ant1, ant2),
+                                                    color="#4682b4")
+                                    legend = axes[0, 0].legend(fontsize='small')
+                                    axes[0, 0].axvline(0.0, lw=1, color='g')
+                                    axes[1, 1].hist(data_.imag, bins=10, color="#4682b4",
+                                                    orientation='horizontal',
+                                                    label="Im {}-{}".format(ant1, ant2))
+                                    legend = axes[1, 1].legend(fontsize='small')
+                                    axes[1, 1].axhline(0.0, lw=1, color='g')
+                                    fig.savefig("res_2d_bl{}_st{}_if{}_scan_{}".format(baseline, stoke, IF_, i),
+                                                bbox_inches='tight', dpi=400)
+                                    matplotlib.pyplot.close()
+                # If ``self.residuals._indxs_baselines_scans[baseline] = None``
+                except TypeError:
+                    continue
+            else:
+                indxs = self.residuals._indxs_baselines[baseline]
+                # Complex (#, #IF, #stokes)
+                data = self.residuals.uvdata[indxs]
+
+                if freq_average:
+                    raise NotImplementedError
+                    # # Complex (#, #stokes)
+                    # data = np.mean(data, axis=1)
+                    # print np.shape(data)
+                    # for stoke in stokes:
+                    #     # Complex 1D array to plot
+                    #     data_ = data[:, stoke]
+                    #     fig, axes = matplotlib.pyplot.subplots(nrows=2,
+                    #                                            ncols=2)
+                    #     matplotlib.pyplot.rcParams.update({'axes.titlesize':
+                    #                                            'small'})
+                    #     axes[1, 0].plot(data_.real, data_.imag, '.k')
+                    #     axes[1, 0].axvline(0.0, lw=0.2, color='g')
+                    #     axes[1, 0].axhline(0.0, lw=0.2, color='g')
+                    #     axes[0, 0].hist(data_.real, bins=20,
+                    #                     label="Re {}-{}".format(ant1, ant2),
+                    #                     color="#4682b4")
+                    #     legend = axes[0, 0].legend(fontsize='small')
+                    #     axes[0, 0].axvline(0.0, lw=1, color='g')
+                    #     axes[1, 1].hist(data_.imag, bins=20, color="#4682b4",
+                    #                     orientation='horizontal',
+                    #                     label="Im {}-{}".format(ant1, ant2))
+                    #     legend = axes[1, 1].legend(fontsize='small')
+                    #     axes[1, 1].axhline(0.0, lw=1, color='g')
+                    #     fig.savefig("res_2d_bl{}_st{}".format(baseline, stoke),
+                    #                 bbox_inches='tight', dpi=400)
+                    #     matplotlib.pyplot.close()
+                else:
+                    for IF_ in IF:
+                        for stoke in stokes:
+                            # Complex 1D array to plot
+                            data_ = data[:, IF_, stoke]
+                            data_out = data_[self._residuals_outliers[baseline][IF_][stoke]]
+                            fig, axes = matplotlib.pyplot.subplots(nrows=2,
+                                                                   ncols=2)
+                            matplotlib.pyplot.rcParams.update({'axes.titlesize':
+                                                                'small'})
+                            axes[1, 0].plot(data_.real, data_.imag, '.k')
+                            axes[1, 0].plot(data_out.real, data_out.imag, '.r')
+                            try:
+                                x_c, y_c = self._residuals_centers[baseline][IF_][stoke]
+                                axes[1, 0].plot(x_c, y_c, '.y')
+                            except ValueError:
+                                x_c, y_c = 0., 0.
+                            axes[1, 0].axvline(0.0, lw=0.2, color='g')
+                            axes[1, 0].axhline(0.0, lw=0.2, color='g')
+                            axes[0, 0].hist(data_.real, bins=20,
+                                            label="Re {}-{}".format(ant1, ant2),
+                                            color="#4682b4",
+                                            histtype='stepfilled', alpha=0.3,
+                                            normed=True)
+                            try:
+                                clf_re = self._residuals_fits[baseline][IF_][stoke][0]
+                                sample = np.linspace(np.min(data_.real) - x_c,
+                                                     np.max(data_.real) - x_c,
+                                                     1000)
+                                pdf = np.exp(clf_re.score_samples(sample[:, np.newaxis]))
+                                axes[0, 0].plot(sample + x_c, pdf, color='blue',
+                                                alpha=0.5, lw=2, label='kde')
+                            # ``AttributeError`` when no ``clf`` for that
+                            # baseline, IF, Stokes
+                            except (ValueError, AttributeError):
+                                pass
+                            legend = axes[0, 0].legend(fontsize='small')
+                            axes[0, 0].axvline(0.0, lw=1, color='g')
+                            axes[1, 1].hist(data_.imag, bins=20,
+                                            color="#4682b4",
+                                            orientation='horizontal',
+                                            histtype='stepfilled', alpha=0.3,
+                                            normed=True,
+                                            label="Im {}-{}".format(ant1, ant2))
+                            try:
+                                clf_im = self._residuals_fits[baseline][IF_][stoke][1]
+                                sample = np.linspace(np.min(data_.imag) + y_c,
+                                                     np.max(data_.imag) + y_c,
+                                                     1000)
+                                pdf = np.exp(clf_im.score_samples(sample[:, np.newaxis]))
+                                axes[1, 1].plot(pdf, sample - y_c, color='blue',
+                                                alpha=0.5, lw=2, label='kde')
+                            # ``AttributeError`` when no ``clf`` for that
+                            # baseline, IF, Stokes
+                            except (ValueError, AttributeError):
+                                pass
+                            legend = axes[1, 1].legend(fontsize='small')
+                            axes[1, 1].axhline(0.0, lw=1, color='g')
+                            fig.savefig("res_2d_bl{}_st{}_if{}".format(baseline, stoke, IF_),
+                                        bbox_inches='tight', dpi=400)
+                            matplotlib.pyplot.close()
 
     # FIXME: Choose ``gamma`` parameter of SVM using data?
     # FIXME: Search outliers in baseline data using GMM -1?
-    def find_outliers_in_residuals(self, split_scans, outliers_fraction_bl=0.05):
+    def find_outliers_in_residuals(self, split_scans=False):
         """
         Method that search outliers in residuals
 
@@ -107,6 +260,8 @@ class Bootstrap(object):
             if not split_scans:
                 for if_ in range(baseline_data.shape[1]):
                     for stokes in range(baseline_data.shape[2]):
+                        # Complex array with visibilities for given baseline,
+                        # #IF, Stokes
                         data = baseline_data[:, if_, stokes]
 
                         # If data are zeros
@@ -116,11 +271,12 @@ class Bootstrap(object):
                         print "Baseline {}, IF {}, Stokes {}".format(baseline,
                                                                      if_,
                                                                      stokes)
-                        # outliers = find_outliers_2d_svm(data, outliers_fraction_bl)
-                        outliers = find_outliers_2d_dbscan(data, 1.5, 15)
-                        self._residuals_outliers[baseline][if_][stokes] = outliers
-                        print "Found {} outliers of {}".format(np.count_nonzero(outliers),
-                                                               len(data))
+                        outliers_re = find_outliers_dbscan(data.real, 1., 5)
+                        outliers_im = find_outliers_dbscan(data.imag, 1., 5)
+                        outliers_1d = np.logical_or(outliers_re, outliers_im)
+                        outliers_2d = find_outliers_2d_dbscan(data, 1.5, 5)
+                        self._residuals_outliers[baseline][if_][stokes] =\
+                            np.logical_or(outliers_1d, outliers_2d)
 
             # If searching outliers on each scan
             else:
@@ -132,6 +288,8 @@ class Bootstrap(object):
                     scan_uvdata = self.residuals.uvdata[scan_indxs]
                     for if_ in range(scan_uvdata.shape[1]):
                         for stokes in range(scan_uvdata.shape[2]):
+                            # Complex array with visibilities for given
+                            # baseline, #scan, #IF, Stokes
                             data = scan_uvdata[:, if_, stokes]
                             # If data are zeros
                             if not np.any(data):
@@ -139,10 +297,12 @@ class Bootstrap(object):
 
                             print "Baseline {}, scan {}, IF {}," \
                                   " Stokes {}".format(baseline, i, if_, stokes)
-                            outliers = find_outliers_2d_mincov(data, 50)
-                            self._residuals_outliers_scans[baseline][i][if_][stokes] = outliers
-                            print "Found {} outliers of {}".format(np.count_nonzero(outliers),
-                                                                   len(data))
+                            outliers_re = find_outliers_dbscan(data.real, 1., 5)
+                            outliers_im = find_outliers_dbscan(data.imag, 1., 5)
+                            outliers_1d = np.logical_or(outliers_re, outliers_im)
+                            outliers_2d = find_outliers_2d_dbscan(data, 1.5, 5)
+                            self._residuals_outliers_scans[baseline][i][if_][stokes] = \
+                                np.logical_or(outliers_1d, outliers_2d)
 
     # TODO: Use only data without outliers
     def find_residuals_centers(self, split_scans):
@@ -239,6 +399,10 @@ class Bootstrap(object):
             At each baseline/scan residuals are fitted with Kernel Density
             Model.
         """
+        print "Fitting residuals"
+        if combine_scans:
+            raise NotImplementedError
+
         for baseline in self.residuals.baselines:
             # If fitting baseline data
             if not split_scans:
@@ -258,11 +422,13 @@ class Bootstrap(object):
                             x_c, y_c = self._residuals_centers[baseline][if_][stokes]
                             data -= x_c - 1j * y_c
                         try:
-                            clf = fit_2d_gmm(data)
+                            clf_re = fit_kde(data.real)
+                            clf_im = fit_kde(data.imag)
                         # This occurs when baseline has 1 point only
                         except ValueError:
                             continue
-                        self._residuals_fits[baseline][if_][stokes] = clf
+                        self._residuals_fits[baseline][if_][stokes] = (clf_re,
+                                                                       clf_im)
             # If fitting each scan independently
             else:
                 if self.residuals.scans_bl[baseline] is None:
@@ -282,11 +448,12 @@ class Bootstrap(object):
                                 x_c, y_c = self._residuals_centers_scans[baseline][i][if_][stokes]
                                 data -= x_c - 1j * y_c
                             try:
-                                clf = fit_2d_gmm(data)
+                                clf_re = fit_kde(data.real)
+                                clf_im = fit_kde(data.imag)
                             # This occurs when scan has 1 point only
                             except ValueError:
                                 continue
-                            self._residuals_fits_scans[baseline][i][if_][stokes] = clf
+                            self._residuals_fits_scans[baseline][i][if_][stokes] = (clf_re, clf_im)
 
     def get_residuals_noise(self, split_scans, use_V):
         """
@@ -600,7 +767,7 @@ class CleanBootstrap(Bootstrap):
     def resample_baseline_nonparametric(self, baseline, copy_of_model_data):
         outliers = self._residuals_outliers[baseline]
         # Find indexes of data from current baseline
-        baseline_indxs = self._indxs_visibilities[baseline]
+        baseline_indxs = self.residuals._indxs_baselines[baseline]
         baseline_indxs_ = baseline_indxs.copy()
         baseline_indxs_[outliers] = False
         indxs = np.where(baseline_indxs_)[0]
@@ -617,7 +784,7 @@ class CleanBootstrap(Bootstrap):
     def resample_baseline_nonparametric_splitting_scans(self, baseline,
                                                         copy_of_model_data):
         # Find indexes of data from current baseline
-        scan_indxs = self._indxs_visibilities_scans[baseline]
+        scan_indxs = self.residuals._indxs_baselines_scans[baseline]
         for i, scan_indx in enumerate(scan_indxs):
             outliers = self._residuals_outliers_scans[baseline][i]
             scan_indxs_ = scan_indxs.copy()
@@ -636,8 +803,8 @@ class CleanBootstrap(Bootstrap):
 
     def resample_baseline_parametric(self, baseline, copy_of_model_data,
                                      recenter, use_kde):
-        indxs = self._indxs_visibilities[baseline]
-        shape = self._shapes_visibilities[baseline]
+        indxs = self.residuals._indxs_baselines[baseline]
+        shape = self.residuals._shapes_baselines[baseline]
         to_add = np.zeros(shape, complex)
         # FIXME: Here iterate over keys with not None values
         for if_ in self._residuals_fits[baseline]:
@@ -680,11 +847,11 @@ class CleanBootstrap(Bootstrap):
                                                      copy_of_model_data,
                                                      recenter, use_kde):
         for baseline in self.residuals.baselines:
-            scan_indxs = self._indxs_visibilities_scans[baseline]
+            scan_indxs = self.residuals._indxs_baselines_scans[baseline]
             # FIXME: Use baseline's noise when scan is shitty!
             if scan_indxs is None:
                 continue
-            scan_shapes = self._shapes_visibilities_scans[baseline]
+            scan_shapes = self.residuals._shapes_baselines_scans[baseline]
             for i, scan_indx in enumerate(scan_indxs):
                 to_add = np.zeros(scan_shapes[i], complex)
                 for if_ in range(self.residuals.nif):
@@ -850,9 +1017,12 @@ if __name__ == "__main__":
     # Clean bootstrap
     import os
     from spydiff import import_difmap_model
-    data_dir = '/home/ilya/code/vlbi_errors/bin'
-    mdl_fname = '0125+487_L.mod_cir'
-    uv_fname = '0125+487_L.uvf_difmap'
+    # data_dir = '/home/ilya/code/vlbi_errors/bin'
+    # mdl_fname = '0125+487_L.mod_cir'
+    # uv_fname = '0125+487_L.uvf_difmap'
+    data_dir = '/home/ilya/vlbi_errors/test_boot'
+    mdl_fname = '1253-055.q1.2010_01_26.mdl'
+    uv_fname = '1253-055.Q1.2010_01_26.UV_CAL'
     from uv_data import UVData
     uvdata = UVData(os.path.join(data_dir, uv_fname))
     comps = import_difmap_model(mdl_fname, data_dir)
@@ -860,6 +1030,11 @@ if __name__ == "__main__":
     model = Model(stokes='I')
     model.add_components(*comps)
     boot = CleanBootstrap([model], uvdata)
+    boot.find_outliers_in_residuals(split_scans=False)
+    boot.find_residuals_centers(split_scans=False)
+    boot.fit_residuals_kde(split_scans=False, combine_scans=False,
+                           recenter=True)
+    boot.plot_residuals_trio(freq_average=False, split_scans=False)
     # boot.run(10, nonparametric=False, split_scans=True,
     #          recenter=True, combine_scans=False, use_kde=True,
     #          use_V=True)

@@ -129,17 +129,51 @@ class Bootstrap(object):
                                         x_c, y_c = self._residuals_centers_scans[baseline][i][IF_][stoke]
                                         axes[1, 0].plot(x_c, y_c, '.y')
                                     except ValueError:
-                                        pass
+                                        x_c, y_c = 0., 0.
                                     axes[1, 0].axvline(0.0, lw=0.2, color='g')
                                     axes[1, 0].axhline(0.0, lw=0.2, color='g')
                                     axes[0, 0].hist(data_.real, bins=10,
-                                                    label="Re {}-{}".format(ant1, ant2),
-                                                    color="#4682b4")
+                                                    label="Re "
+                                                          "{}-{}".format(ant1,
+                                                                         ant2),
+                                                    color="#4682b4",
+                                                    histtype='stepfilled',
+                                                    alpha=0.3,
+                                                    normed=True)
+                                    try:
+                                        clf_re = self._residuals_fits_scans[baseline][i][IF_][stoke][0]
+                                        sample = np.linspace(np.min(data_.real) - x_c,
+                                                             np.max(data_.real) - x_c,
+                                                             1000)
+                                        pdf = np.exp(clf_re.score_samples(sample[:, np.newaxis]))
+                                        axes[0, 0].plot(sample + x_c, pdf, color='blue',
+                                                        alpha=0.5, lw=2, label='kde')
+                                    # ``AttributeError`` when no ``clf`` for that
+                                    # baseline, IF, Stokes
+                                    except (ValueError, AttributeError):
+                                        pass
                                     legend = axes[0, 0].legend(fontsize='small')
                                     axes[0, 0].axvline(0.0, lw=1, color='g')
-                                    axes[1, 1].hist(data_.imag, bins=10, color="#4682b4",
+                                    axes[1, 1].hist(data_.imag, bins=10,
+                                                    color="#4682b4",
                                                     orientation='horizontal',
-                                                    label="Im {}-{}".format(ant1, ant2))
+                                                    histtype='stepfilled',
+                                                    alpha=0.3, normed=True,
+                                                    label="Im "
+                                                          "{}-{}".format(ant1,
+                                                                         ant2))
+                                    try:
+                                        clf_im = self._residuals_fits_scans[baseline][i][IF_][stoke][1]
+                                        sample = np.linspace(np.min(data_.imag) + y_c,
+                                                             np.max(data_.imag) + y_c,
+                                                             1000)
+                                        pdf = np.exp(clf_im.score_samples(sample[:, np.newaxis]))
+                                        axes[1, 1].plot(pdf, sample - y_c, color='blue',
+                                                        alpha=0.5, lw=2, label='kde')
+                                    # ``AttributeError`` when no ``clf`` for that
+                                    # baseline, IF, Stokes
+                                    except (ValueError, AttributeError):
+                                        pass
                                     legend = axes[1, 1].legend(fontsize='small')
                                     axes[1, 1].axhline(0.0, lw=1, color='g')
                                     fig.savefig("res_2d_bl{}_st{}_if{}_scan_{}".format(baseline, stoke, IF_, i),
@@ -415,6 +449,8 @@ class Bootstrap(object):
                         # If data are zeros
                         if not np.any(data):
                             continue
+                        # Don't count outliers
+                        data = data[~self._residuals_outliers[baseline][if_][stokes]]
 
                         print "Baseline {}, IF {}, Stokes {}".format(baseline, if_,
                                                                      stokes)
@@ -441,6 +477,8 @@ class Bootstrap(object):
                             # If data are zeros
                             if not np.any(data):
                                 continue
+                            # Don't count outliers
+                            data = data[~self._residuals_outliers_scans[baseline][i][if_][stokes]]
 
                             print "Baseline {}, Scan {}, IF {}, Stokes" \
                                   " {}".format(baseline, i, if_, stokes)
@@ -1030,11 +1068,11 @@ if __name__ == "__main__":
     model = Model(stokes='I')
     model.add_components(*comps)
     boot = CleanBootstrap([model], uvdata)
-    boot.find_outliers_in_residuals(split_scans=False)
-    boot.find_residuals_centers(split_scans=False)
-    boot.fit_residuals_kde(split_scans=False, combine_scans=False,
+    boot.find_outliers_in_residuals(split_scans=True)
+    boot.find_residuals_centers(split_scans=True)
+    boot.fit_residuals_kde(split_scans=True, combine_scans=False,
                            recenter=True)
-    boot.plot_residuals_trio(freq_average=False, split_scans=False)
+    boot.plot_residuals_trio(freq_average=False, split_scans=True)
     # boot.run(10, nonparametric=False, split_scans=True,
     #          recenter=True, combine_scans=False, use_kde=True,
     #          use_V=True)

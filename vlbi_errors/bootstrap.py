@@ -58,8 +58,8 @@ class Bootstrap(object):
         """
         raise NotImplementedError
 
-    def plot_residuals_trio(self, split_scans=True, freq_average=False, IF=None,
-                            stokes=['RR']):
+    def plot_residuals_trio(self, outname, split_scans=True, freq_average=False,
+                            IF=None, stokes=['RR']):
         if IF is None:
             IF = range(self.residuals.nif)
         if stokes is None:
@@ -84,6 +84,7 @@ class Bootstrap(object):
                     for i, indxs in enumerate(self.residuals._indxs_baselines_scans[baseline]):
                         # Complex (#, #IF, #stokes)
                         data = self.residuals.uvdata[indxs]
+                        # weights = self.residuals.weights[indxs]
 
                         if freq_average:
                             raise NotImplementedError
@@ -118,12 +119,18 @@ class Bootstrap(object):
                                 for stoke in stokes:
                                     # Complex 1D array to plot
                                     data_ = data[:, IF_, stoke]
-                                    data_out = data_[self._residuals_outliers_scans[baseline][i][IF_][stoke]]
+                                    # weigths_ = weights[:, IF_, stoke]
+                                    # data_pw = data_[weigths_ > 0]
+                                    data_pw = data_[self.residuals._pw_indxs[indxs, IF_, stokes]]
+                                    data_nw = data_[self.residuals._nw_indxs[indxs, IF_, stokes]]
+                                    data_out = data_pw[self._residuals_outliers_scans[baseline][i][IF_][stoke]]
+                                    # data_nw = data_[weigths_ <= 0]
                                     fig, axes = matplotlib.pyplot.subplots(nrows=2,
                                                                            ncols=2)
                                     matplotlib.pyplot.rcParams.update({'axes.titlesize':
                                                                            'small'})
                                     axes[1, 0].plot(data_.real, data_.imag, '.k')
+                                    axes[1, 0].plot(data_nw.real, data_nw.imag, '.', color='orange')
                                     axes[1, 0].plot(data_out.real, data_out.imag, '.r')
                                     try:
                                         x_c, y_c = self._residuals_centers_scans[baseline][i][IF_][stoke]
@@ -176,8 +183,9 @@ class Bootstrap(object):
                                         pass
                                     legend = axes[1, 1].legend(fontsize='small')
                                     axes[1, 1].axhline(0.0, lw=1, color='g')
-                                    fig.savefig("res_2d_bl{}_st{}_if{}_scan_{}".format(baseline, stoke, IF_, i),
-                                                bbox_inches='tight', dpi=400)
+                                    fig.savefig("{}_ant1_{}_ant2_{}_stokes_{}_IF_{}_scan_{}".format(outname,
+                                        ant1, ant2, self.residuals.stokes[stoke],
+                                        IF_, i), bbox_inches='tight', dpi=400)
                                     matplotlib.pyplot.close()
                 # If ``self.residuals._indxs_baselines_scans[baseline] = None``
                 except TypeError:
@@ -186,47 +194,29 @@ class Bootstrap(object):
                 indxs = self.residuals._indxs_baselines[baseline]
                 # Complex (#, #IF, #stokes)
                 data = self.residuals.uvdata[indxs]
+                # weights = self.residuals.weights[indxs]
 
                 if freq_average:
                     raise NotImplementedError
-                    # # Complex (#, #stokes)
-                    # data = np.mean(data, axis=1)
-                    # print np.shape(data)
-                    # for stoke in stokes:
-                    #     # Complex 1D array to plot
-                    #     data_ = data[:, stoke]
-                    #     fig, axes = matplotlib.pyplot.subplots(nrows=2,
-                    #                                            ncols=2)
-                    #     matplotlib.pyplot.rcParams.update({'axes.titlesize':
-                    #                                            'small'})
-                    #     axes[1, 0].plot(data_.real, data_.imag, '.k')
-                    #     axes[1, 0].axvline(0.0, lw=0.2, color='g')
-                    #     axes[1, 0].axhline(0.0, lw=0.2, color='g')
-                    #     axes[0, 0].hist(data_.real, bins=20,
-                    #                     label="Re {}-{}".format(ant1, ant2),
-                    #                     color="#4682b4")
-                    #     legend = axes[0, 0].legend(fontsize='small')
-                    #     axes[0, 0].axvline(0.0, lw=1, color='g')
-                    #     axes[1, 1].hist(data_.imag, bins=20, color="#4682b4",
-                    #                     orientation='horizontal',
-                    #                     label="Im {}-{}".format(ant1, ant2))
-                    #     legend = axes[1, 1].legend(fontsize='small')
-                    #     axes[1, 1].axhline(0.0, lw=1, color='g')
-                    #     fig.savefig("res_2d_bl{}_st{}".format(baseline, stoke),
-                    #                 bbox_inches='tight', dpi=400)
-                    #     matplotlib.pyplot.close()
                 else:
                     for IF_ in IF:
                         for stoke in stokes:
+                            print "Stokes {}".format(stoke)
                             # Complex 1D array to plot
                             data_ = data[:, IF_, stoke]
-                            data_out = data_[self._residuals_outliers[baseline][IF_][stoke]]
+                            # weigths_ = weights[:, IF_, stoke]
+                            # data_pw = data_[weigths_ > 0]
+                            data_pw = data_[self.residuals._pw_indxs[indxs, IF_, stoke]]
+                            data_nw = data_[self.residuals._nw_indxs[indxs, IF_, stoke]]
+                            data_out = data_pw[self._residuals_outliers[baseline][IF_][stoke]]
+                            # data_nw = data_[weigths_ <= 0]
                             fig, axes = matplotlib.pyplot.subplots(nrows=2,
                                                                    ncols=2)
                             matplotlib.pyplot.rcParams.update({'axes.titlesize':
                                                                 'small'})
                             axes[1, 0].plot(data_.real, data_.imag, '.k')
                             axes[1, 0].plot(data_out.real, data_out.imag, '.r')
+                            axes[1, 0].plot(data_nw.real, data_nw.imag, '.', color='orange')
                             try:
                                 x_c, y_c = self._residuals_centers[baseline][IF_][stoke]
                                 axes[1, 0].plot(x_c, y_c, '.y')
@@ -273,12 +263,11 @@ class Bootstrap(object):
                                 pass
                             legend = axes[1, 1].legend(fontsize='small')
                             axes[1, 1].axhline(0.0, lw=1, color='g')
-                            fig.savefig("res_2d_bl{}_st{}_if{}".format(baseline, stoke, IF_),
-                                        bbox_inches='tight', dpi=400)
+                            fig.savefig("{}_ant1_{}_ant2_{}_stokes_{}_IF_{}_second".format(outname,
+                                ant1, ant2, self.residuals.stokes[stoke], IF_),
+                                bbox_inches='tight', dpi=400)
                             matplotlib.pyplot.close()
 
-    # FIXME: Choose ``gamma`` parameter of SVM using data?
-    # FIXME: Search outliers in baseline data using GMM -1?
     def find_outliers_in_residuals(self, split_scans=False):
         """
         Method that search outliers in residuals
@@ -288,8 +277,8 @@ class Bootstrap(object):
         """
         print "Searching for outliers in residuals..."
         for baseline in self.residuals.baselines:
-            baseline_data, _ = \
-                self.residuals._choose_uvdata(baselines=[baseline])
+            indxs = self.residuals._indxs_baselines[baseline]
+            baseline_data = self.residuals.uvdata[indxs]
             # If searching outliers in baseline data
             if not split_scans:
                 for if_ in range(baseline_data.shape[1]):
@@ -297,18 +286,24 @@ class Bootstrap(object):
                         # Complex array with visibilities for given baseline,
                         # #IF, Stokes
                         data = baseline_data[:, if_, stokes]
+                        # weigths = self.residuals.weights[indxs, if_, stokes]
+
+                        # Use only valid data with positive weight
+                        data_pw = data[self.residuals._pw_indxs[indxs, if_, stokes]]
+                        data_nw = data[self.residuals._nw_indxs[indxs, if_, stokes]]
+                        print "NW {}".format(np.count_nonzero(data_nw))
 
                         # If data are zeros
-                        if not np.any(data):
+                        if not np.any(data_pw):
                             continue
 
                         print "Baseline {}, IF {}, Stokes {}".format(baseline,
                                                                      if_,
                                                                      stokes)
-                        outliers_re = find_outliers_dbscan(data.real, 1., 5)
-                        outliers_im = find_outliers_dbscan(data.imag, 1., 5)
+                        outliers_re = find_outliers_dbscan(data_pw.real, 1., 5)
+                        outliers_im = find_outliers_dbscan(data_pw.imag, 1., 5)
                         outliers_1d = np.logical_or(outliers_re, outliers_im)
-                        outliers_2d = find_outliers_2d_dbscan(data, 1.5, 5)
+                        outliers_2d = find_outliers_2d_dbscan(data_pw, 1.5, 5)
                         self._residuals_outliers[baseline][if_][stokes] =\
                             np.logical_or(outliers_1d, outliers_2d)
 
@@ -325,16 +320,24 @@ class Bootstrap(object):
                             # Complex array with visibilities for given
                             # baseline, #scan, #IF, Stokes
                             data = scan_uvdata[:, if_, stokes]
+                            # weigths = self.residuals.weights[scan_indxs, if_,
+                            #                                  stokes]
+
+                            # Use only valid data with positive weight
+                            data_pw = data[self.residuals._pw_indxs[scan_indxs, if_, stokes]]
+                            data_nw = data[self.residuals._nw_indxs[scan_indxs, if_, stokes]]
+                            print "NW {}".format(np.count_nonzero(data_nw))
+
                             # If data are zeros
-                            if not np.any(data):
+                            if not np.any(data_pw):
                                 continue
 
                             print "Baseline {}, scan {}, IF {}," \
                                   " Stokes {}".format(baseline, i, if_, stokes)
-                            outliers_re = find_outliers_dbscan(data.real, 1., 5)
-                            outliers_im = find_outliers_dbscan(data.imag, 1., 5)
+                            outliers_re = find_outliers_dbscan(data_pw.real, 1., 5)
+                            outliers_im = find_outliers_dbscan(data_pw.imag, 1., 5)
                             outliers_1d = np.logical_or(outliers_re, outliers_im)
-                            outliers_2d = find_outliers_2d_dbscan(data, 1.5, 5)
+                            outliers_2d = find_outliers_2d_dbscan(data_pw, 1.5, 5)
                             self._residuals_outliers_scans[baseline][i][if_][stokes] = \
                                 np.logical_or(outliers_1d, outliers_2d)
 
@@ -347,21 +350,27 @@ class Bootstrap(object):
         for baseline in self.residuals.baselines:
             # Find centers for baselines only
             if not split_scans:
-                baseline_data, _ = \
-                    self.residuals._choose_uvdata(baselines=[baseline])
+                indxs = self.residuals._indxs_baselines[baseline]
+                baseline_data = self.residuals.uvdata[indxs]
                 for if_ in range(baseline_data.shape[1]):
                     for stokes in range(baseline_data.shape[2]):
                         data = baseline_data[:, if_, stokes]
+                        # weigths = self.residuals.weights[indxs, if_, stokes]
+
+                        # Use only valid data with positive weight
+                        # data_pw = data[weigths > 0]
+                        data_pw = data[self.residuals._pw_indxs[indxs, if_, stokes]]
+                        # data_nw = data[self.residuals._nw_indxs[indxs, if_, stokes]]
 
                         # If data are zeros
-                        if not np.any(data):
+                        if not np.any(data_pw):
                             continue
 
                         print "Baseline {}, IF {}, Stokes {}".format(baseline, if_,
                                                                      stokes)
                         outliers = self._residuals_outliers[baseline][if_][stokes]
-                        x_c = np.sum(data.real[~outliers]) / np.count_nonzero(~outliers)
-                        y_c = np.sum(data.imag[~outliers]) / np.count_nonzero(~outliers)
+                        x_c = np.sum(data_pw.real[~outliers]) / np.count_nonzero(~outliers)
+                        y_c = np.sum(data_pw.imag[~outliers]) / np.count_nonzero(~outliers)
                         print "Center: ({:.4f}, {:.4f})".format(x_c, y_c)
                         self._residuals_centers[baseline][if_][stokes] = (x_c, y_c)
             # Find residuals centers on each scan
@@ -375,15 +384,22 @@ class Bootstrap(object):
                     for if_ in range(scan_uvdata.shape[1]):
                         for stokes in range(scan_uvdata.shape[2]):
                             data = scan_uvdata[:, if_, stokes]
+                            # weigths = self.residuals.weights[scan_indxs, if_,
+                            #                                  stokes]
+
+                            # Use only valid data with positive weight
+                            # data_pw = data[weigths > 0]
+                            data_pw = data[self.residuals._pw_indxs[scan_indxs, if_, stokes]]
+
                             # If data are zeros
-                            if not np.any(data):
+                            if not np.any(data_pw):
                                 continue
 
                             print "Baseline {}, #scan {}, IF {}," \
                                   " Stokes {}".format(baseline, i, if_, stokes)
                             outliers = self._residuals_outliers_scans[baseline][i][if_][stokes]
-                            x_c = np.sum(data.real[~outliers]) / np.count_nonzero(~outliers)
-                            y_c = np.sum(data.imag[~outliers]) / np.count_nonzero(~outliers)
+                            x_c = np.sum(data_pw.real[~outliers]) / np.count_nonzero(~outliers)
+                            y_c = np.sum(data_pw.imag[~outliers]) / np.count_nonzero(~outliers)
                             print "Center: ({:.4f}, {:.4f})".format(x_c, y_c)
                             self._residuals_centers_scans[baseline][i][if_][stokes] = (x_c, y_c)
 
@@ -440,26 +456,31 @@ class Bootstrap(object):
         for baseline in self.residuals.baselines:
             # If fitting baseline data
             if not split_scans:
-                baseline_data, _ = \
-                    self.residuals._choose_uvdata(baselines=[baseline])
+                indxs = self.residuals._indxs_baselines[baseline]
+                baseline_data = self.residuals.uvdata[indxs]
                 for if_ in range(baseline_data.shape[1]):
                     for stokes in range(baseline_data.shape[2]):
                         data = baseline_data[:, if_, stokes]
+                        # weigths = self.residuals.weights[indxs, if_, stokes]
 
+                        # Use only valid data with positive weight
+                        # data_pw = data[weigths > 0]
+                        data_pw = data[self.residuals._pw_indxs[indxs, if_, stokes]]
                         # If data are zeros
-                        if not np.any(data):
+                        if not np.any(data_pw):
                             continue
+
                         # Don't count outliers
-                        data = data[~self._residuals_outliers[baseline][if_][stokes]]
+                        data_pw = data_pw[~self._residuals_outliers[baseline][if_][stokes]]
 
                         print "Baseline {}, IF {}, Stokes {}".format(baseline, if_,
                                                                      stokes)
                         if recenter:
                             x_c, y_c = self._residuals_centers[baseline][if_][stokes]
-                            data -= x_c - 1j * y_c
+                            data_pw -= x_c - 1j * y_c
                         try:
-                            clf_re = fit_kde(data.real)
-                            clf_im = fit_kde(data.imag)
+                            clf_re = fit_kde(data_pw.real)
+                            clf_im = fit_kde(data_pw.imag)
                         # This occurs when baseline has 1 point only
                         except ValueError:
                             continue
@@ -474,20 +495,27 @@ class Bootstrap(object):
                     for if_ in range(scan_uvdata.shape[1]):
                         for stokes in range(scan_uvdata.shape[2]):
                             data = scan_uvdata[:, if_, stokes]
+                            # weigths = self.residuals.weights[scan_indxs, if_, stokes]
+
+                            # Use only valid data with positive weight
+                            # data_pw = data[weigths > 0]
+                            data_pw = data[self.residuals._pw_indxs[scan_indxs, if_, stokes]]
+
                             # If data are zeros
-                            if not np.any(data):
+                            if not np.any(data_pw):
                                 continue
+
                             # Don't count outliers
-                            data = data[~self._residuals_outliers_scans[baseline][i][if_][stokes]]
+                            data_pw = data_pw[~self._residuals_outliers_scans[baseline][i][if_][stokes]]
 
                             print "Baseline {}, Scan {}, IF {}, Stokes" \
                                   " {}".format(baseline, i, if_, stokes)
                             if recenter:
                                 x_c, y_c = self._residuals_centers_scans[baseline][i][if_][stokes]
-                                data -= x_c - 1j * y_c
+                                data_pw -= x_c - 1j * y_c
                             try:
-                                clf_re = fit_kde(data.real)
-                                clf_im = fit_kde(data.imag)
+                                clf_re = fit_kde(data_pw.real)
+                                clf_im = fit_kde(data_pw.imag)
                             # This occurs when scan has 1 point only
                             except ValueError:
                                 continue
@@ -552,7 +580,7 @@ class Bootstrap(object):
 
         # Optionally choose range & ticks
         if vis_range is None:
-            res = uvdata_r._choose_uvdata(stokes=stokes, freq_average=True)[0]
+            res = uvdata_r._choose_uvdata(stokes=stokes, freq_average=True)
             range_ = min(abs(np.array([max(res.real), max(res.imag),
                                        min(res.real), min(res.imag)])))
             range_ = float("{:.3f}".format(range_))
@@ -574,7 +602,7 @@ class Bootstrap(object):
             try:
                 res = uvdata_r._choose_uvdata(baselines=[baseline],
                                               freq_average=True,
-                                              stokes=stokes)[0]
+                                              stokes=stokes)
                 bins = min([10, np.sqrt(len(res.imag))])
                 ant1, ant2 = baselines_2_ants([baseline])
                 axes[i, j].hist(res.real, range=vis_range, color="#4682b4",
@@ -678,7 +706,8 @@ class Bootstrap(object):
                         bbox_inches='tight', dpi=400)
             matplotlib.pyplot.close()
 
-    def resample(self, outname, nonparametric=True, **kwargs):
+    def resample(self, outname, nonparametric, split_scans, recenter, use_kde,
+                 use_v, combine_scans):
         """
         Sample from residuals with replacement or sample from normal random
         noise fitted to residuals and add samples to model to form n bootstrap
@@ -696,9 +725,8 @@ class Bootstrap(object):
         raise NotImplementedError
 
     # FIXME: Implement arbitrary output directory for bootstrapped data
-    def run(self, n, nonparametric, split_scans, recenter, combine_scans,
-            use_kde, use_V, outname=['bootstrapped_data', '.FITS'],
-            outliers_fraction_bl=0.05, outliers_fraction_scan=0.1):
+    def run(self, n, nonparametric, split_scans, recenter, use_kde, use_v,
+            combine_scans, outname=['bootstrapped_data', '.FITS']):
         """
         Generate ``n`` data sets.
 
@@ -706,32 +734,31 @@ class Bootstrap(object):
             Several steps are made before re-sampling ``n`` times:
 
             * First, outliers are found for each baseline or even scan (using
-            ``sklearn.covariance.EllipticEnvelope`` for scans and
-            ``sklearn.svm.OneClassSVM`` for baselines).
+            DBSCAN clustering algorithm).
             * Centers of the residuals for each baselines or optionally
             scans (when ``split_scans=True``) are found excluding outliers.
             * In parametric bootstrap (when ``nonparameteric=False``) noise
             density estimates for each baseline/scan are maid using
-            ``sklearn.neighbors.KernelDensity`` fits to 2D (Re, Im) (optionally)
-            re-centered visibility data with gaussian kernel and bandwidth
-            optimized by ``sklearn.grid_search.GridSearchCV`` with 5-fold CV.
+            ``sklearn.neighbors.KernelDensity`` fits to Re & Im re-centered
+            visibility data with gaussian kernel and bandwidth optimized by
+            ``sklearn.grid_search.GridSearchCV`` with 5-fold CV.
             This is when ``use_kde=True``. Otherwise residuals are supposed to
             be distributed with gaussian density and it's std is estimated
             directly.
 
             Then, in parametric bootstrap re-sampling is maid by adding samples
-            from fitted KDE of the residuals to model data ``n`` times. In
-            non-parametric case re-sampling is maid by sampling with replacement
-            from residuals (with outliers excluded) that are optionally
-            re-centered.
+            from fitted KDE (for ``use_kde=True``) or zero-mean Gaussian
+            distribution with std of the residuals to model visibility data
+            ``n`` times. In non-parametric case re-sampling is maid by sampling
+            with replacement from re-centered residuals (with outliers
+            excluded).
 
         """
         # Find outliers in baseline/scan data
         if not split_scans:
             if not self._residuals_outliers:
                 print "Finding outliers in baseline's data..."
-                self.find_outliers_in_residuals(split_scans=False,
-                                                outliers_fraction_bl=outliers_fraction_bl)
+                self.find_outliers_in_residuals(split_scans=False)
             else:
                 print "Already found outliers in baseline's data..."
         else:
@@ -773,7 +800,7 @@ class Bootstrap(object):
                 if not self.noise_residuals:
                     print "Estimating gaussian STDs on each baseline[/scan]..."
                     self.noise_residuals = self.get_residuals_noise(split_scans,
-                                                                    use_V)
+                                                                    use_v)
                 else:
                     print "Gaussian STDs for each baseline[/scan] are already" \
                           " estimated"
@@ -782,7 +809,9 @@ class Bootstrap(object):
         for i in range(n):
             outname_ = outname[0] + '_' + str(i + 1).zfill(3) + outname[1]
             self.resample(outname=outname_, nonparametric=nonparametric,
-                          split_scans=split_scans)
+                          split_scans=split_scans, recenter=recenter,
+                          use_kde=use_kde, use_v=use_v,
+                          combine_scans=combine_scans)
 
 
 class CleanBootstrap(Bootstrap):
@@ -802,41 +831,67 @@ class CleanBootstrap(Bootstrap):
     def get_residuals(self):
         return self.data - self.model_data
 
-    def resample_baseline_nonparametric(self, baseline, copy_of_model_data):
-        outliers = self._residuals_outliers[baseline]
-        # Find indexes of data from current baseline
-        baseline_indxs = self.residuals._indxs_baselines[baseline]
-        baseline_indxs_ = baseline_indxs.copy()
-        baseline_indxs_[outliers] = False
-        indxs = np.where(baseline_indxs_)[0]
-        # Resample them
-        indxs_ = np.random.choice(indxs,
-                                  np.count_nonzero(baseline_indxs))
+    def resample_baseline_nonparametric(self, baseline, copy_of_model_data,
+                                        recenter):
+        print "Doing nonparametric baseline - for baseline {}".format(baseline)
 
-        # Add to residuals.substitute(model)
-        copy_of_model_data.uvdata[baseline_indxs] = \
-            copy_of_model_data.uvdata[baseline_indxs] + \
-            self.residuals.uvdata[indxs_]
-        copy_of_model_data.sync()
+        # Boolean array that defines indexes of current baseline data
+        baseline_indxs = self.residuals._indxs_baselines[baseline]
+        # FIXME: Here iterate over keys with not None values
+        for if_ in range(self.residuals.nif):
+            for stokes in range(self.residuals.nstokes):
+                baseline_indxs_ = baseline_indxs.copy()
+                # Boolean array that defines indexes of outliers in indexes of
+                # current baseline data
+                outliers = self._residuals_outliers[baseline][if_][stokes]
+                pw_indxs = self.residuals._pw_indxs[baseline_indxs, if_, stokes]
+                # If some Stokes parameter has no outliers calculation - pass it
+                if isinstance(outliers, dict):
+                    continue
+                # Baseline indexes of inliers
+                indxs = np.where(baseline_indxs_)[0][pw_indxs][~outliers]
+                # If for some combinations baseline/IF/Stokes no data to
+                # resample - pass it
+                if not indxs.size:
+                    continue
+                # Resample them
+                indxs_ = np.random.choice(indxs,
+                                          np.count_nonzero(baseline_indxs))
+
+                # Add to residuals.substitute(model)
+                copy_of_model_data.uvdata[baseline_indxs, if_, stokes] = \
+                    copy_of_model_data.uvdata[baseline_indxs, if_, stokes] + \
+                    self.residuals.uvdata[indxs_, if_, stokes]
+                if recenter:
+                    x_c, y_c = self._residuals_centers[baseline][if_][stokes]
+                    copy_of_model_data.uvdata[baseline_indxs, if_, stokes] -=\
+                        x_c + 1j*y_c
+
+                copy_of_model_data.sync()
 
     def resample_baseline_nonparametric_splitting_scans(self, baseline,
-                                                        copy_of_model_data):
+                                                        copy_of_model_data,
+                                                        recenter):
         # Find indexes of data from current baseline
         scan_indxs = self.residuals._indxs_baselines_scans[baseline]
         for i, scan_indx in enumerate(scan_indxs):
-            outliers = self._residuals_outliers_scans[baseline][i]
-            scan_indxs_ = scan_indxs.copy()
-            # Remove outliers from indexes marking scans
-            scan_indxs_[outliers] = False
-            # Find what int indexes corresponds to `inliers`
-            indxs = np.where(scan_indxs_)[0]
-            # Resample them
-            indxs_ = np.random.choice(indxs, np.count_nonzero(scan_indxs))
+            for if_ in range(self.residuals.nif):
+                for stokes in range(self.residuals.nstokes):
+                    outliers = self._residuals_outliers_scans[baseline][i][if_][stokes]
+                    pw_indxs = self.residuals._pw_indxs[scan_indx, if_, stokes]
+                    # Find what int indexes corresponds to `inliers`
+                    indxs = np.where(scan_indx)[0][pw_indxs][~outliers]
+                    # Resample them
+                    indxs_ = np.random.choice(indxs, np.count_nonzero(scan_indx))
 
-            # Add to residuals.substitute(model)
-            copy_of_model_data.uvdata[scan_indx] = \
-                copy_of_model_data.uvdata[scan_indx] + \
-                self.residuals.uvdata[indxs_]
+                    # Add to residuals.substitute(model)
+                    copy_of_model_data.uvdata[scan_indx, if_, stokes] = \
+                        copy_of_model_data.uvdata[scan_indx, if_, stokes] + \
+                        self.residuals.uvdata[indxs_, if_, stokes]
+                    if recenter:
+                        x_c, y_c = self._residuals_centers_scans[baseline][i][if_][stokes]
+                        copy_of_model_data.uvdata[scan_indx, if_, stokes] -= \
+                            x_c + 1j*y_c
             copy_of_model_data.sync()
 
     def resample_baseline_parametric(self, baseline, copy_of_model_data,
@@ -871,9 +926,10 @@ class CleanBootstrap(Bootstrap):
                     sample = vcomplex(sample[: len(to_add)],
                                       sample[len(to_add):])
                 else:
-                    kde = self._residuals_fits[baseline][if_][stokes]
-                    sample = kde.sample(len(to_add))
-                    sample = sample[:, 0] + 1j * sample[:, 1]
+                    kde_re, kde_im = self._residuals_fits[baseline][if_][stokes]
+                    sample_re = kde_re.sample(len(to_add))
+                    sample_im = kde_im.sample(len(to_add))
+                    sample = sample_re[:, 0] + 1j * sample_im[:, 0]
 
                 to_add[:, if_, stokes] = sample
 
@@ -918,13 +974,15 @@ class CleanBootstrap(Bootstrap):
                             sample = vcomplex(sample[: len(to_add)],
                                               sample[len(to_add):])
                         else:
-                            kde = self._residuals_fits_scans[baseline][i][if_][stokes]
+                            kde_re, kde_im =\
+                                self._residuals_fits_scans[baseline][i][if_][stokes]
                             # If no KDE was fitted for some IF/Stokes - pass it
                             try:
-                                sample = kde.sample(len(to_add))
+                                sample_re = kde_re.sample(len(to_add))
+                                sample_im = kde_im.sample(len(to_add))
                             except AttributeError:
                                 continue
-                            sample = sample[:, 0] + 1j * sample[:, 1]
+                            sample = sample_re[:, 0] + 1j * sample_im[:, 0]
 
                         to_add[:, if_, stokes] = sample
 
@@ -932,25 +990,11 @@ class CleanBootstrap(Bootstrap):
                 copy_of_model_data.uvdata[scan_indx] += to_add
                 copy_of_model_data.sync()
 
-    def resample(self, outname, nonparametric=True, split_scans=False,
-                 use_V=True, recenter=False, use_kde=True):
+    def resample(self, outname, nonparametric, split_scans, recenter,
+                 use_kde, use_v, combine_scans=False):
         """
         Sample from residuals with replacement or sample from normal random
         noise and adds samples to model to form n bootstrap samples.
-
-        :param outname:
-            Output file name to save bootstrapped data.
-        :param nonparametric: (optional)
-            If ``True`` then use actual residuals between model and data. If
-            ``False`` then use gaussian noise fitted to actual residuals for
-            parametric bootstrapping. (default: ``True``)
-        :params split_scans: (optional)
-            Calculate noise for each scan individually? Not implemented yet.
-        :param use_V: (optional)
-            Use stokes V for calculation of noise? (default: ``True``)
-        :param recenter: (optional)
-            Boolean. Re-center sampled from fitted GMM residuals? (default:
-            False)
 
         :return:
             Just save bootstrapped data to file with specified ``outname``.
@@ -972,6 +1016,7 @@ class CleanBootstrap(Bootstrap):
                                                                       use_kde)
             # Do nonparametric bootstrap
             else:
+                print "doing nonparametric"
                 # Bootstrap from self.residuals._data. For each baseline.
                 for baseline in self.residuals.baselines:
                     self.resample_baseline_nonparametric_splitting_scans(baseline,
@@ -988,19 +1033,25 @@ class CleanBootstrap(Bootstrap):
                                                       recenter, use_kde)
             # Do nonparametric bootstrap
             else:
+                print "doing nonparametric"
                 # TODO: should i resample all stokes and IFs together? Yes
                 # Bootstrap from self.residuals._data. For each baseline.
                 for baseline in self.residuals.baselines:
                     self.resample_baseline_nonparametric(baseline,
-                                                         copy_of_model_data)
+                                                         copy_of_model_data,
+                                                         recenter)
 
         self.model_data.save(data=copy_of_model_data.hdu.data, fname=outname)
 
-    def run(self, n, nonparametric, split_scans, recenter, combine_scans,
-            use_kde, use_V, outname=['bootstrapped_data', '.fits'], **kwargs):
-        super(CleanBootstrap, self).run(n, nonparametric, split_scans, recenter,
-                                        combine_scans, use_kde, use_V,
-                                        outname=outname, **kwargs)
+    def run(self, n, nonparametric, split_scans=False, recenter=True,
+            use_kde=True, use_v=True, combine_scans=False,
+            outname=['bootstrapped_data', '.fits']):
+        super(CleanBootstrap, self).run(n, nonparametric,
+                                        split_scans=split_scans,
+                                        recenter=recenter, use_kde=use_kde,
+                                        use_v=use_v,
+                                        combine_scans=combine_scans,
+                                        outname=outname)
 
 
 class SelfCalBootstrap(object):
@@ -1068,14 +1119,15 @@ if __name__ == "__main__":
     model = Model(stokes='I')
     model.add_components(*comps)
     boot = CleanBootstrap([model], uvdata)
-    boot.find_outliers_in_residuals(split_scans=True)
-    boot.find_residuals_centers(split_scans=True)
-    boot.fit_residuals_kde(split_scans=True, combine_scans=False,
+    boot.find_outliers_in_residuals(split_scans=False)
+    boot.find_residuals_centers(split_scans=False)
+    boot.fit_residuals_kde(split_scans=False, combine_scans=False,
                            recenter=True)
-    boot.plot_residuals_trio(freq_average=False, split_scans=True)
-    # boot.run(10, nonparametric=False, split_scans=True,
-    #          recenter=True, combine_scans=False, use_kde=True,
-    #          use_V=True)
+    boot.plot_residuals_trio('test_name', freq_average=False, split_scans=True)
+
+    # boot.run(10, nonparametric=False, split_scans=False,
+    #          recenter=True, use_kde=True, use_v=True, combine_scans=False,
+    #          outname=['boot_out', '.FITS'])
 
 
     # # Self-calibration bootstrap

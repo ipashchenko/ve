@@ -6,7 +6,8 @@ from astropy.time import Time, TimeDelta
 from sklearn.cluster import DBSCAN
 from collections import OrderedDict
 from utils import (baselines_2_ants, index_of, get_uv_correlations,
-                   find_card_from_header, get_key)
+                   find_card_from_header, get_key, to_boolean_array,
+                   check_issubset)
 
 try:
     import pylab
@@ -32,8 +33,16 @@ class UVData(object):
         self.learn_data_structure(self.hdu)
         self._uvdata = self.view_uvdata({'COMPLEX': 0}) +\
             1j * self.view_uvdata({'COMPLEX': 1})
+        self._weights = self.view_uvdata({'COMPLEX': 2})
+
+        # Numpy boolean arrays with shape of ``UVData.uvdata``.
+        self._nw_indxs = self._weights <= 0
+        self._pw_indxs = self._weights > 0
+
         self._error = None
         self._scans_bl = None
+        self._times = Time(self.hdu.data['DATE'] + self.hdu.data['_DATE'],
+                           format='jd')
 
         # Dictionary with keys - baselines & values - boolean numpy arrays or
         # lists of boolean numpy arrays with indexes of that baseline (or it's
@@ -54,9 +63,9 @@ class UVData(object):
         """
         self._indxs_baselines_scans = self.scans_bl
         for baseline in self.baselines:
-            bl_data, indxs = self._choose_uvdata(baselines=[baseline])
+            indxs = self._get_baseline_indexes(baseline)
             self._indxs_baselines[baseline] = indxs
-            self._shapes_baselines[baseline] = np.shape(bl_data)
+            self._shapes_baselines[baseline] = np.shape(self.uvdata[indxs])
             self._shapes_baselines_scans[baseline] = list()
             try:
                 for scan_indxs in self._indxs_baselines_scans[baseline]:
@@ -65,6 +74,30 @@ class UVData(object):
             except TypeError:
                 print "Skipping baseline # {}".format(baseline)
                 pass
+
+    def nw_indxs_baseline(self, baseline):
+        """
+        Shortcut to negative or zero weights visibilities on given baseline.
+
+        :param baseline:
+            Integer baseline number.
+        :return:
+            Numpy boolean array with shape of ``(#vis, #bands, #stokes)``, where
+            #vis - number of visibilities for given baseline.
+        """
+        return self._nw_indxs[self._indxs_baselines[baseline]]
+
+    def pw_indxs_baseline(self, baseline):
+        """
+        Shortcut to positive weights visibilities on given baseline.
+
+        :param baseline:
+            Integer baseline number.
+        :return:
+            Numpy boolean array with shape of ``(#vis, #bands, #stokes)``, where
+            #vis - number of visibilities for given baseline.
+        """
+        return ~self.nw_indxs_baseline(baseline)
 
     @property
     def sample_size(self):
@@ -176,6 +209,14 @@ class UVData(object):
                 range(1, n_stokes + 1)]
 
     @property
+    def stokes_dict(self):
+        return {i: stokes for i, stokes in enumerate(self.stokes)}
+
+    @property
+    def stokes_dict_inv(self):
+        return {stokes: i for i, stokes in enumerate(self.stokes)}
+
+    @property
     def uvdata(self):
         """
         Returns (#groups, #if, #stokes,) complex numpy.ndarray with last
@@ -184,6 +225,15 @@ class UVData(object):
         """
         # Always return complex representation of internal ``hdu.data.data``
         return self._uvdata
+
+    @property
+    def weights(self):
+        """
+        Returns (#groups, #if, #stokes,) complex numpy.ndarray with last
+        dimension - weight of visibilities. It is A COPY of ``hdu.data.data``
+        numpy.ndarray.
+        """
+        return self._weights
 
     @uvdata.setter
     def uvdata(self, other):
@@ -211,7 +261,7 @@ class UVData(object):
         """
         Returns list of baselines numbers.
         """
-        result = list(set(self.hdu.columns[self.par_dict['BASELINE']].array))
+        result = list(set(self.hdu.data['BASELINE']))
         return vec_int(sorted(result))
 
     @property
@@ -255,11 +305,9 @@ class UVData(object):
     @property
     def times(self):
         """
-        Returns array of astropy.time.Time instances.
+        Returns array of ``astropy.time.Time`` instances.
         """
-        times = Time(self.hdu.data['DATE'] + self.hdu.data['_DATE'],
-                     format='jd')
-        return times.utc.datetime
+        return self._times
 
     @property
     def scans(self):
@@ -335,7 +383,7 @@ class UVData(object):
             scans_dict = dict()
             for bl in self.baselines:
                 bl_scans = list()
-                bl_indxs = self._choose_uvdata(baselines=bl, indx_only=True)[1]
+                bl_indxs = self._get_baseline_indexes(bl)
                 # JD-formated times for current baseline
                 bl_times = self.hdu.data['DATE'][bl_indxs] +\
                            self.hdu.data['_DATE'][bl_indxs]
@@ -401,130 +449,191 @@ class UVData(object):
         """
         return self.uvw[:, :2]
 
-    # FIXME: shape depends on ``stokes``! Must be ``(N, #IF, #stokes)``
-    def _choose_uvdata(self, times=None, baselines=None, IF=None, stokes=None,
-                       freq_average=False, indx_only=False):
+    def _get_baseline_indexes(self, baseline):
+        """
+        Return boolean numpy array with indexes of given baseline in original
+        record array.
+        """
+        assert baseline in self.baselines
+        try:
+            indxs = self._indxs_baselines[baseline]
+        except KeyError:
+            indxs = self.hdu.data['BASELINE'] == baseline
+        return indxs
+
+    def _get_baselines_indexes(self, baselines):
+        """
+        Return boolean numpy array with indexes of given baselines in original
+        record array.
+        """
+        result = self._get_baseline_indexes(baseline=baselines[0])
+        try:
+            for baseline in baselines[1:]:
+                result = np.logical_or(result, self._get_baseline_indexes(baseline))
+        # When ``baselines`` consists of only one item
+        except TypeError:
+            pass
+        return result
+
+    def _get_times_indexes(self, start_time, stop_time):
+        """
+        Return numpy boolean array with indexes between given time in original
+        record array.
+
+        :param start_time:
+            Instance of ``astropy.time.Time`` class.
+        :param stop_time:
+            Instance of ``astropy.time.Time`` class.
+        """
+        return np.logical_and(start_time <= self.times, stop_time >= self.times)
+
+    def _conver_bands_to_indexes(self, bands):
+        """
+        Convert iterable of band numbers to boolean array with ``True`` values
+        for given bands.
+
+        :param bands:
+            Iterable of integers (starting from zero) - band numbers.
+        :return:
+            Numpy boolean array with size equal to number of bands and ``True``
+            values corresponding to specified band numbers.
+        """
+        assert set(bands).issubset(xrange(self.nif)), "Bands number must be "\
+                                                      "from 0 to {}".format(self.nif)
+        assert max(bands) <= self.nif
+        return to_boolean_array(bands, self.nif)
+
+    def _convert_stokes_to_indexes(self, stokes):
+        """
+        Convert iterable of correlations to boolean array with ``True`` values
+        for given correlations.
+
+        :param stokes:
+            Iterable of strings - correlations.
+        :return:
+            Numpy boolean array with size equal to number of correlations and
+            ``True`` values corresponding to specified correlations.
+        """
+        assert check_issubset(stokes, self.stokes), "Must be RR, LL, RL or LR!"
+        stokes_num = [self.stokes_dict_inv[stokes_] for stokes_ in stokes]
+        return to_boolean_array(stokes_num, self.nstokes)
+
+    def _get_uvdata_slice(self, baselines=None, start_time=None, stop_time=None,
+                          bands=None, stokes=None):
+        """
+        Return tuple of index arrays that represent portion of ``UVData.uvdata``
+        array with given values of baselines, times, bands, stokes.
+        """
+        if baselines is None:
+            baselines = self.baselines
+        indxs = self._get_baselines_indexes(baselines)
+
+        if start_time is not None or stop_time is not None:
+            indxs = np.logical_or(indxs, self._get_times_indexes(start_time,
+                                                                 stop_time))
+
+        if bands is None:
+            bands_indxs = self._conver_bands_to_indexes(xrange(self.nif))
+        else:
+            bands_indxs = self._conver_bands_to_indexes(bands)
+
+        if stokes is None:
+            stokes = self.stokes
+        stokes_indxs = self._convert_stokes_to_indexes(stokes)
+
+        return np.ix_(indxs, bands_indxs, stokes_indxs)
+
+    def _convert_uvdata_slice_to_bool(self, sl):
+        """
+        Convert indexing tuple to boolean array of ``UVData.uvdata`` shape.
+
+        :param sl:
+            Tuple of indexing arrays. Output of ``self._get_uvdata_slice``.
+        :return:
+            Boolean numpy array with shape of ``UVData.uvdata``.
+        """
+        boolean = np.zeros(self.uvdata.shape, dtype=bool)
+        boolean[sl] = True
+        return boolean
+
+    def _choose_uvdata(self, start_time=None, stop_time=None, baselines=None,
+                       bands=None, stokes=None, freq_average=False):
         """
         Method that returns chosen data from ``_data`` numpy structured array
         based on user specified parameters.
 
-        :param times (optional):
-            Container with start & stop time or ``None``. If ``None`` then use
-            all time. (default: ``None``)
+        :param start_time: (optional)
+            Instance of ``astropy.time.Time`` class. (default: ``None``)
 
-        :param baselines (optional):
+        :param stop_time: (optional)
+            Instance of ``astropy.time.Time`` class. (default: ``None``)
+
+        :param baselines: (optional)
             One or iterable of baselines numbers or ``None``. If ``None`` then
             use all baselines. (default: ``None``)
 
-        :parm IF (optional):
-            One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
+        :param bands: (optional)
+            Iterable of IF numbers (0 to #IF-1) or ``None``. If ``None`` then
             use all IFs. (default: ``None``)
 
-        :param stokes (optional):
+        :param stokes: (optional)
             Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
-            ``LR`` or ``None``. If ``None`` then use all available stokes.
-            (default: ``None``)
-
-        :param indx_only: (optional)
-            Boolean - return only indexes? (default: ``False``)
+            ``LR`` or ``None``. If ``None`` then use all available correlations.
+            If ``I``, ``Q``, ``U``, ``V`` then must be iterable with only one
+            item (any single Stokes parameter). (default: ``None``)
 
         :return:
-            Two numpy.ndarrays, where first array is array of data with shape
-            (#N, #IF, #STOKES) and second array is boolean numpy array of
-            indexes of data in original PyFits record array.
-
-        :note:
-            All checks on IF and stokes are made here in one place. This method
-            is heavily used by all methods that retrieve data and/or plot it.
-
+            Numpy.ndarray that is part of (copy) ``UVData.uvdata`` array with
+            shape (#N, #IF, #STOKES).
         """
-        # Copy with shape (#N, #IF, #STOKES, 2,)
+        # Copy with shape (#N, #IF, #STOKES)
         uvdata = self.uvdata
 
-        if baselines is None:
-            baselines = self.baselines
-            indxs = np.ones(len(uvdata), dtype=bool)
+        if start_time is None:
+            start_time = self.times[0]
+        if stop_time is None:
+            stop_time = self.times[-1]
+
+        if check_issubset(stokes, self.stokes):
+            sl = self._get_uvdata_slice(baselines, start_time, stop_time, bands,
+                                        stokes)
+            result = uvdata[sl]
+
+        elif check_issubset(stokes, ('I', 'Q', 'U', 'V')):
+            assert len(stokes) == 1, "Only one Stokes parameter allowed!"
+
+            if stokes in ('I', 'V'):
+                sl_rr = self._get_uvdata_slice(baselines, start_time, stop_time,
+                                               bands, stokes=['RR'])
+                sl_ll = self._get_uvdata_slice(baselines, start_time, stop_time,
+                                               bands, stokes=['LL'])
+                if stokes == 'I':
+                    # I = 0.5 * (RR + LL)
+                    result = 0.5 * (uvdata[sl_rr] + uvdata[sl_ll])
+                else:
+                    # V = 0.5 * (RR - LL)
+                    result = 0.5 * (uvdata[sl_rr] - uvdata[sl_ll])
+
+            if stokes in ('Q', 'U'):
+                sl_rl = self._get_uvdata_slice(baselines, start_time, stop_time,
+                                               bands, stokes=['RL'])
+                sl_lr = self._get_uvdata_slice(baselines, start_time, stop_time,
+                                               bands, stokes=['LR'])
+
+                if stokes == 'Q':
+                    # V = 0.5 * (LR + RL)
+                    result = 0.5 * (uvdata[sl_lr] + uvdata[sl_rl])
+                else:
+                    # V = 0.5 * 1j * (LR - RL)
+                    result = 0.5 * 1j * (uvdata[sl_lr] - uvdata[sl_rl])
         else:
-            indxs = np.zeros(len(uvdata), dtype=bool)
-            baselines_list = list()
-            # If ``baselines`` is iterable
-            try:
-                baselines_list.extend(baselines)
-            # If ``baselines`` is not iterable (int)
-            except TypeError:
-                baselines_list.append(baselines)
-
-            # Check that given baseline numbers are among existing ones
-            assert(set(baselines_list).issubset(self.baselines))
-
-            # Find indexes of structured array (in zero dim) with given
-            # baselines
-            for baseline in baselines_list:
-                # TODO: Vectorize that.
-                indxs = np.logical_or(indxs,
-                                      self.hdu.columns[self.par_dict['BASELINE']].array == baseline)
-
-        # If we are given some time interval then find among ``indxs`` only
-        # those from given time interval
-        if times is not None:
-            # Assert that ``times`` consists of start and stop
-            assert(len(times) == 2)
-            lower_indxs = self.hdu.columns[self.par_dict['DATE']].array < times[1]
-            high_indxs = self.hdu.columns[self.par_dict['DATE']].array > times[0]
-            time_indxs = np.logical_and(lower_indxs, high_indxs)
-            indxs = np.logical_and(indxs, time_indxs)
-
-        if indx_only:
-            return None, indxs
-
-        if IF is None:
-            IF = np.arange(self.nif) + 1
-        else:
-            IF_list = list()
-            # If ``IF`` is iterable
-            try:
-                IF_list.extend(IF)
-            # If ``IF`` is not iterable (int)
-            except TypeError:
-                IF_list.append(IF)
-            IF = np.array(IF_list)
-
-        if not set(IF).issubset(np.arange(1, self.nif + 1)):
-            raise Exception('Choose IF numbers from ' + str(1) + ' to ' +
-                            str(self.nif))
-        IF -= 1
-
-        if stokes == 'I':
-            # I = 0.5 * (RR + LL)
-            result = 0.5 * (uvdata[indxs][:, IF, 0] + uvdata[indxs][:, IF, 1])
-
-        elif stokes == 'V':
-            # V = 0.5 * (RR - LL)
-            result = 0.5 * (uvdata[indxs][:, IF, 0] - uvdata[indxs][:, IF, 1])
-
-        elif stokes == 'Q':
-            # V = 0.5 * (LR + RL)
-            result = 0.5 * (uvdata[indxs][:, IF, 3] + uvdata[indxs][:, IF, 2])
-
-        elif stokes == 'U':
-            # V = 0.5 * 1j * (LR - RL)
-            result = 0.5 * 1j * (uvdata[indxs][:, IF, 3] - uvdata[indxs][:, IF, 2])
-
-        elif stokes in self._stokes_dict.keys():
-            result = uvdata[indxs][:, IF, self._stokes_dict[stokes]]
-
-        elif stokes is None:
-            # When fetching all stokes then need [:, None] tips
-            result = uvdata[indxs][:, IF[:, None], np.arange(self.nstokes)]
-
-        else:
-            raise Exception('Allowed stokes parameters: I, Q, U, V, RR, LL, RL,'
-                            'LR or (default) all [RR, LL, RL, LR].')
+            raise Exception("Stokes must be iterable consisting of following "
+                            "items only: I, Q, U, V, RR, LL, RL, LR!")
 
         if freq_average:
-            result = np.mean(result, axis=1)
+            result = np.mean(result, axis=1).squeeze()
 
-        return result, indxs
+        return result
 
     # TODO: use qq = scipy.stats.probplot((v-mean(v))/std(v), fit=0) then
     # plot(qq[0], qq[1]) - how to check normality
@@ -564,7 +673,7 @@ class UVData(object):
             # or {baseline: [noises]} if split_scans is True.
             if not split_scans:
                 for baseline in self.baselines:
-                    baseline_uvdata = self._choose_uvdata(baselines=baseline)[0]
+                    baseline_uvdata = self._choose_uvdata(baselines=[baseline])
                     if average_freq:
                         baseline_uvdata = np.mean(baseline_uvdata, axis=1)
                     v = (baseline_uvdata[..., 0] - baseline_uvdata[..., 1]).real
@@ -598,7 +707,7 @@ class UVData(object):
         else:
             if not split_scans:
                 for baseline in self.baselines:
-                    baseline_uvdata = self._choose_uvdata(baselines=baseline)[0]
+                    baseline_uvdata = self._choose_uvdata(baselines=[baseline])
                     if average_freq:
                         baseline_uvdata = np.mean(baseline_uvdata, axis=1)
                     differences = (baseline_uvdata[:-1, ...] -
@@ -663,7 +772,7 @@ class UVData(object):
         for baseline, baseline_stds in noise.items():
             for i, std in enumerate(baseline_stds):
                 baseline_uvdata, bl_indxs = \
-                    self._choose_uvdata(baselines=baseline, IF=i + 1)
+                    self._choose_uvdata(baselines=[baseline], bands=[i])
                 # (#, #IF, #CH, #stokes)
                 n = np.shape(baseline_uvdata)[0]
                 n_to_add = n * self.nstokes
@@ -717,8 +826,8 @@ class UVData(object):
 
     # TODO: use different stokes and symmetry!
     # FIXME:
-    def uv_coverage(self, antennas=None, baselines=None, sym='.k', xinc=1,
-                    times=None, x_range=None, y_range=None):
+    def uv_coverage(self, antennas=None, baselines=None, sym='.k',
+                    start_time=None, stop_time=None):
         """
         Make plots of uv-coverage for selected baselines/antennas.
 
@@ -732,17 +841,10 @@ class UVData(object):
             AIPS-like ``uvplt`` parameter.
         :param sym: (optional)
             Matplotlib symbols to plot. (default: ``.k``)
-        :param xinc: (optional)
-            AIPS-like ``uvplt`` parameter.
-        :param times: (optional)
-            Container with start & stop time or ``None``. If ``None`` then use
-            all time. (default: ``None``)
-        :param x_range: (optional)
-            U-distance range. If ``None`` then use all available. (default:
-            ``None``)
-        :param y_range: (optional)
-            V-distance range. If ``None`` then use all available. (default:
-            ``None``)
+        :param start_time: (optional)
+            Instance of ``astropy.time.Time`` class. (default: ``None``)
+        :param stop_time: (optional)
+            Instance of ``astropy.time.Time`` class. (default: ``None``)
         """
         if antennas is None:
             antennas = self.antennas
@@ -783,8 +885,9 @@ class UVData(object):
 
         baselines_to_display = set(baselines_to_display)
 
-        uvdata, indxs = self._choose_uvdata(times=times,
-                                            baselines=baselines_to_display,
+        uvdata, indxs = self._choose_uvdata(baselines=baselines_to_display,
+                                            start_time=start_time,
+                                            stop_time=stop_time,
                                             freq_average=True)
 
         # FIXME: Use properties for u, v
@@ -1099,27 +1202,28 @@ class UVData(object):
 
     # TODO: convert time to datetime format and use date2num for plotting
     # TODO: make a kwarg argument - to plot in different symbols/colors
-    def tplot(self, baselines=None, IF=None, stokes=None, style='a&p',
-              freq_average=False, sym=None):
+    def tplot(self, baselines=None, bands=None, stokes=None, style='a&p',
+              freq_average=False, sym=None, start_time=None, stop_time=None):
         """
         Method that plots uv-data vs. time.
 
-        :param baselines (optional):
-            One or iterable of baselines numbers or ``None``. If ``None`` then
+        :param baselines: (optional)
+            Iterable of baselines numbers or ``None``. If ``None`` then
             use all baselines. (default: ``None``)
-
-        :parm IF (optional):
-            One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
+        :parm bands: (optional)
+            Iterable of IF numbers (0-#IF-1) or ``None``. If ``None`` then
             use all IFs. (default: ``None``)
-
-        :param stokes (optional):
+        :param stokes: (optional)
             Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
             ``LR`` or ``None``. If ``None`` then use ``I``.
             (default: ``None``)
-
-        :param style (optional):
+        :param style: (optional)
             How to plot complex visibilities - real and imaginary part
             (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
+        :param start_time: (optional)
+            Instance of ``astropy.time.Time`` class. (default: ``None``)
+        :param stop_time: (optional)
+            Instance of ``astropy.time.Time`` class. (default: ``None``)
 
         .. note:: All checks are in ``_choose_uvdata`` method.
         """
@@ -1130,11 +1234,11 @@ class UVData(object):
         if not stokes:
             stokes = 'I'
 
-        uvdata, indxs = self._choose_uvdata(baselines=baselines, IF=IF,
-                                            stokes=stokes,
-                                            freq_average=freq_average)
-        # TODO: i need function to choose parameters
-        times = self.hdu.columns[self.par_dict['DATE']].array[indxs]
+        uvdata = self._choose_uvdata(baselines=baselines, bands=bands,
+                                     stokes=stokes, freq_average=freq_average,
+                                     start_time=start_time, stop_time=stop_time)
+        times_indxs = self._get_times_indexes(start_time, stop_time)
+        times = self.times[times_indxs]
 
         if style == 'a&p':
             a1 = np.angle(uvdata)
@@ -1148,7 +1252,7 @@ class UVData(object):
         if not freq_average:
 
             # # of chosen IFs
-            n_if = np.shape(uvdata)[1]
+            n_if = len(bands)
 
             # TODO: define colors
             try:
@@ -1185,23 +1289,27 @@ class UVData(object):
     # TODO: Add ``plot_noise`` boolean kwarg for plotting error bars also. (Use
     # ``UVData.noise()`` method for finding noise values.)
     # TODO: implement antennas/baselines arguments as in ``uv_coverage``.
-    def uvplot(self, baselines=None, IF=None, stokes=None, style='a&p',
+    def uvplot(self, baselines=None, bands=None, stokes=None, style='a&p',
                freq_average=False, sym=None, phase_range=None, amp_range=None,
                re_range=None, im_range=None, colors=None, color='#4682b4',
-               fig=None):
+               fig=None, start_time=None, stop_time=None):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
 
         :param baselines: (optional)
-            One or iterable of baselines numbers or ``None``. If ``None`` then
-            use all baselines. (default: ``None``)
-        :parm IF (optional):
-            One or iterable of IF numbers (1-#IF) or ``None``. If ``None`` then
+            Iterable of baselines numbers or ``None``. If ``None`` then use all
+            baselines. (default: ``None``)
+        :parm bands (optional):
+            Iterable of IF numbers (0 to #IF-1) or ``None``. If ``None`` then
             use all IFs. (default: ``None``)
         :param stokes: (optional)
             Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
             ``LR`` or ``None``. If ``None`` then use ``I``.
             (default: ``None``)
+        :param start_time: (optional)
+            Instance of ``astropy.time.Time`` class. (default: ``None``)
+        :param stop_time: (optional)
+            Instance of ``astropy.time.Time`` class. (default: ``None``)
         :param style: (optional)
             How to plot complex visibilities - real and imaginary part
             (``re&im``) or amplitude and phase (``a&p``). (default: ``a&p``)
@@ -1219,13 +1327,22 @@ class UVData(object):
         if not stokes:
             stokes = 'I'
 
-        uvdata, indxs = self._choose_uvdata(baselines=baselines, IF=IF,
-                                            stokes=stokes,
-                                            freq_average=freq_average)
+        if start_time is None:
+            start_time = self.times[0]
+        if stop_time is None:
+            stop_time = self.times[-1]
 
-        # TODO: i need function choose parameters
+        if baselines is None:
+            baselines = self.baselines
+
+        indxs = np.logical_or(self._get_baselines_indexes(baselines),
+                              self._get_times_indexes(start_time, stop_time))
+        uvdata = self._choose_uvdata(baselines=baselines, bands=bands,
+                                     stokes=stokes, freq_average=freq_average)
+
         uvw_data = self.uvw[indxs]
         uv_radius = np.sqrt(uvw_data[:, 0] ** 2 + uvw_data[:, 1] ** 2)
+        weights = self.weights[indxs]
 
         if style == 'a&p':
             a1 = np.angle(uvdata)
@@ -1245,15 +1362,10 @@ class UVData(object):
         if not freq_average:
             # # of chosen IFs
             # TODO: Better use len(IF) if ``data`` shape will change sometimes.
-            if IF is None:
+            if bands is None:
                 n_if = self.nif
             else:
-                try:
-                    # If ``IF`` is at least iterable
-                    n_if = len(IF)
-                except TypeError:
-                    # If ``IF`` is just a number
-                    n_if = 1
+                n_if = len(bands)
 
             # TODO: define colors
             if colors is not None:
@@ -1265,19 +1377,45 @@ class UVData(object):
                       " colors!"
                 syms = ['.'] * n_if
 
-            for _if in range(n_if):
-                # TODO: plot in different colors and make a legend
-                # Ignore default color if colors list is supplied
-                if colors is not None:
-                    axes[0].plot(uv_radius, a2[:, _if], syms[_if])
-                else:
-                    axes[0].plot(uv_radius, a2[:, _if], syms[_if], color=color)
-            for _if in range(n_if):
-                # Ignore default color if colors list is supplied
-                if colors is not None:
-                    axes[1].plot(uv_radius, a1[:, _if], syms[_if])
-                else:
-                    axes[1].plot(uv_radius, a1[:, _if], syms[_if], color=color)
+            if n_if > 1 or stokes not in self.stokes:
+
+                for _if in range(n_if):
+                    # TODO: plot in different colors and make a legend
+                    # Ignore default color if colors list is supplied
+                    if colors is not None:
+                        axes[0].plot(uv_radius, a2[:, _if], syms[_if])
+                    else:
+                        axes[0].plot(uv_radius, a2[:, _if], syms[_if],
+                                     color=color)
+                for _if in range(n_if):
+                    # Ignore default color if colors list is supplied
+                    if colors is not None:
+                        axes[1].plot(uv_radius, a1[:, _if], syms[_if])
+                    else:
+                        axes[1].plot(uv_radius, a1[:, _if], syms[_if],
+                                     color=color)
+
+            elif n_if == 1 and stokes in self.stokes:
+
+                sc_0 = axes[0].scatter(uv_radius, a2, cmap='gray_r',
+                                       norm=matplotlib.colors.LogNorm(),
+                                       c=weights[:, bands[0],
+                                         self.stokes_dict_inv[stokes]])
+                from mpl_toolkits.axes_grid1 import make_axes_locatable
+                divider_0 = make_axes_locatable(axes[0])
+                cax_0 = divider_0.append_axes("right", size="2%", pad=0.00)
+                cb_0 = fig.colorbar(sc_0, cax=cax_0)
+                sc_1 = axes[1].scatter(uv_radius, a1, cmap='gray_r',
+                                       norm=matplotlib.colors.LogNorm(),
+                                       c=weights[:, bands[0],
+                                         self.stokes_dict_inv[stokes]])
+                cb_0.set_label('Weights')
+                divider_1 = make_axes_locatable(axes[1])
+                cax_1 = divider_1.append_axes("right", size="2%", pad=0.00)
+                cb_1 = fig.colorbar(sc_1, cax=cax_1)
+                cb_1.set_label('Weights')
+                axes[1].set_xlabel('UV-radius, wavelengths')
+
             if style == 'a&p':
                 axes[1].set_ylim([-math.pi, math.pi])
                 axes[0].set_ylabel('Amplitude, [Jy]')
@@ -1293,16 +1431,32 @@ class UVData(object):
                     axes[0].set_ylim(re_range)
                 if im_range is not None:
                     axes[1].set_ylim(im_range)
-            matplotlib.pyplot.xlabel('UV-radius, wavelengths')
+            axes[1].set_xlim(left=0)
             fig.show()
         else:
             if not sym:
                 sym = '.'
-            axes[0].plot(uv_radius, a2, sym, color=color)
-            axes[1].plot(uv_radius, a1, sym, color=color)
-            matplotlib.pyplot.xlabel('UV-radius, wavelengths')
+            # axes[0].plot(uv_radius, a2, sym, color=color)
+            # axes[1].plot(uv_radius, a1, sym, color=color)
+            sc_0 = axes[0].scatter(uv_radius, a2, cmap='gray_r',
+                                   norm=matplotlib.colors.LogNorm(),
+                                   c=np.mean(weights[:, :, self.stokes_dict_inv[stokes]], axis=1))
+            from mpl_toolkits.axes_grid1 import make_axes_locatable
+            divider_0 = make_axes_locatable(axes[0])
+            cax_0 = divider_0.append_axes("right", size="2%", pad=0.00)
+            cb_0 = fig.colorbar(sc_0, cax=cax_0)
+            sc_1 = axes[1].scatter(uv_radius, a1, cmap='gray_r',
+                                   norm=matplotlib.colors.LogNorm(),
+                                   c=np.mean(weights[:, :, self.stokes_dict_inv[stokes]], axis=1))
+            cb_0.set_label('Weights')
+            divider_1 = make_axes_locatable(axes[1])
+            cax_1 = divider_1.append_axes("right", size="2%", pad=0.00)
+            cb_1 = fig.colorbar(sc_1, cax=cax_1)
+            cb_1.set_label('Weights')
+            axes[1].set_xlabel('UV-radius, wavelengths')
             if style == 'a&p':
                 axes[1].set_ylim([-math.pi, math.pi])
+                axes[1].set_xlim(left=0)
                 axes[0].set_ylabel('Amplitude, [Jy]')
                 axes[1].set_ylabel('Phase, [rad]')
                 if amp_range is not None:
@@ -1371,7 +1525,7 @@ class UVData(object):
         """
         # im(x, y) = vis(u, v) * np.exp(2. * math.pi * 1j * (u * x + v * y))
         # where x, y - distances from pase center [rad]
-        pass
+        raise NotImplementedError
 
 
 if __name__ == '__main__':

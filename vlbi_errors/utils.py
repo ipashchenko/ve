@@ -52,6 +52,40 @@ class SyncArray(np.ndarray):
         super(SyncArray, self).__setitem__(coords, value)
 
 
+def to_boolean_array(numbers, length):
+    """
+    Convert iterable of integers to boolean array.
+
+    :param numbers:
+        Iterable of integers.
+    :param length:
+        Integer. Length of the resulting array.
+    :return:
+        Numpy boolean array with indexes of ``numbers`` being ``True``.
+    """
+    numbers = list(numbers)
+    result = np.zeros(length, dtype=bool)
+    result[numbers] = np.ones(len(numbers))
+    return result
+
+
+def check_issubset(to_check, original):
+    """
+    Check that contain of iterable ``to_check`` is among iterable ``original``.
+    :param to_check:
+        Iterable with elements to check.
+    :param original:
+        Iterable with elements to check to.
+    :return:
+        Boolean.
+    """
+    s = set()
+    # Need this because ``set`` remove double letters like ``RR``
+    for item in to_check:
+        s.add(item)
+    return s.issubset(original)
+
+
 def nested_ddict():
     """
     Defaultdict with arbitrary number of levels.

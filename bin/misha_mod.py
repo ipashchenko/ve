@@ -232,6 +232,11 @@ if __name__ == "__main__":
                                        ' residuals of Stokes I real & imag part'
                                        ' plot in output directory.',
                         metavar='FILE NAME')
+    parser.add_argument('-res_plot_full', action='store', nargs='?', default=None,
+                        type=str, help='File name to store residuals of Stokes '
+                                       'RR & LL real & imag part'
+                                       ' plot in output directory.',
+                        metavar='FILE NAME')
     parser.add_argument('-par_plot', action='store', nargs='?', default=None,
                         type=str, help='File name to store parameters plot in'
                                        ' output directory.',
@@ -249,8 +254,7 @@ if __name__ == "__main__":
                              ' nonparametric (nonparametric is the default).')
     parser.add_argument('-recenter', action='store_true', dest='recenter',
                         default=False,
-                        help='Recenter GMM-fitted residuals on each baseline in'
-                             ' parametric bootstrap.')
+                        help='Recenter residuals on each baseline.')
     parser.add_argument('-clean_after', action='store_true', dest='clean_after',
                         default=False,
                         help='Remove bootstrapped data & model files in the'
@@ -262,6 +266,8 @@ if __name__ == "__main__":
     parser.add_argument('-rtheta', action='store_true', dest='use_rtheta',
                         default=False,
                         help='Use `r-theta` coordinates instead of `xy`.')
+    parser.add_argument('-split_scans', action='store_true', dest='split_scans',
+                        default=False, help='Resample each scan individually?')
 
     args = parser.parse_args()
 
@@ -282,6 +288,7 @@ if __name__ == "__main__":
     recenter = args.recenter
     plot_comps = args.plot_comps
     txt_comps = args.txt_comps
+    split_scans = args.split_scans
 
     bic = args.bic
     if args.use_rtheta:
@@ -324,9 +331,9 @@ if __name__ == "__main__":
         print("Using {} bootstrap".format(boot_type_dict[nonparametric]))
         if not nonparametric:
             if recenter:
-                print("Recentering GMM-fitted residuals")
+                print("Recentering KDE-fitted residuals")
             else:
-                print("Using fitted Geussian Mixture Model to generate resamples")
+                print("Using fitted KDE Model to generate resamples")
         print("Using {} bootstrap replications".format(n_boot))
         print("Using {} fitting iterations".format(niter))
         print("Finding {}-confidence regions".format(cred_value))
@@ -339,11 +346,16 @@ if __name__ == "__main__":
             print("Saving errors of {} components to file"
                   " {}".format(txt_comps, errors_fname))
 
+        if split_scans:
+            print("Resampling each scan individually")
         if par_plot:
             print("Saving components {} parameters distributions plot to file"
                   " {}".format(plot_comps, par_plot))
         if args.res_plot:
-            print("Saving residuals plot to file {}".format(args.res_plot))
+            print("Saving residuals I plot to file {}".format(args.res_plot))
+        if args.res_plot_full:
+            print("Saving residulas RR & LL plots to files"
+                  " {}*".format(args.res_plot_full))
         print("==================================")
 
         uvdata = UVData(uv_fits_path)
@@ -361,13 +373,19 @@ if __name__ == "__main__":
             print("Problem in bootstrapping data...")
             sys.exit(1)
         if args.res_plot:
-            print("Plotting histograms of residuals...")
+            print("Plotting histograms of I residuals...")
             boot.plot_residuals(args.res_plot)
+
         curdir = os.getcwd()
         os.chdir(data_dir)
         boot.run(n=n_boot, nonparametric=nonparametric, outname=[outname,
                                                                  '.fits'],
-                 recenter=recenter)
+                 recenter=recenter, use_kde=True)
+        if args.res_plot_full:
+            print("Plotting histograms of RR & LL residuals...")
+            boot.plot_residuals_trio(args.res_plot_full, split_scans,
+                                     stokes=['RR', 'LL'])
+
         os.chdir(curdir)
 
         booted_uv_paths = sorted(glob.glob(os.path.join(data_dir,

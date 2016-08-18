@@ -600,6 +600,8 @@ class UVData(object):
         if stop_time is None:
             stop_time = self.times[-1]
 
+        if stokes is None:
+            stokes = self.stokes
         if check_issubset(stokes, self.stokes):
             sl = self._get_uvdata_slice(baselines, start_time, stop_time, bands,
                                         stokes)
@@ -641,13 +643,7 @@ class UVData(object):
 
         return result
 
-    # TODO: use qq = scipy.stats.probplot((v-mean(v))/std(v), fit=0) then
-    # plot(qq[0], qq[1]) - how to check normality
-    # TODO: should i fit gaussians? - np.std <=> scipy.stats.norm.fit()! NO FIT!
-    # FIXME: ``use_V = True`` gives lower more realistic noise estimates?
-    # FIXME: Generally it should return (#sc, #band, #freq, #stok) array of
-    # stds. Possible, last dimension only for ``use_V=False`` and first dim only
-    # for ``split_scans=True``.
+    # TODO: Use only positive weighted data & robust std estimates
     def noise(self, split_scans=False, use_V=True, average_freq=False):
         """
         Calculate noise for each baseline. If ``split_scans`` is True then
@@ -1115,7 +1111,7 @@ class UVData(object):
         :param model:
             Model to cross-validate. Instance of ``Model`` class.
 
-        :param stokes (optional):
+        :param stokes: (optional)
             Stokes parameter: ``I``, ``Q``, ``U``, ``V``. (default: ``I``)
 
         :return:
@@ -1144,7 +1140,7 @@ class UVData(object):
         for baseline in self.baselines:
             # square difference for each baseline, divide by baseline noise
             # and then sum for current baseline
-            indxs = data_copied.hdu.columns[data_copied.par_dict['BASELINE']].array == baseline
+            indxs = data_copied._indxs_baselines[baseline]
             if average_freq:
                 hands_diff = uvdata[indxs] / noise[baseline]
             else:

@@ -6,6 +6,7 @@ from from_fits import create_model_from_fits_file
 
 
 # TODO: Add optional ``rewrite`` argument to ``UVData.save``
+# TODO: Use only positive weighted data for CV
 class KFoldCV(object):
     def __init__(self, fname, k, basename='cv'):
         self.fname = fname

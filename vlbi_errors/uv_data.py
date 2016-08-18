@@ -1,3 +1,4 @@
+import os
 import math
 import copy
 import numpy as np
@@ -22,7 +23,7 @@ stokes_dict = {-4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR', 1: 'I', 2: 'Q', 3: 'U',
                4: 'V'}
 
 
-# TODO: Implement iterator over IF/Stokes
+# FIXME: Handling FITS files with only one scan (used for CV)
 class UVData(object):
 
     def __init__(self, fname):
@@ -115,7 +116,7 @@ class UVData(object):
         slices_dict.update({'COMPLEX': 1})
         self.hdu.data.data[slices_dict.values()] = self.uvdata.imag
 
-    def save(self, fname=None, data=None):
+    def save(self, fname=None, data=None, rewrite=False):
         """
         Save uv-data to FITS-file.
 
@@ -125,7 +126,12 @@ class UVData(object):
         :param fname: (optional)
             Name of FITS-file to save. If ``None`` then use current instance's
             original file. (default: ``None``)
+        :param rewrite: (optional)
+            Boolean - rewrite file with original name if any? (default:
+            ``False``)
         """
+        if os.path.exists(fname) and rewrite:
+            os.unlink(fname)
         fname = fname or self.fname
         if data is None:
             self.hdulist.writeto(fname)

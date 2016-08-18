@@ -33,8 +33,8 @@ class KFoldCV(object):
                 itrain, itest = list(kfold)[i]
                 train_indxs.extend(itrain)
                 test_indxs.extend(itest)
-            train_data = self.uvdata.hdu.data[itrain]
-            test_data = self.uvdata.hdu.data[itest]
+            train_data = self.uvdata.hdu.data[train_indxs]
+            test_data = self.uvdata.hdu.data[test_indxs]
             self.uvdata.save(self.test_fname, test_data, rewrite=True)
             self.uvdata.save(self.train_fname, train_data, rewrite=True)
 

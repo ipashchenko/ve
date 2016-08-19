@@ -1,17 +1,18 @@
 import numpy as np
 from uv_data import UVData
 from sklearn.cross_validation import KFold
-from spydiff import clean_difmap
+from spydiff import clean_n
 from from_fits import create_model_from_fits_file
 
 
 # TODO: Add optional ``rewrite`` argument to ``UVData.save``
 # TODO: Use only positive weighted data for CV
 class KFoldCV(object):
-    def __init__(self, fname, k, basename='cv'):
+    def __init__(self, fname, k, basename='cv', seed=None):
         self.fname = fname
         self.uvdata = UVData(fname)
         self.k = k
+        self.seed = seed
         self.basename = basename
         self.test_fname = "{}_test.FITS".format(basename)
         self.train_fname = "{}_train.FITS".format(basename)
@@ -21,7 +22,8 @@ class KFoldCV(object):
     def create_folds(self):
         baseline_folds = dict()
         for bl, indxs in self.uvdata._indxs_baselines.items():
-            kfold = KFold(np.count_nonzero(indxs), self.k, shuffle=True)
+            kfold = KFold(np.count_nonzero(indxs), self.k, shuffle=True,
+                          random_state=self.seed)
             baseline_folds[bl] = kfold
         self.baseline_folds = baseline_folds
 
@@ -41,15 +43,17 @@ class KFoldCV(object):
             yield self.train_fname, self.test_fname
 
 
-seed = 42
-cc_pars = list()
+cc_pars = np.arange(10, 1000, 50)
+path_to_script = '/home/ilya/code/vlbi_errors/difmap/clean_n'
 cv_scores = dict()
-for cc_par in cc_pars:
-    kfold = KFoldCV('some.fits', 50, seed)
+for niter in cc_pars:
+    kfold = KFoldCV('some.fits', 30)
     cv = list()
     for tr_fname, ts_fname in kfold:
-        clean_difmap(kfold.train_fname, 'trained_model.FITS', cc_par)
-        tr_model = create_model_from_fits_file('trained_model.FITS')
+        clean_n(kfold.train_fname, 'trained_model_{}.FITS'.format(niter), 'I',
+                (512, 0.1), niter=niter, path_to_script=path_to_script,
+                show_difmap_output=True)
+        tr_model = create_model_from_fits_file('trained_model_{}.FITS'.format(niter))
         ts_uvdata = UVData(ts_fname)
         cv.append(ts_uvdata.cv_score(tr_model))
-    cv_scores[cc_par] = (np.mean(cv), np.std(cv))
+    cv_scores[niter] = (np.mean(cv), np.std(cv))

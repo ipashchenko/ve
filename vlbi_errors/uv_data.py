@@ -535,8 +535,8 @@ class UVData(object):
         indxs = self._get_baselines_indexes(baselines)
 
         if start_time is not None or stop_time is not None:
-            indxs = np.logical_or(indxs, self._get_times_indexes(start_time,
-                                                                 stop_time))
+            indxs = np.logical_and(indxs, self._get_times_indexes(start_time,
+                                                                  stop_time))
 
         if bands is None:
             bands_indxs = self._conver_bands_to_indexes(xrange(self.nif))
@@ -827,7 +827,6 @@ class UVData(object):
         return self._error
 
     # TODO: use different stokes and symmetry!
-    # FIXME:
     def uv_coverage(self, antennas=None, baselines=None, sym='.k',
                     start_time=None, stop_time=None):
         """
@@ -1337,8 +1336,8 @@ class UVData(object):
         if baselines is None:
             baselines = self.baselines
 
-        indxs = np.logical_or(self._get_baselines_indexes(baselines),
-                              self._get_times_indexes(start_time, stop_time))
+        indxs = np.logical_and(self._get_baselines_indexes(baselines),
+                               self._get_times_indexes(start_time, stop_time))
         uvdata = self._choose_uvdata(baselines=baselines, bands=bands,
                                      stokes=stokes, freq_average=freq_average)
 

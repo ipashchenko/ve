@@ -4,6 +4,7 @@ import copy
 import numpy as np
 import astropy.io.fits as pf
 from astropy.time import Time, TimeDelta
+from astropy.stats import biweight_midvariance
 from sklearn.cluster import DBSCAN
 from collections import OrderedDict
 from utils import (baselines_2_ants, index_of, get_uv_correlations,
@@ -56,6 +57,8 @@ class UVData(object):
         self._shapes_baselines = dict()
         self._shapes_baselines_scans = dict()
         self._get_baselines_info()
+        self._noise_diffs = None
+        self._noise_v = None
 
     def _get_baselines_info(self):
         """
@@ -249,13 +252,17 @@ class UVData(object):
         self.sync()
 
     @property
+    def uvdata_weight_masked(self):
+        return np.ma.array(self.uvdata, mask=self._nw_indxs)
+
+    @property
     def uvdata_freq_averaged(self):
         """
         Returns ``self.uvdata`` averaged in IFs, that is complex numpy.ndarray
         with shape (#N, #stokes).
         """
         if self.nif > 1:
-            result = np.mean(self.uvdata, axis=1)
+            result = np.ma.mean(self.uvdata_weight_masked, axis=1)
         # FIXME: if self.nif=1 then np.mean for axis=1 will remove this
         # dimension. So don't need this if-else
         else:
@@ -593,7 +600,7 @@ class UVData(object):
             shape (#N, #IF, #STOKES).
         """
         # Copy with shape (#N, #IF, #STOKES)
-        uvdata = self.uvdata
+        uvdata = self.uvdata_weight_masked
 
         if start_time is None:
             start_time = self.times[0]
@@ -639,11 +646,80 @@ class UVData(object):
                             "items only: I, Q, U, V, RR, LL, RL, LR!")
 
         if freq_average:
-            result = np.mean(result, axis=1).squeeze()
+            result = np.ma.mean(result, axis=1).squeeze()
 
         return result
 
-    # TODO: Use only positive weighted data & robust std estimates
+    def noise_v(self, average_bands=False):
+        """
+        Calculate noise for each baseline using Stokes ``V`` data.
+
+        :param average_bands: (optional)
+            Boolean - average bands after noise calculation?
+
+        :return:
+            Dictionary with keys - baseline numbers & values - numpy arrays with
+            shape (#bands, #stokes) or (#stokes,) if ``average_bands=True``.
+        """
+        if self._noise_v is None:
+            baseline_noises = dict()
+            for baseline in self.baselines:
+                uvdata = self._choose_uvdata(baselines=[baseline])
+                v = uvdata[..., 0] - uvdata[..., 1]
+                mask = np.logical_or(np.isnan(v), v.mask)
+                # #groups, #bands
+                data = np.ma.array(v, mask=mask)
+                mstd = list()
+                for band_data in data.T:
+                    mstd.append(0.5 * (biweight_midvariance(band_data.real) +
+                                       biweight_midvariance(band_data.imag)))
+                baseline_noises[baseline] =\
+                    np.array(mstd).repeat(self.nstokes).reshape((self.nif,
+                                                                 self.nstokes))
+            self._noise_v = baseline_noises.copy()
+
+        if average_bands:
+            return {baseline: np.nanmean(mstd, axis=0) for baseline, mstd in
+                    self._noise_v.items()}
+
+        return self._noise_v
+
+    def noise_diffs(self, average_bands=False):
+        """
+        Calculate noise for each baseline using successive differences approach
+        (Brigg's dissertation).
+
+        :param average_bands: (optional)
+            Boolean - average bands after noise calculation?
+
+        :return:
+            Dictionary with keys - baseline numbers & values - numpy arrays with
+            shape (#bands, #stokes) or (#stokes,) if ``average_bands=True``.
+        """
+        if self._noise_diffs is None:
+            baseline_noises = dict()
+            for baseline in self.baselines:
+                uvdata = self._choose_uvdata(baselines=[baseline])
+                diffs = uvdata[:-1, ...] - uvdata[1:, ...]
+                mask = np.logical_or(np.isnan(diffs), diffs.mask)
+                # #groups, #bands
+                data = np.ma.array(diffs, mask=mask)
+                mstd = np.zeros((self.nif, self.nstokes))
+                for if_ in xrange(self.nif):
+                    for stoke in xrange(self.nstokes):
+                        data_ = data[:, if_, stoke]
+                        mstd[if_, stoke] += biweight_midvariance(data_.real)
+                        mstd[if_, stoke] += biweight_midvariance(data_.imag)
+                        mstd[if_, stoke] *= 0.5
+                baseline_noises[baseline] = mstd
+            self._noise_diffs = baseline_noises.copy()
+
+        if average_bands:
+            return {baseline: np.nanmean(mstd, axis=0) for baseline, mstd in
+                    self._noise_diffs.items()}
+
+        return self._noise_diffs
+
     def noise(self, split_scans=False, use_V=True, average_freq=False):
         """
         Calculate noise for each baseline. If ``split_scans`` is True then
@@ -661,6 +737,9 @@ class UVData(object):
 
         :param average_freq: (optional)
             Use IF-averaged data for calculating noise? (default: ``False``)
+
+        :param stokes: (optional)
+            Stokes parameter to calculate noise.
 
         :return:
             Dictionary with keys - baseline numbers & values - arrays of shape

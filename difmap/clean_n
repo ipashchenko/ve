@@ -1,0 +1,25 @@
+integer clean_niter;
+float clean_gain; clean_gain = 0.03
+
+! select the stokes to clean
+select %1
+clean_niter=%2
+print %1
+print %2
+print "clean_niter ", clean_niter
+
+! clear previous model
+clrmod true,true,true
+
+! delete any windows
+delwin
+
+! remove any tapering
+uvtaper 0
+
+
+! just uniform weighting
+uvw 2,-1
+clean clean_niter,clean_gain;\
+
+print "DONE!"

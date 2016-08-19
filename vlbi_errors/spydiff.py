@@ -3,6 +3,40 @@ import numpy as np
 from components import DeltaComponent, CGComponent, EGComponent
 
 
+def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
+            path_to_script=None, mapsize_restore=None, beam_restore=None,
+            outpath=None, shift=None, show_difmap_output=False):
+    if outpath is None:
+        outpath = os.getcwd()
+
+    if not mapsize_restore:
+        mapsize_restore = mapsize_clean
+
+    difmapout = open("difmap_commands", "w")
+    difmapout.write("observe " + fname + "\n")
+    if shift is not None:
+        difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
+    difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
+                    str(mapsize_clean[1]) + "\n")
+    difmapout.write("@" + path_to_script + " " + stokes + ", " + str(niter) + "\n")
+    if beam_restore:
+        difmapout.write("restore " + str(beam_restore[0]) + ', ' +
+                        str(beam_restore[1]) + ', ' + str(beam_restore[2]) +
+                        "\n")
+    difmapout.write("mapsize " + str(mapsize_restore[0] * 2) + ', ' +
+                    str(mapsize_restore[1]) + "\n")
+    if outpath is None:
+        outpath = os.getcwd()
+    difmapout.write("wmap " + os.path.join(outpath, outfname) + "\n")
+    difmapout.write("exit\n")
+    difmapout.close()
+    # TODO: Use subprocess for silent cleaning?
+    shell_command = "difmap < difmap_commands 2>&1"
+    if not show_difmap_output:
+        shell_command += " >/dev/null"
+    os.system(shell_command)
+
+
 # TODO: add ``shift`` argument, that shifts image before cleaning. It must be
 # more accurate to do this in difmap. Or add such method in ``UVData`` that
 # multiplies uv-data on exp(-1j * (u*x_shift + v*y_shift)).

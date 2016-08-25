@@ -538,14 +538,16 @@ def add_field(a, descr):
 
 def index_of(ar1, ar2, issubset=True):
     """
-    Find indexes of elements of 1d-numpy arrays ar1 in ar2.
+    Find indexes of elements of 1d-numpy array-like ar1 in ar2.
 
     Output:
 
         list (len = len(ar1)) of arrays with indexes of elements in ar2
         corresponding to current (list[i] -> ar1[i]) element of ar1. If no
-        elements are found then i-th elementh of list is None.
+        elements are found then i-th element of list is None.
     """
+    ar1 = np.array(ar1)
+    ar2 = np.array(ar2)
 
     if issubset:
         # assert that all elements of ar1 are in ar2
@@ -570,6 +572,46 @@ def index_of(ar1, ar2, issubset=True):
 
     # return indxs_ar2_sorted[indxs]
     return result
+
+
+def convert_fq_hdu(ohdu):
+    new_columns = list()
+    for coldef in ohdu.data.columns:
+        c = pf.Column(name=coldef.name, format=coldef.format, unit=coldef.unit,
+                      array=coldef.array)
+        new_columns.append(c)
+
+    hdu = pf.BinTableHDU.from_columns(new_columns, name='AIPS FQ')
+    hdu.header.set('EXTVER', value=1, after='EXTNAME')
+    return hdu
+
+
+def convert_an_hdu(ohdu, new_prhdu):
+    """
+    Create AN table HDU.
+
+    :param ohdu:
+        Original AN table HDU.
+    :param new_prhdu:
+        New primary HDU with possibly some baselines missed.
+    :return:
+        Instance of ``BinTableHDU`` with AN table.
+    """
+    new_ants = np.array(baselines_2_ants(new_prhdu.data['BASELINE']))
+    new_ants = ohdu.data['ANNAME'][np.array(new_ants)-1]
+    old_ants = ohdu.data['ANNAME']
+    an_indexes = to_boolean_array(np.array(index_of(new_ants, old_ants)).flatten(),
+                                  len(old_ants))
+
+    new_columns = list()
+    for coldef in ohdu.data.columns:
+        c = pf.Column(name=coldef.name, format=coldef.format, unit=coldef.unit,
+                      array=coldef.array[an_indexes])
+        new_columns.append(c)
+
+    hdu = pf.BinTableHDU.from_columns(new_columns, name='AIPS AN')
+    hdu.header.set('EXTVER', value=1, after='EXTNAME')
+    return hdu
 
 
 def _to_complex_array(struct_array, real_name, imag_name):

@@ -4,12 +4,12 @@ import copy
 import numpy as np
 import astropy.io.fits as pf
 from astropy.time import Time, TimeDelta
-from astropy.stats import biweight_midvariance
+from astropy.stats import biweight_midvariance, mad_std
 from sklearn.cluster import DBSCAN
 from collections import OrderedDict
 from utils import (baselines_2_ants, index_of, get_uv_correlations,
                    find_card_from_header, get_key, to_boolean_array,
-                   check_issubset)
+                   check_issubset, convert_an_hdu, convert_fq_hdu)
 
 try:
     import pylab
@@ -43,6 +43,7 @@ class UVData(object):
 
         self._error = None
         self._scans_bl = None
+        self._stokes = None
         self._times = Time(self.hdu.data['DATE'] + self.hdu.data['_DATE'],
                            format='jd')
 
@@ -76,7 +77,6 @@ class UVData(object):
                     bl_scan_data = self.uvdata[scan_indxs]
                     self._shapes_baselines_scans[baseline].append(np.shape(bl_scan_data))
             except TypeError:
-                print "Skipping baseline # {}".format(baseline)
                 pass
 
     def nw_indxs_baseline(self, baseline):
@@ -139,12 +139,18 @@ class UVData(object):
         if data is None:
             self.hdulist.writeto(fname)
         else:
+            # datas = np.array(sorted(data, key=lambda x: x['DATE']+x['_DATE']),
+            #                 dtype=data.dtype)
             new_hdu = pf.GroupsHDU(data)
             # PyFits updates header using given data (``GCOUNT`` key) anyway
             new_hdu.header = self.hdu.header
 
             hdulist = pf.HDUList([new_hdu])
             for hdu in self.hdulist[1:]:
+                if hdu.header['EXTNAME'] == 'AIPS AN':
+                    hdu = convert_an_hdu(hdu, new_hdu)
+                if hdu.header['EXTNAME'] == 'AIPS FQ':
+                    hdu = convert_fq_hdu(hdu)
                 hdulist.append(hdu)
             hdulist.writeto(fname)
 
@@ -210,12 +216,14 @@ class UVData(object):
         """
         Shortcut to correlations present (or Stokes parameters).
         """
-        ref_val = get_key(self.hdu.header, 'STOKES', 'CRVAL')
-        ref_pix = get_key(self.hdu.header, 'STOKES', 'CRPIX')
-        delta = get_key(self.hdu.header, 'STOKES', 'CDELT')
-        n_stokes = get_key(self.hdu.header, 'STOKES', 'NAXIS')
-        return [stokes_dict[ref_val + (i - ref_pix) * delta] for i in
-                range(1, n_stokes + 1)]
+        if self._stokes is None:
+            ref_val = get_key(self.hdu.header, 'STOKES', 'CRVAL')
+            ref_pix = get_key(self.hdu.header, 'STOKES', 'CRPIX')
+            delta = get_key(self.hdu.header, 'STOKES', 'CDELT')
+            n_stokes = get_key(self.hdu.header, 'STOKES', 'NAXIS')
+            self._stokes = [stokes_dict[ref_val + (i - ref_pix) * delta] for i
+                            in range(1, n_stokes + 1)]
+        return self._stokes
 
     @property
     def stokes_dict(self):
@@ -708,8 +716,10 @@ class UVData(object):
                 for if_ in xrange(self.nif):
                     for stoke in xrange(self.nstokes):
                         data_ = data[:, if_, stoke]
-                        mstd[if_, stoke] += biweight_midvariance(data_.real)
-                        mstd[if_, stoke] += biweight_midvariance(data_.imag)
+                        # mstd[if_, stoke] += biweight_midvariance(data_.real)
+                        # mstd[if_, stoke] += biweight_midvariance(data_.imag)
+                        mstd[if_, stoke] += np.std(data_.real)
+                        mstd[if_, stoke] += np.std(data_.imag)
                         mstd[if_, stoke] *= 0.5
                 baseline_noises[baseline] = mstd
             self._noise_diffs = baseline_noises.copy()
@@ -1181,7 +1191,7 @@ class UVData(object):
                       fname=fname + '_test' + '_' + str(i + 1).zfill(2) + 'of' +
                             str(q) + '.FITS')
 
-    def cv_score(self, model, stokes='I', average_freq=True):
+    def cv_score(self, model, average_freq=True):
         """
         Method that returns cross-validation score for ``self`` (as testing
         cv-sample) and model (trained on training cv-sample).
@@ -1189,8 +1199,9 @@ class UVData(object):
         :param model:
             Model to cross-validate. Instance of ``Model`` class.
 
-        :param stokes: (optional)
-            Stokes parameter: ``I``, ``Q``, ``U``, ``V``. (default: ``I``)
+        :param average_freq: (optional)
+            Boolean - average IFs before CV score calculation? (default:
+            ``True``)
 
         :return:
             Cross-validation score between uv-data of current instance and
@@ -1199,21 +1210,16 @@ class UVData(object):
 
         baselines_cv_scores = list()
 
-        # Calculate noise on each baseline
-        # ``noise`` is dictionary with keys - baseline numbers and values -
-        # numpy arrays of noise std for each IF
-        noise = self.noise(average_freq=average_freq)
-        print "Calculating noise..."
-        print noise
+        noise = self.noise_diffs(average_bands=average_freq)
 
         data_copied = copy.deepcopy(self)
         data_copied.substitute([model])
-        data_copied.uvdata = self.uvdata - data_copied.uvdata
+        data_copied = self - data_copied
 
         if average_freq:
             uvdata = data_copied.uvdata_freq_averaged
         else:
-            uvdata = data_copied.uvdata
+            uvdata = data_copied.uvdata_weight_masked
 
         for baseline in self.baselines:
             # square difference for each baseline, divide by baseline noise
@@ -1223,22 +1229,11 @@ class UVData(object):
                 hands_diff = uvdata[indxs] / noise[baseline]
             else:
                 hands_diff = uvdata[indxs] / noise[baseline][None, :, None]
-            # Construct difference for all Stokes parameters
-            diffs = dict()
-            diffs.update({'I': 0.5 * (hands_diff[..., 0] + hands_diff[..., 1])})
-            diffs.update({'V': 0.5 * (hands_diff[..., 0] - hands_diff[..., 1])})
-            diffs.update({'Q': 0.5 * (hands_diff[..., 2] + hands_diff[..., 3])})
-            diffs.update({'U': 0.5 * 1j * (hands_diff[..., 3] - hands_diff[...,
-                                                                           2])})
-            for stoke in stokes:
-                if stoke not in 'IQUV':
-                    raise Exception('Stokes parameter must be in ``IQUV``!')
-                result = 0
-                diff = diffs[stoke].flatten()
-                diff = diff * np.conjugate(diff)
-                result += float(diff.sum())
-                print "cv score for stoke " + stoke + " is : " + str(result)
-            baselines_cv_scores.append(result)
+            # Construct difference for Stokes ``I`` parameter
+            diff = 0.5 * (hands_diff[..., 0] + hands_diff[..., 1])
+            diff = diff.flatten()
+            diff *= np.conjugate(diff)
+            baselines_cv_scores.append(float(diff.sum()))
 
         return sum(baselines_cv_scores)
 

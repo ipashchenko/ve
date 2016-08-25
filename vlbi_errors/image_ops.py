@@ -897,3 +897,11 @@ def image_slice(image, pix1, pix2):
         y = np.linspace(pix1[1], pix2[1], length)
 
     return image[v_round(x).astype(np.int), v_round(y).astype(np.int)]
+
+
+def bias(image, images):
+    pass
+
+
+def variance(image, images):
+    pass

@@ -5,7 +5,7 @@ from from_fits import create_image_from_fits_file
 
 # Estimate correlation in image pixel values
 # FIXME: Better use residuals image from difmap or AIPS
-image_fits = '/home/ilya/code/learn/1226+023.j.2006_03_09.i_0.1.fits'
+image_fits = '/home/ilya/code/vlbi_errors/vlbi_errors/residuals_15000.FITS'
 image = create_image_from_fits_file(image_fits)
 
 slices = [slice(50 * i, 50 * (i+1)) for i in range(20)]

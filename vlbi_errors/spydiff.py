@@ -5,7 +5,8 @@ from components import DeltaComponent, CGComponent, EGComponent
 
 def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
             path_to_script=None, mapsize_restore=None, beam_restore=None,
-            outpath=None, shift=None, show_difmap_output=False):
+            outpath=None, shift=None, show_difmap_output=False,
+            windows=None):
     if outpath is None:
         outpath = os.getcwd()
 
@@ -16,6 +17,8 @@ def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
     difmapout.write("observe " + fname + "\n")
     if shift is not None:
         difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
+    if windows is not None:
+        difmapout.write("rwin " + str(windows) + "\n")
     difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
                     str(mapsize_clean[1]) + "\n")
     difmapout.write("@" + path_to_script + " " + stokes + ", " + str(niter) + "\n")

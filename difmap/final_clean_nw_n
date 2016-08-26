@@ -1,0 +1,51 @@
+integer clean_niter;
+float clean_gain; clean_gain = 0.03
+float dynam;
+float flux_peak;
+
+! Define the inner loop as a macro.
+
+float flux_cutoff
+float dyn_range
+
+#+map_residual \
+flux_peak = peak(flux);\
+flux_cutoff = imstat(rms) * dynam;\
+while(abs(flux_peak)>flux_cutoff);\
+ clean clean_niter,clean_gain;\
+ flux_cutoff = imstat(rms) * dynam;\
+ flux_peak = peak(flux);\
+end while
+
+! select the stokes to clean
+select %1
+
+! clear previous model
+clrmod true,true,true
+
+
+! remove any tapering
+uvtaper 0
+
+print "*********** FIRST TRY SUPER-UNIFORM WEIGHTING **********"
+print "**** -- only if dynamic range is higher than 50 -- *****"
+
+dynam = 50
+clean_niter = 10
+clean_gain = 0.2
+uvw 20,-1
+map_residual
+uvw 10,-1
+map_residual
+clean_niter = 50
+
+print "*********** REGULAR UNIFORM WEIGHTING NEXT ***************"
+print "**** -- only if dynamic range is higher than 10 -- *****"
+uvw 2,-1
+dynam = 10
+clean_gain = 0.03
+map_residual
+print "********** DEEP CLEANING AT NATURAL WEIGHTING **************"
+uvw 0,-2
+clean_gain = 0.01
+clean %2, clean_gain

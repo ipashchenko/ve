@@ -183,58 +183,6 @@ def clean_uv_fits(uv_fits_path, out_fits_path, stokes, beam=None,
     os.chdir(curdir)
 
 
-# FIXME: This finds only dr that minimize std for shift - radius dependence
-# TODO: use iterables of shifts and sizes as arguments. UNIX-way:)
-def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
-               max_mask_r=None, mask_step=5):
-    """
-    Find shift between two images using our heruistic.
-
-    :param image1:
-        Instance of ``BasicImage`` class.
-    :param image2:
-        Instance of ``BasicImage`` class.
-    :param max_shift:
-        Maximum size of shift to check [pxl].
-    :param shift_step:
-        size of shift changes step [pxl].
-    :param min_shift: (optional)
-        Minimum size of shift to check [pxl]. (default: ``0``)
-    :param max_mask_r: (optional)
-        Maximum size of mask to apply. If ``None`` then use maximum possible.
-        (default: ``None``)
-    :param mask_step: (optional)
-        Size of mask size changes step. (default: ``5``)
-    :return:
-        Array of shifts.
-    """
-    shift_dict = dict()
-
-    # Iterating over difference of mask sizes
-    for dr in range(min_shift, max_shift, shift_step):
-        shift_dict[dr] = list()
-
-        # Iterating over mask sizes
-        for r in range(0, max_mask_r, mask_step):
-            r1 = r
-            r2 = r + dr
-            shift = image1.cross_correlate(image2,
-                                           region1=(image1.x_c, image1.y_c, r1,
-                                                    None),
-                                           region2=(image2.x_c, image2.y_c, r2,
-                                                    None))
-            shift_dict[dr].append(shift)
-
-    for key, value in shift_dict.items():
-        value = np.array(value)
-        shifts = np.sqrt(value[:, 0] ** 2. + value[:, 1] ** 2.)
-        shift_dict.update({key: np.std(shifts)})
-
-    # Searching for mask size difference that has minimal std in shifts
-    # calculated for different mask sizes
-    return sorted(shift_dict, key=lambda _: shift_dict[_])[0]
-
-
 def analyze_source(uv_fits_paths, n_boot, imsizes=None, common_imsize=None,
                    common_beam=None, find_shifts=False, outdir=None,
                    path_to_script=None, clear_difmap_logs=True,

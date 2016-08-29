@@ -416,8 +416,8 @@ class UVData(object):
                 labels = db.labels_
                 if -1 in set(labels):
                     ant1, ant2 = baselines_2_ants([bl])
-                    print "Non-typical scan structure for baseline" \
-                          " {}-{}".format(ant1, ant2)
+                    # print "Non-typical scan structure for baseline" \
+                    #       " {}-{}".format(ant1, ant2)
                     scans_dict[bl] = None
                 else:
                     bl_indxs_ = np.array(bl_indxs, dtype=int)
@@ -862,8 +862,9 @@ class UVData(object):
         # TODO: if on df before generating noise values
         for baseline, baseline_stds in noise.items():
             for i, std in enumerate(baseline_stds):
-                baseline_uvdata, bl_indxs = \
+                baseline_uvdata =\
                     self._choose_uvdata(baselines=[baseline], bands=[i])
+                sl = self._get_uvdata_slice(baselines=[baseline], bands=[i])
                 # (#, #IF, #CH, #stokes)
                 n = np.shape(baseline_uvdata)[0]
                 n_to_add = n * self.nstokes
@@ -874,7 +875,7 @@ class UVData(object):
                 noise_to_add = np.reshape(noise_to_add,
                                           (n, 1, self.nstokes))
                 baseline_uvdata += noise_to_add
-                self.uvdata[bl_indxs] = baseline_uvdata
+                self.uvdata[sl] = baseline_uvdata
         self.sync()
 
     # TODO: Optionally calculate noise by scans.

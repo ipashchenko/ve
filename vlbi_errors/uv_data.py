@@ -470,6 +470,13 @@ class UVData(object):
         """
         return self.uvw[:, :2]
 
+    @property
+    def imsize_by_uv_coverage(self):
+        """
+        Calculate image size & pixel size using UV-plane coverage information.
+        """
+        raise NotImplementedError
+
     def _get_baseline_indexes(self, baseline):
         """
         Return boolean numpy array with indexes of given baseline in original

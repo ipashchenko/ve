@@ -124,7 +124,7 @@ def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
         image += gaussian_(x, y)
         image[image < cut] = 0.
 
-    return image
+    return image, x, y
 
 
 def create_jet_model_image_mojave(width, j_length, cj_length, max_flux, imsize,
@@ -222,6 +222,10 @@ class ModelGenerator(object):
         self.rotm = rotm
         if rotm is None:
             self.rotm = np.zeros(shape, dtype=float)
+
+    @property
+    def pixsize(self):
+        return abs(self._x[1]-self._x[0]), abs(self._y[1]-self._y[0])
 
     def _get_chi_0(self):
         if 'PANG' in self.stokes:
@@ -582,6 +586,156 @@ class MFSimulation(object):
     @property
     def freqs(self):
         return [simulation.frequency for simulation in self.simulations]
+
+
+def create_stokes_models(imsize, j_width=30, j_length=100,
+                         cj_length=10, max_jet_flux=0.00015, center=None,
+                         gauss_peak=0.045, dist_from_core=0, gauss_bmaj=3,
+                         gauss_e=0.2, gauss_bpa=0, gauss_peak_jet=0.0,
+                         qu_fraction=0.2):
+    if center is None:
+        center = (imsize[0]/2, imsize[0]/1)
+    jet_image, x, y = create_jet_model_image(width=j_width, j_length=j_length,
+                                             cj_length=cj_length,
+                                             max_jet_flux=max_jet_flux, imsize=imsize,
+                                             center=center, gauss_peak=gauss_peak,
+                                             dist_from_core=dist_from_core,
+                                             gauss_bmaj=gauss_bmaj, gauss_e=gauss_e,
+                                             gauss_bpa=gauss_bpa,
+                                             gauss_peak_jet=gauss_peak_jet)
+    return {'I': jet_image, 'Q': qu_fraction * jet_image,
+            'U': qu_fraction * jet_image}
+
+
+def get_image_parameters(imsize, pixsize, center=None):
+    """
+    :param imsize:
+        Tuple of image size.
+    :param center:
+        Tuple of image center.
+    :param pixsize:
+        Size of pixel in mas (dx, dy).
+    :return:
+        Array of image coordinates (for x & y) in rads.
+    """
+    if center is None:
+        center = (imsize[0]/2, imsize[1]/2)
+    x, y = create_grid(imsize)
+    x -= center[0]
+    y -= center[1]
+    x /= mas_to_rad
+    y /= mas_to_rad
+
+    return x, y
+
+
+def create_simulator(observed_uv, stokes_models, image_x, image_y,
+                     rotm_image=None, alpha_image=None,
+                     model_freq=20. * 10. ** 9):
+    """
+    :param observed_uv:
+        Iterable of ``UVData`` instances with simultaneous multifrequency
+        uv-data of the same source at the same epoch.
+    :param pixsize:
+        Iterable of pixel size in mas [dx, dy].
+    :return:
+    """
+    assert rotm_image.shape == alpha_image.shape == stokes_models['I'].shape
+    imsize = stokes_models['I'].shape
+
+    mod_generator = ModelGenerator(stokes_models, image_x, image_y,
+                                   rotm=rotm_image, alpha=alpha_image,
+                                   freq=model_freq)
+    return MFSimulation(observed_uv, mod_generator)
+
+
+def get_model_images(mf_simulator, freq, beam_common_pxl, rotm_mask, out_dir):
+    """
+    Create images of model optionally convolved with beam.
+
+    :param mf_simulator:
+    :param freq:
+    :param beam_common_pxl:
+    :param rotm_mask:
+    :param out_dir:
+    :return:
+    """
+    mod_generator = mf_simulator.model_generator
+    # Plotting convolved model of ROTM
+    i_image_mod = mod_generator.get_stokes_images(freq, i_cut_frac=0.01,
+                                                  beam=beam_common_pxl)['I']
+    freqs = sorted([float(freq) for freq in mf_simulator.freqs])
+    rotm_image_mod, _, _ = mod_generator.get_rotm_map(freqs,
+                                                      rotm_mask=rotm_mask,
+                                                      beam=beam_common_pxl)
+    iplot(i_image_mod, rotm_image_mod, x=i_image.x, y=i_image.y,
+          min_abs_level=3. * rms, colors_mask=rotm_mask,
+          outfile='rotm_image_model_convolved', outdir=out_dir, blc=(220, 200),
+          trc=(360, 320), beam=beam_common, colorbar_label='RM, [rad/m/m]',
+          slice_points=((-2, -4), (-2, 4)), show=False, show_beam=True,
+          color_clim=rotm_clim_sym)
+
+    # Plotting non-convolved (generating) model of ROTM
+    # TODO: Should i use original model array for ROTM (not I cause frequency
+    # changed)? Original array of ROTM model ``rotm_image`` could have much
+    # smaller pixel - so probably not.
+    i_image_mod_nc = mod_generator.get_stokes_images(freq, i_cut_frac=0.01)['I']
+    mask_nc = mod_generator.create_i_mask(freq, i_cut_frac=0.01)
+    rotm_image_mod_nc, _, _ = mod_generator.get_rotm_map(freqs,
+                                                         rotm_mask=mask_nc)
+    iplot(i_image_mod_nc, rotm_image_mod_nc, x=i_image.x, y=i_image.y,
+          min_abs_level=0.005 * np.max(i_image_mod_nc), colors_mask=mask_nc,
+          outfile='rotm_image_model_original', outdir=data_dir,
+          color_clim=rotm_clim_model, blc=(220, 200), trc=(360, 320),
+          colorbar_label='RM, [rad/m/m]', slice_points=((-2, -4), (-2, 4)),
+          show=False)
+
+    # Plotting convolved model of SPIX
+    spix_image_mod, _, _ = mod_generator.get_spix_map(freqs,
+                                                      spix_mask=spix_mask,
+                                                      beam=beam_common_pxl)
+    iplot(i_image_mod, spix_image_mod, x=i_image.x, y=i_image.y,
+          min_abs_level=3. * rms, colors_mask=spix_mask,
+          outfile='spix_image_model_convolved', outdir=data_dir,
+          color_clim=spix_clim_sym, blc=(220, 200), trc=(360, 320),
+          beam=beam_common, colorbar_label='SPIX', show=False, show_beam=True,
+          slice_points=((4, 0), (-6, 0)))
+
+    # Plot non-convolved (generating) model of SPIX
+    # TODO: Should i use original model array for SPIX? (not I cause frequency
+    # changed)? Original array of SPIX model ``alpha_image`` could have much
+    # smaller pixel - so probably not.
+    spix_image_mod_nc, _, _ = mod_generator.get_spix_map(freqs,
+                                                         spix_mask=mask_nc)
+    iplot(i_image_mod_nc, spix_image_mod_nc, x=i_image.x, y=i_image.y,
+          min_abs_level=0.005 * np.max(i_image_mod_nc), colors_mask=mask_nc,
+          outfile='spix_image_model_original', outdir=data_dir,
+          color_clim=spix_clim_model, blc=(220, 200), trc=(360, 320),
+          colorbar_label='SPIX', show=False, slice_points=((4, 0), (-6, 0)))
+
+
+def create_simulated_data(mf_simulator, data_dir, n_sample=1.):
+    """
+    Create FITS-files with simulated data.
+    :param mf_simulator:
+    :param data_dir:
+    :param n_sample:
+    """
+    # Mapping from frequencies to FITS file names
+    fnames_dict = dict()
+    os.chdir(data_dir)
+    for freq in mf_simulator.freqs:
+        fnames_dict.update({freq: str(freq) + '_' + 'sim.uvf'})
+
+    # Creating sample
+    for i in range(n_sample):
+        print "Creating sample {}-th of {}".format(i + 1, n_sample)
+        fnames_dict_i = fnames_dict.copy()
+        fnames_dict_i.update({freq: name + '_' + str(i + 1).zfill(3) for
+                              freq, name in fnames_dict.items()})
+        mf_simulator.simulate()
+        mf_simulator.save_fits(fnames_dict_i)
+
 
 
 # TODO: This function only simulates. To analyzes simulations use other funcs

@@ -90,11 +90,11 @@ def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan,
     al. 2012) approach.
 
     :param q:
-        2D numpy array of stokes Q.
+        Instance of ``Image`` class for stokes Q.
     :param u:
-        2D numpy array of stokes U.
+        Instance of ``Image`` class for stokes U.
     :param i:
-        2D numpy array of stokes I.
+        Instance of ``Image`` class for stokes I.
     :param sigma_evpa:
         EVPA calibration error [deg].
     :param d_term:
@@ -115,19 +115,17 @@ def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan,
         uncertainties of PANG and second - with uncertainties of PPOL.
 
     """
-    assert q.shape == u.shape == i.shape
+    assert q == u == i
 
     # Create images of D-terms uncertainty
-    i_peak = np.max(i.ravel())
-    sigma_d_image = d_term * np.sqrt(i ** 2. + (0.3 * i_peak) ** 2) / \
+    i_peak = np.max(i.image.ravel())
+    sigma_d_image = d_term * np.sqrt(i.image ** 2. + (0.3 * i_peak) ** 2) / \
         np.sqrt(n_ant * n_if * n_scan)
 
     # For each stokes Q & U find rms error
     rms_dict = dict()
     for stokes, image in zip(('q', 'u'), (q, u)):
-        mask = create_mask(image.shape, rms_region)
-        image = np.ma.array(image, mask=~mask)
-        rms_dict[stokes] = np.ma.std(image.ravel())
+        rms_dict[stokes] = rms_image(image)
 
     # Find overall Q & U error that is sum of rms and D-terms uncertainty
     overall_errors_dict = dict()
@@ -137,9 +135,9 @@ def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan,
         overall_errors_dict[stoke] = overall_sigma
 
     # Find EVPA & PPOL errors
-    evpa_error_image = np.sqrt((q * overall_errors_dict['u']) ** 2. +
-                               (u * overall_errors_dict['q']) ** 2.) /\
-        (2. * (q ** 2. + u ** 2.))
+    evpa_error_image = np.sqrt((q.image * overall_errors_dict['u']) ** 2. +
+                               (u.image * overall_errors_dict['q']) ** 2.) /\
+        (2. * (q.image ** 2. + u.image ** 2.))
     ppol_error_image = 0.5 * (overall_errors_dict['u'] +
                               overall_errors_dict['q'])
 

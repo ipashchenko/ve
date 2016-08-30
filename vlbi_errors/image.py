@@ -767,7 +767,7 @@ class CleanImage(Image):
     def image(self, image):
         if isinstance(image, Image):
             if self == image:
-                self._image = image.image.copy()
+                self._image_original = image.image.copy()
             else:
                 raise Exception("Images have incompatible parameters!")
         # If ``image`` is array-like
@@ -775,7 +775,7 @@ class CleanImage(Image):
             image = np.atleast_2d(image).copy()
             if not self.imsize == np.shape(image):
                 raise Exception("Images have incompatible parameters!")
-            self._image = image
+            self._image_original = image
 
     @property
     def cc_image(self):

@@ -790,63 +790,87 @@ def pol_mask(stokes_image_dict, n_sigma=2.):
     return np.logical_or(i_cs_mask, ppol_cs_mask)
 
 
-def analyze_rotm_slice(slice_coords, rotm_image, rotm_images,
-                       conf_band_alpha=0.95, outdir=None,
+def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
+                       rotm_images=None, conf_band_alpha=0.95, outdir=None,
                        outfname='rotm_slice_spread.png'):
     """
     Analyze ROTM slice.
 
     :param slice_coords:
-        Iterable of to points (x1, y1) in pixels that are coordinates of slice.
+        Iterable of points (x, y) in pixels that are coordinates of slice.
     :param rotm_image:
         Instance of ``Image`` class with original ROTM map.
-    :param rotm_images:
-        Instance of ``Images`` class with bootstrapped ROTM maps.
+    :param sigma_rotm_image: (optional)
+        Instance of ``Image`` class with error ROTM map. If ``None`` then use
+        ``rotm_images`` argument and build simultaneous confidence band.
+        (default: ``None``)
+    :param rotm_images: (optional)
+        Instance of ``Images`` class with bootstrapped ROTM maps. If ``None``
+        then use ``sigma_rotm_image`` argument and plot pointwise error bars.
+        (default: ``None``)
     :param conf_band_alpha: (optional)
-        Confidence to use (0-1). (default: ``0.95``)
-    :param outdir:
-
-    :return:
+        Confidence to use when calculating simultaneous confidence band (0-1).
+        (default: ``0.95``)
+    :param outdir: (optional)
+        Directory to save figure. If ``None`` then use CWD. (default: ``None``)
+    :param outfname: (optional)
+        File name for saved figure. (default: ``rotm_slice_spread.png``)
     """
     # Setting up the output directory
     if outdir is None:
         outdir = os.getcwd()
     print("Using output directory {}".format(outdir))
 
-    # Calculate simultaneous confidence bands
-    # Bootstrap slices
-    slices = list()
-    for image in rotm_images.images:
-        slice_ = image.slice(slice_coords)
-        slices.append(slice_[~np.isnan(slice_)])
-
     # Find means
-    obs_slice = rotm_image.slice(slice_coords)
+    obs_slice = rotm_image.slice(pix1=slice_coords[0], pix2=slice_coords[1])
     length = int(round(np.hypot(slice_coords[1][0] - slice_coords[0][0],
                                 slice_coords[1][1] - slice_coords[0][1])))
     x = np.arange(length)
     x = x[~np.isnan(obs_slice)]
-    obs_slice = obs_slice[~np.isnan(obs_slice)]
-    # Find sigmas
-    slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices]
-    sigmas = hdi_of_arrays(slices_).squeeze()
-    means = np.mean(np.vstack(slices), axis=0)
-    diff = obs_slice - means
-    # Move bootstrap curves to original simulated centers
-    slices_ = [slice_ + diff for slice_ in slices]
-    # Find low and upper confidence band
-    low, up = create_sim_conf_band(slices_, obs_slice, sigmas,
-                                   alpha=conf_band_alpha)
+    obs_slice_notna = obs_slice[~np.isnan(obs_slice)]
 
-    # Plot confidence bands and model values
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    ax.plot(x, low[::-1], 'g')
-    ax.plot(x, up[::-1], 'g')
-    [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
-    ax.plot(x, obs_slice[::-1], '.k')
-    fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight', dpi=200)
-    plt.close()
+    if sigma_rotm_image is not None:
+        sigma_slice = sigma_rotm_image.slice(pix1=slice_coords[0],
+                                             pix2=slice_coords[1])
+        sigma_slice_notna = sigma_slice[~np.isnan(obs_slice)]
+        # Plot confidence bands and model values
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        ax.errorbar(x, obs_slice_notna[::-1], sigma_slice_notna[::-1], fmt='.k')
+        fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight',
+                    dpi=200)
+        plt.close()
+
+    elif rotm_images is not None:
+        # Calculate simultaneous confidence bands
+        # Bootstrap slices
+        slices = list()
+        for image in rotm_images.images:
+            slice_ = image.slice(pix1=slice_coords[0], pix2=slice_coords[1])
+            slices.append(slice_[~np.isnan(slice_)])
+
+        # Find sigmas
+        slices_ = [arr.reshape((1, len(obs_slice_notna))) for arr in slices]
+        sigmas = hdi_of_arrays(slices_).squeeze()
+        means = np.mean(np.vstack(slices), axis=0)
+        diff = obs_slice_notna - means
+        # Move bootstrap curves to original simulated centers
+        slices_ = [slice_ + diff for slice_ in slices]
+        # Find low and upper confidence band
+        low, up = create_sim_conf_band(slices_, obs_slice_notna, sigmas,
+                                       alpha=conf_band_alpha)
+
+        # Plot confidence bands and model values
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        ax.plot(x, low[::-1], 'g')
+        ax.plot(x, up[::-1], 'g')
+        [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
+        ax.plot(x, obs_slice_notna[::-1], '.k')
+        fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight', dpi=200)
+        plt.close()
+    else:
+        raise Exception("Specify ROTM error map or bootstrapped ROTM images")
 
 
 def plot_image_correlation(image, fname='correlation.png', show=True,

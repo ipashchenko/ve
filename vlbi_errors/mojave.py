@@ -4,6 +4,8 @@ import BeautifulSoup
 import urllib2
 import fnmatch
 import numpy as np
+import sys
+
 from spydiff import clean_difmap
 from from_fits import create_image_from_fits_file, \
     create_clean_image_from_fits_file
@@ -156,7 +158,11 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
     # Downloading (optionally) l-band data
     if 'l18' in bands or 'l20' in bands or 'l21' in bands or 'l22' in bands:
         request = urllib2.Request(os.path.join(mojave_l_url, source))
-        response = urllib2.urlopen(request)
+        try:
+            response = urllib2.urlopen(request)
+        except urllib2.HTTPError:
+            print("No L-bands data available")
+            return
         soup = BeautifulSoup.BeautifulSoup(response)
 
         available_epochs = list()

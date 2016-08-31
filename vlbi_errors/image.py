@@ -69,6 +69,39 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
     return sorted(shift_dict, key=lambda _: shift_dict[_])[0]
 
 
+def find_bbox(array, level, delta=0.):
+    """
+    Find bounding box for part of image containing source.
+
+    :param array:
+        Numpy 2D array with image.
+    :param level:
+        Level at which threshold image in image units.
+    :param delta:
+        Extra space to add symmetrically [pixels].
+    :return:
+        Tuples of BLC & TRC.
+    """
+    from scipy.ndimage.measurements import label
+    from scipy.ndimage.morphology import generate_binary_structure
+    from skimage.measure import regionprops
+
+    signal = array > level
+    s = generate_binary_structure(2, 2)
+    labeled_array, num_features = label(signal, structure=s)
+    props = regionprops(labeled_array, intensity_image=array)
+
+    max_prop = props[0]
+    for prop in props[1:]:
+        if prop.max_intensity > max_prop.max_intensity:
+            max_prop = prop
+
+    bbox = max_prop.bbox
+    blc = (bbox[1] - delta, bbox[0] - delta)
+    trc = (bbox[3] + delta, bbox[2] + delta)
+    return blc, trc
+
+
 # TODO: Implement plotting w/o coordinates - in pixels. Use pixel numbers as
 # coordinates.
 # TODO: Make possible use ``blc`` & ``trc`` in mas.
@@ -617,6 +650,47 @@ class Image(BasicImage):
         self.xv = xv
         self.y = y
         self.yv = yv
+
+    def _convert_coordinates(self, point1, point2):
+        """
+        Convert coordinates from image scale [mas] to pixels
+
+        :param point1:
+            Iterable of coordinates of first pixel [mas].
+        :param point2:
+            Iterable of coordinates of second pixel [mas].
+        :return:
+            Tuples of coordinates for first & second pixel [pixels].
+        """
+        ycoords = self.y / mas_to_rad
+        xcoords = self.x / mas_to_rad
+
+        y0 = np.argmin(np.abs(ycoords - point1[0]))
+        y1 = np.argmin(np.abs(ycoords - point2[0]))
+        x0 = np.argmin(np.abs(xcoords - point1[1]))
+        x1 = np.argmin(np.abs(xcoords - point2[1]))
+        return (x0, y0), (x1, y1)
+
+    def slice(self, pix1=None, pix2=None, point1=None, point2=None):
+        """
+        Return slice of image in pixels or image coordinates.
+        :param pix1: (optional)
+            Iterable of coordinates of first pixel [pixels].
+        :param pix2: (optional)
+            Iterable of coordinates of second pixel [pixels].
+        :param point1: (optional)
+            Iterable of coordinates of first pixel [mas].
+        :param point2: (optional)
+            Iterable of coordinates of second pixel [mas].
+        :return:
+            Numpy array of image values for given slice.
+        """
+        if pix1 is not None and pix2 is not None:
+            return super(Image, self).slice(pix1, pix2)
+        if point1 is not None and point2 is not None:
+            # Convert coordinates [mas] to pixels
+            pix1, pix2 = self._convert_coordinates(point1, point2)
+            return super(Image, self).slice(pix1, pix2)
 
     def __eq__(self, other):
         """

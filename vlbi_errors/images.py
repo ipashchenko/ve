@@ -1,4 +1,4 @@
-import os
+import pickle
 import numpy as np
 import glob
 from collections import defaultdict
@@ -40,12 +40,21 @@ class Images(object):
     """
     def __init__(self):
         # Container of ``Image`` instances
-        self._images_dict = defaultdict(lambda: defaultdict(list))
+        # self._images_dict = defaultdict(lambda: defaultdict(list))
         # Pickleable solution:
-        # from functools import partial
-        # self._images_dict = defaultdict(partial(defaultdict, list))
+        from functools import partial
+        self._images_dict = defaultdict(partial(defaultdict, list))
         # Stacked images
         self._images_cube = None
+
+    def save(self, fname):
+        with open(fname, 'wb') as fo:
+            pickle.dump(self)
+
+    @staticmethod
+    def load(fname):
+        with open(fname, 'rb') as fo:
+            self = pickle.load(fo)
 
     @property
     def images(self):
@@ -688,9 +697,9 @@ class Images(object):
                 pang_array = pang_map(q_image._image, u_image._image, mask=mask)
 
             # Create basic image and add ``pang_array``
-            pang_image = Image(imsize=img.imsize, pixref=img.pixref,
-                               pixrefval=img.pixrefval, pixsize=img.pixsize,
-                               freq=img.freq, stokes='PANG')
+            pang_image = Image()
+            pang_image._construct(img.pixsize, img.pixref, 'PANG', img.freq,
+                                  img.pixrefval, imsize=img.imsize)
             if convolved:
                 pang_image.image = pang_array
             else:

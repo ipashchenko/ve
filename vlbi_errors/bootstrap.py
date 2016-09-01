@@ -833,8 +833,6 @@ class CleanBootstrap(Bootstrap):
 
     def resample_baseline_nonparametric(self, baseline, copy_of_model_data,
                                         recenter):
-        print "Doing nonparametric baseline - for baseline {}".format(baseline)
-
         # Boolean array that defines indexes of current baseline data
         baseline_indxs = self.residuals._indxs_baselines[baseline]
         # FIXME: Here iterate over keys with not None values
@@ -1005,10 +1003,8 @@ class CleanBootstrap(Bootstrap):
 
         # If do resampling for different scans independently
         if split_scans:
-            print "Splitting scans"
             # Do parametric bootstrap
             if not nonparametric:
-                print "doing parametric"
                 for baseline in self.residuals.baselines:
                     self.resample_baseline_parametric_splitting_scans(baseline,
                                                                       copy_of_model_data,
@@ -1016,7 +1012,6 @@ class CleanBootstrap(Bootstrap):
                                                                       use_kde)
             # Do nonparametric bootstrap
             else:
-                print "doing nonparametric"
                 # Bootstrap from self.residuals._data. For each baseline.
                 for baseline in self.residuals.baselines:
                     self.resample_baseline_nonparametric_splitting_scans(baseline,
@@ -1026,15 +1021,12 @@ class CleanBootstrap(Bootstrap):
         else:
             # Do parametric bootstrap
             if not nonparametric:
-                print "Doing parametric"
                 for baseline in self.residuals.baselines:
                     self.resample_baseline_parametric(baseline,
                                                       copy_of_model_data,
                                                       recenter, use_kde)
             # Do nonparametric bootstrap
             else:
-                print "doing nonparametric"
-                # TODO: should i resample all stokes and IFs together? Yes
                 # Bootstrap from self.residuals._data. For each baseline.
                 for baseline in self.residuals.baselines:
                     self.resample_baseline_nonparametric(baseline,

@@ -83,8 +83,7 @@ def add_dterm_evpa(q, u, i, evpa, d_term, n_ant, n_if, n_scans):
     return q_, u_
 
 
-def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan,
-                            rms_region):
+def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan):
     """
     Function that calculates uncertainty images of PANG & PPOL using (Hovatta et
     al. 2012) approach.
@@ -106,10 +105,6 @@ def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan,
         Number of Intermediate Frequency channels.
     :param n_scan:
         Number of scans with independent parallactic angles.
-    :param rms_region:
-        Region to include in rms calculation. Or (blc[0], blc[1], trc[0],
-        trc[1],) or (center[0], center[1], r, None,). If ``None`` then use
-        all image in rms calculation. Default ``None``.
     :return:
         Two 2D numpy arrays with the same shape as input images. First - with
         uncertainties of PANG and second - with uncertainties of PPOL.
@@ -238,7 +233,7 @@ def rotm_map(freqs, chis, s_chis=None, mask=None, outfile=None, outdir=None,
             chisq_array[x, y] = s_sq
             rotm_array[x, y] = np.nan
             s_rotm_array[x, y] = np.nan
-        if pcov is not np.nan:
+        elif pcov is not np.nan:
             chisq_array[x, y] = s_sq
             rotm_array[x, y] = p[0]
             s_rotm_array[x, y] = np.sqrt(pcov[0, 0])
@@ -792,7 +787,7 @@ def pol_mask(stokes_image_dict, n_sigma=2.):
 
 def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
                        rotm_images=None, conf_band_alpha=0.95, outdir=None,
-                       outfname='rotm_slice_spread.png'):
+                       outfname='rotm_slice_spread.png', beam_width=None):
     """
     Analyze ROTM slice.
 
@@ -815,6 +810,9 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
         Directory to save figure. If ``None`` then use CWD. (default: ``None``)
     :param outfname: (optional)
         File name for saved figure. (default: ``rotm_slice_spread.png``)
+    :param beam_width: (optional)
+        Beam width in pixels to plot. If ``None`` then don't plot. (default:
+        ``None``)
     """
     # Setting up the output directory
     if outdir is None:
@@ -826,17 +824,26 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
     length = int(round(np.hypot(slice_coords[1][0] - slice_coords[0][0],
                                 slice_coords[1][1] - slice_coords[0][1])))
     x = np.arange(length)
-    x = x[~np.isnan(obs_slice)]
-    obs_slice_notna = obs_slice[~np.isnan(obs_slice)]
+    # x = x[~np.isnan(obs_slice)]
+    # obs_slice_notna = obs_slice[~np.isnan(obs_slice)]
 
     if sigma_rotm_image is not None:
         sigma_slice = sigma_rotm_image.slice(pix1=slice_coords[0],
                                              pix2=slice_coords[1])
         sigma_slice_notna = sigma_slice[~np.isnan(obs_slice)]
-        # Plot confidence bands and model values
+        # Plot errorbars
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
-        ax.errorbar(x, obs_slice_notna[::-1], sigma_slice_notna[::-1], fmt='.k')
+        # ax.errorbar(x, obs_slice_notna[::-1], sigma_slice_notna[::-1], fmt='.k')
+        ax.errorbar(x, obs_slice[::], sigma_slice[::], fmt='.k')
+        ax.set_xlim([0, len(obs_slice)])
+        ax.set_xlabel("Distance along slice, [pixels]")
+        ax.set_ylabel("RM, [rad/m/m]")
+        if beam_width:
+            # min_point = np.min(obs_slice_notna - sigma_slice_notna)
+            min_point = np.nanmin(obs_slice - sigma_slice) - 25.
+            ax.plot((x[1], x[1] + beam_width), (min_point, min_point), 'k',
+                    lw=2)
         fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight',
                     dpi=200)
         plt.close()
@@ -847,26 +854,44 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
         slices = list()
         for image in rotm_images.images:
             slice_ = image.slice(pix1=slice_coords[0], pix2=slice_coords[1])
-            slices.append(slice_[~np.isnan(slice_)])
+            # slices.append(slice_[~np.isnan(slice_)])
+            slices.append(slice_)
 
         # Find sigmas
-        slices_ = [arr.reshape((1, len(obs_slice_notna))) for arr in slices]
+        # slices_ = [arr.reshape((1, len(obs_slice_notna))) for arr in slices]
+        slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices]
         sigmas = hdi_of_arrays(slices_).squeeze()
         means = np.mean(np.vstack(slices), axis=0)
-        diff = obs_slice_notna - means
+        # diff = obs_slice_notna - means
+        diff = obs_slice - means
         # Move bootstrap curves to original simulated centers
         slices_ = [slice_ + diff for slice_ in slices]
         # Find low and upper confidence band
-        low, up = create_sim_conf_band(slices_, obs_slice_notna, sigmas,
+        # low, up = create_sim_conf_band(slices_, obs_slice_notna, sigmas,
+        #                                alpha=conf_band_alpha)
+        low, up = create_sim_conf_band(slices_, obs_slice, sigmas,
                                        alpha=conf_band_alpha)
 
-        # Plot confidence bands and model values
+        # Plot confidence band
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
-        ax.plot(x, low[::-1], 'g')
-        ax.plot(x, up[::-1], 'g')
-        [ax.plot(x, slice_[::-1], 'r', lw=0.15) for slice_ in slices_]
-        ax.plot(x, obs_slice_notna[::-1], '.k')
+        ax.set_xlim([0, len(obs_slice)])
+        d = 0.125 * ((up - low)[~np.isnan(up - low)][0] +
+                     (up - low)[~np.isnan(up - low)][-1])
+        ax.set_ylim([np.nanmin(low) - d, np.nanmax(up) + d])
+        ax.plot(x, low[::], 'g', lw=2)
+        ax.plot(x, up[::], 'g', lw=2)
+        [ax.plot(x, slice_[::], 'r', lw=0.2) for slice_ in slices_]
+        # ax.plot(x, obs_slice_notna[::-1], '.k')
+        ax.plot(x, obs_slice[::], '.k')
+        ax.set_xlabel("Distance along slice, [pixels]")
+        ax.set_ylabel("RM, [rad/m/m]")
+        if beam_width:
+            # min_point = np.min(obs_slice_notna) -\
+            #             sigmas[np.argmin(obs_slice_notna)]
+            min_point = np.nanmin(low) - 0.5 * d
+            ax.plot((x[1], x[1] + beam_width), (min_point, min_point), 'k',
+                    lw=2)
         fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight', dpi=200)
         plt.close()
     else:

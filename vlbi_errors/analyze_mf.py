@@ -18,6 +18,10 @@ from utils import hdi_of_mcmc
 from mojave import download_mojave_uv_fits, get_epochs_for_source
 
 
+chisq_crit_values = {1: 3.841, 2: 5.991, 3: 7.815, 4: 9.488, 5: 11.070,
+                     6: 12.592, 7: 14.067, 8: 15.507, 9: 16.919, 10: 18.307}
+
+
 def boot_ci(boot_images, original_image, alpha=0.68, kind=None):
     """
     Calculate bootstrap CI.
@@ -60,9 +64,11 @@ class MFObservations(object):
     def __init__(self, fits_files, imsizes=None, n_boot=100, common_imsize=None,
                  common_beam=None, find_shifts=False, path_to_script=None,
                  data_dir=None, clear_difmap_logs=True, rotm_slices=None,
-                 sigma_evpa=None, sigma_d_term=None):
+                 sigma_evpa=None, sigma_d_term=None, n_scans=None):
         """
         :param fits_files:
+            Iterable of FITS files with self-calibrated simultaneous
+            mutlifrequency UV-data.
         :param imsizes: (optional)
             Iterable of tuples (image size [pix], pixel size [mas]) for data
             sorted by frequency. If ``None`` then derive from data UV-plane
@@ -71,11 +77,37 @@ class MFObservations(object):
             Iterable (image size [pix], pixel size [mas]) for common image
             parameters. If ``None`` then use minimal pixel size but keep the
             same physical size. (default: ``None``)
-        :param common_beam:
+        :param common_beam: (optional)
+            Parameters of beam to convolve CCs to make matched resolution maps.
+            If ``None`` then derive from available as beam of lowest frequency.
+            (default: ``None``)
         :param find_shifts:
+            Boolean. Find shifts between pairs of images at different bands?
+            (default: ``False``)
         :param path_to_script:
-        :param data_dir:
-        :param clear_difmap_logs:
+            Path to `difmap` cleaning script `final_clean_nw`. If ``None`` then
+            suppose it is in CWD. (default: ``None``)
+        :param data_dir: (optional)
+            Directory to store output. If ``None`` then use CWD. (default:
+            ``None``)
+        :param clear_difmap_logs: (optional)
+            Boolean. Clear `difmap` log-files after CLEANing methods? (default:
+            ``True``)
+        :param rotm_slices: (optional)
+            Iterable of start & stop point coordinates (in image coordinates,
+            in mas) of ROTM slice to plot. If ``None`` then don't plot any
+            slices. (default: ``None``)
+        :param sigma_evpa: (optional)
+            Iterable of uncertainies of absolute EVPA calibration for each band.
+            If ``None`` then use zero values. (default: ``None``)
+        :param sigma_d_term: (optional)
+            Iterable of D-terms calibration uncertainties for each band. If
+            ``None`` then use zero for each band. (default: ``None``)
+        :param n_scans: (optional)
+            Iterable of numbers of independend scans for each band. If ``None``
+            then number of scans is determined from data (some of them may be
+            dependent). (default: ``None``)
+
         """
         self.original_fits_files = fits_files
         self.uvdata_dict = dict()
@@ -87,6 +119,7 @@ class MFObservations(object):
         self._cs_mask = None
         self._cs_mask_n_sigma = None
         self.rotm_slices = rotm_slices
+        self._chisq_crit = chisq_crit_values[len(self.uvdata_dict) - 2]
 
         if sigma_evpa is None:
             self.sigma_evpa = np.zeros(len(self.uvdata_dict), dtype=float)
@@ -98,6 +131,7 @@ class MFObservations(object):
         else:
             assert len(sigma_d_term) == len(self.uvdata_dict)
         self.sigma_d_term = np.array(sigma_d_term)
+        self.n_scans = n_scans
 
         if imsizes is None:
             imsizes = [self.uvdata_dict[freq].imsize_by_uv_coverage for
@@ -111,6 +145,8 @@ class MFObservations(object):
         self._common_beam = common_beam
 
         self.find_shifts = find_shifts
+        if path_to_script is None:
+            path_to_script = os.path.join(os.getcwd(), 'final_clean_nw')
         self.path_to_script = path_to_script
         if data_dir is None:
             data_dir = os.getcwd()
@@ -139,7 +175,7 @@ class MFObservations(object):
         # bootstraped data
         self.cc_boot_cs_fits_dict = dict()
 
-        # Hovatta-type errors estimation
+        # Hovatta-type errors estimation. Values - 2D numpy arrays.
         self.evpa_sigma_dict = dict()
         self.ppol_sigma_dict = dict()
 
@@ -148,14 +184,22 @@ class MFObservations(object):
         # Instance of ``Images`` class with ROTM maps
         self._boot_rotm_images = None
 
+        # Uncertainties found using bootstrapped data. Values - instances of
+        # ``Image`` class.
+        self.evpa_sigma_boot_dict = dict()
+
         # ROTM image made by conventional method
         self._rotm_image_conv = None
         # ROTM error map made by conventional method
         self._rotm_image_sigma_conv = None
+        # Chi-squared image made by conventional method
+        self._rotm_chisq_image_conv = None
         # ROTM image made by bootstrapping
         self._rotm_image_boot = None
         # ROTM error map made by bootstrapping
         self._rotm_image_sigma_boot = None
+        # Chi-squared image made by bootstrapped data
+        self._rotm_chisq_image_boot = None
 
     def run(self, sigma_evpa=None, sigma_d_term=None, colors_clim=None,
             n_sigma_mask=None, rotm_slices=None):
@@ -195,6 +239,7 @@ class MFObservations(object):
             powers = powers.tolist()
             imsize = 2 ** powers.index(0)
             self._common_imsize = imsize, pixsize
+            print("Common image parameteres: {}, {}".format(imsize, pixsize))
         return self._common_imsize
 
     @property
@@ -205,6 +250,7 @@ class MFObservations(object):
         """
         if self._common_beam is None:
             self._common_beam = self.cc_beam_dict[self.freqs[0]]
+            print("Common beam parameters: {}".format(self._common_beam))
         return self._common_beam
 
     def set_common_mask(self, n_sigma=3.):
@@ -226,6 +272,8 @@ class MFObservations(object):
 
         print("Clean original uv-data with native map parameters...")
         for freq in self.freqs:
+            print("Cleaning frequency {} with image "
+                  "parameters {}".format(freq, self.imsizes_dict[freq]))
             uv_fits_path = self.uvfits_dict[freq]
             uv_dir, uv_fname = os.path.split(uv_fits_path)
             for stokes in self.stokes:
@@ -253,7 +301,8 @@ class MFObservations(object):
                 os.unlink(difmap_log)
 
     def clean_original_common(self):
-        print("Clean original uv-data with common map parameters...")
+        print("Clean original uv-data with common map parameters "
+              " {} and beam {}".format(self.common_imsize, self.common_beam))
         for freq in self.freqs:
             self.cc_cs_image_dict.update({freq: dict()})
             self.cc_cs_fits_dict.update({freq: dict()})
@@ -446,24 +495,26 @@ class MFObservations(object):
             s_evpa = sigma_evpa[i]
 
             # Get number of scans
-            try:
-                # If `NX` table is present
-                n_scans = len(self.uvdata_dict[freq].scans)
-            except TypeError:
-                scans_dict = self.uvdata_dict[freq].scans_bl
-                scan_lengths = list()
-                for scans in scans_dict.values():
-                    if scans is not None:
-                        scan_lengths.append(len(scans))
-                n_scans = mode(scan_lengths)[0][0]
+            if self.n_scans is not None:
+                try:
+                    # If `NX` table is present
+                    n_scans = len(self.uvdata_dict[freq].scans)
+                except TypeError:
+                    scans_dict = self.uvdata_dict[freq].scans_bl
+                    scan_lengths = list()
+                    for scans in scans_dict.values():
+                        if scans is not None:
+                            scan_lengths.append(len(scans))
+                    n_scans = mode(scan_lengths)[0][0]
+            else:
+                n_scans = self.n_scans[i]
 
             q = self.cc_cs_image_dict[freq]['Q']
             u = self.cc_cs_image_dict[freq]['U']
             i = self.cc_cs_image_dict[freq]['I']
-            rms_region = rms_image(i)
             pang_std, ppol_std = hovatta_find_sigma_pang(q, u, i, s_evpa,
                                                          d_term, n_ant, n_if,
-                                                         n_scans, rms_region)
+                                                         n_scans)
             self.evpa_sigma_dict[freq] = pang_std
             iplot(i_image.image, pang_std, x=i_image.x, y=i_image.y,
                   min_abs_level=3. * rms, colors_mask=self._cs_mask,
@@ -473,11 +524,13 @@ class MFObservations(object):
                   show_beam=True, show=False)
 
         sigma_pang_arrays = [self.evpa_sigma_dict[freq] for freq in self.freqs]
-        rotm_image, sigma_rotm_image =\
+        rotm_image, sigma_rotm_image, chisq_image =\
             self.original_cs_images.create_rotm_image(sigma_pang_arrays,
-                                                      mask=self._cs_mask)
+                                                      mask=self._cs_mask,
+                                                      return_chisq=True)
         self._rotm_image_conv = rotm_image
         self._rotm_image_sigma_conv = sigma_rotm_image
+        self._rotm_chisq_image_conv = chisq_image
 
         i_image = self.cc_cs_image_dict[self.freqs[-1]]['I']
         rms = rms_image(i_image)
@@ -487,14 +540,20 @@ class MFObservations(object):
               min_abs_level=3. * rms, colors_mask=self._cs_mask,
               outfile='rotm_image_conv', outdir=self.data_dir,
               color_clim=colors_clim, blc=blc, trc=trc, beam=self.common_beam,
-              colorbar_label='RM, [rad/m/m]', slice_points=None, show_beam=True,
-              show=False)
+              colorbar_label='RM, [rad/m/m]', slice_points=rotm_slices,
+              show_beam=True, show=False)
         iplot(i_image.image, sigma_rotm_image.image, x=i_image.x, y=i_image.y,
               min_abs_level=3. * rms, colors_mask=self._cs_mask,
               outfile='rotm_image_conv_sigma', outdir=self.data_dir,
               color_clim=[0, 200], blc=blc, trc=trc, beam=self.common_beam,
-              colorbar_label='RM, [rad/m/m]', slice_points=None, show_beam=True,
-              show=False)
+              colorbar_label='RM, [rad/m/m]', slice_points=rotm_slices,
+              show_beam=True, show=False)
+        iplot(i_image.image, chisq_image.image, x=i_image.x, y=i_image.y,
+              min_abs_level=3. * rms, colors_mask=self._cs_mask,
+              outfile='rotm_chisq_image_conv', outdir=self.data_dir,
+              color_clim=[0., self._chisq_crit], blc=blc, trc=trc, beam=self.common_beam,
+              colorbar_label='Chi-squared', slice_points=rotm_slices,
+              show_beam=True, show=False)
 
         if rotm_slices is not None:
             for rotm_slice in rotm_slices:
@@ -503,6 +562,7 @@ class MFObservations(object):
                 analyze_rotm_slice(rotm_slice_, rotm_image,
                                    sigma_rotm_image=sigma_rotm_image,
                                    outdir=self.data_dir,
+                                   beam_width=int(i_image._beam.beam[0]),
                                    outfname="ROTM_{}_slice.png".format(rotm_slice))
 
         return rotm_image, sigma_rotm_image
@@ -556,6 +616,7 @@ class MFObservations(object):
                   color_clim=[0, 1], blc=blc, trc=trc, beam=self.common_beam,
                   colorbar_label='sigma EVPA, [rad]', slice_points=None,
                   show_beam=True, show=False)
+        self.evpa_sigma_boot_dict = result
         return result
 
     def analyze_rotm_boot(self, n_sigma=None, cred_mass=0.68, rotm_slices=None,
@@ -569,10 +630,12 @@ class MFObservations(object):
         sigma_pangs_dict = self.create_boot_pang_errors()
         sigma_pang_arrays = [sigma_pangs_dict[freq].image for freq in
                              self.freqs]
-        rotm_image, _ = \
+        rotm_image, _, chisq_image = \
             self.original_cs_images.create_rotm_image(sigma_pang_arrays,
-                                                      mask=self._cs_mask)
+                                                      mask=self._cs_mask,
+                                                      return_chisq=True)
         self._rotm_image_boot = rotm_image
+        self._rotm_chisq_image_boot = chisq_image
 
         i_image = self.cc_cs_image_dict[self.freqs[-1]]['I']
         rms = rms_image(i_image)
@@ -582,11 +645,18 @@ class MFObservations(object):
               min_abs_level=3. * rms, colors_mask=self._cs_mask,
               outfile='rotm_image_boot', outdir=self.data_dir,
               color_clim=colors_clim, blc=blc, trc=trc, beam=self.common_beam,
-              colorbar_label='RM, [rad/m/m]', slice_points=None, show_beam=True,
-              show=False)
+              colorbar_label='RM, [rad/m/m]', slice_points=rotm_slices,
+              show_beam=True, show=False)
+        iplot(i_image.image, chisq_image.image, x=i_image.x, y=i_image.y,
+              min_abs_level=3. * rms, colors_mask=self._cs_mask,
+              outfile='rotm_chisq_image_boot', outdir=self.data_dir,
+              color_clim=[0., self._chisq_crit], blc=blc, trc=trc, beam=self.common_beam,
+              colorbar_label='Chi-squared', slice_points=rotm_slices,
+              show_beam=True, show=False)
 
         self._boot_rotm_images =\
-            self.boot_images.create_rotm_images(mask=self._cs_mask)
+            self.boot_images.create_rotm_images(mask=self._cs_mask,
+                                                mask_on_chisq=False)
         sigma_rotm_image =\
             self._boot_rotm_images.create_error_image(cred_mass=cred_mass)
         self._rotm_image_sigma_boot = sigma_rotm_image
@@ -595,8 +665,8 @@ class MFObservations(object):
               min_abs_level=3. * rms, colors_mask=self._cs_mask,
               outfile='rotm_image_boot_sigma', outdir=self.data_dir,
               color_clim=[0, 200], blc=blc, trc=trc, beam=self.common_beam,
-              colorbar_label='RM, [rad/m/m]', slice_points=None, show_beam=True,
-              show=False)
+              colorbar_label='RM, [rad/m/m]', slice_points=rotm_slices,
+              show_beam=True, show=False)
 
         if rotm_slices is not None:
             for rotm_slice in rotm_slices:
@@ -605,6 +675,7 @@ class MFObservations(object):
                 analyze_rotm_slice(rotm_slice_, rotm_image,
                                    rotm_images=self._boot_rotm_images,
                                    outdir=self.data_dir,
+                                   beam_width=int(i_image._beam.beam[0]),
                                    outfname="ROTM_{}_slice_boot.png".format(rotm_slice))
 
         return rotm_image, sigma_rotm_image
@@ -612,26 +683,31 @@ class MFObservations(object):
 
 if __name__ == '__main__':
     import glob
-    source = '0454+844'
+    # source = '0454+844'
+    source = '2230+114'
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
     epochs = get_epochs_for_source(source, use_db='multifreq')
     print(epochs)
     print("Found epochs for source {}:".format(source))
     for epoch in epochs:
         print(epoch)
+    # epoch = epochs[-1]
+    epoch = '2006_02_12'
     base_dir = '/home/ilya/vlbi_errors/article/'
     data_dir = os.path.join(base_dir, source)
 
     # Download uv-data from MOJAVE web DB optionally
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
-        download_mojave_uv_fits(source, epochs=[epochs[-1]],
+        download_mojave_uv_fits(source, epochs=[epoch],
                                 download_dir=data_dir)
     fits_files = glob.glob(os.path.join(data_dir, "*.uvf"))
     imsizes = [(512, 0.1), (512, 0.1), (512, 0.1), (512, 0.1)]
-    n_boot = 10
+    n_boot = 50
     mfo = MFObservations(fits_files, imsizes, n_boot, data_dir=data_dir,
-                         path_to_script=path_to_script)
-    mfo.run(sigma_evpa=[2., 2., 2., 2.], n_sigma_mask=3.0,
-            sigma_d_term=[0.003, 0.003, 0.003, 0.003],
-            rotm_slices=[((3, -0.5), (-3, -0.5)), ((3, 0), (-3, 0))])
+                         path_to_script=path_to_script,
+                         n_scans=[4., 4., 4., 4.],
+                         sigma_d_term=[0.002, 0.002, 0.002, 0.002],
+                         sigma_evpa=[2., 2., 2., 2.])
+    mfo.run(n_sigma_mask=3.0, colors_clim=[-600, 250],
+            rotm_slices=[((4, -5), (1, -7))])

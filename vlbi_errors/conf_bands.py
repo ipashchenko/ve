@@ -20,7 +20,7 @@ def is_embraced(curve, means, widths):
     assert len(curve) == len(means) == len(widths)
     diff = np.abs(curve - means)
 
-    return np.alltrue(diff < widths)
+    return np.alltrue(np.nan_to_num(diff) <= np.nan_to_num(widths))
 
 
 def count_contained(curves, means, widths):

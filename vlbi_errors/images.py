@@ -354,7 +354,7 @@ class Images(object):
     # TODO: Option for plotting PANG vs. wavelength squared for pixels
     def create_rotm_image(self, s_pang_arrays=None, freqs=None, mask=None, n=0,
                           outfile=None, outdir=None, ext='png',
-                          mask_on_chisq=True):
+                          mask_on_chisq=True, return_chisq=False):
         """
         Method that creates image of Rotation Measure for current collection of
         instances.
@@ -441,6 +441,15 @@ class Images(object):
                                 pixref=img.pixref, stokes='ROTM',
                                 freq=tuple(freqs), pixrefval=img.pixrefval)
         s_rotm_image.image = s_rotm_array
+
+        if return_chisq:
+            chisq_image = Image()
+            chisq_image._construct(imsize=img.imsize, pixsize=img.pixsize,
+                                   pixref=img.pixref, stokes='CHI2',
+                                   freq=tuple(freqs), pixrefval=img.pixrefval)
+            chisq_image.image = chisq_array
+
+            return rotm_image, s_rotm_image, chisq_image
 
         return rotm_image, s_rotm_image
 

@@ -295,8 +295,9 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                         width=0.05, headaxislength=0.)
 
     if slice_points is not None:
-        ax.plot([slice_points[0][0], slice_points[1][0]],
-                [slice_points[0][1], slice_points[1][1]])
+        for single_slice in slice_points:
+            ax.plot([single_slice[0][0], single_slice[1][0]],
+                    [single_slice[0][1], single_slice[1][1]])
 
     if plot_title:
         title = ax.set_title(plot_title, fontsize='large')

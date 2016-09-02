@@ -20,9 +20,9 @@ except ImportError:
 # FIXME: This finds only dr that minimize std for shift - radius dependence
 # TODO: use iterables of shifts and sizes as arguments. UNIX-way:)
 def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
-               max_mask_r=None, mask_step=5):
+               max_mask_r=100, mask_step=5):
     """
-    Find shift between two images using our heruistic.
+    Find shift between two images using our heuristic.
 
     :param image1:
         Instance of ``BasicImage`` class.
@@ -35,8 +35,7 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
     :param min_shift: (optional)
         Minimum size of shift to check [pxl]. (default: ``0``)
     :param max_mask_r: (optional)
-        Maximum size of mask to apply. If ``None`` then use maximum possible.
-        (default: ``None``)
+        Maximum size of mask to apply. (default: ``100.``)
     :param mask_step: (optional)
         Size of mask size changes step. (default: ``5``)
     :return:
@@ -59,14 +58,20 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
                                                     None))
             shift_dict[dr].append(shift)
 
+    shift_value_dict = dict()
     for key, value in shift_dict.items():
         value = np.array(value)
         shifts = np.sqrt(value[:, 0] ** 2. + value[:, 1] ** 2.)
-        shift_dict.update({key: np.std(shifts)})
+        shift_value_dict.update({key: np.std(shifts)})
 
     # Searching for mask size difference that has minimal std in shifts
     # calculated for different mask sizes
-    return sorted(shift_dict, key=lambda _: shift_dict[_])[0]
+    dr_tgt = sorted(shift_dict, key=lambda _: shift_value_dict[_])[0]
+    # Shift values vs mask radius dependence for best mask size difference
+    shift_values = shift_value_dict[dr_tgt]
+    # Looking for first minimum
+    idx = (np.diff(np.sign(np.diff(shift_values))) > 0).nonzero()[0] + 1
+    return shift_dict[dr_tgt][idx]
 
 
 def find_bbox(array, level, delta=0.):

@@ -4,6 +4,7 @@ import json
 import glob
 import numpy as np
 from scipy.stats import mode
+from astropy.time import Time
 from uv_data import UVData
 from spydiff import clean_difmap
 from from_fits import (create_clean_image_from_fits_file,
@@ -203,12 +204,17 @@ class MFObservations(object):
 
     def run(self, sigma_evpa=None, sigma_d_term=None, colors_clim=None,
             n_sigma_mask=None, rotm_slices=None):
+        self._t0 = Time.now()
+        date, time = str(self._t0.utc.datetime).split()
+        self._difmap_commands_file =\
+            os.path.join(self.data_dir,
+                         "difmap_commands_{}_{}".format(date, time))
         self.clean_original_native()
         self.clean_original_common()
         if self.find_shifts:
             self.get_shifts()
         self.bootstrap_uvdata()
-        self.clean_boot_native()
+        # self.clean_boot_native()
         self.clean_boot_common()
         self.set_common_mask(n_sigma=n_sigma_mask)
         self.analyze_rotm_conv(colors_clim=colors_clim, sigma_evpa=sigma_evpa,
@@ -284,7 +290,8 @@ class MFObservations(object):
                     clean_difmap(uv_fname, outfname, stokes,
                                  self.imsizes_dict[freq], path=uv_dir,
                                  path_to_script=self.path_to_script,
-                                 outpath=self.data_dir, show_difmap_output=False)
+                                 outpath=self.data_dir,
+                                 command_file=self._difmap_commands_file)
                 else:
                     print("Found CLEAN model in file {}".format(outfname))
                 self.cc_fits_dict[freq].update({stokes: os.path.join(self.data_dir,
@@ -315,9 +322,11 @@ class MFObservations(object):
                 # Check if it is already done
                 if not os.path.exists(outpath):
                     clean_difmap(uv_fname, outfname, stokes, self.common_imsize,
-                                 path=uv_dir, path_to_script=self.path_to_script,
+                                 path=uv_dir,
+                                 path_to_script=self.path_to_script,
                                  beam_restore=self.common_beam,
-                                 outpath=self.data_dir, show_difmap_output=False)
+                                 outpath=self.data_dir,
+                                 command_file=self._difmap_commands_file)
                 else:
                     print("Found CLEAN model in file {}".format(outfname))
                 self.cc_cs_fits_dict[freq].update({stokes: os.path.join(self.data_dir,
@@ -334,6 +343,7 @@ class MFObservations(object):
     def get_shifts(self):
         print("Optionally find shifts between original CLEAN-images...")
         print("Determining images shift...")
+        beam_pxl = int(self.common_beam[0] / self.common_imsize[1])
         shift_dict = dict()
         freq_1 = self.freqs[0]
         image_1 = self.cc_cs_image_dict[freq_1]['I']
@@ -341,8 +351,8 @@ class MFObservations(object):
         for freq_2 in self.freqs[1:]:
             image_2 = self.cc_cs_image_dict[freq_2]['I']
             # Coarse grid of possible shifts
-            shift = find_shift(image_1, image_2, 100, 5, max_mask_r=200,
-                               mask_step=5)
+            shift = find_shift(image_1, image_2, beam_pxl, 1,
+                               max_mask_r=beam_pxl, mask_step=2)
             # More accurate grid of possible shifts
             print("Using fine grid for accurate estimate")
             coarse_grid = range(0, 100, 5)
@@ -394,7 +404,7 @@ class MFObservations(object):
             self.uvfits_boot_dict.update({freq: sorted(files)})
 
     def clean_boot_native(self):
-        print("Clean bootstrap replications with common restoring beam and map"
+        print("Clean bootstrap replications with native restoring beam and map"
               " size...")
         for freq in self.freqs:
             self.cc_boot_fits_dict.update({freq: dict()})
@@ -407,12 +417,12 @@ class MFObservations(object):
                     # Check if it is already done
                     if not os.path.exists(os.path.join(self.data_dir,
                                                        outfname)):
-                        clean_difmap(uv_fname, outfname, stokes, self.common_imsize,
-                                     path=uv_dir,
+                        clean_difmap(uv_fname, outfname, stokes,
+                                     self.common_imsize, path=uv_dir,
                                      path_to_script=self.path_to_script,
                                      beam_restore=self.common_beam,
                                      outpath=self.data_dir,
-                                     show_difmap_output=False)
+                                     command_file=self._difmap_commands_file)
                     else:
                         print("Found CLEAN model in file {}".format(outfname))
                 files = sorted(glob.glob(os.path.join(self.data_dir,
@@ -426,7 +436,7 @@ class MFObservations(object):
                 os.unlink(difmap_log)
 
     def clean_boot_common(self):
-        print("Optionally clean bootstrap replications with common "
+        print("Clean bootstrap replications with common "
               "restoring beams and map sizes...")
         for freq in self.freqs:
             self.cc_boot_cs_fits_dict.update({freq: dict()})
@@ -439,12 +449,12 @@ class MFObservations(object):
                     # Check if it is already done
                     if not os.path.exists(os.path.join(self.data_dir,
                                                        outfname)):
-                        clean_difmap(uv_fname, outfname, stokes, self.common_imsize,
-                                     path=uv_dir,
+                        clean_difmap(uv_fname, outfname, stokes,
+                                     self.common_imsize, path=uv_dir,
                                      path_to_script=self.path_to_script,
                                      beam_restore=self.common_beam,
                                      outpath=self.data_dir,
-                                     show_difmap_output=False)
+                                     command_file=self._difmap_commands_file)
                     else:
                         print("Found CLEAN model in file {}".format(outfname))
                 files = sorted(glob.glob(os.path.join(self.data_dir,
@@ -683,8 +693,7 @@ class MFObservations(object):
 
 if __name__ == '__main__':
     import glob
-    # source = '0454+844'
-    source = '2230+114'
+    source = '2134+004'
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
     epochs = get_epochs_for_source(source, use_db='multifreq')
     print(epochs)
@@ -692,7 +701,7 @@ if __name__ == '__main__':
     for epoch in epochs:
         print(epoch)
     # epoch = epochs[-1]
-    epoch = '2006_02_12'
+    epoch = '2006_07_07'
     base_dir = '/home/ilya/vlbi_errors/article/'
     data_dir = os.path.join(base_dir, source)
 
@@ -703,11 +712,11 @@ if __name__ == '__main__':
                                 download_dir=data_dir)
     fits_files = glob.glob(os.path.join(data_dir, "*.uvf"))
     imsizes = [(512, 0.1), (512, 0.1), (512, 0.1), (512, 0.1)]
-    n_boot = 50
+    n_boot = 100
     mfo = MFObservations(fits_files, imsizes, n_boot, data_dir=data_dir,
                          path_to_script=path_to_script,
                          n_scans=[4., 4., 4., 4.],
                          sigma_d_term=[0.002, 0.002, 0.002, 0.002],
-                         sigma_evpa=[2., 2., 2., 2.])
-    mfo.run(n_sigma_mask=3.0, colors_clim=[-600, 250],
-            rotm_slices=[((4, -5), (1, -7))])
+                         sigma_evpa=[4., 4., 2., 3.])
+    mfo.run(n_sigma_mask=3.0, colors_clim=[-250, 2250],
+            rotm_slices=[((-2, 3), (-2, -4))])

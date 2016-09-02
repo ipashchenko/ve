@@ -45,7 +45,8 @@ def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
 # multiplies uv-data on exp(-1j * (u*x_shift + v*y_shift)).
 def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  path_to_script=None, mapsize_restore=None, beam_restore=None,
-                 outpath=None, shift=None, show_difmap_output=False):
+                 outpath=None, shift=None, show_difmap_output=False,
+                 command_file=None):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
@@ -78,6 +79,9 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         If ``None`` then don't shift. (default: ``None``)
     :param show_difmap_output: (optional)
         Show difmap output? (default: ``False``)
+    :param command_file: (optional)
+        Script file name to store `difmap` commands. If ``None`` then use
+        ``difmap_commands``. (default: ``None``)
 
     """
     if path is None:
@@ -88,7 +92,10 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     if not mapsize_restore:
         mapsize_restore = mapsize_clean
 
-    difmapout = open("difmap_commands", "w")
+    if command_file is None:
+        command_file = "difmap_commands"
+
+    difmapout = open(command_file, "w")
     difmapout.write("observe " + os.path.join(path, fname) + "\n")
     if shift is not None:
         difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
@@ -109,7 +116,7 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     difmapout.write("exit\n")
     difmapout.close()
     # TODO: Use subprocess for silent cleaning?
-    shell_command = "difmap < difmap_commands 2>&1"
+    shell_command = "difmap < " + command_file + " 2>&1"
     if not show_difmap_output:
         shell_command += " >/dev/null"
     os.system(shell_command)

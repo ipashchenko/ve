@@ -645,7 +645,8 @@ class Images(object):
     # in ``create_rotm_images``
     # ``Images`` instance can be easily obtained from list of ``Image``
     # instances
-    def create_pang_images(self, freq=None, mask=None, convolved=True):
+    def create_pang_images(self, freq=None, mask=None, convolved=True,
+                           sigma_evpa=None):
         """
         Method that creates Polarization Angle images for current collection of
         image instances.
@@ -657,6 +658,15 @@ class Images(object):
             Mask to be applied to arrays before calculation. If ``None`` then
             don't apply mask. Note that ``mask`` must have dimensions of only
             one image, that is it should be 2D array.
+        :param convolved: (optional)
+            Boolean. Use ``image`` or ``_image`` attribute of ``Image``
+            instances to create PANG maps? (default: ``True``)
+        :param sigma_evpa: (optional)
+            Value of std [degrees] that represents uncertainty of absolute EVPA
+            calibration. Add normal random variable with zero mean and
+            ``sigma_evpa`` std to each instance of ``Image`` class with PANG
+            map. If ``None`` then don't account for this uncertainty (e.g. when
+            searching ROTM gradients).
 
         :return:
             List of ``Image`` instances with Polarization Angle maps.
@@ -704,6 +714,11 @@ class Images(object):
                 pang_array = pang_map(q_image.image, u_image.image, mask=mask)
             else:
                 pang_array = pang_map(q_image._image, u_image._image, mask=mask)
+
+            if sigma_evpa:
+                pang_array +=\
+                    np.random.normal(loc=0., scale=np.deg2rad(sigma_evpa),
+                                     size=1) * np.ones(pang_array.shape)
 
             # Create basic image and add ``pang_array``
             pang_image = Image()

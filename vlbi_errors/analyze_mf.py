@@ -203,7 +203,8 @@ class MFObservations(object):
         self._rotm_chisq_image_boot = None
 
     def run(self, sigma_evpa=None, sigma_d_term=None, colors_clim=None,
-            n_sigma_mask=None, rotm_slices=None):
+            n_sigma_mask=None, rotm_slices=None, pxls_plot=None,
+            plot_points=None):
         self._t0 = Time.now()
         date, time = str(self._t0.utc.datetime).split()
         self._difmap_commands_file =\
@@ -219,7 +220,8 @@ class MFObservations(object):
         self.set_common_mask(n_sigma=n_sigma_mask)
         self.analyze_rotm_conv(colors_clim=colors_clim, sigma_evpa=sigma_evpa,
                                sigma_d_term=sigma_d_term,
-                               rotm_slices=rotm_slices)
+                               rotm_slices=rotm_slices, pxls_plot=pxls_plot,
+                               plot_points=plot_points)
         self.analyze_rotm_boot(colors_clim=colors_clim, rotm_slices=rotm_slices)
 
     def load_uvdata(self):
@@ -477,7 +479,8 @@ class MFObservations(object):
         return self._original_cs_images
 
     def analyze_rotm_conv(self, sigma_evpa=None, sigma_d_term=None,
-                          rotm_slices=None, colors_clim=None, n_sigma=None):
+                          rotm_slices=None, colors_clim=None, n_sigma=None,
+                          pxls_plot=None, plot_points=None):
         print("Estimate RM map and it's error using conventional method...")
 
         if sigma_evpa is None:
@@ -492,9 +495,10 @@ class MFObservations(object):
         # Find EVPA error for each frequency
         print("Calculating maps of PANG errors for each band using Hovatta's"
               " approach...")
-        # Fetch common size `I` map on highest frequency for plotting PNAG error
+        # Fetch common size `I` map on highest frequency for plotting PANG error
         # maps
         i_image = self.cc_cs_image_dict[self.freqs[-1]]['I']
+        pxls_plot = [i_image._convert_coordinate(pxl) for pxl in pxls_plot]
         rms = rms_image(i_image)
         blc, trc = find_bbox(i_image.image, 2.*rms,
                              delta=int(i_image._beam.beam[0]))
@@ -537,7 +541,10 @@ class MFObservations(object):
         rotm_image, sigma_rotm_image, chisq_image =\
             self.original_cs_images.create_rotm_image(sigma_pang_arrays,
                                                       mask=self._cs_mask,
-                                                      return_chisq=True)
+                                                      return_chisq=True,
+                                                      plot_pxls=pxls_plot,
+                                                      outdir=self.data_dir,
+                                                      mask_on_chisq=True)
         self._rotm_image_conv = rotm_image
         self._rotm_image_sigma_conv = sigma_rotm_image
         self._rotm_chisq_image_conv = chisq_image
@@ -551,7 +558,7 @@ class MFObservations(object):
               outfile='rotm_image_conv', outdir=self.data_dir,
               color_clim=colors_clim, blc=blc, trc=trc, beam=self.common_beam,
               colorbar_label='RM, [rad/m/m]', slice_points=rotm_slices,
-              show_beam=True, show=False)
+              show_beam=True, show=False, show_points=plot_points)
         iplot(i_image.image, sigma_rotm_image.image, x=i_image.x, y=i_image.y,
               min_abs_level=3. * rms, colors_mask=self._cs_mask,
               outfile='rotm_image_conv_sigma', outdir=self.data_dir,
@@ -561,7 +568,7 @@ class MFObservations(object):
         iplot(i_image.image, chisq_image.image, x=i_image.x, y=i_image.y,
               min_abs_level=3. * rms, colors_mask=self._cs_mask,
               outfile='rotm_chisq_image_conv', outdir=self.data_dir,
-              color_clim=[0., self._chisq_crit], blc=blc, trc=trc, beam=self.common_beam,
+              color_clim=None, blc=blc, trc=trc, beam=self.common_beam,
               colorbar_label='Chi-squared', slice_points=rotm_slices,
               show_beam=True, show=False)
 
@@ -583,6 +590,9 @@ class MFObservations(object):
                 self._boot_images = Images()
                 for freq in self.freqs:
                     for stokes in self.stokes:
+                        # FIXME: to low memory usage for now
+                        if stokes not in ('Q', 'U'):
+                            continue
                         self._boot_images.add_from_fits(self.cc_boot_cs_fits_dict[freq][stokes])
         return self._boot_images
 
@@ -612,12 +622,16 @@ class MFObservations(object):
         rms = rms_image(i_image)
         blc, trc = find_bbox(i_image.image, 2.*rms,
                              delta=int(i_image._beam.beam[0]))
-        for freq in self.freqs:
+        for i, freq in enumerate(self.freqs):
             images = self.boot_images.create_pang_images(freq=freq,
                                                          mask=self._cs_mask)
             pang_images = Images()
             pang_images.add_images(images)
             error_image = pang_images.create_error_image(cred_mass=cred_mass)
+            # As this errors are used for linear fit judgement only - add EVPA
+            # absolute calibration error in quadrature
+            evpa_error = np.deg2rad(self.sigma_evpa[i]) * np.ones(error_image.image.shape)
+            error_image.image = np.sqrt(error_image.image**2. + evpa_error**2.)
             result[freq] = error_image
             iplot(i_image.image, error_image.image, x=i_image.x, y=i_image.y,
                   min_abs_level=3. * rms, colors_mask=self._cs_mask,
@@ -628,6 +642,9 @@ class MFObservations(object):
                   show_beam=True, show=False)
         self.evpa_sigma_boot_dict = result
         return result
+        # FIXME: Beam slice length must be projection - not major axis
+        # FIXME: Point fit file name must include coordinates in mas, not pixels
+        # FIXME: Figure out how to work with low memory usage!
 
     def analyze_rotm_boot(self, n_sigma=None, cred_mass=0.68, rotm_slices=None,
                           colors_clim=None):
@@ -671,6 +688,8 @@ class MFObservations(object):
             self._boot_rotm_images.create_error_image(cred_mass=cred_mass)
         self._rotm_image_sigma_boot = sigma_rotm_image
 
+        # This sigma doesn't take absolute EVPA calibration uncertainty into
+        # account
         iplot(i_image.image, sigma_rotm_image.image, x=i_image.x, y=i_image.y,
               min_abs_level=3. * rms, colors_mask=self._cs_mask,
               outfile='rotm_image_boot_sigma', outdir=self.data_dir,
@@ -693,30 +712,33 @@ class MFObservations(object):
 
 if __name__ == '__main__':
     import glob
-    source = '2134+004'
+    source = '0952+179'
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
-    epochs = get_epochs_for_source(source, use_db='multifreq')
-    print(epochs)
-    print("Found epochs for source {}:".format(source))
-    for epoch in epochs:
-        print(epoch)
+    # epochs = get_epochs_for_source(source, use_db='multifreq')
+    # print(epochs)
+    # print("Found epochs for source {}:".format(source))
+    # for epoch in epochs:
+    #     print(epoch)
     # epoch = epochs[-1]
     epoch = '2006_07_07'
     base_dir = '/home/ilya/vlbi_errors/article/'
     data_dir = os.path.join(base_dir, source)
 
     # Download uv-data from MOJAVE web DB optionally
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-        download_mojave_uv_fits(source, epochs=[epoch],
-                                download_dir=data_dir)
-    fits_files = glob.glob(os.path.join(data_dir, "*.uvf"))
-    imsizes = [(512, 0.1), (512, 0.1), (512, 0.1), (512, 0.1)]
+    # if not os.path.exists(data_dir):
+    #     os.makedirs(data_dir)
+    #     download_mojave_uv_fits(source, epochs=[epoch],
+    #                             download_dir=data_dir)
+    fits_files = glob.glob(os.path.join(data_dir, "{}*.PINAL".format(source)))
+    imsizes = [(512, 0.3), (512, 0.3), (512, 0.2), (512, 0.2), (512, 0.1)]
     n_boot = 100
     mfo = MFObservations(fits_files, imsizes, n_boot, data_dir=data_dir,
                          path_to_script=path_to_script,
-                         n_scans=[4., 4., 4., 4.],
-                         sigma_d_term=[0.002, 0.002, 0.002, 0.002],
-                         sigma_evpa=[4., 4., 2., 3.])
-    mfo.run(n_sigma_mask=3.0, colors_clim=[-250, 2250],
-            rotm_slices=[((-2, 3), (-2, -4))])
+                         n_scans=[4., 4., 4., 4., 4.],
+                         sigma_d_term=[0.01, 0.01, 0.01, 0.01, 0.01],
+                         sigma_evpa=[4., 4., 4., 4., 4.])
+    mfo.run(n_sigma_mask=3.0, colors_clim=[-300, 300],
+            rotm_slices=[((2, 15), (-3, 13)), ((3, 5), (-2, 5)),
+                         ((3, 6), (-2, 6)), ((3, 7), (-2, 7))],
+            pxls_plot=[(0, 5), (0, 6), (0, 7), (0, 13)],
+            plot_points=[(0, 5), (0, 6), (0, 7), (0, 13)])

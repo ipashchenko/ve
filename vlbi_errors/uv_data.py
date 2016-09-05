@@ -44,8 +44,12 @@ class UVData(object):
         self._error = None
         self._scans_bl = None
         self._stokes = None
-        self._times = Time(self.hdu.data['DATE'] + self.hdu.data['_DATE'],
-                           format='jd')
+        self._times = None
+
+        self._frequency = None
+        self._freq_width = None
+        self._freq_width_if = None
+        self._band_center = None
 
         # Dictionary with keys - baselines & values - boolean numpy arrays or
         # lists of boolean numpy arrays with indexes of that baseline (or it's
@@ -297,37 +301,48 @@ class UVData(object):
         """
         Returns sky frequency in Hz.
         """
-        freq_card = find_card_from_header(self.hdu.header, value='FREQ')[0]
-        return self.hdu.header['CRVAL{}'.format(freq_card[0][-1])]
+        if self._frequency is None:
+            freq_card = find_card_from_header(self.hdu.header, value='FREQ')[0]
+            self._frequency = self.hdu.header['CRVAL{}'.format(freq_card[0][-1])]
+        return self._frequency
 
     @property
     def freq_width_if(self):
         """
         Returns width of IF in Hz.
         """
-        freq_card = find_card_from_header(self.hdu.header, value='FREQ')[0]
-        return self.hdu.header['CDELT{}'.format(freq_card[0][-1])]
+        if self._freq_width_if is None:
+            freq_card = find_card_from_header(self.hdu.header, value='FREQ')[0]
+            self._freq_width_if = self.hdu.header['CDELT{}'.format(freq_card[0][-1])]
+        return self._freq_width_if
 
     @property
     def freq_width(self):
         """
         Returns width of all IFs in Hz.
         """
-        freq_card = find_card_from_header(self.hdu.header, value='FREQ')[0]
-        return self.nif * self.hdu.header['CDELT{}'.format(freq_card[0][-1])]
+        if self._freq_width is None:
+            freq_card = find_card_from_header(self.hdu.header, value='FREQ')[0]
+            self._freq_width = self.nif * self.hdu.header['CDELT{}'.format(freq_card[0][-1])]
+        return self._freq_width
 
     @property
     def band_center(self):
         """
         Returns center of frequency bandwidth in Hz.
         """
-        return self.frequency + self.freq_width_if * (self.nif / 2. - 0.5)
+        if self._band_center is None:
+            self._band_center = self.frequency + self.freq_width_if * (self.nif / 2. - 0.5)
+        return self._band_center
 
     @property
     def times(self):
         """
         Returns array of ``astropy.time.Time`` instances.
         """
+        if self._times is None:
+            self._times = Time(self.hdu.data['DATE'] + self.hdu.data['_DATE'],
+                               format='jd')
         return self._times
 
     @property

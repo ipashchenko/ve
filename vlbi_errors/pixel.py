@@ -55,7 +55,7 @@ def rotm_leastsq(lambda_sq, chi, s_chi=None, p0=None):
         pcov = np.nan
         s_sq = np.nan
 
-    return p, pcov, s_sq
+    return p, pcov, s_sq * (len(chi) - len(p0))
 
 
 def resolver_chisq(lambda_sq, chi, s_chi=None, p0=None):

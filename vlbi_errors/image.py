@@ -117,7 +117,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          colors_mask=None, vectors_mask=None, plot_title=None, color_clim=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
          beam_place='ll', colorbar_label=None, show=True, contour_color='k',
-         beam_edge_color='black', beam_face_color='green', beam_alpha=0.3):
+         beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
+         show_points=None):
     """
     Plot image(s).
 
@@ -186,6 +187,9 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     :param slice_points: (optional)
         Iterable of 2 coordinates (``y``, ``x``) [mas] to plot slice. If
         ``None`` then don't plot slice. (default: ``None``)
+    :param show_points: (optional)
+        Iterable od 2 coordinates (``y``, ``x``) [mas] to plot points. If
+        ``None`` then don't plot points. (default: ``None``)
 
     :note:
         ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
@@ -217,7 +221,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     # Set BLC & TRC
     blc = blc or (1, 1,)
     trc = trc or image.shape
-    # Use ``-1`` because user expect AIPS-like behaivior of ``blc`` & ``trc``
+    # Use ``-1`` because user expect AIPS-like behavior of ``blc`` & ``trc``
     x_slice = slice(blc[1] - 1, trc[1], None)
     y_slice = slice(blc[0] - 1, trc[0],  None)
 
@@ -303,6 +307,10 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         for single_slice in slice_points:
             ax.plot([single_slice[0][0], single_slice[1][0]],
                     [single_slice[0][1], single_slice[1][1]])
+
+    if show_points is not None:
+        for point in show_points:
+            ax.plot(point[0], point[1], '.k')
 
     if plot_title:
         title = ax.set_title(plot_title, fontsize='large')
@@ -656,6 +664,22 @@ class Image(BasicImage):
         self.xv = xv
         self.y = y
         self.yv = yv
+
+    def _convert_coordinate(self, point):
+        """
+        Convert coordinates from image scale [mas] to pixels
+
+        :param point:
+            Iterable of coordinates of pixel [mas].
+        :return:
+            Tuples of coordinates for pixel [pixels].
+        """
+        ycoords = self.y / mas_to_rad
+        xcoords = self.x / mas_to_rad
+
+        y0 = np.argmin(np.abs(ycoords - point[0]))
+        x0 = np.argmin(np.abs(xcoords - point[1]))
+        return x0, y0
 
     def _convert_coordinates(self, point1, point2):
         """

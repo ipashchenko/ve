@@ -354,7 +354,8 @@ class Images(object):
     # TODO: Option for plotting PANG vs. wavelength squared for pixels
     def create_rotm_image(self, s_pang_arrays=None, freqs=None, mask=None, n=0,
                           outfile=None, outdir=None, ext='png',
-                          mask_on_chisq=True, return_chisq=False):
+                          mask_on_chisq=True, return_chisq=False,
+                          plot_pxls=None, outfile_pxls=None):
         """
         Method that creates image of Rotation Measure for current collection of
         instances.
@@ -378,6 +379,12 @@ class Images(object):
         :param n: (optional)
             Sequence number of Q & U images to use for each frequency. (default:
             ``0``)
+        :param plot_pxls: (optional)
+            Iterable of pixel coordinates to plot fit. If ``None`` then don't
+            plot single pixel fits. (default: ``None``)
+        :param outfile_pxls: (optional)
+            Optional outfile postfix if ploting single pixel fits. If ``None``
+            then don't use any postfix. (default: ``None``)
 
         :return:
            Tuple of two ``Image`` instances with Rotation Measure values and
@@ -428,8 +435,10 @@ class Images(object):
                                                          s_pang_arrays,
                                                          mask=mask,
                                                          outfile=outfile,
-                                                         outdir=outdir, ext=ext,
-                                                         mask_on_chisq=mask_on_chisq)
+                                                         outdir=outdir,
+                                                         mask_on_chisq=mask_on_chisq,
+                                                         plot_pxls=plot_pxls,
+                                                         outfile_pxls=None)
         rotm_image = Image()
         rotm_image._construct(imsize=img.imsize, pixsize=img.pixsize,
                               pixref=img.pixref, stokes='ROTM',

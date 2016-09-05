@@ -146,7 +146,7 @@ def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan):
 # FIXME: This functions just use ``rotm`` function for each pixel.
 # TODO: Add outputting PA at zero frequency
 def rotm_map(freqs, chis, s_chis=None, mask=None, outfile=None, outdir=None,
-             ext='png', mask_on_chisq=True):
+             mask_on_chisq=True, plot_pxls=None, outfile_pxls=None):
     """
     Function that calculates Rotation Measure map.
 
@@ -164,6 +164,12 @@ def rotm_map(freqs, chis, s_chis=None, mask=None, outfile=None, outdir=None,
     :param mask_on_chisq: (optional)
         Mask chi squared values that are larger then critical value? (default:
         ``True``)
+    :param plot_pxls: (optional)
+        Iterable of pixel coordinates to plot fit. If ``None`` then don't plot
+        single pixel fits. (default: ``None``)
+    :param outfile_pxls: (optional)
+        Optional outfile postfix if plotting single pixel fits. If ``None`` then
+        don't use any postfix. (default: ``None``)
 
     :return:
         Tuple of 2D numpy array with values of Rotation Measure [rad/m**2], 2D
@@ -198,89 +204,46 @@ def rotm_map(freqs, chis, s_chis=None, mask=None, outfile=None, outdir=None,
     if mask is None:
         mask = np.zeros(rotm_array.shape, dtype=int)
 
-    # If saving output thern create figure with desired number of cells.
-    if outfile:
+    # If saving output then create figure with desired number of cells.
+    if outfile or outfile_pxls:
         if outdir is None:
-            outdir = '.'
+            outdir = os.getcwd()
         # If the directory does not exist, create it
         if not os.path.exists(outdir):
             os.makedirs(outdir)
 
-        # Calculate how many pixels there should be
-        npixels = len(np.where(mask.ravel() == 0)[0])
-        print "{} pixels with fit will be plotted".format(npixels)
-        nrows = int(np.sqrt(npixels) + 1)
-        print "Plot will have dims: {} by {}".format(nrows, nrows)
-
-        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, sharex=True,
-                                 sharey=True)
-        fig.set_size_inches(18.5, 18.5)
-        plt.rcParams.update({'axes.titlesize': 'small'})
-        i, j = 0, 0
-
     # Cycle ROTM calculation for each unmasked pixel
     for (x, y), value in np.ndenumerate(rotm_array):
+        if plot_pxls is not None and (x, y) in plot_pxls:
+            plot = True
+            outfile = 'ROTM_fit_{}_{}'.format(x, y)
+        else:
+            plot = False
         # If pixel should be masked then just pass by and leave NaN as value
         if mask[x, y]:
+            if (x, y) in plot_pxls:
+                print("But Masking out")
             continue
 
         if s_chis is not None:
-            p, pcov, s_sq = rotm(freqs, chi_cube[x, y, :], s_chi_cube[x, y, :])
+            p, pcov, s_sq = rotm(freqs, chi_cube[x, y, :], s_chi_cube[x, y, :],
+                                 plot=plot, outdir=outdir, outfname=outfile)
         else:
-            p, pcov, s_sq = rotm(freqs, chi_cube[x, y, :])
+            p, pcov, s_sq = rotm(freqs, chi_cube[x, y, :], plot=plot,
+                                 outdir=outdir, outfname=outfile)
 
-        if mask_on_chisq and s_sq > chisq_crit_values[len(chis) - 2]:
-            chisq_array[x, y] = s_sq
+        if mask_on_chisq and s_sq * (len(chis) - 2) > chisq_crit_values[len(chis) - 2]:
+            chisq_array[x, y] = s_sq * (len(chis) - 2)
             rotm_array[x, y] = np.nan
             s_rotm_array[x, y] = np.nan
         elif pcov is not np.nan:
-            chisq_array[x, y] = s_sq
+            chisq_array[x, y] = s_sq * (len(chis) - 2)
             rotm_array[x, y] = p[0]
             s_rotm_array[x, y] = np.sqrt(pcov[0, 0])
         else:
-            chisq_array[x, y] = s_sq
+            chisq_array[x, y] = s_sq * (len(chis) - 2)
             rotm_array[x, y] = p[0]
             s_rotm_array[x, y] = np.nan
-
-        # Plot to file
-        if outfile:
-            lambdasq = (3. * 10 ** 8 / freqs) ** 2
-            if s_chis is not None:
-                axes[i, j].errorbar(lambdasq, chi_cube[x, y, :],
-                                    s_chi_cube[x, y, :], fmt='.k')
-            else:
-                axes[i, j].plot(lambdasq, chi_cube[x, y, :], '.k')
-            lambdasq_ = np.linspace(lambdasq[0], lambdasq[-1], 10)
-            axes[i, j].plot(lambdasq_,
-                            rotm_model(p, 3. * 10 ** 8 / np.sqrt(lambdasq_)),
-                            'r', lw=2, label="RM={0:.1f}".format(p[0]))
-            axes[i, j].set_title("{}-{}".format(x, y))
-            axes[i, j].legend(prop={'size': 6}, loc='best', fancybox=True,
-                              framealpha=0.5)
-            # Check this text box
-            # ax.hist(x, 50)
-            # # these are matplotlib.patch.Patch properties
-            # props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-
-            # # place a text box in upper left in axes coords
-            # ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14,
-            # verticalalignment='top', bbox=props)
-
-            axes[i, j].set_xticks([lambdasq[0], lambdasq[-1]])
-            axes[i, j].set_ylim(-np.pi, np.pi)
-            j += 1
-            # Plot first row first
-            if j // nrows > 0:
-                # Then second row, etc...
-                i += 1
-                j = 0
-
-    # Save to file plotted figure
-    if outfile:
-        path = os.path.join(outdir, outfile)
-        print "Saving linear fits to {}.{}".format(path, ext)
-        fig.show()
-        fig.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=200)
 
     return rotm_array, s_rotm_array, chisq_array
 
@@ -396,7 +359,8 @@ def fpol_map(q_array, u_array, i_array, mask=None):
     return np.sqrt(cpol_array * cpol_array.conj()).real / i_array
 
 
-def rotm(freqs, chis, s_chis=None, p0=None):
+def rotm(freqs, chis, s_chis=None, p0=None, plot=False, plot_title=None,
+         outfname=None, outdir=None):
     """
     Function that calculates Rotation Measure.
 
@@ -406,13 +370,25 @@ def rotm(freqs, chis, s_chis=None, p0=None):
         Iterable of polarization positional angles [rad].
     :param s_chis: (optional)
         Iterable of polarization positional angles uncertainties estimates
-        [rad].
-    :param p0:
+        [rad]. If ``None`` then don't use weights in fitting. (default:
+        ``None``)
+    :param p0: (optional)
         Starting value for minimization (RM [rad/m**2], PA_zero_lambda [rad]).
+        If ``None`` then use ``(0., 0.)``. (default: ``None``)
+    :param plot: (optional)
+        Boolean. Plot linear fit on single figure? (default: ``False``)
+    :param plot_title: (optional)
+        Optional title on plot. If ``None`` then don't show any title.
+        (default: ``None``)
+    :param outfname: (optional)
+        File name for saving figure. If ``None`` then use ``ROTM_fit.png``
+        (default: ``None``)
+    :param outdir: (optional)
+        Directory to save figure. If ``None`` then use CWD. (default: ``None``)
 
     :return:
-        Tuple of numpy array of (RM [rad/m**2], PA_zero_lambda [rad]) and 2D
-        numpy array of covariance matrix.
+        Tuple of numpy array of (RM [rad/m**2], PA_zero_lambda [rad]), 2D
+        numpy array of covariance matrix & reduced chi-squared value.
 
     """
 
@@ -453,6 +429,35 @@ def rotm(freqs, chis, s_chis=None, p0=None):
         pcov *= s_sq
     else:
         pcov = np.nan
+
+    if plot:
+        fig, axes = plt.subplots()
+        lambdasq = (3. * 10 ** 8 / freqs) ** 2
+        print("P: {}, cov: {}".format(p, pcov))
+        if s_chis is not None:
+            axes.errorbar(lambdasq, np.rad2deg(chis), np.rad2deg(s_chis),
+                          fmt='.k')
+        else:
+            axes.plot(lambdasq, np.rad2deg(chis), '.k')
+        lambdasq_ = np.linspace(lambdasq[0], lambdasq[-1], 10)
+        axes.plot(lambdasq_,
+                  np.rad2deg(rotm_model(p, 3. * 10 ** 8 / np.sqrt(lambdasq_))), 'r',
+                  lw=2, label="RM={0:.1f} +/- {1:.1f} rad/m/m".format(p[0], np.sqrt(pcov[0, 0])))
+        if plot_title is not None:
+            axes.set_title(plot_title)
+        axes.legend(prop={'size': 6}, loc='best', fancybox=True,
+                    framealpha=0.5)
+        axes.set_xticks([lambdasq[0], lambdasq[-1]])
+        # axes_.set_ylim(-np.pi, np.pi)
+        axes.set_ylabel("PA, [deg]")
+
+        if outfname is None:
+            outfname = "ROTM_fit"
+        if outdir is None:
+            outdir = os.getcwd()
+        path = os.path.join(outdir, outfname)
+        fig.savefig("{}.png".format(path), bbox_inches='tight',
+                    dpi=200)
 
     return p, pcov, s_sq
 

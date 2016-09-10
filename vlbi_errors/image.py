@@ -20,7 +20,7 @@ except ImportError:
 # FIXME: This finds only dr that minimize std for shift - radius dependence
 # TODO: use iterables of shifts and sizes as arguments. UNIX-way:)
 def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
-               max_mask_r=100, mask_step=1, uspsample_factor=100):
+               max_mask_r=100, mask_step=1, upsample_factor=100):
     """
     Find shift between two images using our heuristic.
 
@@ -56,7 +56,7 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
                                                     None),
                                            region2=(image2.x_c, image2.y_c, r2,
                                                     None),
-                                           upsample_factor=uspsample_factor)
+                                           upsample_factor=10)
             shift_dict[dr].append(shift)
 
     shift_value_dict = dict()
@@ -77,7 +77,15 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
     shift_values = shift_values_dict[dr_tgt]
     # Looking for first minimum
     idx = (np.diff(np.sign(np.diff(shift_values))) > 0).nonzero()[0] + 1
-    return shift_dict[dr_tgt][idx[0]]
+    # return shift_dict[dr_tgt][idx[0]]
+    print("best at r={}, dr={}".format(idx[0], dr_tgt))
+    shift = image1.cross_correlate(image2,
+                                   region1=(image1.x_c, image1.y_c, idx[0],
+                                            None),
+                                   region2=(image2.x_c, image2.y_c, idx[0] + dr_tgt,
+                                            None),
+                                   upsample_factor=upsample_factor)
+    return shift
 
 
 def find_bbox(array, level, delta=0.):

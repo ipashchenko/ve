@@ -18,8 +18,9 @@ for i in range(1, 100):
     print("Finding shift between {} & {}".format(os.path.split(f15)[-1], os.path.split(f8)[-1]))
     beam_pxl = int(i15._beam.bmaj)
 
-    shift = find_shift(i15, i8, max_shift=beam_pxl, shift_step=1,
-                       max_mask_r=beam_pxl, mask_step=1, uspsample_factor=1000)
+    shift = find_shift(i15, i8, max_shift=2 * beam_pxl, shift_step=1,
+                       max_mask_r=5 * beam_pxl, mask_step=1,
+                       upsample_factor=1000)
     shift_value = math.sqrt(shift[0]**2 + shift[1]**2)
     shifts.append(shift)
     shifts_values.append(shift_value)

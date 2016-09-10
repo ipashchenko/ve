@@ -255,33 +255,3 @@ def variogram(data):
         res_newa.append(resa)
 
     return array(data_new),array(res_new),array(mean_new),Cov_matrix,A.transpose()
-    #return result, distance
-
-
-
-
-
-def bootstrap_samples(residuals, number_of_btstrp_samples = 1000):
-   """Given the output of fitting - residuals - not scaled by errors), which
-   generally are masked arrays, this function returns predefined number of
-   bootstraped samples of residuals with replacement"""
-   import itertools
-   import random
-
-   def sample_wr(population, k):
-      """Chooses k random elements (with replacement) from a population"""
-      n             = len(population)
-      _random, _int = random.random, int    #speed hack
-      return [population[_int(_random() * n)] for i in itertools.repeat(None, k)]
-
-   models             = []
-   size               = len(residuals)
-
-   _sample_wr         = sample_wr
-   new_residuals = []
-   for i in xrange(number_of_btstrp_samples):
-      new_residual = _sample_wr(residuals, size)
-      new_residuals.append(new_residual)
-
-   return new_residuals
-

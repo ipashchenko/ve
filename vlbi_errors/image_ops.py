@@ -221,8 +221,9 @@ def rotm_map(freqs, chis, s_chis=None, mask=None, outfile=None, outdir=None,
             plot = False
         # If pixel should be masked then just pass by and leave NaN as value
         if mask[x, y]:
-            if (x, y) in plot_pxls:
-                print("But Masking out")
+            if plot_pxls is not None:
+                if (x, y) in plot_pxls:
+                    print("But Masking out")
             continue
 
         if s_chis is not None:
@@ -745,7 +746,7 @@ def image_ridge_line(image):
 
 
 # TODO: Add as method to ``images.Images``
-def rms_image(image):
+def rms_image(image, hovatta_factor=True):
     """
     Calculate rms of Image.
 
@@ -762,6 +763,9 @@ def rms_image(image):
                                     None))
     rms += 0.25 * image.rms(region=(image.imsize[0] - r_rms,
                                     image.imsize[0] - r_rms, r_rms, None))
+    if hovatta_factor:
+        rms *= 1.8
+
     return rms
 
 

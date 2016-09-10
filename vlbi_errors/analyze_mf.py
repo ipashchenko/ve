@@ -214,15 +214,15 @@ class MFObservations(object):
         self.clean_original_common()
         if self.find_shifts:
             self.get_shifts()
-        self.bootstrap_uvdata()
+        # self.bootstrap_uvdata()
         # self.clean_boot_native()
-        self.clean_boot_common()
+        # self.clean_boot_common()
         self.set_common_mask(n_sigma=n_sigma_mask)
         self.analyze_rotm_conv(colors_clim=colors_clim, sigma_evpa=sigma_evpa,
                                sigma_d_term=sigma_d_term,
                                rotm_slices=rotm_slices, pxls_plot=pxls_plot,
                                plot_points=plot_points)
-        self.analyze_rotm_boot(colors_clim=colors_clim, rotm_slices=rotm_slices)
+        # self.analyze_rotm_boot(colors_clim=colors_clim, rotm_slices=rotm_slices)
 
     def load_uvdata(self):
         self.uvdata_dict = dict()
@@ -278,7 +278,7 @@ class MFObservations(object):
             self.cc_fits_dict.update({freq: dict()})
             self.cc_beam_dict.update({freq: dict()})
 
-        print("Clean original uv-data with native map parameters...")
+        print("Clean original uv-data with native map & beam parameters...")
         for freq in self.freqs:
             print("Cleaning frequency {} with image "
                   "parameters {}".format(freq, self.imsizes_dict[freq]))
@@ -498,7 +498,8 @@ class MFObservations(object):
         # Fetch common size `I` map on highest frequency for plotting PANG error
         # maps
         i_image = self.cc_cs_image_dict[self.freqs[-1]]['I']
-        pxls_plot = [i_image._convert_coordinate(pxl) for pxl in pxls_plot]
+        if pxls_plot is not None:
+            pxls_plot = [i_image._convert_coordinate(pxl) for pxl in pxls_plot]
         rms = rms_image(i_image)
         blc, trc = find_bbox(i_image.image, 2.*rms,
                              delta=int(i_image._beam.beam[0]))
@@ -712,7 +713,7 @@ class MFObservations(object):
 
 if __name__ == '__main__':
     import glob
-    source = '0952+179'
+    source = 'sim'
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
     # epochs = get_epochs_for_source(source, use_db='multifreq')
     # print(epochs)
@@ -720,8 +721,8 @@ if __name__ == '__main__':
     # for epoch in epochs:
     #     print(epoch)
     # epoch = epochs[-1]
-    epoch = '2006_07_07'
-    base_dir = '/home/ilya/vlbi_errors/article/'
+    # epoch = '2006_07_07'
+    base_dir = '/home/ilya/vlbi_errors/article/simulate'
     data_dir = os.path.join(base_dir, source)
 
     # Download uv-data from MOJAVE web DB optionally
@@ -729,16 +730,16 @@ if __name__ == '__main__':
     #     os.makedirs(data_dir)
     #     download_mojave_uv_fits(source, epochs=[epoch],
     #                             download_dir=data_dir)
-    fits_files = glob.glob(os.path.join(data_dir, "{}*.PINAL".format(source)))
-    imsizes = [(512, 0.3), (512, 0.3), (512, 0.2), (512, 0.2), (512, 0.1)]
-    n_boot = 100
+    fits_files = glob.glob(os.path.join(data_dir, "*.uvf"))
+    imsizes = [(512, 0.1), (512, 0.1), (512, 0.1), (512, 0.1), (512, 0.1)]
+    n_boot = 5
     mfo = MFObservations(fits_files, imsizes, n_boot, data_dir=data_dir,
                          path_to_script=path_to_script,
-                         n_scans=[4., 4., 4., 4., 4.],
-                         sigma_d_term=[0.01, 0.01, 0.01, 0.01, 0.01],
-                         sigma_evpa=[4., 4., 4., 4., 4.])
+                         n_scans=[4., 4., 4., 4.],
+                         sigma_d_term=[0.002, 0.002, 0.002, 0.002],
+                         sigma_evpa=[4., 4., 2., 3.])
     mfo.run(n_sigma_mask=3.0, colors_clim=[-300, 300],
-            rotm_slices=[((2, 15), (-3, 13)), ((3, 5), (-2, 5)),
-                         ((3, 6), (-2, 6)), ((3, 7), (-2, 7))],
-            pxls_plot=[(0, 5), (0, 6), (0, 7), (0, 13)],
-            plot_points=[(0, 5), (0, 6), (0, 7), (0, 13)])
+            rotm_slices=[((0, -3), (0, 3)), ((-2, -3), (-2, 3)), ((-3, -3),
+                                                                  (-3, 3))],
+            pxls_plot=[(0, 0), (-2, 0), (-3, 0), (-4, 0)],
+            plot_points=[(0, 0), (-2, 0), (-3, 0), (-4, 0)])

@@ -20,7 +20,7 @@ except ImportError:
 # FIXME: This finds only dr that minimize std for shift - radius dependence
 # TODO: use iterables of shifts and sizes as arguments. UNIX-way:)
 def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
-               max_mask_r=100, mask_step=5):
+               max_mask_r=100, mask_step=1, uspsample_factor=100):
     """
     Find shift between two images using our heuristic.
 
@@ -55,7 +55,8 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
                                            region1=(image1.x_c, image1.y_c, r1,
                                                     None),
                                            region2=(image2.x_c, image2.y_c, r2,
-                                                    None))
+                                                    None),
+                                           upsample_factor=uspsample_factor)
             shift_dict[dr].append(shift)
 
     shift_value_dict = dict()
@@ -63,15 +64,20 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
         value = np.array(value)
         shifts = np.sqrt(value[:, 0] ** 2. + value[:, 1] ** 2.)
         shift_value_dict.update({key: np.std(shifts)})
+    shift_values_dict = dict()
+    for key, value in shift_dict.items():
+        value = np.array(value)
+        shifts = np.sqrt(value[:, 0] ** 2. + value[:, 1] ** 2.)
+        shift_values_dict.update({key: shifts})
 
     # Searching for mask size difference that has minimal std in shifts
     # calculated for different mask sizes
     dr_tgt = sorted(shift_dict, key=lambda _: shift_value_dict[_])[0]
     # Shift values vs mask radius dependence for best mask size difference
-    shift_values = shift_value_dict[dr_tgt]
+    shift_values = shift_values_dict[dr_tgt]
     # Looking for first minimum
     idx = (np.diff(np.sign(np.diff(shift_values))) > 0).nonzero()[0] + 1
-    return shift_dict[dr_tgt][idx]
+    return shift_dict[dr_tgt][idx[0]]
 
 
 def find_bbox(array, level, delta=0.):

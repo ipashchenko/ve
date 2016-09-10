@@ -74,7 +74,7 @@ def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
                            gauss_bmaj=10, gauss_e=1., gauss_bpa=0.,
                            gauss_peak_jet=0.0, dist_from_core_jet=24,
                            gauss_bmaj_jet=10, gauss_e_jet=1., gauss_bpa_jet=0.,
-                           cut=0.0001, transverse='quadratic'):
+                           cut=0.000001, transverse='quadratic'):
     """
     Function that returns image of jet.
 
@@ -124,7 +124,7 @@ def create_jet_model_image(width, j_length, cj_length, max_flux, imsize,
         image += gaussian_(x, y)
         image[image < cut] = 0.
 
-    return image, x, y
+    return image
 
 
 def create_jet_model_image_mojave(width, j_length, cj_length, max_flux, imsize,
@@ -589,15 +589,15 @@ class MFSimulation(object):
 
 
 def create_stokes_models(imsize, j_width=30, j_length=100,
-                         cj_length=10, max_jet_flux=0.00015, center=None,
+                         cj_length=10, max_jet_flux=0.015, center=None,
                          gauss_peak=0.045, dist_from_core=0, gauss_bmaj=3,
                          gauss_e=0.2, gauss_bpa=0, gauss_peak_jet=0.0,
                          qu_fraction=0.2):
     if center is None:
-        center = (imsize[0]/2, imsize[0]/1)
+        center = (imsize[0]/2, imsize[0]/2)
     jet_image, x, y = create_jet_model_image(width=j_width, j_length=j_length,
                                              cj_length=cj_length,
-                                             max_jet_flux=max_jet_flux, imsize=imsize,
+                                             max_flux=max_jet_flux, imsize=imsize,
                                              center=center, gauss_peak=gauss_peak,
                                              dist_from_core=dist_from_core,
                                              gauss_bmaj=gauss_bmaj, gauss_e=gauss_e,
@@ -607,7 +607,7 @@ def create_stokes_models(imsize, j_width=30, j_length=100,
             'U': qu_fraction * jet_image}
 
 
-def get_image_parameters(imsize, pixsize, center=None):
+def get_image_coordinates(imsize, pixsize, center=None):
     """
     :param imsize:
         Tuple of image size.
@@ -623,13 +623,15 @@ def get_image_parameters(imsize, pixsize, center=None):
     x, y = create_grid(imsize)
     x -= center[0]
     y -= center[1]
+    x *= (pixsize * mas_to_rad)
+    y *= (pixsize * mas_to_rad)
     x /= mas_to_rad
     y /= mas_to_rad
 
     return x, y
 
 
-def create_simulator(observed_uv, stokes_models, image_x, image_y,
+def create_simulator(observed_uv, stokes_models, pixsize,
                      rotm_image=None, alpha_image=None,
                      model_freq=20. * 10. ** 9):
     """
@@ -642,8 +644,9 @@ def create_simulator(observed_uv, stokes_models, image_x, image_y,
     """
     assert rotm_image.shape == alpha_image.shape == stokes_models['I'].shape
     imsize = stokes_models['I'].shape
+    image_x, image_y = get_image_coordinates(imsize, pixsize)
 
-    mod_generator = ModelGenerator(stokes_models, image_x, image_y,
+    mod_generator = ModelGenerator(stokes_models, image_x[0], image_y[:, 0],
                                    rotm=rotm_image, alpha=alpha_image,
                                    freq=model_freq)
     return MFSimulation(observed_uv, mod_generator)
@@ -735,7 +738,6 @@ def create_simulated_data(mf_simulator, data_dir, n_sample=1.):
                               freq, name in fnames_dict.items()})
         mf_simulator.simulate()
         mf_simulator.save_fits(fnames_dict_i)
-
 
 
 # TODO: This function only simulates. To analyzes simulations use other funcs
@@ -906,6 +908,11 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
                      'U': qu_fraction * jet_image}
     mod_generator = ModelGenerator(stokes_models, x, y, rotm=rotm_image,
                                    alpha=alpha_image, freq=model_freq)
+    import pickle
+    print("Dumping model generator to file")
+    with open(os.path.join(data_dir, 'model.pkl'), 'wb') as fo:
+        pickle.dump(mod_generator, fo)
+
     rm_simulation = MFSimulation(observed_uv, mod_generator)
 
     # Mapping from frequencies to FITS file names
@@ -994,7 +1001,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
           min_abs_level=3. * rms, colors_mask=rotm_mask,
           outfile='rotm_image_sym', outdir=data_dir, color_clim=rotm_clim_sym,
           blc=(220, 200), trc=(360, 320), beam=beam_common,
-          colorbar_label='RM, [rad/m/m]', slice_points=((-2, -4), (-2, 4)),
+          colorbar_label='RM, [rad/m/m]', slice_points=[((-2, -4), (-2, 4))],
           show=False, show_beam=True)
     # Plotting simulated high-freq stokes I contours with SPIX values.
     iplot(i_image.image, spix_image_sym.image, x=i_image.x, y=i_image.y,
@@ -1002,7 +1009,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
           outfile='spix_image_sym', outdir=data_dir, color_clim=spix_clim_sym,
           blc=(220, 200), trc=(360, 320), beam=beam_common,
           colorbar_label='SPIX', show=False, show_beam=True,
-          slice_points=((4, 0), (-6, 0)))
+          slice_points=[((4, 0), (-6, 0))])
 
     # Plotting convolved model of ROTM
     freqs = sorted([float(freq) for freq in rm_simulation.freqs])
@@ -1016,7 +1023,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
           min_abs_level=3. * rms, colors_mask=rotm_mask,
           outfile='rotm_image_model_convolved', outdir=data_dir, blc=(220, 200),
           trc=(360, 320), beam=beam_common, colorbar_label='RM, [rad/m/m]',
-          slice_points=((-2, -4), (-2, 4)), show=False, show_beam=True,
+          slice_points=[((-2, -4), (-2, 4))], show=False, show_beam=True,
           color_clim=rotm_clim_sym)
 
     # Plotting non-convolved (generating) model of ROTM
@@ -1031,7 +1038,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
           min_abs_level=0.005 * np.max(i_image_mod_nc), colors_mask=mask_nc,
           outfile='rotm_image_model_original', outdir=data_dir,
           color_clim=rotm_clim_model, blc=(220, 200), trc=(360, 320),
-          colorbar_label='RM, [rad/m/m]', slice_points=((-2, -4), (-2, 4)),
+          colorbar_label='RM, [rad/m/m]', slice_points=[((-2, -4), (-2, 4))],
           show=False)
 
     # Plotting convolved model of SPIX
@@ -1043,7 +1050,7 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
           outfile='spix_image_model_convolved', outdir=data_dir,
           color_clim=spix_clim_sym, blc=(220, 200), trc=(360, 320),
           beam=beam_common, colorbar_label='SPIX', show=False, show_beam=True,
-          slice_points=((4, 0), (-6, 0)))
+          slice_points=[((4, 0), (-6, 0))])
 
     # Plot non-convolved (generating) model of SPIX
     # TODO: Should i use original model array for SPIX? (not I cause frequency
@@ -1055,51 +1062,51 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
           min_abs_level=0.005 * np.max(i_image_mod_nc), colors_mask=mask_nc,
           outfile='spix_image_model_original', outdir=data_dir,
           color_clim=spix_clim_model, blc=(220, 200), trc=(360, 320),
-          colorbar_label='SPIX', show=False, slice_points=((4, 0), (-6, 0)))
+          colorbar_label='SPIX', show=False, slice_points=[((4, 0), (-6, 0))])
 
-    # Plotting simulated slices with model values (convolved and non-convolved)
-    # Simulated ROTM slice & model value
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    # Simulated values with formal errorbars
-    ax.errorbar(np.arange(216, 296, 1),
-                rotm_image_sym.slice((216, 276), (296, 276)),
-                s_rotm_image_sym.slice((216, 276), (296, 276)), fmt='.k')
+    # # Plotting simulated slices with model values (convolved and non-convolved)
+    # # Simulated ROTM slice & model value
+    # fig = plt.figure()
+    # ax = fig.add_subplot(1, 1, 1)
+    # # Simulated values with formal errorbars
+    # ax.errorbar(np.arange(216, 296, 1),
+    #             rotm_image_sym.slice((216, 276), (296, 276)),
+    #             s_rotm_image_sym.slice((216, 276), (296, 276)), fmt='.k')
+    # # ax.plot(np.arange(216, 296, 1),
+    # #         rotm_grad_value * (np.arange(216, 296, 1) - 256.) + rotm_value_0)
+    # # Model convolved values
     # ax.plot(np.arange(216, 296, 1),
-    #         rotm_grad_value * (np.arange(216, 296, 1) - 256.) + rotm_value_0)
-    # Model convolved values
-    ax.plot(np.arange(216, 296, 1),
-            image_slice(rotm_image_mod, (216, 276), (296, 276)), 'g')
-    # Model non-convolved values
-    ax.plot(np.arange(216, 296, 1),
-            image_slice(rotm_image, (216, 276), (296, 276)), 'r')
-    ax.set_xlabel("slice pixel")
-    ax.set_ylabel("ROTM, [rad/m/m]")
-    fig.savefig(os.path.join(data_dir, 'rotm_slice.png'),
-                bbox_inches='tight', dpi=200)
-    plt.close()
+    #         image_slice(rotm_image_mod, (216, 276), (296, 276)), 'g')
+    # # Model non-convolved values
+    # ax.plot(np.arange(216, 296, 1),
+    #         image_slice(rotm_image, (216, 276), (296, 276)), 'r')
+    # ax.set_xlabel("slice pixel")
+    # ax.set_ylabel("ROTM, [rad/m/m]")
+    # fig.savefig(os.path.join(data_dir, 'rotm_slice.png'),
+    #             bbox_inches='tight', dpi=200)
+    # plt.close()
 
-    # Simulated SPIX slice & model value
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    # Simulated values with formal errorbars
-    ax.errorbar(np.arange(216, 336, 1),
-                spix_image_sym.slice((256, 216), (256, 336)),
-                s_spix_image_sym.slice((256, 216), (256, 336)),
-                fmt='.k')
-    # Model convolved values
-    ax.plot(np.arange(216, 336, 1),
-            image_slice(spix_image_mod, (256, 216), (256, 336)), 'g')
-    # Model non-convolved values
-    ax.plot(np.arange(216, 336, 1),
-            image_slice(alpha_image, (256, 216), (256, 336)), 'r')
-    # ax.plot(np.arange(216, 296, 1),
-    #         rotm_grad_value * (np.arange(216, 296, 1) - 256.) + rotm_value_0)
-    ax.set_xlabel("slice pixel")
-    ax.set_ylabel("SPIX")
-    fig.savefig(os.path.join(data_dir, 'spix_slice.png'),
-                bbox_inches='tight', dpi=200)
-    plt.close()
+    # # Simulated SPIX slice & model value
+    # fig = plt.figure()
+    # ax = fig.add_subplot(1, 1, 1)
+    # # Simulated values with formal errorbars
+    # ax.errorbar(np.arange(216, 336, 1),
+    #             spix_image_sym.slice((256, 216), (256, 336)),
+    #             s_spix_image_sym.slice((256, 216), (256, 336)),
+    #             fmt='.k')
+    # # Model convolved values
+    # ax.plot(np.arange(216, 336, 1),
+    #         image_slice(spix_image_mod, (256, 216), (256, 336)), 'g')
+    # # Model non-convolved values
+    # ax.plot(np.arange(216, 336, 1),
+    #         image_slice(alpha_image, (256, 216), (256, 336)), 'r')
+    # # ax.plot(np.arange(216, 296, 1),
+    # #         rotm_grad_value * (np.arange(216, 296, 1) - 256.) + rotm_value_0)
+    # ax.set_xlabel("slice pixel")
+    # ax.set_ylabel("SPIX")
+    # fig.savefig(os.path.join(data_dir, 'spix_slice.png'),
+    #             bbox_inches='tight', dpi=200)
+    # plt.close()
 
     # Creating sample
     for i in range(n_sample):
@@ -1110,129 +1117,157 @@ def simulate(source, epoch, bands, n_sample=3, n_rms=5., max_jet_flux=0.01,
         rm_simulation.simulate()
         rm_simulation.save_fits(fnames_dict_i)
 
-    # CLEAN uv-fits with simulated sample data
-    for freq in rm_simulation.freqs:
-        for i in range(n_sample):
-            uv_fits_fname = fnames_dict[freq] + '_' + str(i + 1).zfill(3)
-            print "Cleaning {}".format(uv_fits_fname)
-            for stokes in rm_simulation.stokes:
-                    print "Stokes {}".format(stokes)
-                    cc_fits_fname = str(freq) + '_' + stokes + '_{}.fits'.format(str(i + 1).zfill(3))
-                    clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
-                                 mapsize_common, path=data_dir,
-                                 path_to_script=path_to_script,
-                                 outpath=data_dir, beam_restore=beam_common)
+    # # CLEAN uv-fits with simulated sample data
+    # for freq in rm_simulation.freqs:
+    #     for i in range(n_sample):
+    #         uv_fits_fname = fnames_dict[freq] + '_' + str(i + 1).zfill(3)
+    #         print "Cleaning {}".format(uv_fits_fname)
+    #         for stokes in rm_simulation.stokes:
+    #                 print "Stokes {}".format(stokes)
+    #                 cc_fits_fname = str(freq) + '_' + stokes + '_{}.fits'.format(str(i + 1).zfill(3))
+    #                 clean_difmap(uv_fits_fname, cc_fits_fname, stokes,
+    #                              mapsize_common, path=data_dir,
+    #                              path_to_script=path_to_script,
+    #                              outpath=data_dir, beam_restore=beam_common)
 
-    # Create ROTM images of simulated sample
-    sym_images = Images()
-    fnames = sorted(glob.glob(os.path.join(data_dir, "*.0_*_*.fits")))
-    sym_images.add_from_fits(fnames)
-    rotm_images_sym = sym_images.create_rotm_images(mask=rotm_mask)
+    # # Create ROTM images of simulated sample
+    # sym_images = Images()
+    # fnames = sorted(glob.glob(os.path.join(data_dir, "*.0_*_*.fits")))
+    # sym_images.add_from_fits(fnames)
+    # rotm_images_sym = sym_images.create_rotm_images(mask=rotm_mask)
 
-    # Calculate simultaneous confidence bands
-    # Bootstrap slices
-    slices = list()
-    for image in rotm_images_sym.images:
-        slice_ = image.slice((216, 276), (296, 276))
-        # print slice_, np.max(abs(slice_))
-        if np.nanmax(abs(slice_)) < 1000:
-            slices.append(slice_[~np.isnan(slice_)])
+    # # Calculate simultaneous confidence bands
+    # # Bootstrap slices
+    # slices = list()
+    # for image in rotm_images_sym.images:
+    #     slice_ = image.slice((216, 276), (296, 276))
+    #     # print slice_, np.max(abs(slice_))
+    #     if np.nanmax(abs(slice_)) < 1000:
+    #         slices.append(slice_[~np.isnan(slice_)])
 
-    # Find means
-    obs_slice = rotm_image_sym.slice((216, 276), (296, 276))
-    x = np.arange(216, 296, 1)
-    x = x[~np.isnan(obs_slice)]
-    obs_slice = obs_slice[~np.isnan(obs_slice)]
-    obs_slice_0 = np.zeros((len(obs_slice)))
-    # Find sigmas
-    slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices if (abs(arr[0]) < 1000 and abs(arr[-1] < 1000))]
-    sigmas = hdi_of_arrays(slices_).squeeze()
-    means = np.mean(np.vstack(slices), axis=0)
-    diff = obs_slice_0 - means
-    # Move bootstrap curves to original simulated centers
-    slices_ = [slice_ + diff for slice_ in slices]
-    # Find low and upper confidence band
-    low, up = create_sim_conf_band(slices_, obs_slice_0, sigmas,
-                                   alpha=conf_band_alpha)
+    # # Find means
+    # obs_slice = rotm_image_sym.slice((216, 276), (296, 276))
+    # x = np.arange(216, 296, 1)
+    # x = x[~np.isnan(obs_slice)]
+    # obs_slice = obs_slice[~np.isnan(obs_slice)]
+    # obs_slice_0 = np.zeros((len(obs_slice)))
+    # # Find sigmas
+    # slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices if (abs(arr[0]) < 1000 and abs(arr[-1] < 1000))]
+    # sigmas = hdi_of_arrays(slices_).squeeze()
+    # means = np.mean(np.vstack(slices), axis=0)
+    # diff = obs_slice_0 - means
+    # # Move bootstrap curves to original simulated centers
+    # slices_ = [slice_ + diff for slice_ in slices]
+    # # Find low and upper confidence band
+    # low, up = create_sim_conf_band(slices_, obs_slice_0, sigmas,
+    #                                alpha=conf_band_alpha)
 
-    # Plot confidence bands and model values
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    ax.plot(x, low, 'g')
-    ax.plot(x, up, 'g')
-    [ax.plot(x, slice_, 'r', lw=0.15) for slice_ in slices_]
-    ax.plot(x, obs_slice_0, 'k')
-    ## Model convolved values
-    #ax.plot(np.arange(216, 296, 1),
-    #        image_slice(rotm_image_mod, (216, 276), (296, 276)), 'g')
-    ## Model non-convolved values
-    #ax.plot(np.arange(216, 296, 1),
-    #        image_slice(rotm_image, (216, 276), (296, 276)), 'r')
-    ax.set_xlabel("slice pixel")
-    ax.set_ylabel("ROTM, [rad/m/m]")
-    ax.axhline(-400, 0.2, 0.48, color='k', lw=2)
-    fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
-                bbox_inches='tight', dpi=200)
-    plt.close()
+    # # Plot confidence bands and model values
+    # fig = plt.figure()
+    # ax = fig.add_subplot(1, 1, 1)
+    # ax.plot(x, low, 'g')
+    # ax.plot(x, up, 'g')
+    # [ax.plot(x, slice_, 'r', lw=0.15) for slice_ in slices_]
+    # ax.plot(x, obs_slice_0, 'k')
+    # ## Model convolved values
+    # #ax.plot(np.arange(216, 296, 1),
+    # #        image_slice(rotm_image_mod, (216, 276), (296, 276)), 'g')
+    # ## Model non-convolved values
+    # #ax.plot(np.arange(216, 296, 1),
+    # #        image_slice(rotm_image, (216, 276), (296, 276)), 'r')
+    # ax.set_xlabel("slice pixel")
+    # ax.set_ylabel("ROTM, [rad/m/m]")
+    # ax.axhline(-400, 0.2, 0.48, color='k', lw=2)
+    # fig.savefig(os.path.join(data_dir, 'rotm_slice_spread.png'),
+    #             bbox_inches='tight', dpi=200)
+    # plt.close()
 
-    # Create SPIX images of simulated sample
-    spix_images_sym = sym_images.create_spix_images(mask=spix_mask)
+    # # Create SPIX images of simulated sample
+    # spix_images_sym = sym_images.create_spix_images(mask=spix_mask)
 
-    # Calculate simultaneous confidence bands
-    # Bootstrap slices
-    slices = list()
-    for image in spix_images_sym.images:
-        slice_ = image.slice((256, 216), (256, 336))
-        slices.append(slice_[~np.isnan(slice_)])
+    # # Calculate simultaneous confidence bands
+    # # Bootstrap slices
+    # slices = list()
+    # for image in spix_images_sym.images:
+    #     slice_ = image.slice((256, 216), (256, 336))
+    #     slices.append(slice_[~np.isnan(slice_)])
 
-    # Find means
-    obs_slice = spix_image_sym.slice((256, 216), (256, 336))
-    x = np.arange(216, 336, 1)
-    x = x[~np.isnan(obs_slice)]
-    obs_slice = obs_slice[~np.isnan(obs_slice)]
-    # Find sigmas
-    slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices]
-    sigmas = hdi_of_arrays(slices_).squeeze()
-    means = np.mean(np.vstack(slices), axis=0)
-    diff = obs_slice - means
-    # Move bootstrap curves to original simulated centers
-    slices_ = [slice_ + diff for slice_ in slices]
-    # Find low and upper confidence band
-    low, up = create_sim_conf_band(slices_, obs_slice, sigmas,
-                                   alpha=conf_band_alpha)
+    # # Find means
+    # obs_slice = spix_image_sym.slice((256, 216), (256, 336))
+    # x = np.arange(216, 336, 1)
+    # x = x[~np.isnan(obs_slice)]
+    # obs_slice = obs_slice[~np.isnan(obs_slice)]
+    # # Find sigmas
+    # slices_ = [arr.reshape((1, len(obs_slice))) for arr in slices]
+    # sigmas = hdi_of_arrays(slices_).squeeze()
+    # means = np.mean(np.vstack(slices), axis=0)
+    # diff = obs_slice - means
+    # # Move bootstrap curves to original simulated centers
+    # slices_ = [slice_ + diff for slice_ in slices]
+    # # Find low and upper confidence band
+    # low, up = create_sim_conf_band(slices_, obs_slice, sigmas,
+    #                                alpha=conf_band_alpha)
 
-    # Plot confidence bands and model values
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    ax.plot(x, low, 'g')
-    ax.plot(x, up, 'g')
-    [ax.plot(x, slice_, 'r', lw=0.15) for slice_ in slices_]
-    ax.plot(x, obs_slice, '.k')
-    # Model convolved values
-    ax.plot(np.arange(216, 336, 1),
-            image_slice(spix_image_mod, (256, 216), (256, 336)), 'g')
+    # # Plot confidence bands and model values
+    # fig = plt.figure()
+    # ax = fig.add_subplot(1, 1, 1)
+    # ax.plot(x, low, 'g')
+    # ax.plot(x, up, 'g')
+    # [ax.plot(x, slice_, 'r', lw=0.15) for slice_ in slices_]
+    # ax.plot(x, obs_slice, '.k')
+    # # Model convolved values
+    # ax.plot(np.arange(216, 336, 1),
+    #         image_slice(spix_image_mod, (256, 216), (256, 336)), 'g')
     # Model non-convolved values
-    ax.plot(np.arange(216, 336, 1),
-            image_slice(alpha_image, (256, 216), (256, 336)), 'r')
-    ax.set_xlabel("slice pixel")
-    ax.set_ylabel("SPIX")
-    fig.savefig(os.path.join(data_dir, 'spix_slice_spread.png'),
-                bbox_inches='tight', dpi=200)
-    plt.close()
+    # ax.plot(np.arange(216, 336, 1),
+    #         image_slice(alpha_image, (256, 216), (256, 336)), 'r')
+    # ax.set_xlabel("slice pixel")
+    # ax.set_ylabel("SPIX")
+    # fig.savefig(os.path.join(data_dir, 'spix_slice_spread.png'),
+    #             bbox_inches='tight', dpi=200)
+    # plt.close()
 
 if __name__ == '__main__':
 
+    # import os
+    # template_source = '0952+179'
+    # base_dir = '/home/ilya/vlbi_errors/article/'
+    # data_dir_base = os.path.join(base_dir, "{}_{}".format(template_source,
+    #                                                       "simulations"))
+    # data_dir = os.path.join(base_dir, "{}_{}".format(template_source,
+    #                                                  "simulations"))
+    # if not os.path.exists(data_dir):
+    #     os.mkdir(data_dir)
+
+    # # Parameter of model image
+    # imsize = (512, 512)
+    # # Pixel size in mas
+    # pixsize = 0.1
+
+    # import glob
+    # observed_uv = glob.glob(os.path.join(data_dir_base, "*.PINAL"))
+    # observed_uv = [UVData(fits_file) for fits_file in observed_uv]
+    # stokes_models = create_stokes_models(imsize)
+    # rotm_image = rotm((imsize[0], imsize[0]), (imsize[0] / 2, imsize[0] / 2),
+    #                   grad_value=40., rm_value_0=100.)
+    # alpha_image = alpha((imsize[0], imsize[0]), (imsize[0] / 2, imsize[0] / 2),
+    #                     0.)
+    # model_freq = 20. * 10. ** 9.
+    # simulator = create_simulator(observed_uv, stokes_models, pixsize,
+    #                              rotm_image=rotm_image, alpha_image=alpha_image,
+    #                              model_freq=model_freq)
+    # create_simulated_data(simulator, data_dir, n_sample=2)
     ############################################################################
     # Test simulate
-    from mojave import get_epochs_for_source
-    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
-    base_dir = '/home/ilya/vlbi_errors/mojave_rm/test'
-    # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
-    #            '1749+701', '0454+844']
-    mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
-                    'u': (512, 0.1)}
-    mapsize_common = (512, 0.1)
-    source_epoch_dict = dict()
+    # from mojave import get_epochs_for_source
+    # path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    # base_dir = '/home/ilya/vlbi_errors/mojave_rm/test'
+    # # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
+    # #            '1749+701', '0454+844']
+    # mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
+    #                 'u': (512, 0.1)}
+    # mapsize_common = (512, 0.1)
+    # source_epoch_dict = dict()
     # for source in sources:
     #     epochs = get_epochs_for_source(source, use_db='multifreq')
     #     print "Found epochs for source {}".format(source)
@@ -1246,27 +1281,43 @@ if __name__ == '__main__':
     #              mapsize_common=mapsize_common, base_dir=base_dir,
     #              rotm_value_0=0., max_jet_flux=0.005)
 
-    source = '0454+844'
-    epoch = '2006_03_09'
-    sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
-               '1749+701', '0454+844']
-    max_jet_fluxes = np.linspace(0.001, 0.002, len(sources))
-    from collections import OrderedDict
-    source_epoch_dict = OrderedDict()
-    for source in sources[::-1]:
-        epochs = get_epochs_for_source(source, use_db='multifreq')
-        print "Found epochs for source {}".format(source)
-        print epochs
-        source_epoch_dict.update({source: epochs[-1]})
-    for (source, epoch), max_jet_flux in zip(source_epoch_dict.items(), max_jet_fluxes):
-        simulate(source, epoch, ['x', 'y', 'j', 'u'],
-                 n_sample=100, max_jet_flux=max_jet_flux, rotm_clim_sym=[-300, 300],
-                 rotm_clim_model=[-300, 300],
-                 path_to_script=path_to_script, mapsize_dict=mapsize_dict,
-                 mapsize_common=mapsize_common, base_dir=base_dir,
-                 rotm_value_0=0., rotm_grad_value=0., n_rms=2.,
-                 download_mojave=True, spix_clim_sym=[-1.5, 1],
-                 spix_clim_model=[-1.5, 1], qu_fraction=0.3)
+    # source = '0454+844'
+    # epoch = '2006_03_09'
+    # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
+    #            '1749+701', '0454+844']
+    # max_jet_fluxes = np.linspace(0.001, 0.002, len(sources))
+    # from collections import OrderedDict
+    # source_epoch_dict = OrderedDict()
+    # for source in sources[::-1]:
+    #     epochs = get_epochs_for_source(source, use_db='multifreq')
+    #     print "Found epochs for source {}".format(source)
+    #     print epochs
+    #     source_epoch_dict.update({source: epochs[-1]})
+    # for (source, epoch), max_jet_flux in zip(source_epoch_dict.items(), max_jet_fluxes):
+    #     simulate(source, epoch, ['x', 'y', 'j', 'u'],
+    #              n_sample=100, max_jet_flux=max_jet_flux, rotm_clim_sym=[-300, 300],
+    #              rotm_clim_model=[-300, 300],
+    #              path_to_script=path_to_script, mapsize_dict=mapsize_dict,
+    #              mapsize_common=mapsize_common, base_dir=base_dir,
+    #              rotm_value_0=0., rotm_grad_value=0., n_rms=2.,
+    #              download_mojave=True, spix_clim_sym=[-1.5, 1],
+    #              spix_clim_model=[-1.5, 1], qu_fraction=0.3)
+    source = '2230+114'
+    epoch = '2006_02_12'
+    max_jet_flux = 0.001
+    mapsize_common = (512, 0.1)
+    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    mapsize_dict = {'x': (512, 0.1), 'y': (512, 0.1), 'j': (512, 0.1),
+                    'u': (512, 0.1)}
+    base_dir = '/home/ilya/vlbi_errors/article/simulate'
+    simulate(source, epoch, ['x', 'y', 'j', 'u'],
+             max_jet_flux=max_jet_flux, rotm_clim_sym=[-300, 300],
+             rotm_clim_model=[-300, 300], n_sample=10,
+             path_to_script=path_to_script, mapsize_dict=mapsize_dict,
+             mapsize_common=mapsize_common, base_dir=base_dir,
+             rotm_value_0=0., rotm_grad_value=40., n_rms=2.,
+             download_mojave=False, spix_clim_sym=[-1.5, 1],
+             spix_clim_model=[-1.5, 1], qu_fraction=0.3)
 
     # ############################################################################
     # # Test for ModelGenerator

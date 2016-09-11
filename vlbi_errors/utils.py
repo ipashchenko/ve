@@ -1481,6 +1481,28 @@ def hdi_of_arrays(arrays, cred_mass=0.68):
     return hdis
 
 
+def percent(xs, perc=None):
+    """
+    Find ``perc`` % in sorted container xs.
+    """
+
+    xs_ = sorted(xs)
+    indx = int(math.ceil(len(xs) * perc / 100.))
+
+    return xs_[indx]
+
+
+def percent(xs, perc=None):
+    """
+    Find ``perc`` % in sorted container xs.
+    """
+
+    xs_ = sorted(xs)
+    indx = int(math.ceil(len(xs) * perc / 100.))
+
+    return xs_[indx]
+
+
 def unwrap_phases(phases):
     """
     Function that bring phases that are subject to +/-pi*N closer.

@@ -4,11 +4,15 @@ import numpy as np
 import glob
 from from_fits import create_clean_image_from_fits_file
 from image import find_shift
+from knuth_hist import histogram
+from utils import percent
+import matplotlib.pyplot as plt
 
 
 data_dir = '/home/ilya/vlbi_errors/article/2230+114'
 shifts = list()
 shifts_values = list()
+shifts_mask_size = dict()
 for i in range(1, 300):
     files = sorted(glob.glob(os.path.join(data_dir,
                                           "cs_boot_*_I_cc_{}.fits".format(str(i).zfill(3)))))
@@ -26,12 +30,18 @@ for i in range(1, 300):
     shifts.append(shift)
     shifts_values.append(shift_value)
     print("Found shift : {} with value {}".format(shift, shift_value))
+    shifts_mask_size[i] = list()
+    print("Found shift dependence on mask size for current bootstrap sample")
+    for r in range(0, 100, 5):
+        sh = i15.cross_correlate(i8, region1=(i15.x_c, i15.y_c, r, None),
+                                 region2=(i8.x_c, i8.y_c, r, None),
+                                 upsample_factor=1000)
+        sh_value = math.sqrt(sh[0]**2 + sh[1]**2)
+        print("r = {}, shift = {}".format(r, sh_value))
+        shifts_mask_size[i].append(sh_value)
 
 
 np.savetxt('2230_shifts_300.txt', shifts)
-from knuth_hist import histogram
-from utils import percent
-import matplotlib.pyplot as plt
 hist_d, edges_d = histogram(shifts_values, normed=False)
 lower_d = np.resize(edges_d, len(edges_d) - 1)
 fig, ax = plt.subplots(1, 1)

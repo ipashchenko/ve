@@ -1,5 +1,6 @@
 import os
 import math
+import numpy as np
 import glob
 from from_fits import create_clean_image_from_fits_file
 from image import find_shift
@@ -8,7 +9,7 @@ from image import find_shift
 data_dir = '/home/ilya/vlbi_errors/article/2230+114'
 shifts = list()
 shifts_values = list()
-for i in range(1, 100):
+for i in range(1, 300):
     files = sorted(glob.glob(os.path.join(data_dir,
                                           "cs_boot_*_I_cc_{}.fits".format(str(i).zfill(3)))))
     f15 = files[1]
@@ -25,3 +26,19 @@ for i in range(1, 100):
     shifts.append(shift)
     shifts_values.append(shift_value)
     print("Found shift : {} with value {}".format(shift, shift_value))
+
+
+np.savetxt('2230_shifts_300.txt', shifts)
+from knuth_hist import histogram
+from utils import percent
+import matplotlib.pyplot as plt
+hist_d, edges_d = histogram(shifts_values, normed=False)
+lower_d = np.resize(edges_d, len(edges_d) - 1)
+fig, ax = plt.subplots(1, 1)
+ax.bar(lower_d, hist_d, width=np.diff(lower_d)[0], linewidth=1, color='w')
+ax.axvline(x=percent(shifts_values, perc=16), color='k')
+ax.axvline(x=percent(shifts_values, perc=84), color='k')
+font = {'family': 'Droid Sans', 'weight': 'normal', 'size': 24}
+ax.set_xlabel(ur"Shift values, [pixels]")
+ax.set_ylabel(ur"Number of replications")
+fig.savefig("shifts_histogram.png", bbox_inches='tight', dpi=200)

@@ -227,6 +227,10 @@ class ModelGenerator(object):
     def pixsize(self):
         return abs(self._x[1]-self._x[0]), abs(self._y[1]-self._y[0])
 
+    @property
+    def pixref(self):
+        return np.where(self._x == 0.)[0][0], np.where(self._y == 0.)[0][0]
+
     def _get_chi_0(self):
         if 'PANG' in self.stokes:
             chi_0 = self.stokes_models['PANG']

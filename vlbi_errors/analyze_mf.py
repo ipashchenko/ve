@@ -204,7 +204,7 @@ class MFObservations(object):
 
     def run(self, sigma_evpa=None, sigma_d_term=None, colors_clim=None,
             n_sigma_mask=None, rotm_slices=None, pxls_plot=None,
-            plot_points=None):
+            plot_points=None, model_generator=None):
         self._t0 = Time.now()
         date, time = str(self._t0.utc.datetime).split()
         self._difmap_commands_file =\
@@ -214,20 +214,21 @@ class MFObservations(object):
         self.clean_original_common()
         if self.find_shifts:
             self.get_shifts()
-        # self.bootstrap_uvdata()
+        self.bootstrap_uvdata()
         # self.clean_boot_native()
-        # self.clean_boot_common()
+        self.clean_boot_common()
         self.set_common_mask(n_sigma=n_sigma_mask)
         self.analyze_rotm_conv(colors_clim=colors_clim, sigma_evpa=sigma_evpa,
                                sigma_d_term=sigma_d_term,
                                rotm_slices=rotm_slices, pxls_plot=pxls_plot,
                                plot_points=plot_points)
-        # self.analyze_rotm_boot(colors_clim=colors_clim, rotm_slices=rotm_slices)
+        self.analyze_rotm_boot(colors_clim=colors_clim, rotm_slices=rotm_slices)
 
     def load_uvdata(self):
         self.uvdata_dict = dict()
         self.uvfits_dict = dict()
         for fits_file in self.original_fits_files:
+            print("Loading UV-FITS file {}".format(os.path.split(fits_file)[-1]))
             uvdata = UVData(fits_file)
             self.uvdata_dict.update({uvdata.band_center: uvdata})
             self.uvfits_dict.update({uvdata.band_center: fits_file})
@@ -713,7 +714,7 @@ class MFObservations(object):
 
 if __name__ == '__main__':
     import glob
-    source = 'sim'
+    source = '1641+399'
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
     # epochs = get_epochs_for_source(source, use_db='multifreq')
     # print(epochs)
@@ -721,25 +722,24 @@ if __name__ == '__main__':
     # for epoch in epochs:
     #     print(epoch)
     # epoch = epochs[-1]
-    # epoch = '2006_07_07'
-    base_dir = '/home/ilya/vlbi_errors/article/simulate'
+    epoch = '2006_06_15'
+    base_dir = '/home/ilya/vlbi_errors/article'
     data_dir = os.path.join(base_dir, source)
 
     # Download uv-data from MOJAVE web DB optionally
-    # if not os.path.exists(data_dir):
-    #     os.makedirs(data_dir)
-    #     download_mojave_uv_fits(source, epochs=[epoch],
-    #                             download_dir=data_dir)
-    fits_files = glob.glob(os.path.join(data_dir, "*.uvf"))
-    imsizes = [(512, 0.1), (512, 0.1), (512, 0.1), (512, 0.1), (512, 0.1)]
-    n_boot = 5
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+        download_mojave_uv_fits(source, epochs=[epoch],
+                                download_dir=data_dir)
+    fits_files = glob.glob(os.path.join(data_dir, "{}*.uvf".format(source)))
+    imsizes = [(512, 0.1), (512, 0.1), (512, 0.1), (512, 0.1)]
+    n_boot = 100
     mfo = MFObservations(fits_files, imsizes, n_boot, data_dir=data_dir,
                          path_to_script=path_to_script,
                          n_scans=[4., 4., 4., 4.],
                          sigma_d_term=[0.002, 0.002, 0.002, 0.002],
                          sigma_evpa=[4., 4., 2., 3.])
-    mfo.run(n_sigma_mask=3.0, colors_clim=[-300, 300],
-            rotm_slices=[((0, -3), (0, 3)), ((-2, -3), (-2, 3)), ((-3, -3),
-                                                                  (-3, 3))],
-            pxls_plot=[(0, 0), (-2, 0), (-3, 0), (-4, 0)],
-            plot_points=[(0, 0), (-2, 0), (-3, 0), (-4, 0)])
+    mfo.run(n_sigma_mask=3.0, colors_clim=[-550, 650],
+            rotm_slices=[((-2, 3), (-2, -3))])
+            # pxls_plot=[(0, 0), (1, 0), (-3, 0), (-4, 0)],
+            # plot_points=[(0, 0), (-2, 0), (-3, 0), (-4, 0)])

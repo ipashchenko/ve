@@ -796,7 +796,8 @@ def pol_mask(stokes_image_dict, n_sigma=2.):
 
 def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
                        rotm_images=None, conf_band_alpha=0.95, outdir=None,
-                       outfname='rotm_slice_spread.png', beam_width=None):
+                       outfname='rotm_slice_spread.png', beam_width=None,
+                       model_rotm_image=None):
     """
     Analyze ROTM slice.
 
@@ -822,6 +823,10 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
     :param beam_width: (optional)
         Beam width in pixels to plot. If ``None`` then don't plot. (default:
         ``None``)
+    :param rotm_image: (optional)
+        Instance of ``Image`` class with model ROTM map beam-convolved.
+        Actually, model Q & U maps are beam convolved and then ROTM map is
+        found. If ``None`` then don't use model values. (default: ``None``)
     """
     # Setting up the output directory
     if outdir is None:
@@ -845,6 +850,10 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
         ax = fig.add_subplot(1, 1, 1)
         # ax.errorbar(x, obs_slice_notna[::-1], sigma_slice_notna[::-1], fmt='.k')
         ax.errorbar(x, obs_slice[::], sigma_slice[::], fmt='.k')
+        if model_rotm_image is not None:
+            model_slice = model_rotm_image.slice(pix1=slice_coords[0],
+                                                 pix2=slice_coords[1])
+            ax.plot(x, model_slice[::], 'b')
         ax.set_xlim([0, len(obs_slice)])
         ax.set_xlabel("Distance along slice, [pixels]")
         ax.set_ylabel("RM, [rad/m/m]")
@@ -893,6 +902,10 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
         [ax.plot(x, slice_[::], 'r', lw=0.2) for slice_ in slices_]
         # ax.plot(x, obs_slice_notna[::-1], '.k')
         ax.plot(x, obs_slice[::], '.k')
+        if model_rotm_image is not None:
+            model_slice = model_rotm_image.slice(pix1=slice_coords[0],
+                                                 pix2=slice_coords[1])
+            ax.plot(x, model_slice[::], 'b')
         ax.set_xlabel("Distance along slice, [pixels]")
         ax.set_ylabel("RM, [rad/m/m]")
         if beam_width:

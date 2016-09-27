@@ -57,10 +57,9 @@ class KFoldCV(object):
 if __name__ == '__main__':
     # 45.19953388864762 = min(scores) + sigma_min
     # cc_pars = np.linspace(100, 300, 2)
-    # cc_pars = [100, 1000, 3000, 5000, 10000, 15000, 20000, 30000, 50000]
-    cc_pars = [100000, 125000]
-    # cc_pars = [67500, 70000, 72500, 75000, 77500, 80000, 82500, 85000, 87500]
-    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw_n'
+    cc_pars = [100, 1000, 2500, 5000, 7500, 10000, 12500, 15000, 17500, 20000]
+    path_to_script = '/home/ilya/code/vlbi_errors/difmap/clean_n'
+    # path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw_n'
     # uv_fits = '/home/ilya/data/3c273/1226+023.x.2006_06_15.uvf'
     uv_fits = '/home/ilya/data/check_cv_misha/1226+023.X1.2010_01_26.UV_CAL'
     windows = '/home/ilya/data/check_cv_misha/1226+023.X1.2010_01_26.win'
@@ -73,7 +72,7 @@ if __name__ == '__main__':
         for j, (tr_fname, ts_fname) in enumerate(kfold):
             clean_n(kfold.train_fname, 'trained_model_{}.FITS'.format(niter), 'I',
                     (2048, 0.20), niter=niter, path_to_script=path_to_script,
-                    show_difmap_output=True, windows=windows)
+                    show_difmap_output=True)
             tr_model = create_model_from_fits_file('trained_model_{}.FITS'.format(niter))
             ts_uvdata = UVData(ts_fname)
             score = ts_uvdata.cv_score(tr_model)

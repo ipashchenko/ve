@@ -221,7 +221,7 @@ def process_flux_components():
         files = sorted(glob.glob(os.path.join(data_dir, "68*comp*txt")))
         print files
         if not files:
-            print "No componen files"
+            print "No component files"
             continue
         for file_ in files:
             if "comp1" in file_:
@@ -260,7 +260,9 @@ def process_position_components():
                        index_col=False)
     from from_fits import create_clean_image_from_fits_file
     params = list()
+    params_dict = dict()
     for source in df['source'].unique():
+        params_dict[source] = dict()
         print "Checking {}".format(source)
         epochs = df.loc[df['source'] == source]['epoch']
         last_epoch_ = list(epochs)[-1]
@@ -277,11 +279,13 @@ def process_position_components():
         files = sorted(glob.glob(os.path.join(data_dir, "68*comp*txt")))
         print files
         if not files:
-            print "No componen files"
+            print "No component files"
             continue
-        for file_ in [files[-1]]:
+        for file_ in files:
             if "comp" in file_:
                 print "Checking file {}".format(file_)
+                comp = os.path.split(file_)[-1].split('_')[5]
+                print "Component # {}".format(comp[-1])
                 try:
                     with open(file_) as fo:
                         pars = fo.readlines()
@@ -310,10 +314,54 @@ def process_position_components():
                             continue
                         # RMS
                         rms = float(file_.split('_')[-1][:-4])
-                        params.append([flux, boot_sigma, radius, boot_xy, beam,
-                                       rms])
+                        # params.append([flux, boot_sigma, radius, boot_xy, beam,
+                        #                rms])
+                        params_dict[source].update({comp[-1]: [flux, boot_sigma,
+                                                               radius, boot_xy,
+                                                               beam, rms]})
                 except IOError:
                     print "Failed reading file {}".format(file_)
                     continue
     params = np.atleast_2d(params)
-    return params
+    return params, params_dict
+
+
+params_dict = dict()
+ratios_dict = dict()
+base_dir = '/home/ilya/vlbi_errors/mojave_mod'
+names = ['source', 'id', 's_ra', 's_dec']
+df = pd.read_table(os.path.join(base_dir, 'asu_chisq.tsv'), sep='\t',
+                   header=None, names=names, dtype={key: str for key in names},
+                   index_col=False)
+sources = params_dict.keys()
+for source in sources:
+    print "Source {}".format(source)
+    comps = params_dict[source].keys()
+    ratios_dict[source] = dict()
+    for comp in comps:
+        print "Component {}".format(comp)
+        a = df.loc[(df['source'] == source) & (df['id'] == ' {}'.format(comp))]
+        if a.empty:
+            continue
+        sigma_chi = np.sqrt(float(a['s_ra'])**2 + float(a['s_dec'])**2)
+        sigma_boot = params_dict[source][comp][3]
+        ratios_dict[source][comp] = sigma_boot/sigma_chi
+
+ratio_3 = list()
+for source in ratios_dict.keys():
+    for comp in ratios_dict[source].keys():
+        if comp=='3':
+            ratio_3.append(ratios_dict[source][comp])
+
+from knuth_hist import histogram
+hist_d, edges_d = histogram(ratio_3, normed=False)
+lower_d = np.resize(edges_d, len(edges_d) - 1)
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots(1, 1)
+ax.bar(lower_d, hist_d, width=np.diff(lower_d)[0], linewidth=1, color='#4682b4')
+ax.set_xlabel(ur"Bootstrap $\sigma_{position}$ to kinematic post-fit"
+              ur" $\sigma_{position}$")
+ax.set_ylabel(ur"N")
+fig.savefig("/home/ilya/Dropbox/article/evn2016/boot_chi2_position_sigma_histogram_3comp.png", bbox_inches='tight', dpi=200)
+fig.close()
+

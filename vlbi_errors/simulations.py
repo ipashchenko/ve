@@ -412,7 +412,8 @@ class ModelGenerator(object):
         return mask
 
     def get_rotm_map(self, frequencies, i_cut_frac=None, beam=None,
-                     mask_before_convolve=True, rotm_mask=None):
+                     mask_before_convolve=True, rotm_mask=None,
+                     mask_on_chisq=True, plot_pxls=None, outfile_pxls=None):
         """
         Calculate model ROTM map (optionally for convolved `Q` & `U` images) for
         a user-specified frequencies.
@@ -430,6 +431,10 @@ class ModelGenerator(object):
         :param rotm_mask: (optional)
             Mask used when creating ROTM map. If ``None`` the don't use mask.
             (default: ``None``)
+        :param mask_on_chisq: (optional)
+        :param plot_pxls: (optional)
+        :param outfile_pxls: (optional)
+            Arguments to ``rotm_map`` function.
 
         :return:
             Output of ``images_ops.rotm_map`` for model for given frequencies.
@@ -445,7 +450,50 @@ class ModelGenerator(object):
                                                   beam=beam,
                                                   mask_before_convolve=mask_before_convolve)['PANG']
         return rotm_map(frequencies, images.values(), mask=rotm_mask,
-                        mask_on_chisq=False)
+                        mask_on_chisq=mask_on_chisq, plot_pxls=plot_pxls,
+                        outfile_pxls=outfile_pxls)
+
+    def get_rotm_image(self, frequencies, i_cut_frac=None, beam=None,
+                       mask_before_convolve=True, rotm_mask=None,
+                       mask_on_chisq=True, plot_pxls=None, outfile_pxls=None):
+        """
+        Calculate instance of ``Image`` class with model ROTM map (optionally
+        for convolved `Q` & `U` images) for a user-specified frequencies.
+
+        :param frequencies:
+            Iterable of frequencies [Hz].
+        :param i_cut_frac: (optional)
+            Fraction of stokes `I` intensity to create mask. If ``None`` then
+            don't mask images.
+        :param beam: (optional)
+            Iterable of 3 beam parameters - bmaj [mas], bmean [mas], bpa [deg]
+            to optionally convolve images
+        :param mask_before_convolve:
+            Boolean. Mask maps with ``i_cut_frac`` before or after convolution?
+        :param rotm_mask: (optional)
+            Mask used when creating ROTM map. If ``None`` the don't use mask.
+            (default: ``None``)
+        :param mask_on_chisq: (optional)
+        :param plot_pxls: (optional)
+        :param outfile_pxls: (optional)
+            Arguments to ``rotm_map`` function.
+
+        :return:
+            Instance of ``Image`` class with model ROTM map.
+        """
+        rotm_map = self.get_rotm_map(frequencies, i_cut_frac=i_cut_frac,
+                                     beam=beam,
+                                     mask_before_convolve=mask_before_convolve,
+                                     rotm_mask=rotm_mask,
+                                     mask_on_chisq=mask_on_chisq,
+                                     plot_pxls=plot_pxls,
+                                     outfile_pxls=outfile_pxls)
+        rotm_image = Image()
+        rotm_image._construct(imsize=self.image_shape, pixsize=self.pixsize,
+                              pixref=self.pixref, stokes='ROTM',
+                              freq=tuple(frequencies), pixrefval=(0., 0.))
+        rotm_image.image = rotm_map
+        return rotm_image
 
     def get_spix_map(self, frequencies, i_cut_frac=None, beam=None,
                      mask_before_convolve=True, spix_mask=None):

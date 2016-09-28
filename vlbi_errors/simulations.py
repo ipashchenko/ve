@@ -46,6 +46,13 @@ def alpha(imsize, center, y0, k=0.5, const=-0.5):
     return alpha
 
 
+def alpha_linear(imsize, center, grad_value, value_0=0.5):
+    y, x = create_grid(imsize)
+    x -= center[0]
+    y -= center[1]
+    return grad_value * y + value_0
+
+
 def rotm(imsize, center, grad_value=5., rm_value_0=0.0):
     """
     Function that defines model of ROTM gradient distribution.

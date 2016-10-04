@@ -208,6 +208,19 @@ class Model(object):
         for component in self._components:
             component.add_to_image(image, beam=beam)
 
+    def substract_from_image(self, image, beam=None):
+        """
+        Subtract model from instances of ``Image`` subclasses.
+
+        :param image:
+            Instance of ``Image`` subclass.
+        :param beam: (optional)
+            Instance of ``Beam`` subclass to convolve model with beam before
+            adding to image. If ``None`` then don't convolve.
+        """
+        for component in self._components:
+            component.substract_from_image(image, beam=beam)
+
     # FIXME: Nonlinear models can't use AIC/BIC?
     def bic(self, uvdata, average_freq=True):
         """

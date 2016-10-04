@@ -124,6 +124,8 @@ def find_bbox(array, level, delta=0.):
 # TODO: Implement plotting w/o coordinates - in pixels. Use pixel numbers as
 # coordinates.
 # TODO: Make possible use ``blc`` & ``trc`` in mas.
+# TODO: Plot components from difmap-style txt-file or instances of ``Component``
+# class.
 def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          y=None, blc=None, trc=None, cmap='hsv', abs_levels=None,
          rel_levels=None, min_abs_level=None, min_rel_level=None, k=2., vinc=2.,
@@ -202,7 +204,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         Iterable of 2 coordinates (``y``, ``x``) [mas] to plot slice. If
         ``None`` then don't plot slice. (default: ``None``)
     :param show_points: (optional)
-        Iterable od 2 coordinates (``y``, ``x``) [mas] to plot points. If
+        Iterable of 2 coordinates (``y``, ``x``) [mas] to plot points. If
         ``None`` then don't plot points. (default: ``None``)
 
     :note:
@@ -759,13 +761,21 @@ class Image(BasicImage):
 
     # This method has no sense in ``BasicImage`` class as there are no physical
     # sizes here.
-    def add_component(self, component):
-        component.add_to_image(self)
+    def add_component(self, component, beam=None):
+        component.add_to_image(self, beam=beam)
 
-    def add_model(self, model):
+    def substract_component(self, component, beam=None):
+        component.substract_from_image(self, beam=beam)
+
+    def add_model(self, model, beam=None):
         if self.stokes != model.stokes:
             raise Exception
-        model.add_to_image(self)
+        model.add_to_image(self, beam=beam)
+
+    def substract_model(self, model, beam=None):
+        if self.stokes != model.stokes:
+            raise Exception
+        model.substract_from_image(self, beam=beam)
 
     def plot(self, blc=None, trc=None, clim=None, cmap=None, abs_levels=None,
              rel_levels=None, min_abs_level=None, min_rel_level=None, factor=2.,

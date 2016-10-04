@@ -285,7 +285,67 @@ class EGComponent(Component):
             fluxes = beam.convolve(fluxes)
 
         # Adding component's flux to image grid
-        image._image += fluxes
+        image._image += np.rot90(fluxes)[::-1, ::]
+
+    def substract_from_image(self, image, beam=None):
+        """
+        Substract component from given instance of ``Image`` class.
+        """
+        # Cellsize [rad]
+        dx, dy = image.dx, image.dy
+        pix_mas = abs(image.pixsize[0]/dx)
+        # Center of image [pix]
+        x_c, y_c = image.x_c, image.y_c
+
+        # Parameters of component
+        try:
+            # Jy, mas, mas, mas,  , rad
+            flux, x0, y0, bmaj, e, bpa = self._p
+        # If we call method inside ``CGComponent``
+        except ValueError:
+            flux, x0, y0, bmaj = self._p
+            e = 1.
+            bpa = 0.
+
+        # There's ONE place to convert them
+        x0 *= mas_to_rad
+        y0 *= mas_to_rad
+        bmaj *= mas_to_rad
+
+        # TODO: Is it [Jy/beam]??
+        # Amplitude of gaussian component [Jy/beam]
+        # amp = flux / (2. * math.pi * (bmaj / mas_to_rad) ** 2. * e)
+        amp = flux / (2. * math.pi * (bmaj / abs(image.pixsize[0])) ** 2. * e)
+
+        # Create gaussian function of (x, y) with given parameters
+        gaussf = gaussian(amp, x0, y0, bmaj, e, bpa=bpa)
+
+        # Calculating angular distances of cells from center of component
+        # from cell numbers to relative distances
+        # arrays with elements from 1 to imsize
+        x, y = np.mgrid[1: image.imsize[0] + 1,
+               1: image.imsize[1] + 1]
+        # from -imsize/2 to imsize/2
+        x = x - x_c
+        y = y - y_c
+        # the same in rads
+        x = x * dx
+        y = y * dy
+        ## relative to component center
+        #x = x - x0
+        #y = y - y0
+        ## convert to mas cause all params are in mas
+        #x = x / mas_to_rad
+        #y = y / mas_to_rad
+
+        # Creating grid with component's flux at each cell
+        fluxes = gaussf(x, y)
+
+        if beam is not None:
+            fluxes = beam.convolve(fluxes)
+
+        # Substracting component's flux from image grid
+        image._image -= fluxes
 
 
 class CGComponent(EGComponent):
@@ -382,6 +442,32 @@ class DeltaComponent(Component):
 
         image._image[y, x] += flux
 
+    def substract_from_image(self, image, beam=None):
+        """
+        Subtract component from given instance of ``ImagePlane`` class.
+        """
+        dx, dy = image.dx, image.dy
+        x_c, y_c = image.x_c, image.y_c
+
+        flux, x0, y0 = self._p
+
+        # There's ONE place to convert them
+        x0 *= mas_to_rad
+        y0 *= mas_to_rad
+
+        x_coords = int(round(x0 / dx))
+        y_coords = int(round(y0 / dy))
+        # 2 means that x_c & x_coords should be zero-indexed actually both.
+        x = x_c + x_coords - 2
+        y = y_c + y_coords - 2
+        # ``._image`` attribute contains model (FT of uv-data)
+        # [y, x] - to get coincidence with fits clean maps
+
+        if beam is not None:
+            flux = beam.convolve(flux)
+
+        image._image[y, x] -= flux
+
 
 # TODO: Add method of RM/alpha transformations? With arguments ``from_freq`` &
 # ``to_freq``
@@ -413,6 +499,12 @@ class ImageComponent(Component):
         if beam is not None:
             add = beam.convolve(self.image)
         image.image += add
+
+    def substract_from_image(self, image, beam=None):
+        add = self.image
+        if beam is not None:
+            add = beam.convolve(self.image)
+        image.image -= add
 
     def ft(self, uv):
         u = uv[:, 0]

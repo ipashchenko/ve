@@ -39,7 +39,7 @@ class Beam(object):
             to_convolve = image.image
         except AttributeError:
             to_convolve = np.atleast_2d(image)
-        return signal.fftconvolve(self.image, to_convolve, mode='same')
+        return signal.fftconvolve(to_convolve, self.image, mode='same')
 
 
 class DirtyBeam(Beam):

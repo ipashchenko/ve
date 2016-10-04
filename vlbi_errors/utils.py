@@ -1040,9 +1040,10 @@ def gaussian(height, x0, y0, bmaj, e, bpa):
         imshow(gaussian(x, y))
 
     """
-    bmin = bmaj * e
     # This brings PA to VLBI-convention (- = from NOrth counterclocwise)
     bpa = -bpa
+    bmaj = bmaj / (2. * np.sqrt(2. * np.log(2)))
+    bmin = e * bmaj
     a = math.cos(bpa) ** 2. / (2. * bmaj ** 2.) + \
         math.sin(bpa) ** 2. / (2. * bmin ** 2.)
     b = math.sin(2. * bpa) / (2. * bmaj ** 2.) - \

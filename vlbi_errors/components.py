@@ -253,7 +253,9 @@ class EGComponent(Component):
 
         # TODO: Is it [Jy/beam]??
         # Amplitude of gaussian component [Jy/beam]
-        amp = flux / (2. * math.pi * (bmaj / mas_to_rad) ** 2. * e)
+        # amp = flux / (2. * math.pi * (bmaj / mas_to_rad) ** 2. * e)
+        # amp = flux / (2. * math.pi * (bmaj / abs(image.pixsize[0])) ** 2. * e)
+        amp = 4. * np.log(2) * flux / (np.pi * (bmaj/abs(image.pixsize[0]))**2 * e)
 
         # Create gaussian function of (x, y) with given parameters
         gaussf = gaussian(amp, x0, y0, bmaj, e, bpa=bpa)

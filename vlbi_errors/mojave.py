@@ -4,6 +4,7 @@ import BeautifulSoup
 import urllib2
 import fnmatch
 import numpy as np
+import pandas as pd
 import sys
 
 from spydiff import clean_difmap
@@ -191,6 +192,72 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
                               " Skipping...".format(fname, download_dir))
                         continue
                     urllib.urlretrieve(url, os.path.join(download_dir, fname))
+
+
+# TODO: Fetch data from VizieR
+def get_mojave_mdl_file(tsv_table, source, epoch, outfile=None, outdir=None):
+    """
+    Create difmap file with model components for MOJAVE 15GHz observation of
+    given source for given epoch. Uses table from VizieR.
+    http://vizier.cfa.harvard.edu/viz-bin/VizieR-3?-source=J/AJ/138/1874/table1
+
+    :param tsv_table:
+        tsv file with table.
+    :param source:
+        Source.
+    :param epoch:
+        Epoch. String with '-' as separators.
+    :param outfile: (optional)
+        Output file name. If ``None`` then use `source_epoch.mdl`. (default:
+        ``None``)
+    :param outdir: (optional)
+        Output directory. If ``None`` then use CWD. (defautl: ``None``)
+
+    :return:
+        Difmap txt-file with model.
+    """
+
+    names = ['source', 'id', 'trash', 'epoch', 'flux', 'r', 'pa', 'bmaj', 'e',
+             'bpa']
+    df = pd.read_table(tsv_table, sep=';', header=None,
+                       names=names, dtype={key: str for key in names},
+                       index_col=False)
+    if outdir is None:
+        outdir = os.getcwd()
+    if outfile is None:
+        outfile = '{}_{}.mdl'.format(source, epoch)
+    outfile = os.path.join(outdir, outfile)
+    fn = open(outfile, 'w')
+    model_df = df.loc[np.logical_and(df['source'] == source,
+                                     df['epoch'] == epoch)]
+    for (flux, r, pa, bmaj, e, bpa) in np.asarray(model_df[['flux', 'r', 'pa',
+                                                            'bmaj', 'e',
+                                                            'bpa']]):
+        print flux, r, pa, bmaj, e, bpa
+        if not r.strip(' '):
+            r = '0.0'
+        if not pa.strip(' '):
+            pa = '0.0'
+
+        if not bmaj.strip(' '):
+            bmaj = '0.0'
+        if not e.strip(' '):
+            e = "1.0"
+
+        if np.isnan(float(bpa)):
+            bpa = "0.0"
+        else:
+            bpa = bpa + 'v'
+
+        if bmaj == '0.0':
+            type_ = 0
+            bpa = "0.0"
+        else:
+            bmaj = bmaj + 'v'
+            type_ = 1
+        fn.write("{}v {}v {}v {} {} {} {} {} {}".format(flux, r, pa, bmaj, e,
+                                                        bpa, type_, "0", "0\n"))
+    fn.close()
 
 
 def get_stacked_map(source, mojave_dir=None, out_dir=None, imsize=(512, 0.1),

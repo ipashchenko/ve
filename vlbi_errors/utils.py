@@ -1030,6 +1030,7 @@ def infer_gaussian(data):
     return amplitude, x_0, y_0, width
 
 
+# TODO: in components ft methods this repeats - use this method there
 def gaussian(height, x0, y0, bmaj, e, bpa):
     """
     Returns a gaussian function with the given parameters.

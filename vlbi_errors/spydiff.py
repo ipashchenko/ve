@@ -97,8 +97,8 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
 
     difmapout = open(command_file, "w")
     difmapout.write("observe " + os.path.join(path, fname) + "\n")
-    if shift is not None:
-        difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
+    # if shift is not None:
+    #     difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
     difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
                     str(mapsize_clean[1]) + "\n")
     difmapout.write("@" + path_to_script + " " + stokes + "\n")
@@ -112,6 +112,8 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         outpath = path
     elif not outpath.endswith("/"):
         outpath = outpath + "/"
+    if shift is not None:
+        difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
     difmapout.write("wmap " + os.path.join(outpath, outfname) + "\n")
     difmapout.write("exit\n")
     difmapout.close()

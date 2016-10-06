@@ -121,6 +121,7 @@ def find_bbox(array, level, delta=0.):
     return blc, trc
 
 
+# FIXME: When plotting w & wo colors it flips axes!
 # TODO: Implement plotting w/o coordinates - in pixels. Use pixel numbers as
 # coordinates.
 # TODO: Make possible use ``blc`` & ``trc`` in mas.

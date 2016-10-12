@@ -278,7 +278,7 @@ class UVData(object):
         # FIXME: if self.nif=1 then np.mean for axis=1 will remove this
         # dimension. So don't need this if-else
         else:
-            result = self.uvdata[:, 0, :]
+            result = self.uvdata_weight_masked[:, 0, :]
         return result
 
     @property
@@ -599,6 +599,7 @@ class UVData(object):
         boolean[sl] = True
         return boolean
 
+    # FIXME: Choose only one stokes parameter
     def _choose_uvdata(self, start_time=None, stop_time=None, baselines=None,
                        bands=None, stokes=None, freq_average=False):
         """
@@ -637,6 +638,7 @@ class UVData(object):
         if stop_time is None:
             stop_time = self.times[-1]
 
+        # FIXME: Choose only one stokes parameter
         if stokes is None:
             stokes = self.stokes
         if check_issubset(stokes, self.stokes):
@@ -1536,6 +1538,7 @@ class UVData(object):
                 sym = '.'
             # axes[0].plot(uv_radius, a2, sym, color=color)
             # axes[1].plot(uv_radius, a1, sym, color=color)
+            # FIXME: Doesn't work for stokes='I' (stokes_dict_inv)
             sc_0 = axes[0].scatter(uv_radius, a2, cmap='gray_r',
                                    norm=matplotlib.colors.LogNorm(),
                                    c=np.mean(weights[:, :, self.stokes_dict_inv[stokes]], axis=1))

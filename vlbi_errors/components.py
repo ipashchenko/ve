@@ -122,6 +122,7 @@ class Component(object):
         return sum(lnprior)
 
 
+# TODO: Use mod(pi) for BPA?
 class EGComponent(Component):
     """
     Class that implements elliptical gaussian component.

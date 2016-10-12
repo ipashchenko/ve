@@ -121,7 +121,8 @@ def find_bbox(array, level, delta=0.):
     return blc, trc
 
 
-# FIXME: When plotting w & wo colors it flips axes!
+# FIXME: When plotting w & wo colors it flips axes! When only contours are
+# plotted then it flips axis with negative increment!
 # TODO: Implement plotting w/o coordinates - in pixels. Use pixel numbers as
 # coordinates.
 # TODO: Make possible use ``blc`` & ``trc`` in mas.
@@ -319,6 +320,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                         v[::vinc, ::vinc], angles='uv',
                         units='xy', headwidth=0., headlength=0., scale=0.005,
                         width=0.05, headaxislength=0.)
+    # Set equal aspect
+    ax.set_aspect('equal')
 
     if slice_points is not None:
         for single_slice in slice_points:

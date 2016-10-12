@@ -135,6 +135,7 @@ class LnPrior(object):
         self.model = model
 
     def __call__(self, p):
+        self.model.p = p[:]
         distances = list()
         for component in self.model._components:
             distances.append(np.sqrt(component.p[1] ** 2. +
@@ -142,11 +143,11 @@ class LnPrior(object):
         if not is_sorted(distances):
             print "Components are not sorted:("
             return -np.inf
-        self.model.p = p[:]
         lnpr = list()
         for component in self.model._components:
-            component.p = p[:component.size]
-            p = p[component.size:]
+            # This is implemented in ``Model.p``
+            # component.p = p[:component.size]
+            # p = p[component.size:]
             #print "Got lnprior for component : ", component.lnpr
             lnpr.append(component.lnpr)
 
@@ -159,7 +160,10 @@ class LnPost(object):
         self.lnpr = LnPrior(model)
 
     def __call__(self, p):
-        return self.lnlik(p[:]) + self.lnpr(p[:])
+        lnpr = self.lnpr(p[:])
+        if not np.isfinite(lnpr):
+            return -np.inf
+        return self.lnlik(p[:]) + lnpr
 
 
 if __name__ == '__main__':

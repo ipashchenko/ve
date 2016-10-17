@@ -1,5 +1,10 @@
 #!/usr/bin python
 # -*- coding: utf-8 -*-
+# FIXME: -par_plot option fails:
+# ValueError: range parameter must be finite
+# ('vis_range', [nan, nan])
+# ('ticks', [nan, nan])
+
 
 from __future__ import (print_function)
 import os
@@ -372,19 +377,20 @@ if __name__ == "__main__":
         except IndexError:
             print("Problem in bootstrapping data...")
             sys.exit(1)
+        # FIXME: Broken - ValueError
         if args.res_plot:
             print("Plotting histograms of I residuals...")
             boot.plot_residuals(args.res_plot)
 
         curdir = os.getcwd()
         os.chdir(data_dir)
-        boot.run(n=n_boot, nonparametric=nonparametric, outname=[outname,
-                                                                 '.fits'],
-                 recenter=recenter, use_kde=True)
         if args.res_plot_full:
             print("Plotting histograms of RR & LL residuals...")
             boot.plot_residuals_trio(args.res_plot_full, split_scans,
                                      stokes=['RR', 'LL'])
+        boot.run(n=n_boot, nonparametric=nonparametric, outname=[outname,
+                                                                 '.fits'],
+                 recenter=recenter, use_kde=True)
 
         os.chdir(curdir)
 

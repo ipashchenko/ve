@@ -70,7 +70,7 @@ uvdata = UVData(os.path.join(data_dir, uv_fname))
 
 
 # Create several components
-eg1 = EGComponent(5.0, 0.0, 0.0, 0.5, 0.3, np.pi/2)
+eg1 = EGComponent(4.0, 0.0, 0.0, 0.1, 0.4, 1.5)
 eg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 10.], dict(),),
               bmaj=(sp.stats.uniform.logpdf, [0, 20.], dict(),),
               e=(sp.stats.uniform.logpdf, [0, 1.], dict(),),
@@ -82,7 +82,7 @@ mdl1.add_component(eg1)
 # Create posterior for data & model
 lnpost = LnPost(uvdata, mdl1)
 ndim = mdl1.size
-nwalkers = 100
+nwalkers = 50
 sampler = emcee.EnsembleSampler(nwalkers, ndim, lnpost)
 p_std1 = [0.1, 0.01, 0.01, 0.01, 0.01, 0.01]
 p0 = emcee.utils.sample_ball(mdl1.p, p_std1, size=nwalkers)
@@ -90,18 +90,28 @@ pos, prob, state = sampler.run_mcmc(p0, 100)
 sampler.reset()
 pos, lnp, _ = sampler.run_mcmc(pos, 300)
 
+# Plot corner
+fig, axes = plt.subplots(nrows=ndim, ncols=ndim)
+fig.set_size_inches(13.5, 13.5)
+corner.corner(sampler.flatchain[::10, :], fig=fig,
+              labels=[r'$flux$', r'$x$', r'$y$', r'$bmaj$', r'$e$', r'$bpa$'],
+              show_titles=True, title_kwargs={'fontsize': 16},
+              quantiles=[0.16, 0.5, 0.84], label_kwargs={'fontsize': 16},
+              title_fmt=".3f")
+fig.savefig('corner_1component.png', bbox_inches='tight', dpi=200)
+
 # Find mode of parameter distributions
 p_map = pos[np.argmax(lnp)]
 
 # Now fitting two components
 eg1 = EGComponent(*p_map)
-cg2 = CGComponent(0.5, 2.0, 0.0, 1.0)
-eg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 5.], dict(),),
+cg2 = CGComponent(0.2, 0.0, -0.2, 0.2)
+eg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 10.], dict(),),
               bmaj=(sp.stats.uniform.logpdf, [0, 20.], dict(),),
               e=(sp.stats.uniform.logpdf, [0, 1.], dict(),),
               bpa=(sp.stats.uniform.logpdf, [0, np.pi], dict(),))
-cg2.add_prior(flux=(sp.stats.uniform.logpdf, [0., 3.5], dict(),),
-              bmaj=(sp.stats.uniform.logpdf, [0, 20.], dict(),))
+cg2.add_prior(flux=(sp.stats.uniform.logpdf, [0., 1.5], dict(),),
+              bmaj=(sp.stats.uniform.logpdf, [0.01, 20.], dict(),))
 # Create model
 mdl2 = Model(stokes='I')
 # Add components to model
@@ -112,10 +122,11 @@ lnpost = LnPost(uvdata, mdl2)
 ndim = mdl2.size
 nwalkers = 100
 sampler = emcee.EnsembleSampler(nwalkers, ndim, lnpost)
-p_std1 = [0.1, 0.01, 0.01, 0.01, 0.01, 0.01]
-p_std2 = [0.1, 0.1, 0.1, 0.1]
+p_std1 = [0.1, 0.01, 0.01, 0.005, 0.01, 0.005]
+p_std2 = [0.01, 0.01, 0.01, 0.01]
 p0 = emcee.utils.sample_ball(mdl2.p, p_std1 + p_std2, size=nwalkers)
 pos, prob, state = sampler.run_mcmc(p0, 100)
+####
 sampler.reset()
 pos, lnp, _ = sampler.run_mcmc(pos, 300)
 
@@ -130,12 +141,8 @@ corner.corner(sampler.flatchain[::10, :], fig=fig,
               title_fmt=".3f")
 fig.savefig('corner_2components.png', bbox_inches='tight', dpi=200)
 
-# Overplot data and model
-p_map = pos[np.argmax(lnp)]
-# p_map = list()
-# for i in range(ndim):
-#     counts, bin_values = np.histogram(sampler.flatchain[::10, i], bins=50)
-#     p_map.append(bin_values[counts == counts.max()][0])
+p_ = [4.18100886e+00, -3.91663159e-03, 4.15828600e-02, 1.16368974e-01,
+      3.91873876e-01,  1.49900603e+00, ]
 mdl = Model(stokes='I')
 eg1 = EGComponent(*(p_map[:6]))
 cg2 = CGComponent(*(p_map[6:]))
@@ -146,17 +153,17 @@ fig.savefig('2component_mdl_vs_data.png', bbox_inches='tight', dpi=200)
 
 # Adding third component
 mdl = Model(stokes='I')
-eg1 = CGComponent(*(p_map[:6]))
+eg1 = EGComponent(*(p_map[:6]))
 cg2 = CGComponent(*(p_map[6:]))
-cg3 = CGComponent(0.3, 0, -1.5, 1.0)
-eg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 5.], dict(),),
+cg3 = CGComponent(0.05, 0.29, 0.75, 0.2)
+eg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 10.], dict(),),
               bmaj=(sp.stats.uniform.logpdf, [0, 20.], dict(),),
               e=(sp.stats.uniform.logpdf, [0, 1.], dict(),),
               bpa=(sp.stats.uniform.logpdf, [0, np.pi], dict(),))
-cg2.add_prior(flux=(sp.stats.uniform.logpdf, [0., 3.5], dict(),),
-              bmaj=(sp.stats.uniform.logpdf, [0, 10.], dict(),))
-cg3.add_prior(flux=(sp.stats.uniform.logpdf, [0., 1.5], dict(),),
-              bmaj=(sp.stats.uniform.logpdf, [0, 10.], dict(),))
+cg2.add_prior(flux=(sp.stats.uniform.logpdf, [0., 1.5], dict(),),
+              bmaj=(sp.stats.uniform.logpdf, [0.03, 10.], dict(),))
+cg3.add_prior(flux=(sp.stats.uniform.logpdf, [0., 1.0], dict(),),
+              bmaj=(sp.stats.uniform.logpdf, [0.03, 10.], dict(),))
 mdl.add_components(eg1, cg2, cg3)
 # Create posterior for data & model
 lnpost = LnPost(uvdata, mdl)
@@ -164,8 +171,8 @@ ndim = mdl.size
 nwalkers = 100
 sampler = emcee.EnsembleSampler(nwalkers, ndim, lnpost)
 p_std1 = [0.1, 0.01, 0.01, 0.01, 0.01, 0.01]
-p_std2 = [0.1, 0.1, 0.1, 0.1]
-p_std3 = [0.1, 0.1, 0.1, 0.1]
+p_std2 = [0.03, 0.03, 0.03, 0.03]
+p_std3 = [0.03, 0.03, 0.03, 0.03]
 p0 = emcee.utils.sample_ball(mdl.p, p_std1 + p_std2 + p_std3, size=nwalkers)
 pos, prob, state = sampler.run_mcmc(p0, 100)
 sampler.reset()
@@ -178,13 +185,47 @@ corner.corner(sampler.flatchain[::10, :], fig=fig,
               labels=[r'$flux$', r'$x$', r'$y$', r'$bmaj$', r'$e$', r'$bpa$',
                       r'$flux$', r'$x$', r'$y$', r'$bmaj$', r'$flux$', r'$x$',
                       r'$y$', r'$bmaj$'],
-              show_titles=True, title_kwargs={'fontsize': 12},
-              quantiles=[0.16, 0.5, 0.84], label_kwargs={'fontsize': 12},
-              title_fmt=".3f")
-fig.savefig('corner_2components.png', bbox_inches='tight', dpi=200)
+              show_titles=True, title_kwargs={'fontsize': 10},
+              quantiles=[0.16, 0.5, 0.84], label_kwargs={'fontsize': 10},
+              title_fmt=".3f", max_n_ticks=3)
+fig.savefig('corner_3components.png', bbox_inches='tight', dpi=200)
 
 # Overplot data and model
 p_map = pos[np.argmax(lnp)]
+# In [128]: p_map
+# Out[128]:
+# array([  4.01536730e+00,  -4.24002619e-03,   3.67696324e-02,
+#          9.22227342e-02,   4.81077919e-01,   1.50883915e+00,
+#          1.73122933e-01,   1.25605087e-02,   2.19525868e-01,
+#          3.84424150e-02,   2.00000000e-03,   2.60000000e-01,
+#          7.00000000e-01,   1.00000000e-01])
+# Adding third component
+mdl = Model(stokes='I')
+eg1 = EGComponent(*(p_map[:6]))
+cg2 = CGComponent(*(p_map[6:10]))
+cg3 = CGComponent(*(p_map[10:]))
+eg1.add_prior(flux=(sp.stats.uniform.logpdf, [0., 10.], dict(),),
+              bmaj=(sp.stats.uniform.logpdf, [0, 2.], dict(),),
+              e=(sp.stats.uniform.logpdf, [0, 1.], dict(),),
+              bpa=(sp.stats.uniform.logpdf, [0, np.pi], dict(),))
+cg2.add_prior(flux=(sp.stats.uniform.logpdf, [0., 1.5], dict(),),
+              bmaj=(sp.stats.uniform.logpdf, [0.01, 10.], dict(),))
+cg3.add_prior(flux=(sp.stats.uniform.logpdf, [0., 0.1], dict(),),
+              bmaj=(sp.stats.uniform.logpdf, [0.01, 10.], dict(),))
+mdl.add_components(eg1, cg2, cg3)
+# Create posterior for data & model
+lnpost = LnPost(uvdata, mdl)
+ndim = mdl.size
+nwalkers = 100
+sampler = emcee.EnsembleSampler(nwalkers, ndim, lnpost)
+p_std1 = [0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
+p_std2 = [0.01, 0.01, 0.01, 0.01]
+p_std3 = [0.0001, 0.01, 0.01, 0.01]
+p0 = emcee.utils.sample_ball(mdl.p, p_std1 + p_std2 + p_std3, size=nwalkers)
+pos, prob, state = sampler.run_mcmc(p0, 100)
+sampler.reset()
+pos, lnp, _ = sampler.run_mcmc(pos, 300)
+
 # p_map = list()
 # for i in range(ndim):
 #     counts, bin_values = np.histogram(sampler.flatchain[::10, i], bins=100)

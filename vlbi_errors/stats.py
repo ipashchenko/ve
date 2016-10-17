@@ -74,6 +74,7 @@ class LnLikelihood(object):
         self.model = model
         self.data = uvdata
         stokes = model.stokes
+        self.stokes = stokes
         if average_freq:
             if stokes == 'I':
                 self.uvdata = 0.5 * (uvdata.uvdata_freq_averaged[:, 0] +
@@ -116,6 +117,7 @@ class LnLikelihood(object):
         if self.amp_only:
             model_amp = np.absolute(model_data)
             data_amp = np.absolute(data)
+            # FIXME: double data for stokes I conjugate
             # Use Rice distribution
             lnlik = np.log(model_amp) - 2. * np.log(error) -\
                     (model_amp ** 2. + data_amp ** 2.) / (2. * error ** 2.) +\
@@ -123,9 +125,12 @@ class LnLikelihood(object):
                                          (model_amp * data_amp / error ** 2.)))
         else:
             # Use complex normal distribution
-            lnlik = -0.5 * np.log(2. * math.pi * error ** 2.) - \
+            k = 1.
+            if self.stokes == 'I':
+                k = 2.
+            lnlik = k * (-0.5 * np.log(2. * math.pi * error ** 2.) - \
                     (data - model_data) * (data - model_data).conj() / \
-                    (2. * error ** 2.)
+                    (2. * error ** 2.))
             lnlik = lnlik.real
         return lnlik.sum()
 

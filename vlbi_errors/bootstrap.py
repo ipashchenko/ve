@@ -183,7 +183,7 @@ class Bootstrap(object):
                                         pass
                                     legend = axes[1, 1].legend(fontsize='small')
                                     axes[1, 1].axhline(0.0, lw=1, color='g')
-                                    fig.savefig("{}_ant1_{}_ant2_{}_stokes_{}_IF_{}_scan_{}".format(outname,
+                                    fig.savefig("{}_ant1_{}_ant2_{}_stokes_{}_IF_{}_scan_{}.png".format(outname,
                                         ant1, ant2, self.residuals.stokes[stoke],
                                         IF_, i), bbox_inches='tight', dpi=400)
                                     matplotlib.pyplot.close()
@@ -263,7 +263,7 @@ class Bootstrap(object):
                                 pass
                             legend = axes[1, 1].legend(fontsize='small')
                             axes[1, 1].axhline(0.0, lw=1, color='g')
-                            fig.savefig("{}_ant1_{}_ant2_{}_stokes_{}_IF_{}_second".format(outname,
+                            fig.savefig("{}_ant1_{}_ant2_{}_stokes_{}_IF_{}.png".format(outname,
                                 ant1, ant2, self.residuals.stokes[stoke], IF_),
                                 bbox_inches='tight', dpi=400)
                             matplotlib.pyplot.close()

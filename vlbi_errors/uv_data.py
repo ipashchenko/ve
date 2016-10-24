@@ -1060,7 +1060,7 @@ class UVData(object):
                 elif ant2 < ant1:
                     baselines_to_display.append(ant1 + 256 * ant2)
 
-        baselines_to_display = set(baselines_to_display)
+        baselines_to_display = list(set(baselines_to_display))
 
         uvdata, indxs = self._choose_uvdata(baselines=baselines_to_display,
                                             start_time=start_time,
@@ -1278,7 +1278,8 @@ class UVData(object):
                       fname=fname + '_test' + '_' + str(i + 1).zfill(2) + 'of' +
                             str(q) + '.FITS')
 
-    def cv_score(self, model, average_freq=True):
+    # TODO: normalize on data (high amplitude baselines dominate without it)
+    def cv_score(self, model, average_freq=True, baselines=None):
         """
         Method that returns cross-validation score for ``self`` (as testing
         cv-sample) and model (trained on training cv-sample).
@@ -1308,7 +1309,9 @@ class UVData(object):
         else:
             uvdata = data_copied.uvdata_weight_masked
 
-        for baseline in self.baselines:
+        if baselines is None:
+            baselines = self.baselines
+        for baseline in baselines:
             # square difference for each baseline, divide by baseline noise
             # and then sum for current baseline
             indxs = data_copied._indxs_baselines[baseline]
@@ -1320,7 +1323,10 @@ class UVData(object):
             diff = 0.5 * (hands_diff[..., 0] + hands_diff[..., 1])
             diff = diff.flatten()
             diff *= np.conjugate(diff)
-            baselines_cv_scores.append(float(diff.sum()))
+            try:
+                baselines_cv_scores.append(float(diff.sum())/np.count_nonzero(~diff.mask))
+            except ZeroDivisionError:
+                continue
 
         return sum(baselines_cv_scores)
 
@@ -1486,7 +1492,7 @@ class UVData(object):
         if not pylab:
             raise Exception('Install ``pylab`` for plotting!')
 
-        if not stokes:
+        if stokes is None:
             stokes = 'I'
 
         if start_time is None:

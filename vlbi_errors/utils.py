@@ -69,6 +69,37 @@ def to_boolean_array(numbers, length):
     return result
 
 
+def from_boolean_array(bool_array):
+    """
+    Convert boolean array to array of integers.
+    :param bool_array:
+        Boolean array.
+    :return:
+        Numpy integer array with length equal to number of ``True`` elements in
+        original boolean array.
+    """
+    return np.where(bool_array)[0]
+
+
+def mask_boolean_with_boolean(bool_array, bool_mask):
+    """
+    Mask boolean array with other boolean array.
+    :param bool_array:
+        Boolean numpy array.
+    :param bool_mask:
+        Boolean mask with size equal to number of ``True`` elements in
+        ``bool_array``.
+    :return:
+        Boolean array with shape of ``bool_array`` where some of the original
+        ``True`` elements are now ``False`` depending on there boolean value in
+        ``bool_mask``.
+    """
+    assert np.count_nonzero(bool_array) == len(bool_mask)
+    int_indxs = from_boolean_array(bool_array)
+    int_indxs = int_indxs[bool_mask]
+    return to_boolean_array(int_indxs, len(bool_array))
+
+
 def check_issubset(to_check, original):
     """
     Check that contain of iterable ``to_check`` is among iterable ``original``.

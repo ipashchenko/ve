@@ -443,6 +443,28 @@ class UVData(object):
             self._scans_bl = scans_dict
         return self._scans_bl
 
+    def _downscale_uvw_by_frequency(self):
+        suffix = '--'
+        try:
+            u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
+            v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
+            w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
+        except KeyError:
+            try:
+                suffix = '---SIN'
+                u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
+                v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
+                w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
+            except KeyError:
+                suffix = ''
+                u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
+                v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
+                w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
+        if abs(np.mean(u)) < 1.:
+            self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array /= self.frequency
+            self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array /= self.frequency
+            self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array /= self.frequency
+
     @property
     def uvw(self):
         """

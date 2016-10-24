@@ -384,13 +384,13 @@ if __name__ == "__main__":
 
         curdir = os.getcwd()
         os.chdir(data_dir)
+        boot.run(n=n_boot, nonparametric=nonparametric, outname=[outname,
+                                                                 '.fits'],
+                 recenter=recenter, use_kde=True)
         if args.res_plot_full:
             print("Plotting histograms of RR & LL residuals...")
             boot.plot_residuals_trio(args.res_plot_full, split_scans,
                                      stokes=['RR', 'LL'])
-        boot.run(n=n_boot, nonparametric=nonparametric, outname=[outname,
-                                                                 '.fits'],
-                 recenter=recenter, use_kde=True)
 
         os.chdir(curdir)
 

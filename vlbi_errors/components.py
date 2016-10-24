@@ -195,6 +195,8 @@ class EGComponent(Component):
         """
         try:
             flux, x0, y0, bmaj, e, bpa = self._p
+            if e == 0:
+                e = 10**(-54)
         # If we call method inside ``CGComponent``
         except ValueError:
             # Jy, mas, mas, mas
@@ -218,10 +220,16 @@ class EGComponent(Component):
             math.sin(2. * bpa) / (2. * std_y ** 2.)
         c = math.sin(bpa) ** 2. / (2. * std_x ** 2.) + \
             math.cos(bpa) ** 2. / (2. * std_y ** 2.)
+        a = np.double(a)
+        b = np.double(a)
+        c = np.double(a)
+        flux = np.double(flux)
         # Calculate the value of FT in point (u,v) for x0=0,y0=0 case using (2)
         k = (4. * a * c - b ** 2.)
-        ft = flux * np.exp((4. * math.pi ** 2. / k) * (-c * u ** 2. +
-                                                       b * u * v - a * v ** 2.))
+        # ft = flux * np.exp((4. * math.pi ** 2. / k) * (-c * u ** 2. +
+        #                                                b * u * v - a * v ** 2.))
+        ft = flux * np.exp((4. * math.pi ** 2.) * (-(c/k) * u ** 2. +
+                                                   (b/k) * u * v - (a/k) * v ** 2.))
         ft = vcomplex(ft)
         # If x0=!0 or y0=!0 then shift phase accordingly
         if x0 or y0:

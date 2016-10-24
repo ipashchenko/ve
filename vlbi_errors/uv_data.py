@@ -83,19 +83,57 @@ class UVData(object):
             except TypeError:
                 pass
 
-    def nw_indxs_baseline(self, baseline):
+    def nw_indxs_baseline(self, baseline, average_bands=False, stokes=None,
+                          average_stokes=False):
         """
         Shortcut to negative or zero weights visibilities on given baseline.
 
         :param baseline:
             Integer baseline number.
+        :param average_bands: (optional)
+            Average bands in that way that if any bands for current
+            visibility/stokes has negative weight then this visibility/stokes
+            has negative weight. (default: ``False``)
+        :param stokes: (optional)
+            Stokes parameters of ``self`` that output or use for calculation of
+            frequency averaged values.
+        :param average_stokes: (optional)
+            Average Stokes parameters chosen in ``stokes`` kw argument or all
+            present in data in that way that if any stokes for current
+            visibility has negative weight then this visibility has negative
+            weight. (default: ``False``)
         :return:
-            Numpy boolean array with shape of ``(#vis, #bands, #stokes)``, where
-            #vis - number of visibilities for given baseline.
+            Numpy boolean array with shape of ``(#vis, #bands, #stokes)`` or
+            ``(#vis, #stokes)``, where #vis - number of visibilities for given
+            baseline & #stokes - number of stokes parameters in ``self`` or
+            ``len(stokes)`` in ``stokes`` is not ``None``. (default: ``None``)
         """
-        return self._nw_indxs[self._indxs_baselines[baseline]]
+        result = self._nw_indxs[self._indxs_baselines[baseline]]
+        stokes_indxs = list()
+        if stokes is not None:
+            for stoke in stokes:
+                assert stoke in self.stokes
+                stokes_indxs.append(self.stokes_dict_inv[stoke])
+        result = result[:, :, stokes_indxs]
+        if average_bands:
+            result = np.asarray(~result, dtype=int)
+            result = np.prod(result, axis=1)
+            result = np.asarray(result, dtype=bool)
+            result = ~result
+        if average_stokes and not average_bands:
+            result = np.asarray(~result, dtype=int)
+            result = np.prod(result, axis=2)
+            result = np.asarray(result, dtype=bool)
+            result = ~result
+        if average_stokes and average_bands:
+            result = np.asarray(~result, dtype=int)
+            result = np.prod(result, axis=1)
+            result = np.asarray(result, dtype=bool)
+            result = ~result
+        return result
 
-    def pw_indxs_baseline(self, baseline):
+    def pw_indxs_baseline(self, baseline, average_bands=False, stokes=None,
+                          average_stokes=False):
         """
         Shortcut to positive weights visibilities on given baseline.
 
@@ -105,7 +143,9 @@ class UVData(object):
             Numpy boolean array with shape of ``(#vis, #bands, #stokes)``, where
             #vis - number of visibilities for given baseline.
         """
-        return ~self.nw_indxs_baseline(baseline)
+        return ~self.nw_indxs_baseline(baseline, average_bands=average_bands,
+                                       stokes=stokes,
+                                       average_stokes=average_stokes)
 
     @property
     def sample_size(self):

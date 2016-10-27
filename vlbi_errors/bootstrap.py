@@ -3,7 +3,8 @@ import numpy as np
 from gains import Absorber
 from utils import (fit_2d_gmm, vcomplex, nested_ddict, make_ellipses,
                    baselines_2_ants, find_outliers_2d_mincov,
-                   find_outliers_2d_dbscan, find_outliers_dbscan, fit_kde)
+                   find_outliers_2d_dbscan, find_outliers_dbscan, fit_kde,
+                   fit_2d_kde)
 import matplotlib
 matplotlib.use('Agg')
 label_size = 6
@@ -35,6 +36,10 @@ class Bootstrap(object):
         # of ``sklearn.neighbors.KernelDensity`` class fitted on the residuals
         # (Re&Im) of key baselines
         self._residuals_fits = nested_ddict()
+        # Dictionary with keys - baseline, #IF, #Stokes and values - instances
+        # of ``sklearn.neighbors.KernelDensity`` class fitted on the residuals
+        # (Re&Im) of key baselines
+        self._residuals_fits_2d = nested_ddict()
         # Dictionary with keys - baseline, #scan, #IF, #Stokes and values -
         # instances of ``sklearn.neighbors.KernelDensity`` class fitted on the
         # residuals (Re&Im)
@@ -521,6 +526,91 @@ class Bootstrap(object):
                                 continue
                             self._residuals_fits_scans[baseline][i][if_][stokes] = (clf_re, clf_im)
 
+    # FIXME: Use real Stokes parameters as keys.
+    def fit_residuals_kde_2d(self, split_scans, combine_scans, recenter):
+        """
+        Fit residuals with Gaussian Kernel Density.
+
+        :param split_scans:
+            Boolean. Fit to each scan of baseline independently?
+        :param combine_scans:
+            Boolean. Combine re-centered scans on each baseline before fit?
+        :param recenter:
+            Boolean. Recenter residuals before fit?
+
+        :note:
+            At each baseline/scan residuals are fitted with Kernel Density
+            Model.
+        """
+        print "Fitting residuals"
+        if combine_scans:
+            raise NotImplementedError
+
+        for baseline in self.residuals.baselines:
+            # If fitting baseline data
+            if not split_scans:
+                indxs = self.residuals._indxs_baselines[baseline]
+                baseline_data = self.residuals.uvdata[indxs]
+                for if_ in range(baseline_data.shape[1]):
+                    for stokes in range(baseline_data.shape[2]):
+                        data = baseline_data[:, if_, stokes]
+                        # weigths = self.residuals.weights[indxs, if_, stokes]
+
+                        # Use only valid data with positive weight
+                        # data_pw = data[weigths > 0]
+                        data_pw = data[self.residuals._pw_indxs[indxs, if_, stokes]]
+                        # If data are zeros
+                        if not np.any(data_pw):
+                            continue
+
+                        # Don't count outliers
+                        data_pw = data_pw[~self._residuals_outliers[baseline][if_][stokes]]
+
+                        print "Baseline {}, IF {}, Stokes {}".format(baseline, if_,
+                                                                     stokes)
+                        if recenter:
+                            x_c, y_c = self._residuals_centers[baseline][if_][stokes]
+                            data_pw -= x_c - 1j * y_c
+                        try:
+                            clf = fit_2d_kde(data_pw)
+                        # This occurs when baseline has 1 point only
+                        except ValueError:
+                            continue
+                        self._residuals_fits[baseline][if_][stokes] = clf
+            # If fitting each scan independently
+            else:
+                if self.residuals.scans_bl[baseline] is None:
+                    continue
+                for i, scan_indxs in enumerate(self.residuals.scans_bl[baseline]):
+                    scan_uvdata = self.residuals.uvdata[scan_indxs]
+                    for if_ in range(scan_uvdata.shape[1]):
+                        for stokes in range(scan_uvdata.shape[2]):
+                            data = scan_uvdata[:, if_, stokes]
+                            # weigths = self.residuals.weights[scan_indxs, if_, stokes]
+
+                            # Use only valid data with positive weight
+                            # data_pw = data[weigths > 0]
+                            data_pw = data[self.residuals._pw_indxs[scan_indxs, if_, stokes]]
+
+                            # If data are zeros
+                            if not np.any(data_pw):
+                                continue
+
+                            # Don't count outliers
+                            data_pw = data_pw[~self._residuals_outliers_scans[baseline][i][if_][stokes]]
+
+                            print "Baseline {}, Scan {}, IF {}, Stokes" \
+                                  " {}".format(baseline, i, if_, stokes)
+                            if recenter:
+                                x_c, y_c = self._residuals_centers_scans[baseline][i][if_][stokes]
+                                data_pw -= x_c - 1j * y_c
+                            try:
+                                clf = fit_2d_kde(data_pw)
+                            # This occurs when scan has 1 point only
+                            except ValueError:
+                                continue
+                            self._residuals_fits_scans[baseline][i][if_][stokes] = clf_re
+
     def get_residuals_noise(self, split_scans, use_V):
         """
         Estimate noise of the residuals using stokes V or successive
@@ -797,6 +887,11 @@ class Bootstrap(object):
                           " baseline/scan/IF/Stokes"
             # Use parametric gaussian estimate of residuals density
             else:
+                # FIXME: This is needed only for cycle after!!!
+                self.fit_residuals_kde(split_scans=split_scans,
+                                       combine_scans=combine_scans,
+                                       recenter=recenter)
+                print "only for cycle"
                 if not self.noise_residuals:
                     print "Estimating gaussian STDs on each baseline[/scan]..."
                     self.noise_residuals = self.get_residuals_noise(split_scans,
@@ -898,6 +993,7 @@ class CleanBootstrap(Bootstrap):
         shape = self.residuals._shapes_baselines[baseline]
         to_add = np.zeros(shape, complex)
         # FIXME: Here iterate over keys with not None values
+        # FIXME: If not using KDE then residuals are not fitted!
         for if_ in self._residuals_fits[baseline]:
             for stokes in self._residuals_fits[baseline][if_]:
                 if not use_kde:

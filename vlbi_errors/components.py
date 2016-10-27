@@ -208,12 +208,78 @@ class EGComponent(Component):
         x0 *= mas_to_rad
         y0 *= mas_to_rad
         bmaj *= mas_to_rad
+        bpa += 0.5 * np.pi
+
+        u = uv[:, 0]
+        v = uv[:, 1]
+        c = (np.pi*bmaj)**2/(4. * np.log(2.))
+        b = e**2 * (u*np.cos(bpa)-v*np.sin(bpa))**2 + (u*np.sin(bpa)+v*np.cos(bpa))**2
+        ft = flux*np.exp(-c*b)
+        ft = vcomplex(ft)
+        # If x0=!0 or y0=!0 then shift phase accordingly
+        if x0 or y0:
+            ft *= np.exp(-2. * math.pi * 1j * (u * x0 + v * y0))
+        return ft
+
+    def _ft(self, uv):
+        """
+        Return the Fourier Transform of component for given uv-points.
+        :param uv:
+            2D numpy array of uv-points for which to calculate FT.
+        :return:
+            Numpy array of complex visibilities for specified points of
+            uv-plane. Length of the resulting array = length of ``uv`` array.
+
+        :note:
+
+            The value of the Fourier transform of gaussian function (Wiki):
+
+            g(x, y) = A*exp[-(a*(x-x0)**2+b*(x-x0)*(y-y0)+c*(y-y0)**2)]  (1)
+
+            where:
+
+                a = cos(\theta)**2/(2*std_x**2)+sin(\theta)**2/(2*std_y**2)
+                b = sin(2*\theta)/(2*std_x**2)-sin(2*\theta)/(2*std_y**2)
+                (corresponds to rotation counter clockwise)
+                c = sin(\theta)**2/(2*std_x**2)+cos(\theta)**2/(2*std_y**2)
+
+            For x0=0, y0=0 in point u,v of uv-plane is (Briggs Thesis):
+
+            2*pi*A*(4*a*c-b**2)**(-1/2)*exp[(4*pi**2/(4*a*c-b**2))*
+                    (-c*u**2+b*u*v-a*v**2)] (2)
+
+            As we parametrize the flux as full flux of gaussian (that is flux at
+            zero (u,v)-spacing), then change coefficient in front of exponent to
+            A.
+
+            Shift of (x0, y0) in image plane corresponds to phase shift in
+            uv-plane:
+
+            ft(x0,y0) = ft(x0=0,y0=0)*exp(-2*pi*(u*x0+v*y0))
+        """
+        try:
+            flux, x0, y0, bmaj, e, bpa = self._p
+            if e == 0:
+                e = 10**(-54)
+        # If we call method inside ``CGComponent``
+        except ValueError:
+            # Jy, mas, mas, mas
+            flux, x0, y0, bmaj = self._p
+            e = 1.
+            bpa = 0.
+
+        # There's ONE place to convert them
+        x0 *= mas_to_rad
+        y0 *= mas_to_rad
+        bmaj *= mas_to_rad
 
         u = uv[:, 0]
         v = uv[:, 1]
         # Construct parameter of gaussian function (1)
         std_x = bmaj / (2. * np.sqrt(2. * np.log(2)))
         std_y = e * bmaj / (2. * np.sqrt(2. * np.log(2)))
+        # std_x = bmaj / (2. * np.sqrt(2. * np.log(2)))
+        # std_y = e * bmaj / (2. * np.sqrt(2. * np.log(2)))
         a = math.cos(bpa) ** 2. / (2. * std_x ** 2.) + \
             math.sin(bpa) ** 2. / (2. * std_y ** 2.)
         b = math.sin(2. * bpa) / (2. * std_x ** 2.) - \
@@ -226,10 +292,10 @@ class EGComponent(Component):
         flux = np.double(flux)
         # Calculate the value of FT in point (u,v) for x0=0,y0=0 case using (2)
         k = (4. * a * c - b ** 2.)
-        # ft = flux * np.exp((4. * math.pi ** 2. / k) * (-c * u ** 2. +
-        #                                                b * u * v - a * v ** 2.))
-        ft = flux * np.exp((4. * math.pi ** 2.) * (-(c/k) * u ** 2. +
-                                                   (b/k) * u * v - (a/k) * v ** 2.))
+        ft = flux * np.exp((4. * math.pi ** 2. / k) * (-c * u ** 2. +
+                                                       b * u * v - a * v ** 2.))
+        # ft = flux * np.exp((4. * math.pi ** 2.) * (-(c/k) * u ** 2. +
+        #                                            (b/k) * u * v - (a/k) * v ** 2.))
         ft = vcomplex(ft)
         # If x0=!0 or y0=!0 then shift phase accordingly
         if x0 or y0:

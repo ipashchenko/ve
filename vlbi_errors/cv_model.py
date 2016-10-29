@@ -83,12 +83,11 @@ class KFoldCV(object):
 if __name__ == '__main__':
     from spydiff import import_difmap_model, modelfit_difmap
     from model import Model
-    mdl_dir = '/home/ilya/Dropbox/Ilya/0235_bk150_uvf_data/models_from_Sanya_new/'
-    uvfits_dir = '/home/ilya/Dropbox/Ilya/0235_bk150_uvf_data/'
-    # mdl_file_1 = '0235_q_single_core.mdl'
-    # mdl_file_2 = '0235_q_2comp_ellipse_circ.mdl'
-    mdl_files = ['mod_q1_1c.mdl', 'mod_q1_1e.mdl', 'mod_q1_2cc.mdl',
-                 'mod_q1_2ce.mdl', 'mod_q1_2ec.mdl', 'mod_q1_2ee.mdl']
+    mdl_dir = '/home/ilya/code/vlbi_errors/bin_c1'
+    uvfits_dir = '/home/ilya/code/vlbi_errors/bin_c1'
+    mdl_files = ['0235+164.c1.2008_09_02_delta_fitted.mdl',
+                 '0235+164.c1.2008_09_02_cgauss_fitted_fitted.mdl',
+                 '0235+164.c1.2008_09_02.mdl']
     mdl_dict = {i: mdl_file for (i, mdl_file) in enumerate(mdl_files)}
     # comps1 = import_difmap_model(mdl_file_1, mdl_dir)
     # comps2 = import_difmap_model(mdl_file_2, mdl_dir)
@@ -103,9 +102,9 @@ if __name__ == '__main__':
     # model2.add_components(*comps2)
     # models = [model1, model2]
     import os
-    uv_fits = '0235+164.q1.2008_09_02.uvf_difmap'
+    uv_fits = '0235+164.c1.2008_09_02.uvf_difmap'
     cv_scores = dict()
-    n_folds = 10
+    n_folds = 3
     for i in mdl_dict:
         kfold = KFoldCV(os.path.join(uvfits_dir, uv_fits), n_folds,
                         baselines=[774, 1546])

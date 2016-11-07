@@ -176,9 +176,9 @@ def import_difmap_model(mdl_fname, mdl_dir=None):
                 except ValueError:
                     e = float(axial[:-1])
                 try:
-                    bpa = -np.deg2rad(float(phi)) + np.pi / 2.
+                    bpa = np.deg2rad(float(phi)) + np.pi / 2.
                 except ValueError:
-                    bpa = -np.deg2rad(float(phi[:-1])) + np.pi / 2.
+                    bpa = np.deg2rad(float(phi[:-1])) + np.pi / 2.
                 comp = EGComponent(flux, x, y, bmaj, e, bpa)
         else:
             raise NotImplementedError("Only CC, CG & EG are implemented")

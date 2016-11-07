@@ -27,9 +27,9 @@ stokes_dict = {-4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR', 1: 'I', 2: 'Q', 3: 'U',
 # FIXME: Handling FITS files with only one scan (used for CV)
 class UVData(object):
 
-    def __init__(self, fname):
+    def __init__(self, fname, mode='readonly'):
         self.fname = fname
-        self.hdulist = pf.open(fname)
+        self.hdulist = pf.open(fname, mode=mode, save_backup=True)
         self.hdu = self.hdulist[0]
         self._stokes_dict = {'RR': 0, 'LL': 1, 'RL': 2, 'LR': 3}
         self.learn_data_structure(self.hdu)
@@ -181,6 +181,7 @@ class UVData(object):
             os.unlink(fname)
         fname = fname or self.fname
         if data is None:
+            self._downscale_uvw_by_frequency()
             self.hdulist.writeto(fname)
         else:
             # datas = np.array(sorted(data, key=lambda x: x['DATE']+x['_DATE']),
@@ -196,6 +197,7 @@ class UVData(object):
                 if hdu.header['EXTNAME'] == 'AIPS FQ':
                     hdu = convert_fq_hdu(hdu)
                 hdulist.append(hdu)
+            # self._downscale_uvw_by_frequency()
             hdulist.writeto(fname)
 
     # TODO: for IDI extend this method
@@ -834,9 +836,6 @@ class UVData(object):
         :param average_freq: (optional)
             Use IF-averaged data for calculating noise? (default: ``False``)
 
-        :param stokes: (optional)
-            Stokes parameter to calculate noise.
-
         :return:
             Dictionary with keys - baseline numbers & values - arrays of shape
             ([#scans], [#IF], [#stokes]). It means (#scans, #IF) if
@@ -856,8 +855,10 @@ class UVData(object):
                     v = (baseline_uvdata[..., 0] - baseline_uvdata[..., 1]).real
                     mask = ~np.isnan(v)
                     baselines_noises[baseline] =\
-                        np.asarray(np.std(np.ma.array(v, mask=np.invert(mask)).data,
-                                          axis=0))
+                        np.asarray(mad_std(np.ma.array(v, mask=np.invert(mask)).data,
+                                           axis=0))
+                        # np.asarray(np.std(np.ma.array(v, mask=np.invert(mask)).data,
+                        #                   axis=0))
             else:
                 # Use each scan
                 for baseline in self.baselines:
@@ -884,15 +885,18 @@ class UVData(object):
         else:
             if not split_scans:
                 for baseline in self.baselines:
+                    # (#, #IF, #Stokes)
                     baseline_uvdata = self._choose_uvdata(baselines=[baseline])
                     if average_freq:
                         baseline_uvdata = np.mean(baseline_uvdata, axis=1)
+                    # (#, #IF, #Stokes)
                     differences = (baseline_uvdata[:-1, ...] -
                                    baseline_uvdata[1:, ...])
-                    mask = ~np.isnan(differences)
+                    mask = np.isnan(differences)
+                    # (#IF, #Stokes)
                     baselines_noises[baseline] = \
                         np.asarray([np.std(np.ma.array(differences,
-                                                       mask=np.invert(mask)).real[..., i], axis=0) for i
+                                                       mask=mask).real[..., i], axis=0) for i
                                     in range(self.nstokes)]).T
             else:
                 # Use each scan
@@ -947,21 +951,26 @@ class UVData(object):
 
         # TODO: if on df before generating noise values
         for baseline, baseline_stds in noise.items():
+            # i - IF number, std (#IF, #Stokes)
             for i, std in enumerate(baseline_stds):
-                baseline_uvdata =\
-                    self._choose_uvdata(baselines=[baseline], bands=[i])
-                sl = self._get_uvdata_slice(baselines=[baseline], bands=[i])
-                # (#, #IF, #CH, #stokes)
-                n = np.shape(baseline_uvdata)[0]
-                n_to_add = n * self.nstokes
-                noise_to_add = vec_complex(np.random.normal(scale=std,
-                                                            size=n_to_add),
-                                           np.random.normal(scale=std,
-                                                            size=n_to_add))
-                noise_to_add = np.reshape(noise_to_add,
-                                          (n, 1, self.nstokes))
-                baseline_uvdata += noise_to_add
-                self.uvdata[sl] = baseline_uvdata
+                # (#, 1, #stokes)
+                for stokes in self.stokes:
+                    j = self.stokes_dict_inv[stokes]
+                    baseline_uvdata =\
+                        self._choose_uvdata(baselines=[baseline], bands=[i],
+                                            stokes=[stokes])
+                    # (#, #IF, #CH, #stokes)
+                    n = len(baseline_uvdata)
+                    sl = self._get_uvdata_slice(baselines=[baseline], bands=[i],
+                                                stokes=[stokes])
+                    noise_to_add = vec_complex(np.random.normal(scale=std[j],
+                                                                size=n),
+                                               np.random.normal(scale=std[j],
+                                                                size=n))
+                    noise_to_add = np.reshape(noise_to_add,
+                                              baseline_uvdata.shape)
+                    baseline_uvdata += noise_to_add
+                    self.uvdata[sl] = baseline_uvdata
         self.sync()
 
     # TODO: Optionally calculate noise by scans.
@@ -1091,7 +1100,7 @@ class UVData(object):
         return self
 
     def __deepcopy__(self, memo):
-        return UVData(self.hdulist.filename())
+        return UVData(self.hdulist.filename(), mode='readonly')
 
     def __add__(self, other):
         """
@@ -1355,11 +1364,7 @@ class UVData(object):
         uv = self.uvw[indxs, :2]
 
         uv_correlations = get_uv_correlations(uv, models)
-        # FIXME: This will cause `IndexError: index 1 is out of bounds for axis
-        # 2 with size 1` if uv-data has just one parallel stokes (et. `LL`).
-        # I should check that my uv-data has Stokes that model provides
-        # otherwise ignore that Stokes. Implement ``stokes`` property!
-        for i, hand in enumerate(['RR', 'LL', 'RL', 'LR']):
+        for i, hand in self.stokes_dict.items():
             try:
                 self.uvdata[indxs, :, i] = \
                     uv_correlations[hand].repeat(self.nif).reshape((n, self.nif))

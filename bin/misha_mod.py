@@ -138,13 +138,15 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
             try:
                 n = sum([len(c) for c in comps_to_plot])
                 figure, axes = matplotlib.pyplot.subplots(nrows=n, ncols=n)
+                figure.set_size_inches(19.5, 19.5)
                 triangle.corner(boot_data, labels=labels, plot_contours=False,
                                 truths=np.hstack([comps_params0[i] for i in
                                                   plot_comps]),
                                 title_kwargs={"fontsize": 6},
                                 label_kwargs={"fontsize": 6},
                                 quantiles=[0.16, 0.5, 0.84], fig=figure,
-                                use_math_text=True)
+                                use_math_text=True, show_titles=True,
+                                title_fmt=".3f")
                 figure.gca().annotate("Components {}".format(plot_comps),
                                       xy=(0.5, 1.0),
                                       xycoords="figure fraction",
@@ -181,8 +183,8 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                     raise Exception
                 fn.write("{:<4} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}"
                          " {:.4f}".format(parnames[j], params[j], low,
-                                          high, mean, median, abs(mean - low),
-                                          abs(high - mean)))
+                                          high, mean, median, abs(median - low),
+                                          abs(high - median)))
                 fn.write("\n")
             recorded += (j + 1)
         fn.close()
@@ -386,7 +388,7 @@ if __name__ == "__main__":
         os.chdir(data_dir)
         boot.run(n=n_boot, nonparametric=nonparametric, outname=[outname,
                                                                  '.fits'],
-                 recenter=recenter, use_kde=True)
+                 recenter=recenter, use_kde=False, use_v=False)
         if args.res_plot_full:
             print("Plotting histograms of RR & LL residuals...")
             boot.plot_residuals_trio(args.res_plot_full, split_scans,

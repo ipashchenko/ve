@@ -67,20 +67,25 @@ class CrossValidation(object):
         return result
 
 
+# FIXME: For ``average_freq=True`` got shitty results
 class LnLikelihood(object):
-    def __init__(self, uvdata, model, average_freq=True, amp_only=False):
-        error = uvdata.error(average_freq=average_freq)
+    def __init__(self, uvdata, model, average_freq=True, amp_only=False,
+                 use_V=False):
+        error = uvdata.error(average_freq=average_freq, use_V=use_V)
         self.amp_only = amp_only
         self.model = model
         self.data = uvdata
         stokes = model.stokes
         self.stokes = stokes
+        self.average_freq = average_freq
         if average_freq:
             if stokes == 'I':
                 self.uvdata = 0.5 * (uvdata.uvdata_freq_averaged[:, 0] +
                                      uvdata.uvdata_freq_averaged[:, 1])
-                self.error = 0.5 * np.sqrt(error[:, 0] ** 2. +
-                                           error[:, 1] ** 2.)
+                # self.error = 0.5 * np.sqrt(error[:, 0] ** 2. +
+                #                            error[:, 1] ** 2.)
+                self.error = 0.5 * (error[:, 0] +
+                                    error[:, 1])
             elif stokes == 'RR':
                 self.uvdata = uvdata.uvdata_freq_averaged[:, 0]
                 self.error = error[:, 0]
@@ -91,11 +96,19 @@ class LnLikelihood(object):
                 raise Exception("Working with only I, RR or LL!")
         else:
             if stokes == 'I':
-                self.uvdata = 0.5 * (uvdata.uvdata[:, 0] + uvdata.uvdata[:, 1])
+                # (#, #IF)
+                self.uvdata = 0.5 * (uvdata.uvdata[..., 0] + uvdata.uvdata[..., 1])
+                # (#, #IF)
+                # self.error = 0.5 * np.sqrt(error[..., 0] ** 2. +
+                #                            error[..., 1] ** 2.)
+                self.error = 0.5 * (error[..., 0] +
+                                    error[..., 1])
             elif stokes == 'RR':
-                self.uvdata = uvdata.uvdata[:, 0]
+                self.uvdata = uvdata.uvdata[..., 0]
+                self.error = error[..., 0]
             elif stokes == 'LL':
-                self.uvdata = uvdata.uvdata[:, 1]
+                self.uvdata = uvdata.uvdata[..., 1]
+                self.error = error[..., 1]
             else:
                 raise Exception("Working with only I, RR or LL!")
 
@@ -128,9 +141,12 @@ class LnLikelihood(object):
             k = 1.
             if self.stokes == 'I':
                 k = 2.
-            lnlik = k * (-0.5 * np.log(2. * math.pi * error ** 2.) - \
-                    (data - model_data) * (data - model_data).conj() / \
-                    (2. * error ** 2.))
+            # lnlik = k * (-0.5 * np.log(2. * math.pi * error ** 2.) - \
+            #         (data - model_data) * (data - model_data).conj() / \
+            #         (2. * error ** 2.))
+            lnlik = k * (-np.log(2. * math.pi * error ** 2.) - \
+                         (data - model_data) * (data - model_data).conj() / \
+                         (2. * error ** 2.))
             lnlik = lnlik.real
         return lnlik.sum()
 
@@ -160,8 +176,9 @@ class LnPrior(object):
 
 
 class LnPost(object):
-    def __init__(self, uvdata, model, average_freq=True):
-        self.lnlik = LnLikelihood(uvdata, model, average_freq=average_freq)
+    def __init__(self, uvdata, model, average_freq=True, use_V=False):
+        self.lnlik = LnLikelihood(uvdata, model, average_freq=average_freq,
+                                  use_V=use_V)
         self.lnpr = LnPrior(model)
 
     def __call__(self, p):

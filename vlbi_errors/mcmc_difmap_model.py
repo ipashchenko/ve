@@ -53,6 +53,8 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
                                  0.01 * comp.p[3],
                                  0.01 * comp.p[3],
                                  0.03 * comp.p[3]]
+            else:
+                raise Exception("Gauss component should have size 4 or 6!")
         elif isinstance(comp, DeltaComponent):
             flux_high = 2 * comp.p[0]
             comp.add_prior(flux=(sp.stats.uniform.logpdf, [0., flux_high], dict(),))
@@ -60,7 +62,7 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
                              0.01,
                              0.01]
         else:
-            raise Exception
+            raise Exception("Unknown type of component!")
             
     # Construct labels for corner and truth values (of difmap models)
     labels = list()
@@ -68,12 +70,16 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
     for comp in comps:
         truths.extend(comp.p)
         if isinstance(comp, EGComponent):
-            labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$', r'$e$', r'$bpa$'])
-        elif isinstance(comp, CGComponent):
-            labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$'])
+            if comp.size == 6:
+                labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$', r'$e$', r'$bpa$'])
+            elif comp.size == 4:
+                labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$'])
+            else:
+                raise Exception("Gauss component should have size 4 or 6!")
         elif isinstance(comp, DeltaComponent):
             labels.extend([r'$flux$', r'$x$', r'$y$'])
-
+        else:
+            raise Exception("Unknown type of component!")
 
     # Create model
     mdl = Model(stokes='I')

@@ -61,6 +61,19 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
                              0.01]
         else:
             raise Exception
+            
+    # Construct labels for corner and truth values (of difmap models)
+    labels = list()
+    truths = list()
+    for comp in comps:
+        truths.extend(comp.p)
+        if isinstance(comp, EGComponent):
+            labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$', r'$e$', r'$bpa$'])
+        elif isinstance(comp, CGComponent):
+            labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$'])
+        elif isinstance(comp, DeltaComponent):
+            labels.extend([r'$flux$', r'$x$', r'$y$'])
+
 
     # Create model
     mdl = Model(stokes='I')
@@ -94,18 +107,6 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
     # Plot corner
     fig, axes = plt.subplots(nrows=ndim, ncols=ndim)
     fig.set_size_inches(14.5, 14.5)
-
-    # Construct labels for corner and truth values (of difmap models)
-    labels = list()
-    truths = list()
-    for comp in comps:
-        truths.extend(comp.p)
-        if isinstance(comp, EGComponent):
-            labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$', r'$e$', r'$bpa$'])
-        elif isinstance(comp, CGComponent):
-            labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$'])
-        elif isinstance(comp, DeltaComponent):
-            labels.extend([r'$flux$', r'$x$', r'$y$'])
 
     # Choose fontsize
     if len(comps) <= 2:

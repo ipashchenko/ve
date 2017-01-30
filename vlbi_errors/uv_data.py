@@ -289,6 +289,13 @@ class UVData(object):
         # Always return complex representation of internal ``hdu.data.data``
         return self._uvdata
 
+    @uvdata.setter
+    def uvdata(self, other):
+        # Updates A COPY of ``hdu.data.data`` numpy.ndarray (complex repr.)
+        self._uvdata = other
+        # Sync internal representation with changed complex representation.
+        self.sync()
+
     @property
     def weights(self):
         """
@@ -298,16 +305,10 @@ class UVData(object):
         """
         return self._weights
 
-    @uvdata.setter
-    def uvdata(self, other):
-        # Updates A COPY of ``hdu.data.data`` numpy.ndarray (complex repr.)
-        self._uvdata = other
-        # Sync internal representation with changed complex representation.
-        self.sync()
-
     @property
     def uvdata_weight_masked(self):
         return np.ma.array(self.uvdata, mask=self._nw_indxs)
+
 
     @property
     def uvdata_freq_averaged(self):
@@ -321,6 +322,33 @@ class UVData(object):
         # dimension. So don't need this if-else
         else:
             result = self.uvdata_weight_masked[:, 0, :]
+        return result
+
+
+    @property
+    def weights_nw_masked(self):
+        """
+        Returns (#groups, #if, #stokes,) complex numpy.ndarray with last
+        dimension - weight of visibilities. It is A COPY of ``hdu.data.data``
+        numpy.ndarray.
+        """
+        return np.ma.array(self._weights, mask=self._nw_indxs)
+
+    @property
+    def errors_from_weights(self):
+        """
+        Returns (#groups, #if, #stokes,) complex numpy.ndarray with last
+        dimension - weight of visibilities. It is A COPY of ``hdu.data.data``
+        numpy.ndarray.
+        """
+        return 1. / np.sqrt(self.weights_nw_masked)
+
+    @property
+    def errors_from_weights_masked_freq_averaged(self):
+        if self.nif > 1:
+            result = np.ma.mean(self.errors_from_weights, axis=1)
+        else:
+            result = self.errors_from_weights[:, 0, :]
         return result
 
     @property
@@ -895,8 +923,8 @@ class UVData(object):
                     mask = np.isnan(differences)
                     # (#IF, #Stokes)
                     baselines_noises[baseline] = \
-                        np.asarray([np.std(np.ma.array(differences,
-                                                       mask=mask).real[..., i], axis=0) for i
+                        np.asarray([mad_std(np.ma.array(differences,
+                                                        mask=mask).real[..., i], axis=0) for i
                                     in range(self.nstokes)]).T
             else:
                 # Use each scan
@@ -915,7 +943,7 @@ class UVData(object):
                                            scan_baseline_uvdata[1:, ...])
                             mask = ~np.isnan(differences)
                             # (nif, nstokes,)
-                            scan_noise = np.asarray([np.std(np.ma.array(differences,
+                            scan_noise = np.asarray([mad_std(np.ma.array(differences,
                                                                         mask=np.invert(mask)).real[..., i],
                                                             axis=0) for i in
                                                      range(self.nstokes)]).T
@@ -963,9 +991,9 @@ class UVData(object):
                     n = len(baseline_uvdata)
                     sl = self._get_uvdata_slice(baselines=[baseline], bands=[i],
                                                 stokes=[stokes])
-                    noise_to_add = vec_complex(np.random.normal(scale=std[j],
+                    noise_to_add = vec_complex(np.random.normal(scale=std,
                                                                 size=n),
-                                               np.random.normal(scale=std[j],
+                                               np.random.normal(scale=std,
                                                                 size=n))
                     noise_to_add = np.reshape(noise_to_add,
                                               baseline_uvdata.shape)
@@ -1329,7 +1357,9 @@ class UVData(object):
             else:
                 hands_diff = uvdata[indxs] / noise[baseline][None, :, None]
             # Construct difference for Stokes ``I`` parameter
-            diff = 0.5 * (hands_diff[..., 0] + hands_diff[..., 1])
+            # diff = 0.5 * (hands_diff[..., 0] + hands_diff[..., 1])
+            print np.shape(hands_diff)
+            diff = hands_diff[..., 0]
             diff = diff.flatten()
             diff *= np.conjugate(diff)
             try:

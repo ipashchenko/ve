@@ -11,7 +11,7 @@ import nestle
 
 data_dir = '/home/ilya/code/vlbi_errors/bin_c1/'
 uv_fits = os.path.join(data_dir, '0235+164.c1.2008_09_02.uvf_difmap')
-mdl_file = '0235+164.c1.2008_09_02_cgauss.mdl'
+mdl_file = '0235+164.c1.2008_09_02.mdl'
 stokes = 'I'
 
 uv_data = UVData(uv_fits)
@@ -72,4 +72,5 @@ mdl = Model(stokes=stokes)
 mdl.add_components(*comps)
 loglike = LnLikelihood(uv_data, mdl)
 result = nestle.sample(loglikelihood=loglike, prior_transform=hypercube,
-                       ndim=mdl.size, npoints=25, method='multi')
+                       ndim=mdl.size, npoints=50, method='classic',
+                       callback=nestle.print_progress)

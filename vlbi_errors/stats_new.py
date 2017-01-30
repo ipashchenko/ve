@@ -114,13 +114,13 @@ if __name__ == '__main__':
     from spydiff import import_difmap_model
     from uv_data import UVData
     from model import Model, Jitter
-    uv_fits = '/home/ilya/code/vlbi_errors/bin_c1/0235+164.c1.2008_09_02.uvf_difmap'
+    uv_fits = '/home/ilya/code/vlbi_errors/pet/0235+164_X.uvf_difmap'
     uvdata = UVData(uv_fits)
     # Create model
-    mdl = Model(stokes='I')
-    comps = import_difmap_model('0235+164.c1.2008_09_02.mdl',
-                                '/home/ilya/code/vlbi_errors/bin_c1')
-    comps[0].add_prior(flux=(sp.stats.uniform.logpdf, [0., 5], dict(),),
+    mdl = Model(stokes='RR')
+    comps = import_difmap_model('0235+164_X.mdl',
+                                '/home/ilya/code/vlbi_errors/pet')
+    comps[0].add_prior(flux=(sp.stats.uniform.logpdf, [0., 10], dict(),),
                        bmaj=(sp.stats.uniform.logpdf, [0, 1], dict(),),
                        e=(sp.stats.uniform.logpdf, [0, 1.], dict(),),
                        bpa=(sp.stats.uniform.logpdf, [0, np.pi], dict(),))
@@ -146,8 +146,8 @@ if __name__ == '__main__':
     print "Acceptance fraction for initial burning: ", sampler.acceptance_fraction
     sampler.reset()
     # Run second burning
-    pos, lnp, _ = sampler.run_mcmc(pos, 300)
+    pos, lnp, _ = sampler.run_mcmc(pos, 500)
     print "Acceptance fraction for second burning: ", sampler.acceptance_fraction
     sampler.reset()
-    pos, lnp, _ = sampler.run_mcmc(pos, 500)
+    pos, lnp, _ = sampler.run_mcmc(pos, 1000)
     print "Acceptance fraction for production: ", sampler.acceptance_fraction

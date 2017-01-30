@@ -31,10 +31,8 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
     for comp in comps:
         print comp
         if isinstance(comp, EGComponent):
-            # flux_high = 2 * comp.p[0]
-            flux_high = 10. * comp.p[0]
-            # bmaj_high = 4 * comp.p[3]
-            bmaj_high = 4.
+            flux_high = 2 * comp.p[0]
+            bmaj_high = 4 * comp.p[3]
             if comp.size == 6:
                 comp.add_prior(flux=(sp.stats.uniform.logpdf, [0., flux_high], dict(),),
                                bmaj=(sp.stats.uniform.logpdf, [0, bmaj_high], dict(),),
@@ -47,10 +45,8 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
                                  0.01,
                                  0.01]
             elif comp.size == 4:
-                # flux_high = 2 * comp.p[0]
-                flux_high = 10. * comp.p[0]
-                # bmaj_high = 4 * comp.p[3]
-                bmaj_high = 4.
+                flux_high = 2 * comp.p[0]
+                bmaj_high = 4 * comp.p[3]
                 comp.add_prior(flux=(sp.stats.uniform.logpdf, [0., flux_high], dict(),),
                                bmaj=(sp.stats.uniform.logpdf, [0, bmaj_high], dict(),))
                 p0_dict[comp] = [0.03 * comp.p[0],
@@ -102,6 +98,7 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
         p_std.extend(p0_dict[comp])
     print "Initial std of parameters: {}".format(p_std)
     p0 = emcee.utils.sample_ball(mdl.p, p_std, size=nwalkers)
+    print p0[0]
 
     # Run initial burnin
     pos, prob, state = sampler.run_mcmc(p0, nburnin_1)
@@ -141,11 +138,11 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
 
 if __name__ == '__main__':
 
-    uv_fits = '/home/ilya/code/vlbi_errors/pet/0235+164_X.uvf_difmap'
-    mdl_file = '/home/ilya/code/vlbi_errors/pet/0235+164_X.mdl'
+    uv_fits = '/home/ilya/sandbox/test_small/1458+718.u.2006_09_06.uvf'
+    mdl_file = '/home/ilya/sandbox/test_small/dfmp_original_model.mdl'
     lnpost, sampler = fit_model_with_mcmc(uv_fits, mdl_file,
-                                          nburnin_2=300, nproduction=500,
-                                          nwalkers=100,
+                                          nburnin_2=500, nproduction=1000,
+                                          nwalkers=200,
                                           samples_file='samples_of_mcmc.txt',
-                                          outdir='/home/ilya/code/vlbi_errors/pet',
-                                          stokes='RR')
+                                          outdir='/home/ilya/sandbox/test_small',
+                                          stokes='I')

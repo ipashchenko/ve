@@ -398,8 +398,8 @@ class MFObservations(object):
                 boot = CleanBootstrap(models, uvdata)
                 curdir = os.getcwd()
                 os.chdir(self.data_dir)
-                boot.run(n=self.n_boot, nonparametric=True,
-                         outname=['boot_{}'.format(freq), '.uvf'])
+                boot.run(n=self.n_boot, nonparametric=True, use_v=False,
+                         use_kde=True, outname=['boot_{}'.format(freq), '.uvf'])
                 os.chdir(curdir)
 
                 files = glob.glob(os.path.join(self.data_dir,
@@ -714,7 +714,7 @@ class MFObservations(object):
 
 if __name__ == '__main__':
     import glob
-    source = '1641+399'
+    source = '2230+114'
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
     # epochs = get_epochs_for_source(source, use_db='multifreq')
     # print(epochs)
@@ -722,7 +722,7 @@ if __name__ == '__main__':
     # for epoch in epochs:
     #     print(epoch)
     # epoch = epochs[-1]
-    epoch = '2006_06_15'
+    epoch = '2006_02_12'
     base_dir = '/home/ilya/vlbi_errors/article'
     data_dir = os.path.join(base_dir, source)
 
@@ -739,7 +739,7 @@ if __name__ == '__main__':
                          n_scans=[4., 4., 4., 4.],
                          sigma_d_term=[0.002, 0.002, 0.002, 0.002],
                          sigma_evpa=[4., 4., 2., 3.])
-    mfo.run(n_sigma_mask=3.0, colors_clim=[-550, 650],
-            rotm_slices=[((-2, 3), (-2, -3))])
+    mfo.run(n_sigma_mask=3.0, colors_clim=[-600, 250],
+            rotm_slices=[((4, -5), (1, -7))])
             # pxls_plot=[(0, 0), (1, 0), (-3, 0), (-4, 0)],
             # plot_points=[(0, 0), (-2, 0), (-3, 0), (-4, 0)])

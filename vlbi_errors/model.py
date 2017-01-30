@@ -5,13 +5,30 @@ import astropy.io.fits as pf
 from stats import LnPost
 from components import CGComponent, EGComponent, DeltaComponent
 from utils import get_hdu_from_hdulist, get_fits_image_info_from_hdulist,\
-    degree_to_mas
+    degree_to_mas, _function_wrapper
 import matplotlib
 
 try:
     import pylab
 except ImportError:
     pylab = None
+
+
+class Jitter(object):
+    def __init__(self, uvdata):
+        self.baselines = uvdata.baselines
+        self._lnpriors = dict()
+
+    def set_priors(self):
+        for baseline in self.baselines:
+            self._lnpriors[baseline] = _function_wrapper(sp.stats.uniform.logpdf, [-5, 5], dict(),)
+
+    def lnpr(self, p):
+        n = len(self.baselines)
+        lnprior = list()
+        for i, par in enumerate(p):
+            lnprior.append(self._lnpriors[self.baselines[i]](par))
+        return sum(lnprior)
 
 
 # TODO: ``Model`` subclasses can't be convolved with anything! It is

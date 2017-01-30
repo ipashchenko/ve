@@ -70,7 +70,7 @@ class CrossValidation(object):
 # FIXME: For ``average_freq=True`` got shitty results
 class LnLikelihood(object):
     def __init__(self, uvdata, model, average_freq=True, amp_only=False,
-                 use_V=False):
+                 use_V=False, use_weights=False):
         error = uvdata.error(average_freq=average_freq, use_V=use_V)
         self.amp_only = amp_only
         self.model = model
@@ -86,6 +86,8 @@ class LnLikelihood(object):
                 #                            error[:, 1] ** 2.)
                 self.error = 0.5 * (error[:, 0] +
                                     error[:, 1])
+                if use_weights:
+                    self.error = uvdata.errors_from_weights_masked_freq_averaged
             elif stokes == 'RR':
                 self.uvdata = uvdata.uvdata_freq_averaged[:, 0]
                 self.error = error[:, 0]
@@ -118,7 +120,7 @@ class LnLikelihood(object):
         :param p:
         :return:
         """
-        #print "calculating lnlik for ", p
+        # print "calculating lnlik for ", p
         # Data visibilities and noise
         data = self.uvdata
         error = self.error
@@ -176,14 +178,16 @@ class LnPrior(object):
 
 
 class LnPost(object):
-    def __init__(self, uvdata, model, average_freq=True, use_V=False):
+    def __init__(self, uvdata, model, average_freq=True, use_V=False,
+                 use_weights=False):
         self.lnlik = LnLikelihood(uvdata, model, average_freq=average_freq,
-                                  use_V=use_V)
+                                  use_V=use_V, use_weights=use_weights)
         self.lnpr = LnPrior(model)
 
     def __call__(self, p):
         lnpr = self.lnpr(p[:])
         if not np.isfinite(lnpr):
+            print "inf prior"
             return -np.inf
         return self.lnlik(p[:]) + lnpr
 

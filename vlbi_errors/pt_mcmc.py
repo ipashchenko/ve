@@ -7,9 +7,9 @@ import scipy as sp
 import numpy as np
 
 
-mdl_dir = '/home/ilya/Dropbox/Ilya/0235_bk150_uvf_data/models_from_Sanya_new/'
-mdl_file = 'mod_q1_4ec.mdl'
-uvfits = '/home/ilya/Dropbox/Ilya/0235_bk150_uvf_data/0235_q_core_only_from_4ec.FITS'
+mdl_dir = '/home/ilya/vlbi_errors/bin_q'
+mdl_file = '0235+164.q1.2008_09_02.mdl'
+uvfits = '/home/ilya/vlbi_errors/bin_q/0235+164.q1.2008_09_02.uvf_difmap'
 
 uvdata = UVData(uvfits)
 comps = import_difmap_model(mdl_file, mdl_dir)
@@ -57,8 +57,8 @@ for p, lnprob, lnlike in ptsampler.sample(p, lnprob0=lnprob,
 # # (11427.220089952611, 5.9308987859385525)
 # import corner
 # samples = ptsampler.flatchain[0, ::3, 3:5]
-# fig = corner.corner(samples, range=((0, 0.15), (0, 1)),
-#                     labels=[r'$bmaj$', r'$e$'], show_titles=True,
-#                     title_kwargs={'fontsize': 16}, quantiles=[0.16, 0.5, 0.84],
-#                     label_kwargs={'fontsize': 16}, title_fmt=".3f")
-# fig.savefig('/home/ilya/Dropbox/Ilya/0235_bk150_uvf_data/models_from_Sanya_new/Q_core_only_bmaj_vs_e_corner.png', bbox_inches='tight', dpi=200)
+fig = corner.corner(samples, range=((0, 0.15), (0, 1)),
+                    labels=[r'$bmaj$', r'$e$'], show_titles=True,
+                    title_kwargs={'fontsize': 16}, quantiles=[0.16, 0.5, 0.84],
+                    label_kwargs={'fontsize': 16}, title_fmt=".3f")
+fig.savefig('_corner.png', bbox_inches='tight', dpi=200)

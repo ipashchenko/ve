@@ -44,11 +44,13 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
     shift_dict = dict()
 
     # Iterating over difference of mask sizes
-    for dr in range(min_shift, max_shift, shift_step):
+    for dr in np.arange(min_shift, max_shift, shift_step):
+        print "Using dr = {}".format(dr)
         shift_dict[dr] = list()
 
         # Iterating over mask sizes
         for r in range(0, max_mask_r, mask_step):
+            print "Using r = {}".format(r)
             r1 = r
             r2 = r + dr
             shift = image1.cross_correlate(image2,
@@ -56,7 +58,8 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
                                                     None),
                                            region2=(image2.x_c, image2.y_c, r2,
                                                     None),
-                                           upsample_factor=10)
+                                           upsample_factor=100)
+            print "Found shift = {}".format(shift)
             shift_dict[dr].append(shift)
 
     shift_value_dict = dict()
@@ -136,7 +139,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
          beam_place='ll', colorbar_label=None, show=True, contour_color='k',
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
-         show_points=None):
+         show_points=None, core=None):
     """
     Plot image(s).
 
@@ -372,6 +375,18 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         # FIXME: check how ``bpa`` should be plotted
         e = Ellipse((y_c, x_c), e_width, e_height, angle=beam[2],
                     edgecolor=beam_edge_color, facecolor=beam_face_color,
+                    alpha=beam_alpha)
+        ax.add_patch(e)
+
+    if core:
+        delta = abs(x[1] - x[0])
+        print delta
+        y_c = -core[1]
+        x_c = core[2]
+        e_height = core[3]
+        e_width = core[3] * core[4]
+        e = Ellipse((y_c, x_c), e_width, e_height, angle=core[5],
+                    edgecolor=beam_edge_color, facecolor='red',
                     alpha=beam_alpha)
         ax.add_patch(e)
 

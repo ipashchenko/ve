@@ -36,7 +36,7 @@ for model in models:
 
 np.savetxt(os.path.join(data_dir, 'cv_scores_eg.txt'), np.array(cv_scores))
 
-# Now check delta
-modelfit_difmap(uv_fits, '0235+164.c1.2008_09_02_cgauss.mdl',
-                '0235+164.c1.2008_09_02_cgauss_fitted_fitted.mdl', niter=100,
-                path=data_dir, mdl_path=data_dir, out_path=data_dir)
+# # Now check delta
+# modelfit_difmap(uv_fits, '0235+164.c1.2008_09_02_cgauss.mdl',
+#                 '0235+164.c1.2008_09_02_cgauss_fitted_fitted.mdl', niter=100,
+#                 path=data_dir, mdl_path=data_dir, out_path=data_dir)

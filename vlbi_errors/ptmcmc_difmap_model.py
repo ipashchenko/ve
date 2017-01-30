@@ -149,12 +149,11 @@ def fit_model_with_ptmcmc(uv_fits, mdl_file, outdir=None, nburnin=1000,
         samples_file = 'mcmc_samples.txt'
     print "Saving thinned samples to {} file...".format(samples_file)
     np.savetxt(samples_file, samples)
-    return lnpost, ptsampler
+    return ptsampler
 
 if __name__ == '__main__':
-    uv_fits = '/home/ilya/code/vlbi_errors/pet/0235+164_X.uvf_difmap'
-    mdl_file = '/home/ilya/code/vlbi_errors/pet/0235+164_X.mdl'
-    lnpost, sampler = fit_model_with_ptmcmc(uv_fits, mdl_file, nwalkers=100,
-                                            samples_file='samples_of_mcmc.txt',
-                                            outdir='/home/ilya/code/vlbi_errors/pet',
-                                            stokes='RR')
+    uv_fits = '/home/ilya/code/vlbi_errors/bin_c1/0235+164.c1.2008_09_02.uvf_difmap'
+    mdl_file = '/home/ilya/code/vlbi_errors/bin_c1/0235+164.c1.2008_09_02.mdl'
+    sampler = fit_model_with_ptmcmc(uv_fits, mdl_file, nwalkers=50,
+                                    samples_file='samples_of_mcmc.txt',
+                                    outdir='/home/ilya/code/vlbi_errors/bin_c1')

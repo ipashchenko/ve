@@ -1,9 +1,10 @@
+import os
 import numpy as np
 from uv_data import UVData
 from sklearn.cross_validation import KFold
-from spydiff import clean_n
-from from_fits import create_model_from_fits_file
 from utils import to_boolean_array, mask_boolean_with_boolean
+from spydiff import import_difmap_model, modelfit_difmap
+from model import Model
 
 
 # TODO: Use only positive weighted data for CV
@@ -80,39 +81,27 @@ class KFoldCV(object):
             yield self.train_fname, self.test_fname
 
 
-if __name__ == '__main__':
-    from spydiff import import_difmap_model, modelfit_difmap
-    from model import Model
-    mdl_dir = '/home/ilya/code/vlbi_errors/bin_c1'
-    uvfits_dir = '/home/ilya/code/vlbi_errors/bin_c1'
-    mdl_files = ['0235+164.c1.2008_09_02_delta_fitted.mdl',
-                 '0235+164.c1.2008_09_02_cgauss_fitted_fitted.mdl',
-                 '0235+164.c1.2008_09_02.mdl']
-    mdl_dict = {i: mdl_file for (i, mdl_file) in enumerate(mdl_files)}
-    # comps1 = import_difmap_model(mdl_file_1, mdl_dir)
-    # comps2 = import_difmap_model(mdl_file_2, mdl_dir)
-    mdl_comps = [import_difmap_model(mdl_file, mdl_dir) for mdl_file in
-                 mdl_files]
-    models = [Model(stokes='I') for mdl_file in mdl_files]
+def cv_model(dfm_model_files, uv_fits, K=10, dfm_model_dir=None, baselines=None,
+             dfm_niter=50):
+    if dfm_model_dir is None:
+        dfm_model_dir = os.getcwd()
+    mdl_dict = {i: mdl_file for (i, mdl_file) in enumerate(dfm_model_files)}
+    mdl_comps = [import_difmap_model(mdl_file, dfm_model_dir) for mdl_file in
+                 dfm_model_files]
+    models = [Model(stokes='I')] * len(dfm_model_files)
     for model, comps in zip(models, mdl_comps):
         model.add_components(*comps)
-    # model1 = Model(stokes='I')
-    # model2 = Model(stokes='I')
-    # model1.add_components(*comps1)
-    # model2.add_components(*comps2)
-    # models = [model1, model2]
-    import os
-    uv_fits = '0235+164.c1.2008_09_02.uvf_difmap'
+
     cv_scores = dict()
-    n_folds = 3
+    n_folds = K
     for i in mdl_dict:
-        kfold = KFoldCV(os.path.join(uvfits_dir, uv_fits), n_folds,
-                        baselines=[774, 1546])
+        kfold = KFoldCV(uv_fits, n_folds, baselines=baselines)
         cv = list()
         for j, (tr_fname, ts_fname) in enumerate(kfold):
             modelfit_difmap(kfold.train_fname, mdl_dict[i],
-                            'trained_model_{}.mdl'.format(i), mdl_path=mdl_dir,
-                            niter=50)
+                            'trained_model_{}.mdl'.format(i),
+                            mdl_path=dfm_model_dir,
+                            niter=dfm_niter)
             tr_comps = import_difmap_model('trained_model_{}.mdl'.format(i))
             tr_model = Model(stokes='I')
             tr_model.add_components(*tr_comps)
@@ -120,17 +109,55 @@ if __name__ == '__main__':
             score = ts_uvdata.cv_score(tr_model)
             print "{} of {} gives {}".format(j+1, n_folds, score)
             cv.append(score)
-        cv_scores[i] = (np.nanmean(cv), np.nanstd(cv))
+        cv_scores[i] = (np.nanmean(cv), np.nanstd(cv)/np.sqrt(K))
+        # print "CV gives {} +/- {}".format(np.nanmean(cv), np.nanstd(cv)/np.sqrt(K))
         print "CV gives {} +/- {}".format(np.nanmean(cv), np.nanstd(cv))
 
-    print cv_scores
-    # n = cv_scores.keys()
-    # scores = [cv_scores[i][0] for i in n]
-    # errors = [cv_scores[i][1] for i in n]
+    return cv_scores
+
+
+if __name__ == '__main__':
+
+    dfm_mdl_files = ['0235+164_L_delta_fitted.mdl',
+                     '0235+164_L.mdl']
+    # dfm_mdl_files = ['0235+164.u1.2008_09_02_delta_fitted.mdl',
+    #                  '0235+164.u1.2008_09_02_cgauss_fitted.mdl',
+    #                  '0235+164.u1.2008_09_02.mdl']
+    uv_fits = '/home/ilya/code/vlbi_errors/pet/0235+164_L.uvf_difmap'
+    # uv_fits = '/home/ilya/code/vlbi_errors/bin_u/0235+164.u1.2008_09_02.uvf_difmap'
+    cv_scores = cv_model(dfm_mdl_files, uv_fits, baselines=None, K=5,
+                         dfm_model_dir='/home/ilya/code/vlbi_errors/pet',
+                         dfm_niter=50)
+    a = np.array(cv_scores.values())
+    y = a[:, 0]
+    yerr = a[:, 1]
+
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.errorbar(np.arange(len(dfm_mdl_files))+1, y, yerr, lw=2)
+    plt.xlim([0.9, len(dfm_mdl_files) + 0.1])
+    plt.xlabel("Model number")
+    plt.ylabel("CV score")
+    plt.xticks(range(len(dfm_mdl_files)))
+    plt.show()
+
+
+    # cv_scores_ = list()
+    # for i in range(10):
+    #     cv_scores = cv_model(dfm_mdl_files, uv_fits, baselines=[774, 1546], K=10,
+    #                          dfm_model_dir='/home/ilya/code/vlbi_errors/bin_c1')
+    #     cv_scores_.append(cv_scores)
+    # print cv_scores_
     # import matplotlib.pyplot as plt
-    # plt.errorbar(n, scores, errors, fmt='.k')
-    # min_score = min(scores)
-    # min_error = errors[scores.index(min_score)]
-    # s = min_score + min_error
-    # plt.axhline(s)
+    # plt.figure()
+    # a = np.array(cv_scores_.values())[..., 0].T
+    # for ar in a:
+    #     plt.plot(np.arange(len(dfm_mdl_files)) +
+    #              np.random.normal(0, 0.03, size=3), ar, '.k', lw=2)
+    # plt.xlim([-0.1, len(dfm_mdl_files) -0.9])
+    # plt.xlabel("Model number")
+    # plt.ylabel("CV score, lower - better")
+    # plt.xticks(range(len(dfm_mdl_files)))
     # plt.show()
+
+

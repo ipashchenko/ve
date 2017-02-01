@@ -118,15 +118,18 @@ def cv_model(dfm_model_files, uv_fits, K=10, dfm_model_dir=None, baselines=None,
 
 if __name__ == '__main__':
 
-    dfm_mdl_files = ['0235+164_L_delta_fitted.mdl',
-                     '0235+164_L.mdl']
+    # dfm_mdl_files = ['0235+164_L_delta_fitted.mdl',
+    #                  '0235+164_L.mdl']
     # dfm_mdl_files = ['0235+164.u1.2008_09_02_delta_fitted.mdl',
     #                  '0235+164.u1.2008_09_02_cgauss_fitted.mdl',
     #                  '0235+164.u1.2008_09_02.mdl']
-    uv_fits = '/home/ilya/code/vlbi_errors/pet/0235+164_L.uvf_difmap'
+    dfm_mdl_files = ['0235+164.q1.2009_02_22.mdl_test_delta',
+                     '0235+164.q1.2009_02_22.mdl_test_circ',
+                     '0235+164.q1.2009_02_22.mdl_test_ell']
+    uv_fits = '/home/ilya/Dropbox/0235/tmp/2ilya/0235+164.q1.2009_02_22.uvp'
     # uv_fits = '/home/ilya/code/vlbi_errors/bin_u/0235+164.u1.2008_09_02.uvf_difmap'
     cv_scores = cv_model(dfm_mdl_files, uv_fits, baselines=None, K=5,
-                         dfm_model_dir='/home/ilya/code/vlbi_errors/pet',
+                         dfm_model_dir='/home/ilya/Dropbox/0235/tmp/2ilya',
                          dfm_niter=50)
     a = np.array(cv_scores.values())
     y = a[:, 0]

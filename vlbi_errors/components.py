@@ -25,6 +25,10 @@ class Component(object):
     def __len__(self):
         return len(self._parnames)
 
+    @property
+    def parnames(self):
+        return self._parnames[~self._fixed]
+
     def add_prior(self, **lnprior):
         """
         Add prior for some parameters.
@@ -156,6 +160,7 @@ class EGComponent(Component):
                 if par not in self._parnames:
                     raise Exception('Uknown parameter ' + str(par) + ' !')
                 self._fixed[self._parnames.index(par)] = True
+            self.size = 6 - np.count_nonzero(self._fixed)
 
     def ft(self, uv):
         """
@@ -444,7 +449,7 @@ class CGComponent(EGComponent):
         self._parnames.remove('e')
         self._parnames.remove('bpa')
         self._p = self._p[:-2]
-        self.size = 4
+        self.size = 4 - np.count_nonzero(self._fixed)
 
 
 class DeltaComponent(Component):
@@ -468,6 +473,7 @@ class DeltaComponent(Component):
                 if par not in self._parnames:
                     raise Exception('Uknown parameter ' + str(par) + ' !')
                 self._fixed[self._parnames.index(par)] = True
+            self.size = 3 - np.count_nonzero(self._fixed)
 
     def ft(self, uv):
         """

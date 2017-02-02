@@ -111,18 +111,18 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
     comps_to_plot = [comps_orig[k] for k in plot_comps]
     # (#boot, #parameters)
     boot_data = np.hstack(np.array(comps_params[i]).reshape((n_boot,
-                                                             len(comps_orig[i]))) for
+                                                             comps_orig[i].size)) for
                           i in plot_comps)
 
     # Optionally plot
     if plot_file:
         if triangle:
-            lens = list(np.cumsum([len(comp) for comp in comps_orig]))
+            lens = list(np.cumsum([comp.size for comp in comps_orig]))
             lens.insert(0, 0)
 
             labels = list()
             for comp in comps_to_plot:
-                for lab in comp._parnames:
+                for lab in np.array(comp._parnames)[~comp._fixed]:
                     # FIXME: Move (x, y) <-> (r, theta) mapping to ``Component``
                     if coordinates == 'rtheta':
                         if lab == 'x':
@@ -136,7 +136,7 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                     labels.append(lab)
 
             try:
-                n = sum([len(c) for c in comps_to_plot])
+                n = sum([c.size for c in comps_to_plot])
                 figure, axes = matplotlib.pyplot.subplots(nrows=n, ncols=n)
                 figure.set_size_inches(19.5, 19.5)
                 triangle.corner(boot_data, labels=labels, plot_contours=False,
@@ -167,7 +167,7 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
         recorded = 0
         for i in plot_comps:
             comp = comps_orig[i]
-            for j in range(len(comp)):
+            for j in range(comp.size):
                 low, high, mean, median = hdi_of_mcmc(boot_data[:, recorded+j],
                                                       cred_mass=cred_mass,
                                                       return_mean_median=True)

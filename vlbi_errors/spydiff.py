@@ -158,18 +158,25 @@ def import_difmap_model(mdl_fname, mdl_dir=None):
                 major = 0.0
                 type_ = 0
 
+        list_fixed = list()
+        if flux[-1] != 'v':
+            list_fixed.append('flux')
+
         x = -float(radius[:-1]) * np.sin(np.deg2rad(float(theta[:-1])))
         y = -float(radius[:-1]) * np.cos(np.deg2rad(float(theta[:-1])))
         flux = float(flux[:-1])
+
         if int(type_) == 0:
             comp = DeltaComponent(flux, x, y)
         elif int(type_) == 1:
+
             try:
                 bmaj = float(major)
+                list_fixed.append('bmaj')
             except ValueError:
                 bmaj = float(major[:-1])
             if float(axial[:-1]) == 1:
-                comp = CGComponent(flux, x, y, bmaj)
+                comp = CGComponent(flux, x, y, bmaj, fixed=list_fixed)
             else:
                 try:
                     e = float(axial)
@@ -179,7 +186,7 @@ def import_difmap_model(mdl_fname, mdl_dir=None):
                     bpa = np.deg2rad(float(phi)) + np.pi / 2.
                 except ValueError:
                     bpa = np.deg2rad(float(phi[:-1])) + np.pi / 2.
-                comp = EGComponent(flux, x, y, bmaj, e, bpa)
+                comp = EGComponent(flux, x, y, bmaj, e, bpa, fixed=list_fixed)
         else:
             raise NotImplementedError("Only CC, CG & EG are implemented")
         comps.append(comp)

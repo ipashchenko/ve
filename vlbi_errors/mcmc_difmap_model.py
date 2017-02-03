@@ -32,7 +32,10 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
         print comp
         if isinstance(comp, EGComponent):
             flux_high = 2 * comp.p[0]
-            bmaj_high = 4 * comp.p[3]
+            try:
+                bmaj_high = 4 * comp.p[3]
+            except IndexError:
+                pass
             if comp.size == 6:
                 comp.add_prior(flux=(sp.stats.uniform.logpdf, [0., flux_high], dict(),),
                                bmaj=(sp.stats.uniform.logpdf, [0, bmaj_high], dict(),),
@@ -53,6 +56,12 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
                                  0.01 * comp.p[3],
                                  0.01 * comp.p[3],
                                  0.03 * comp.p[3]]
+            elif comp.size == 3:
+                flux_high = 2 * comp.p[0]
+                comp.add_prior(flux=(sp.stats.uniform.logpdf, [0., flux_high], dict(),))
+                p0_dict[comp] = [0.03 * comp.p[0],
+                                 0.01,
+                                 0.01]
             else:
                 raise Exception("Gauss component should have size 4 or 6!")
         elif isinstance(comp, DeltaComponent):
@@ -74,6 +83,8 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
                 labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$', r'$e$', r'$bpa$'])
             elif comp.size == 4:
                 labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$'])
+            elif comp.size == 3:
+                labels.extend([r'$flux$', r'$x$', r'$y$'])
             else:
                 raise Exception("Gauss component should have size 4 or 6!")
         elif isinstance(comp, DeltaComponent):
@@ -138,11 +149,13 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
 
 if __name__ == '__main__':
 
-    uv_fits = '/home/ilya/sandbox/test_small/1458+718.u.2006_09_06.uvf'
-    mdl_file = '/home/ilya/sandbox/test_small/dfmp_original_model.mdl'
+    # uv_fits = '/home/ilya/sandbox/test_small/1458+718.u.2006_09_06.uvf'
+    uv_fits = '/home/ilya/code/vlbi_errors/silke/0851+202.u.2004_11_05.uvf'
+    # mdl_file = '/home/ilya/sandbox/test_small/dfmp_original_model.mdl'
+    mdl_file = '/home/ilya/code/vlbi_errors/silke/1.mod.2004_11_05'
     lnpost, sampler = fit_model_with_mcmc(uv_fits, mdl_file,
                                           nburnin_2=500, nproduction=1000,
                                           nwalkers=200,
                                           samples_file='samples_of_mcmc.txt',
-                                          outdir='/home/ilya/sandbox/test_small',
+                                          outdir='/home/ilya/code/vlbi_errors/silke',
                                           stokes='I')

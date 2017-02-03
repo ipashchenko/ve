@@ -239,6 +239,11 @@ if __name__ == "__main__":
                                        ' residuals of Stokes I real & imag part'
                                        ' plot in output directory.',
                         metavar='FILE NAME')
+    parser.add_argument('-amplitude_scale_sigma', action='store', nargs='?',
+                        default=None, type=float, help='Sigma of amplitude'
+                                                       ' scale. In fractions of'
+                                                       ' amplitude.',
+                        metavar='FLOAT nearly 0.05-0.1')
     parser.add_argument('-res_plot_full', action='store', nargs='?', default=None,
                         type=str, help='File name to store residuals of Stokes '
                                        'RR & LL real & imag part'
@@ -296,6 +301,7 @@ if __name__ == "__main__":
     plot_comps = args.plot_comps
     txt_comps = args.txt_comps
     split_scans = args.split_scans
+    amplitude_scale_sigma = args.amplitude_scale_sigma
 
     bic = args.bic
     if args.use_rtheta:
@@ -342,6 +348,9 @@ if __name__ == "__main__":
             else:
                 print("Using fitted KDE Model to generate resamples")
         print("Using {} bootstrap replications".format(n_boot))
+        if amplitude_scale_sigma:
+            print("Using amplitude sigma for scale"
+                  " = {}".format(amplitude_scale_sigma))
         print("Using {} fitting iterations".format(niter))
         print("Finding {}-confidence regions".format(cred_value))
         print("Using directory {} for storing output".format(data_dir))
@@ -374,7 +383,8 @@ if __name__ == "__main__":
             bic_booted = list()
 
         try:
-            boot = CleanBootstrap([model], uvdata)
+            boot = CleanBootstrap([model], uvdata,
+                                  sigma_ampl_scale=amplitude_scale_sigma)
         # If uv-data contains only one Stokes parameter (e.g. `0838+133`)
         except IndexError:
             print("Problem in bootstrapping data...")

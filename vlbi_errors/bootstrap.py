@@ -923,6 +923,10 @@ class CleanBootstrap(Bootstrap):
         Path to FITS-file with uv-data (self-calibrated or not).
     """
 
+    def __init__(self, models, uvdata, sigma_ampl_scale=None):
+        super(CleanBootstrap, self).__init__(models, uvdata)
+        self.sigma_ampl_scale = sigma_ampl_scale
+
     def get_residuals(self):
         return self.data - self.model_data
 
@@ -1129,6 +1133,10 @@ class CleanBootstrap(Bootstrap):
                                                          copy_of_model_data,
                                                          recenter)
 
+        if self.sigma_ampl_scale is not None:
+            scale_factor = 1. + np.random.normal(0., self.sigma_ampl_scale)
+            print "Scaling amplitudes on {}".format(scale_factor)
+            copy_of_model_data.scale_amplitude(scale_factor)
         self.model_data.save(data=copy_of_model_data.hdu.data, fname=outname)
 
     def run(self, n, nonparametric, split_scans=False, recenter=True,

@@ -1039,6 +1039,15 @@ class UVData(object):
 
         return self._error
 
+    def scale_amplitude(self, scale):
+        """
+        Scale amplitude of uv-data by some scale factor.
+
+        :param scale:
+            Float. Factor of scaling.
+        """
+        self.uvdata *= scale
+
     # TODO: use different stokes and symmetry!
     def uv_coverage(self, antennas=None, baselines=None, sym='.k',
                     start_time=None, stop_time=None):

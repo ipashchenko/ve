@@ -8,6 +8,7 @@ from utils import (create_grid, create_mask, mas_to_rad, v_round,
 from model import Model
 from beam import CleanBeam
 from skimage.feature import register_translation
+import matplotlib
 import matplotlib.pyplot as plt
 # from matplotlib.patches import Ellipse
 
@@ -139,7 +140,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
          beam_place='ll', colorbar_label=None, show=True, contour_color='k',
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
-         show_points=None, core=None):
+         show_points=None, core=None, slice_color='black'):
     """
     Plot image(s).
 
@@ -217,6 +218,15 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         converted to python-like zero-indexing. If none are specified then use
         default values. All images plotted must have the same shape.
     """
+    label_size = 14
+    matplotlib.rcParams['xtick.labelsize'] = label_size
+    matplotlib.rcParams['ytick.labelsize'] = label_size
+    matplotlib.rcParams['axes.titlesize'] = label_size
+    matplotlib.rcParams['axes.labelsize'] = label_size
+    matplotlib.rcParams['font.size'] = label_size
+    matplotlib.rcParams['legend.fontsize'] = label_size
+    matplotlib.rcParams['pdf.fonttype'] = 42
+    matplotlib.rcParams['ps.fonttype'] = 42
 
     image = None
     if contours is not None:
@@ -271,8 +281,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     # Actually plotting
     fig = plt.figure()
     ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
-    ax.set_xlabel('RA, [mas]')
-    ax.set_ylabel('DEC, [mas]')
+    ax.set_xlabel(u'Relative R.A. (mas)')
+    ax.set_ylabel(u'Relative Decl. (mas)')
 
     # Plot contours
     if contours is not None:
@@ -329,7 +339,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     if slice_points is not None:
         for single_slice in slice_points:
             ax.plot([single_slice[0][0], single_slice[1][0]],
-                    [single_slice[0][1], single_slice[1][1]])
+                    [single_slice[0][1], single_slice[1][1]], color=slice_color)
 
     if show_points is not None:
         for point in show_points:
@@ -406,6 +416,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         fig.show()
     if close:
         plt.close()
+
+    return fig
 
 
 class BasicImage(object):

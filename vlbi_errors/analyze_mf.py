@@ -3,6 +3,8 @@ import pickle
 import json
 import glob
 import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
 from scipy.stats import mode
 from astropy.time import Time
 from uv_data import UVData
@@ -121,6 +123,7 @@ class MFObservations(object):
         self._cs_mask_n_sigma = None
         self.rotm_slices = rotm_slices
         self._chisq_crit = chisq_crit_values[len(self.uvdata_dict) - 2]
+        self.figures = dict()
 
         if sigma_evpa is None:
             self.sigma_evpa = np.zeros(len(self.uvdata_dict), dtype=float)
@@ -210,8 +213,8 @@ class MFObservations(object):
         self._difmap_commands_file =\
             os.path.join(self.data_dir,
                          "difmap_commands_{}_{}".format(date, time))
-        self.clean_original_native()
-        self.clean_original_common()
+        self.clean_original_native(freq_stokes_dict=None)
+        self.clean_original_common(freq_stokes_dict=None)
         if self.find_shifts:
             self.get_shifts()
         self.bootstrap_uvdata()
@@ -270,7 +273,7 @@ class MFObservations(object):
         self._cs_mask = cs_mask
         self._cs_mask_n_sigma = n_sigma
 
-    def clean_original_native(self):
+    def clean_original_native(self, freq_stokes_dict=None):
         """
         Clean original FITS-files with uv-data using native resolution.
         """
@@ -279,30 +282,41 @@ class MFObservations(object):
             self.cc_fits_dict.update({freq: dict()})
             self.cc_beam_dict.update({freq: dict()})
 
-        print("Clean original uv-data with native map & beam parameters...")
-        for freq in self.freqs:
-            print("Cleaning frequency {} with image "
-                  "parameters {}".format(freq, self.imsizes_dict[freq]))
-            uv_fits_path = self.uvfits_dict[freq]
-            uv_dir, uv_fname = os.path.split(uv_fits_path)
-            for stokes in self.stokes:
-                outfname = '{}_{}_cc.fits'.format(freq, stokes)
-                outpath = os.path.join(self.data_dir, outfname)
-                # Check if it is already done
-                if not os.path.exists(outpath):
-                    clean_difmap(uv_fname, outfname, stokes,
-                                 self.imsizes_dict[freq], path=uv_dir,
-                                 path_to_script=self.path_to_script,
-                                 outpath=self.data_dir,
-                                 command_file=self._difmap_commands_file)
-                else:
-                    print("Found CLEAN model in file {}".format(outfname))
-                self.cc_fits_dict[freq].update({stokes: os.path.join(self.data_dir,
-                                                                     outfname)})
-                image = create_clean_image_from_fits_file(outpath)
-                self.cc_image_dict[freq].update({stokes: image})
-                if stokes == 'I':
-                    self.cc_beam_dict.update({freq: image.beam})
+        if freq_stokes_dict is not None:
+            print("Found CLEANed images of original uvdata with naitive map &"
+                  " beam parameters...")
+            for freq in self.freqs:
+                for stokes in self.stokes:
+                    image = create_clean_image_from_fits_file(freq_stokes_dict[freq][stokes])
+                    self.cc_image_dict[freq].update({stokes: image})
+                    if stokes == 'I':
+                        self.cc_beam_dict.update({freq: image.beam})
+
+        else:
+            print("Clean original uv-data with native map & beam parameters...")
+            for freq in self.freqs:
+                print("Cleaning frequency {} with image "
+                      "parameters {}".format(freq, self.imsizes_dict[freq]))
+                uv_fits_path = self.uvfits_dict[freq]
+                uv_dir, uv_fname = os.path.split(uv_fits_path)
+                for stokes in self.stokes:
+                    outfname = '{}_{}_cc.fits'.format(freq, stokes)
+                    outpath = os.path.join(self.data_dir, outfname)
+                    # Check if it is already done
+                    if not os.path.exists(outpath):
+                        clean_difmap(uv_fname, outfname, stokes,
+                                     self.imsizes_dict[freq], path=uv_dir,
+                                     path_to_script=self.path_to_script,
+                                     outpath=self.data_dir,
+                                     command_file=self._difmap_commands_file)
+                    else:
+                        print("Found CLEAN model in file {}".format(outfname))
+                    self.cc_fits_dict[freq].update({stokes: os.path.join(self.data_dir,
+                                                                         outfname)})
+                    image = create_clean_image_from_fits_file(outpath)
+                    self.cc_image_dict[freq].update({stokes: image})
+                    if stokes == 'I':
+                        self.cc_beam_dict.update({freq: image.beam})
 
         if self.clear_difmap_logs:
             print("Removing difmap log-files...")
@@ -310,7 +324,20 @@ class MFObservations(object):
             for difmap_log in difmap_logs:
                 os.unlink(difmap_log)
 
-    def clean_original_common(self):
+    def clean_original_common(self, freq_stokes_dict=None):
+
+        # if freq_stokes_dict is not None:
+        #     print("Found CLEANed images of original uvdata with common map &"
+        #           " beam parameters...")
+        #     for freq in self.freqs:
+        #         self.cc_cs_image_dict.update({freq: dict()})
+        #         self.cc_cs_fits_dict.update({freq: dict()})
+        #         for stokes in self.stokes:
+        #             image = create_clean_image_from_fits_file(freq_stokes_dict[freq][stokes])
+        #             self.cc_image_dict[freq].update({stokes: image})
+        #             if stokes == 'I':
+        #                 self.cc_beam_dict.update({freq: image.beam})
+
         print("Clean original uv-data with common map parameters "
               " {} and beam {}".format(self.common_imsize, self.common_beam))
         for freq in self.freqs:
@@ -398,12 +425,13 @@ class MFObservations(object):
                 boot = CleanBootstrap(models, uvdata)
                 curdir = os.getcwd()
                 os.chdir(self.data_dir)
-                boot.run(n=self.n_boot, nonparametric=True, use_v=False,
+                boot.run(n=self.n_boot, nonparametric=False, use_v=False,
                          use_kde=True, outname=['boot_{}'.format(freq), '.uvf'])
                 os.chdir(curdir)
 
                 files = glob.glob(os.path.join(self.data_dir,
                                                'boot_{}*.uvf'.format(freq)))
+            print("Found bootstraped uvdata files!")
             self.uvfits_boot_dict.update({freq: sorted(files)})
 
     def clean_boot_native(self):
@@ -559,30 +587,33 @@ class MFObservations(object):
               min_abs_level=3. * rms, colors_mask=self._cs_mask,
               outfile='rotm_image_conv', outdir=self.data_dir,
               color_clim=colors_clim, blc=blc, trc=trc, beam=self.common_beam,
-              colorbar_label='RM, [rad/m/m]', slice_points=rotm_slices,
-              show_beam=True, show=False, show_points=plot_points)
+              slice_points=rotm_slices,
+              show_beam=True, show=False, show_points=plot_points,
+              cmap='hsv')
         iplot(i_image.image, sigma_rotm_image.image, x=i_image.x, y=i_image.y,
               min_abs_level=3. * rms, colors_mask=self._cs_mask,
               outfile='rotm_image_conv_sigma', outdir=self.data_dir,
               color_clim=[0, 200], blc=blc, trc=trc, beam=self.common_beam,
-              colorbar_label='RM, [rad/m/m]', slice_points=rotm_slices,
-              show_beam=True, show=False)
+              slice_points=rotm_slices, beam_face_color='black',
+              show_beam=True, show=False, cmap='hsv')
         iplot(i_image.image, chisq_image.image, x=i_image.x, y=i_image.y,
               min_abs_level=3. * rms, colors_mask=self._cs_mask,
               outfile='rotm_chisq_image_conv', outdir=self.data_dir,
               color_clim=None, blc=blc, trc=trc, beam=self.common_beam,
               colorbar_label='Chi-squared', slice_points=rotm_slices,
-              show_beam=True, show=False)
+              show_beam=True, show=False, cmap='hsv')
 
         if rotm_slices is not None:
+            self.figures['slices_conv'] = dict()
             for rotm_slice in rotm_slices:
                 rotm_slice_ = i_image._convert_coordinates(rotm_slice[0],
                                                            rotm_slice[1])
-                analyze_rotm_slice(rotm_slice_, rotm_image,
-                                   sigma_rotm_image=sigma_rotm_image,
-                                   outdir=self.data_dir,
-                                   beam_width=int(i_image._beam.beam[0]),
-                                   outfname="ROTM_{}_slice.png".format(rotm_slice))
+                fig = analyze_rotm_slice(rotm_slice_, rotm_image,
+                                         sigma_rotm_image=sigma_rotm_image,
+                                         outdir=self.data_dir,
+                                         beam_width=int(i_image._beam.beam[0]),
+                                         outfname="ROTM_{}_slice".format(rotm_slice))
+                self.figures['slices_conv'][str(rotm_slice)] = fig
 
         return rotm_image, sigma_rotm_image
 
@@ -670,18 +701,20 @@ class MFObservations(object):
         rms = rms_image(i_image)
         blc, trc = find_bbox(i_image.image, 2.*rms,
                              delta=int(i_image._beam.beam[0]))
-        iplot(i_image.image, rotm_image.image, x=i_image.x, y=i_image.y,
-              min_abs_level=3. * rms, colors_mask=self._cs_mask,
-              outfile='rotm_image_boot', outdir=self.data_dir,
-              color_clim=colors_clim, blc=blc, trc=trc, beam=self.common_beam,
-              colorbar_label='RM, [rad/m/m]', slice_points=rotm_slices,
-              show_beam=True, show=False)
-        iplot(i_image.image, chisq_image.image, x=i_image.x, y=i_image.y,
-              min_abs_level=3. * rms, colors_mask=self._cs_mask,
-              outfile='rotm_chisq_image_boot', outdir=self.data_dir,
-              color_clim=[0., self._chisq_crit], blc=blc, trc=trc, beam=self.common_beam,
-              colorbar_label='Chi-squared', slice_points=rotm_slices,
-              show_beam=True, show=False)
+        fig = iplot(i_image.image, rotm_image.image, x=i_image.x, y=i_image.y,
+                    min_abs_level=3. * rms, colors_mask=self._cs_mask,
+                    outfile='rotm_image_boot', outdir=self.data_dir,
+                    color_clim=colors_clim, blc=blc, trc=trc, beam=self.common_beam,
+                    slice_points=rotm_slices, cmap='hsv',
+                    show_beam=True, show=False)
+        self.figures['rotm_image_boot'] = fig
+        fig = iplot(i_image.image, chisq_image.image, x=i_image.x, y=i_image.y,
+                    min_abs_level=3. * rms, colors_mask=self._cs_mask,
+                    outfile='rotm_chisq_image_boot', outdir=self.data_dir,
+                    color_clim=[0., self._chisq_crit], blc=blc, trc=trc, beam=self.common_beam,
+                    colorbar_label='Chi-squared', slice_points=rotm_slices,
+                    show_beam=True, show=False)
+        self.figures['rotm_chisq_image_boot'] = fig
 
         self._boot_rotm_images =\
             self.boot_images.create_rotm_images(mask=self._cs_mask,
@@ -692,29 +725,54 @@ class MFObservations(object):
 
         # This sigma doesn't take absolute EVPA calibration uncertainty into
         # account
-        iplot(i_image.image, sigma_rotm_image.image, x=i_image.x, y=i_image.y,
-              min_abs_level=3. * rms, colors_mask=self._cs_mask,
-              outfile='rotm_image_boot_sigma', outdir=self.data_dir,
-              color_clim=[0, 200], blc=blc, trc=trc, beam=self.common_beam,
-              colorbar_label='RM, [rad/m/m]', slice_points=rotm_slices,
-              show_beam=True, show=False)
+        fig = iplot(i_image.image, sigma_rotm_image.image, x=i_image.x, y=i_image.y,
+                    min_abs_level=3. * rms, colors_mask=self._cs_mask,
+                    outfile='rotm_image_boot_sigma', outdir=self.data_dir,
+                    color_clim=[0, 200], blc=blc, trc=trc, beam=self.common_beam,
+                    slice_points=rotm_slices, cmap='gray_r',
+                    show_beam=True, show=False, beam_face_color='black')
+        self.figures['rotm_image_boot_sigma'] = fig
 
         if rotm_slices is not None:
+            self.figures['slices_boot'] = dict()
             for rotm_slice in rotm_slices:
                 rotm_slice_ = i_image._convert_coordinates(rotm_slice[0],
                                                            rotm_slice[1])
-                analyze_rotm_slice(rotm_slice_, rotm_image,
-                                   rotm_images=self._boot_rotm_images,
-                                   outdir=self.data_dir,
-                                   beam_width=int(i_image._beam.beam[0]),
-                                   outfname="ROTM_{}_slice_boot.png".format(rotm_slice))
+                fig = analyze_rotm_slice(rotm_slice_, rotm_image,
+                                         rotm_images=self._boot_rotm_images,
+                                         outdir=self.data_dir,
+                                         beam_width=int(i_image._beam.beam[0]),
+                                         outfname="ROTM_{}_slice_boot".format(rotm_slice))
+                self.figures['slices_boot'][str(rotm_slice)] = fig
 
         return rotm_image, sigma_rotm_image
 
 
 if __name__ == '__main__':
     import glob
-    source = '2230+114'
+    # 0923+392
+    # source = '0923+392'
+    # rotm_slices = [((0.3, 2.6), (-0.6, -2.75))]
+    # colors_clim = [-800, 1500]
+    # epoch = '2006_07_07'
+
+    # 2230+114
+    # rotm_slices = [((4, -5), (1, -7))]
+    # colors_clim = [-600, 250]
+    # epoch = '2006_02_12'
+
+    # 0945+408
+    # source = '0945+408'
+    # epoch = '2006_06_15'
+    # rotm_slices = [((2.5, 1), (0.5, -3)), ((1.5, 1.5), (0, -2))]
+    # colors_clim = [-120, 440]
+
+    # 1641+399
+    source = '1641+399'
+    epoch = '2006_06_15'
+    rotm_slices = [((-2, -3), (-2, 3))]
+    colors_clim = [-550, 650]
+
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
     # epochs = get_epochs_for_source(source, use_db='multifreq')
     # print(epochs)
@@ -722,8 +780,8 @@ if __name__ == '__main__':
     # for epoch in epochs:
     #     print(epoch)
     # epoch = epochs[-1]
-    epoch = '2006_02_12'
-    base_dir = '/home/ilya/vlbi_errors/article'
+    # base_dir = '/home/ilya/vlbi_errors/article'
+    base_dir = '/home/ilya/Dropbox/papers/boot/new_pics/mf'
     data_dir = os.path.join(base_dir, source)
 
     # Download uv-data from MOJAVE web DB optionally
@@ -739,7 +797,29 @@ if __name__ == '__main__':
                          n_scans=[4., 4., 4., 4.],
                          sigma_d_term=[0.002, 0.002, 0.002, 0.002],
                          sigma_evpa=[4., 4., 2., 3.])
-    mfo.run(n_sigma_mask=3.0, colors_clim=[-600, 250],
-            rotm_slices=[((4, -5), (1, -7))])
+    mfo.run(n_sigma_mask=3.0, colors_clim=colors_clim,
+            rotm_slices=rotm_slices)
             # pxls_plot=[(0, 0), (1, 0), (-3, 0), (-4, 0)],
             # plot_points=[(0, 0), (-2, 0), (-3, 0), (-4, 0)])
+   #  label_size = 16
+   #  matplotlib.rcParams['pdf.fonttype'] = 42
+   #  matplotlib.rcParams['ps.fonttype'] = 42
+   #  matplotlib.rcParams['xtick.labelsize'] = label_size
+   #  matplotlib.rcParams['ytick.labelsize'] = label_size
+   #  matplotlib.rcParams['axes.titlesize'] = label_size
+   #  matplotlib.rcParams['axes.labelsize'] = label_size
+   #  matplotlib.rcParams['font.size'] = label_size
+   #  matplotlib.rcParams['legend.fontsize'] = label_size
+   #  matplotlib.rcParams['text.usetex'] = True
+   #  # matplotlib.rcParams['text.latex.unicode'] = True
+   #  # matplotlib.rcParams['text.latex.preview'] = True
+   #  matplotlib.rcParams['font.family'] = 'serif'
+   #  matplotlib.rcParams['font.serif'] = 'cm'
+
+   #  fig = mfo.figures['slices_boot']['((4, -5), (1, -7))']
+   #  fig.show()
+   #  ax = fig.gca()
+   #  ax.set_xlabel(r'Distance along slice, (pixels)')
+   #  ax.set_ylabel(r'RM, (rad $\cdot$ m$^{-2}$)')
+   #  fig.show()
+

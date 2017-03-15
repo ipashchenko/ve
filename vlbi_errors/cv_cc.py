@@ -56,13 +56,14 @@ class KFoldCV(object):
 
 if __name__ == '__main__':
     # 45.19953388864762 = min(scores) + sigma_min
-    # cc_pars = np.linspace(100, 300, 2)
-    cc_pars = [100, 1000, 2500, 5000, 7500, 10000, 12500, 15000, 17500, 20000]
+    cc_pars = np.linspace(100, 2000, 5)
+    cc_pars = [50, 75, 100, 125, 150, 200, 300, 500, 1000, 2500, 5000, 10000]
     path_to_script = '/home/ilya/code/vlbi_errors/difmap/clean_n'
     # path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw_n'
     # uv_fits = '/home/ilya/data/3c273/1226+023.x.2006_06_15.uvf'
-    uv_fits = '/home/ilya/data/check_cv_misha/1226+023.X1.2010_01_26.UV_CAL'
-    windows = '/home/ilya/data/check_cv_misha/1226+023.X1.2010_01_26.win'
+    uv_fits = '/home/ilya/code/vlbi_errors/data/account_spix/0055+300.u.2006_02_12.uvf'
+    # uv_fits = '/home/ilya/data/check_cv_misha/1226+023.X1.2010_01_26.UV_CAL'
+    # windows = '/home/ilya/data/check_cv_misha/1226+023.X1.2010_01_26.win'
     cv_scores = dict()
     n_folds = 10
     for niter in cc_pars:
@@ -71,7 +72,7 @@ if __name__ == '__main__':
         cv = list()
         for j, (tr_fname, ts_fname) in enumerate(kfold):
             clean_n(kfold.train_fname, 'trained_model_{}.FITS'.format(niter), 'I',
-                    (2048, 0.20), niter=niter, path_to_script=path_to_script,
+                    (1024, 0.1), niter=niter, path_to_script=path_to_script,
                     show_difmap_output=True)
             tr_model = create_model_from_fits_file('trained_model_{}.FITS'.format(niter))
             ts_uvdata = UVData(ts_fname)
@@ -85,10 +86,27 @@ if __name__ == '__main__':
     n = cv_scores.keys()
     scores = [cv_scores[i][0] for i in n]
     errors = [cv_scores[i][1] for i in n]
+
+    import matplotlib
+    label_size = 12
+    matplotlib.rcParams['xtick.labelsize'] = label_size
+    matplotlib.rcParams['ytick.labelsize'] = label_size
+    matplotlib.rcParams['axes.titlesize'] = label_size
+    matplotlib.rcParams['axes.labelsize'] = label_size
+    matplotlib.rcParams['font.size'] = label_size
+    matplotlib.rcParams['legend.fontsize'] = label_size
     import matplotlib.pyplot as plt
+    plt.semilogy()
+    plt.semilogx()
     plt.errorbar(n, scores, errors, fmt='.k')
     min_score = min(scores)
     min_error = errors[scores.index(min_score)]
     s = min_score + min_error
     plt.axhline(s)
+    plt.xlabel(r"$N_{CC}$")
+    plt.ylabel(r"CV-score")
     plt.show()
+    # plt.savefig('/home/ilya/Dropbox/papers/boot/new_pics/cv_cc.eps',
+    #             bbox_inches='tight', format='eps', dpi=1200)
+    # plt.savefig('/home/ilya/Dropbox/papers/boot/new_pics/cv_cc.svg',
+    #             bbox_inches='tight', format='svg', dpi=1200)

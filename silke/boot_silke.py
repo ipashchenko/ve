@@ -398,7 +398,7 @@ if __name__ == "__main__":
         os.chdir(data_dir)
         boot.run(n=n_boot, nonparametric=nonparametric, outname=[outname,
                                                                  '.fits'],
-                 recenter=recenter, use_kde=False, use_v=False)
+                 recenter=recenter, use_kde=True, use_v=False)
         if args.res_plot_full:
             print("Plotting histograms of RR & LL residuals...")
             boot.plot_residuals_trio(args.res_plot_full, split_scans,

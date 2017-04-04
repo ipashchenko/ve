@@ -120,8 +120,8 @@ def find_bbox(array, level, delta=0.):
             max_prop = prop
 
     bbox = max_prop.bbox
-    blc = (bbox[1] - delta, bbox[0] - delta)
-    trc = (bbox[3] + delta, bbox[2] + delta)
+    blc = (int(bbox[1] - delta), int(bbox[0] - delta))
+    trc = (int(bbox[3] + delta), int(bbox[2] + delta))
     return blc, trc
 
 
@@ -308,6 +308,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             abs_levels = [-min_abs_level] + [min_abs_level * k ** i for i in
                                              range(n_max)]
             print "Constructed absolute levels are: ", abs_levels
+        # return y, x, contours[x_slice, y_slice]
         co = ax.contour(y, x, contours[x_slice, y_slice], abs_levels,
                         colors=contour_color)
     if colors is not None:

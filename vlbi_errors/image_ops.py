@@ -1,11 +1,18 @@
 import os
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 from scipy.optimize import leastsq
+from skimage.morphology import medial_axis
+from scipy.ndimage.filters import gaussian_filter
+
 from utils import (gen_rand_vecs, hdi_of_arrays, unwrap_phases, create_mask,
                    v_round)
 from pixel import resolver_chisq
 from conf_bands import create_sim_conf_band
+from skel_utils import (isolateregions, pix_identify, init_lengths, pre_graph,
+                        longest_path, prune_graph, extremum_pts, main_length,
+                        make_final_skeletons, recombine_skeletons)
 
 
 def rotm_model(p, freqs):
@@ -117,12 +124,13 @@ def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan):
     sigma_d_image = d_term * np.sqrt(i.image ** 2. + (0.3 * i_peak) ** 2) / \
         np.sqrt(n_ant * n_if * n_scan)
 
-    # For each stokes Q & U find rms error
+    # For each stokes Q & U find rms error w/o Hovatta's correction
     rms_dict = dict()
     for stokes, image in zip(('q', 'u'), (q, u)):
-        rms_dict[stokes] = rms_image(image)
+        rms_dict[stokes] = rms_image(image, hovatta_factor=False)
 
-    # Find overall Q & U error that is sum of rms and D-terms uncertainty
+    # Find overall Q & U error that is sum of rms and D-terms uncertainty plus
+    # Hovatta factor of CLEAN errors.
     overall_errors_dict = dict()
     for stoke in ('q', 'u'):
         overall_sigma = np.sqrt(rms_dict[stoke] ** 2. + sigma_d_image ** 2. +
@@ -729,6 +737,85 @@ def jet_ridge_line(image, r_max, beam=None, dr=1, n=1.):
     return coords
 
 
+def jet_skeleton(image, data_dir=None):
+    if data_dir is None:
+        data_dir = os.getcwd()
+    rms = rms_image(image)
+    data = image.image.copy()
+    data = gaussian_filter(data, 5)
+    mask = data < 3. * rms
+    data[mask] = 0
+    data[~mask] = 1
+
+    skel, distance = medial_axis(data, return_distance=True)
+    dist_on_skel = distance * skel
+
+    # Plot area and skeleton
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4), sharex=True, sharey=True,
+                                   subplot_kw={'adjustable': 'box-forced'})
+    ax1.imshow(data, cmap=plt.cm.gray, interpolation='nearest')
+    ax1.axis('off')
+    ax2.imshow(dist_on_skel, cmap=plt.cm.spectral, interpolation='nearest')
+    ax2.contour(data, [0.5], colors='w')
+    ax2.axis('off')
+    fig.tight_layout()
+    plt.show()
+    fig.savefig(os.path.join(data_dir, 'skeleton_orig.png'))
+    plt.close()
+
+    isolated_filaments, num, offsets = isolateregions(skel)
+
+    interpts, hubs, ends, filbranches, labeled_fil_arrays = \
+        pix_identify(isolated_filaments, num)
+
+    branch_properties = init_lengths(labeled_fil_arrays, filbranches, offsets, data)
+    branch_properties["number"] = filbranches
+
+    edge_list, nodes = pre_graph(labeled_fil_arrays, branch_properties, interpts,
+                                 ends)
+
+    max_path, extremum, G = longest_path(edge_list, nodes, verbose=True,
+                                         save_png=False,
+                                         skeleton_arrays=labeled_fil_arrays)
+
+    updated_lists = prune_graph(G, nodes, edge_list, max_path, labeled_fil_arrays,
+                                branch_properties, length_thresh=20,
+                                relintens_thresh=0.1)
+    labeled_fil_arrays, edge_list, nodes,  branch_properties = updated_lists
+
+    filament_extents = extremum_pts(labeled_fil_arrays, extremum, ends)
+
+    length_output = main_length(max_path, edge_list, labeled_fil_arrays, interpts,
+                                branch_properties["length"], 1, verbose=True)
+    filament_arrays = {}
+    lengths, filament_arrays["long path"] = length_output
+    lengths = np.asarray(lengths)
+
+    filament_arrays["final"] = make_final_skeletons(labeled_fil_arrays, interpts,
+                                                    verbose=True)
+
+    skeleton = recombine_skeletons(filament_arrays["final"], offsets, data.shape,
+                                   0, verbose=True)
+    skeleton_longpath = recombine_skeletons(filament_arrays["long path"], offsets,
+                                            data.shape, 1)
+    skeleton_longpath_dist = skeleton_longpath * distance
+
+    # Plot area and skeleton
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4), sharex=True, sharey=True,
+                                   subplot_kw={'adjustable': 'box-forced'})
+    ax1.imshow(data, cmap=plt.cm.gray, interpolation='nearest')
+    ax1.axis('off')
+    ax2.imshow(skeleton_longpath_dist, cmap=plt.cm.spectral,
+               interpolation='nearest')
+    ax2.contour(data, [0.5], colors='w')
+    ax2.axis('off')
+    fig.tight_layout()
+    plt.savefig(os.path.join(data_dir, 'skeleton.png'))
+    plt.show()
+    plt.close()
+
+
+
 def image_ridge_line(image):
     rms = rms_image(image)
     im = image.image.copy()
@@ -769,21 +856,85 @@ def rms_image(image, hovatta_factor=True):
     return rms
 
 
+def rms_image_shifted(uv_fits_path, hovatta_factor=True, shift=(1000, 1000),
+                      tmp_name='shifted_clean_map.fits', tmp_dir=None,
+                      stokes='I', image=None, image_fits=None,
+                      mapsize_clean=None, path_to_script=None):
+    """
+    Estimate image per-pixel rms using shifted image.
+
+    :param uv_fits_path:
+    :param hovatta_factor:
+    :param shift:
+    :param tmp_name:
+    :param tmp_dir:
+    :param stokes:
+    :param image:
+    :param image_fits:
+    :param mapsize_clean:
+    :param path_to_script:
+    :return:
+    """
+    path, uv_fits_fname = os.path.split(uv_fits_path)
+    if tmp_dir is None:
+        tmp_dir = os.getcwd()
+    if path_to_script is None:
+        raise Exception("Provide location of difmap final CLEAN script!")
+    if mapsize_clean is None and image is not None:
+        import utils
+        pixsize = abs(image.pixsize[0]) / utils.mas_to_rad
+        mapsize_clean = (image.imsize[0], pixsize)
+    if mapsize_clean is None and image_fits is not None:
+        import from_fits
+        image = from_fits.create_image_from_fits_file(image_fits)
+        import utils
+        pixsize = abs(image.pixsize[0]) / utils.mas_to_rad
+        mapsize_clean = (image.imsize[0], pixsize)
+
+    import spydiff
+    spydiff.clean_difmap(uv_fits_fname, tmp_name, stokes=stokes,
+                         mapsize_clean=mapsize_clean, path=path,
+                         path_to_script=path_to_script, outpath=tmp_dir,
+                         shift=shift)
+    import from_fits
+    image = from_fits.create_image_from_fits_file(os.path.join(tmp_dir,
+                                                               tmp_name))
+    return rms_image(image, hovatta_factor=hovatta_factor)
+
+
 # TODO: Add as method to ``images.Images``
-def pol_mask(stokes_image_dict, n_sigma=2.):
+def pol_mask(stokes_image_dict, uv_fits_path=None, n_sigma=2.,
+             path_to_script=None):
     """
     Find mask using stokes 'I' map and 'PPOL' map using specified number of
     sigma.
     :param stokes_image_dict:
         Dictionary with keys - stokes, values - instances of ``Image``.
-    :param n_sigma:
+    :param uv_fits_path: (optional)
+        Path to uv-fits files.
+    :param n_sigma: (optional)
         Number of sigma to consider for stokes 'I' and 'PPOL'. 1, 2 or 3.
+        (default: ``2``)
+    :param path_to_script:
+        Path to difmap final CLEAN script.
     :return:
         Logical array of mask.
     """
+    if path_to_script is None:
+        raise Exception("Provide location of difmap final CLEAN script!")
+
     quantile_dict = {1: 0.6827, 2: 0.9545, 3: 0.9973, 4: 0.99994}
-    rms_cs_dict = {stokes: rms_image(stokes_image_dict[stokes]) for stokes in
-                   ('I', 'Q', 'U')}
+    # If no UV-data then calculate rms using outer parts of images
+    if uv_fits_path is None:
+        rms_cs_dict = {stokes: rms_image(stokes_image_dict[stokes]) for stokes
+                       in ('I', 'Q', 'U')}
+    else:
+        rms_cs_dict = {stokes:
+                           rms_image_shifted(uv_fits_path, stokes=stokes,
+                                             image=stokes_image_dict[stokes],
+                                             path_to_script=path_to_script)
+                       for stokes in ('I', 'Q', 'U')}
+
     qu_rms = np.mean([rms_cs_dict[stoke] for stoke in ('Q', 'U')])
     ppol_quantile = qu_rms * np.sqrt(-np.log((1. -
                                               quantile_dict[n_sigma]) ** 2.))
@@ -796,8 +947,9 @@ def pol_mask(stokes_image_dict, n_sigma=2.):
 
 def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
                        rotm_images=None, conf_band_alpha=0.95, outdir=None,
-                       outfname='rotm_slice_spread.png', beam_width=None,
-                       model_rotm_image=None):
+                       outfname='rotm_slice_spread', beam_width=None,
+                       model_rotm_image=None, ylim=None, fig=None,
+                       external_sigma_slice=None, show_dots_boot=True):
     """
     Analyze ROTM slice.
 
@@ -827,7 +979,17 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
         Instance of ``Image`` class with model ROTM map beam-convolved.
         Actually, model Q & U maps are beam convolved and then ROTM map is
         found. If ``None`` then don't use model values. (default: ``None``)
+    :param external_sigma_slice: (optional)
+        Iterable of \sigma for additional errorbar in bootstrap replications
+        slices plot.
     """
+    label_size = 14
+    matplotlib.rcParams['xtick.labelsize'] = label_size
+    matplotlib.rcParams['ytick.labelsize'] = label_size
+    matplotlib.rcParams['axes.titlesize'] = label_size
+    matplotlib.rcParams['axes.labelsize'] = label_size
+    matplotlib.rcParams['font.size'] = label_size
+    matplotlib.rcParams['legend.fontsize'] = label_size
     # Setting up the output directory
     if outdir is None:
         outdir = os.getcwd()
@@ -846,8 +1008,13 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
                                              pix2=slice_coords[1])
         sigma_slice_notna = sigma_slice[~np.isnan(obs_slice)]
         # Plot errorbars
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
+        if fig is None:
+            fig = plt.figure()
+            ax = fig.add_subplot(1, 1, 1)
+        else:
+            # Suppose that figure has only one axes
+            ax = fig.axes[0]
+        fig.tight_layout()
         # ax.errorbar(x, obs_slice_notna[::-1], sigma_slice_notna[::-1], fmt='.k')
         ax.errorbar(x, obs_slice[::], sigma_slice[::], fmt='.k')
         if model_rotm_image is not None:
@@ -855,15 +1022,19 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
                                                  pix2=slice_coords[1])
             ax.plot(x, model_slice[::], 'b')
         ax.set_xlim([0, len(obs_slice)])
-        ax.set_xlabel("Distance along slice, [pixels]")
-        ax.set_ylabel("RM, [rad/m/m]")
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        ax.set_xlabel(r'Distance along slice, (pixels)')
+        ax.set_ylabel(r'RM, (rad $\cdot$ m$^{-2}$)')
         if beam_width:
             # min_point = np.min(obs_slice_notna - sigma_slice_notna)
             min_point = np.nanmin(obs_slice - sigma_slice) - 25.
             ax.plot((x[1], x[1] + beam_width), (min_point, min_point), 'k',
                     lw=2)
-        fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight',
-                    dpi=200)
+        fig.savefig(os.path.join(outdir, outfname) + '.pdf', bbox_inches='tight',
+                    dpi=1200, format='pdf')
+        fig.savefig(os.path.join(outdir, outfname) + '.eps', bbox_inches='tight',
+                    dpi=1200, format='eps')
         plt.close()
 
     elif rotm_images is not None:
@@ -891,47 +1062,65 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
                                        alpha=conf_band_alpha)
 
         # Plot confidence band
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
+        if fig is None:
+            fig = plt.figure()
+            ax = fig.add_subplot(1, 1, 1)
+        else:
+            # Suppose that figure has only one axes
+            ax = fig.axes[0]
+        fig.tight_layout()
         ax.set_xlim([0, len(obs_slice)])
         d = 0.125 * ((up - low)[~np.isnan(up - low)][0] +
                      (up - low)[~np.isnan(up - low)][-1])
-        ax.set_ylim([np.nanmin(low) - d, np.nanmax(up) + d])
-        ax.plot(x, low[::], 'g', lw=2)
-        ax.plot(x, up[::], 'g', lw=2)
-        [ax.plot(x, slice_[::], 'r', lw=0.2) for slice_ in slices_]
+        if ylim is None:
+            ax.set_ylim([np.nanmin(low) - d, np.nanmax(up) + d])
+        else:
+            ax.set_ylim(ylim)
+        ax.plot(x, low[::], 'k', lw=2)
+        ax.plot(x, up[::], 'k', lw=2)
+        [ax.plot(x, slice_[::], lw=0.1, color="#4682b4") for slice_ in slices_]
         # ax.plot(x, obs_slice_notna[::-1], '.k')
-        ax.plot(x, obs_slice[::], '.k')
+        if show_dots_boot:
+            ax.plot(x, obs_slice[::], '.k')
+        # Plot errorbar aditionally to bootstrap slices
+        if external_sigma_slice is not None:
+            assert len(obs_slice) == len(external_sigma_slice)
+            ax.errorbar(x, obs_slice[::], external_sigma_slice[::], fmt='.k')
         if model_rotm_image is not None:
             model_slice = model_rotm_image.slice(pix1=slice_coords[0],
                                                  pix2=slice_coords[1])
-            ax.plot(x, model_slice[::], 'b')
-        ax.set_xlabel("Distance along slice, [pixels]")
-        ax.set_ylabel("RM, [rad/m/m]")
+            ax.plot(x, model_slice[::], 'k', ls='dashed')
+        ax.set_xlabel("Position along slice, (pixels)")
+        ax.set_ylabel(r'RM, (rad $\cdot$ m$^{-2}$)')
         if beam_width:
             # min_point = np.min(obs_slice_notna) -\
             #             sigmas[np.argmin(obs_slice_notna)]
             min_point = np.nanmin(low) - 0.5 * d
             ax.plot((x[1], x[1] + beam_width), (min_point, min_point), 'k',
                     lw=2)
-        fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight', dpi=200)
+        fig.savefig(os.path.join(outdir, outfname) + '.pdf',
+                    bbox_inches='tight', dpi=1200, format='pdf')
+        fig.savefig(os.path.join(outdir, outfname) + '.eps',
+                    bbox_inches='tight', dpi=1200, format='eps')
         plt.close()
     else:
         raise Exception("Specify ROTM error map or bootstrapped ROTM images")
+    return fig
 
 
 def plot_image_correlation(image, fname='correlation.png', show=True,
                            close=False, savefig=True, outdir=None):
     fig = plt.figure()
     ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
-    ax.set_xlabel('Pixles')
-    ax.set_ylabel('Pixles')
+    ax.set_xlabel('Pixels')
+    ax.xaxis.set_ticks_position('bottom')
+    ax.set_ylabel('Pixels')
     R = np.corrcoef(image)
-    im = ax.matshow(R, cmap='hot')
+    im = ax.matshow(R)
     colorbar_ax = fig.add_axes([0.80, 0.10, 0.05, 0.80])
+    # cb = fig.colorbar(im, cax=colorbar_ax)
     cb = fig.colorbar(im, cax=colorbar_ax)
-    cb = fig.colorbar(im, cax=colorbar_ax)
-    cb.set_label('Correlation')
+    cb.set_label('Correlation Coeff.')
     if savefig:
         if outdir is None:
             outdir = os.getcwd()
@@ -940,6 +1129,7 @@ def plot_image_correlation(image, fname='correlation.png', show=True,
         fig.show()
     if close:
         plt.close()
+    return fig
 
 
 def image_slice(image, pix1, pix2):

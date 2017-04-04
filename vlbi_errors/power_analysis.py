@@ -7,7 +7,8 @@ from uv_data import UVData
 from from_fits import (create_model_from_fits_file, create_image_from_fits_file)
 from bootstrap import CleanBootstrap
 from utils import (hdi_of_mcmc, get_fits_image_info, mas_to_rad, bc_endpoint)
-from image_ops import rms_image
+from image_ops import rms_image, rms_image_shifted
+from image import find_bbox
 
 
 def bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n, outpath=None,
@@ -44,7 +45,7 @@ def bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n, outpath=None,
             os.makedirs(outpath)
     curdir = os.getcwd()
     os.chdir(outpath)
-    boot.run(n=n, outname=outname)
+    boot.run(n=n, outname=outname, nonparametric=False, use_v=False, use_kde=True)
     os.chdir(curdir)
 
 
@@ -600,8 +601,10 @@ def create_coverage_map_classic(original_uv_fits_path, ci_type,
             # Calculate ``n_rms`` CI
             print("Calculating rms...")
             sample_image = create_image_from_fits_file(sample_cc_fits_path)
-            rms = rms_image(sample_image)
-            rms = np.sqrt(rms ** 2. + (0.0 * rms ** 2.) ** 2.)
+            rms = rms_image_shifted(sample_uv_fits_path,
+                                    image_fits=sample_cc_fits_path,
+                                    path_to_script=path_to_script)
+            # rms = rms_image(sample_image)
             hdi_low = sample_image.image - n_rms * rms
             hdi_high = sample_image.image + n_rms * rms
         else:
@@ -625,8 +628,10 @@ if __name__ == '__main__':
     from image_ops import rms_image
 
     # Parameters to choose
-    sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
-               '1749+701', '0454+844']
+    # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
+    #            '1749+701', '0454+844']
+    # sources = ['1749+701']
+    sources = ['1514-241']
     from collections import OrderedDict
     source_epoch_dict = OrderedDict()
     for source in sources[::-1]:
@@ -641,15 +646,15 @@ if __name__ == '__main__':
         stokes = 'I'
         epochs = [epoch]
         bands = ['x']
-        ci_type = 'rms'
-        n_rms = 2
+        ci_type = 'boot'
+        n_rms = 1
         if n_rms not in [1, 2, 3]:
             raise Exception("n_rms must be 1, 2 or 3")
         alpha = 0.68
         n_boot = 50
         n_cov = 100
         imsize = (512, 0.1)
-        base_dir = '/home/ilya/vlbi_errors/examples/coverage'
+        base_dir = '/home/ilya/vlbi_errors/examples/coverage/new'
 
         # Not supposed to change anything below
         path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
@@ -678,14 +683,14 @@ if __name__ == '__main__':
         # sample_uv_fits_paths, sample_cc_fits_paths =\
         #     create_sample(original_uv_fits_path, imsize=imsize, outdir=data_dir,
         #                   path_to_script=path_to_script)
-        # sample_cc_fits_paths = sorted(glob.glob(os.path.join(data_dir,
-        #                                                      'sample_cc_*.fits')))
-        sample_cc_fits_paths = None
-        # sample_uv_fits_paths = sorted(glob.glob(os.path.join(data_dir,
-        #                                                      'sample_uv_*.uvf')))
-        sample_uv_fits_paths = None
-        # original_cc_fits_path = os.path.join(data_dir, 'original_cc.fits')
-        original_cc_fits_path = None
+        sample_cc_fits_paths = sorted(glob.glob(os.path.join(data_dir,
+                                                             'sample_cc_*.fits')))
+        # sample_cc_fits_paths = None
+        sample_uv_fits_paths = sorted(glob.glob(os.path.join(data_dir,
+                                                             'sample_uv_*.uvf')))
+        # sample_uv_fits_paths = None
+        original_cc_fits_path = os.path.join(data_dir, 'original_cc.fits')
+        # original_cc_fits_path = None
         coverage_map =\
             create_coverage_map_classic(original_uv_fits_path, ci_type=ci_type,
                                         original_cc_fits_path=original_cc_fits_path,
@@ -700,9 +705,22 @@ if __name__ == '__main__':
         original_cc_fits_path = os.path.join(data_dir, 'original_cc.fits')
         i_image_cc = create_clean_image_from_fits_file(original_cc_fits_path)
         i_image = create_image_from_fits_file(original_cc_fits_path)
-        rms = rms_image(i_image)
-        # blc=(110, 105), trc=(256, 250) for 1633
-        iplot(i_image.image, coverage_map, x=i_image.x, y=i_image.y,
-              min_abs_level=3. * rms, outfile=outfile, outdir=data_dir,
-              beam=i_image_cc.beam, colorbar_label='Coverage', show=False,
-              show_beam=True, cmap='hot')
+        rms = rms_image_shifted(original_uv_fits_path, tmp_dir=data_dir,
+                                image_fits=original_cc_fits_path,
+                                path_to_script=path_to_script)
+        blc, trc = find_bbox(i_image.image, 2 * rms, delta=int(i_image_cc._beam.bmaj/2))
+        # iplot(i_image.image, coverage_map, x=i_image.x, y=i_image.y,
+        #       min_abs_level=2. * rms, outfile=outfile, outdir=data_dir,
+        #       beam=i_image_cc.beam, show=True, beam_corner='lr',
+        #       show_beam=True, cmap='viridis', blc=blc, trc=trc)
+        fig = iplot(i_image.image, coverage_map-0.68, x=i_image.x, y=i_image.y,
+                    min_abs_level=2. * rms, outfile=outfile, outdir=data_dir,
+                    beam=i_image_cc.beam, show=True, beam_corner='lr',
+                    show_beam=True, cmap='hsv_r', blc=blc, trc=trc,
+                    color_clim=[-0.3, 0.3], colors_mask=i_image.image < 2*rms)
+        fig.savefig('/home/ilya/Dropbox/papers/boot/new_pics/1514_x_2006_04_28_cov68boot.eps',
+                    bbox_inches='tight', format='eps', dpi=1200)
+        fig.savefig('/home/ilya/Dropbox/papers/boot/new_pics/1514_x_2006_04_28_cov68boot.svg',
+                    bbox_inches='tight', format='svg', dpi=1200)
+        fig.savefig('/home/ilya/Dropbox/papers/boot/new_pics/1514_x_2006_04_28_cov68boot.pdf',
+                    bbox_inches='tight', format='pdf', dpi=1200)

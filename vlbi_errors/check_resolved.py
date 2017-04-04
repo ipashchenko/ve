@@ -117,13 +117,13 @@ def check_resolved(uv_fits, mdl_dict, components_priors, outdir=None,
 
 
 if __name__ == '__main__':
-    # data_dir = '/home/ilya/code/vlbi_errors/bin_x1/'
-    data_dir = '/home/ilya/Dropbox/0235/tmp/2ilya'
-    outdir = '/home/ilya/Dropbox/0235/tmp/evidence/2misha/'
-    uv_fits = os.path.join(data_dir, '0235+164.q1.2009_02_22.uvp')
-    mdl_file_pt = '0235+164.q1.2009_02_22.mdl_test_delta'
-    mdl_file_cg = '0235+164.q1.2009_02_22.mdl_test_circ'
-    mdl_file_el = '0235+164.q1.2009_02_22.mdl_test_ell'
+    data_dir = '/home/ilya/code/vlbi_errors/bin_q/'
+    # data_dir = '/home/ilya/Dropbox/0235/tmp/2ilya'
+    outdir = '/home/ilya/Dropbox/0235/tmp/evidence/Q'
+    uv_fits = os.path.join(data_dir, '0235+164.q1.2008_09_02.uvf_difmap')
+    mdl_file_pt = 'qmodel_point.mdl'
+    mdl_file_cg = 'qmodel_circ.mdl'
+    mdl_file_el = '0235+164.q1.2008_09_02.mdl'
     mdl_dict = {'pt': mdl_file_pt, 'cg': mdl_file_cg, 'el': mdl_file_el}
     for key, value in mdl_dict.items():
         mdl_dict.update({key: os.path.join(data_dir, value)})
@@ -160,34 +160,59 @@ if __name__ == '__main__':
     #                              'y': (sp.stats.uniform.ppf, [-1, 2], {}),
     #                              'bmaj': (sp.stats.uniform.ppf, [0, 3], {})})
     pt_components_priors = list()
-    pt_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 3], {}),
+    pt_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 4], {}),
                                  'x': (sp.stats.uniform.ppf, [-0.5, 1], {}),
                                  'y': (sp.stats.uniform.ppf, [-0.5, 1], {})})
+    pt_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 2], {}),
+                                 'x': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'y': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'bmaj': (sp.stats.uniform.ppf, [0, 1], {})})
     pt_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 1], {}),
                                  'x': (sp.stats.uniform.ppf, [-1, 2], {}),
                                  'y': (sp.stats.uniform.ppf, [-1, 2], {}),
                                  'bmaj': (sp.stats.uniform.ppf, [0, 1], {})})
+    pt_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 1], {}),
+                                 'x': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'y': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'bmaj': (sp.stats.uniform.ppf, [0, 2], {})})
 
     cg_components_priors = list()
-    cg_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 3], {}),
+    cg_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 4], {}),
                                  'x': (sp.stats.uniform.ppf, [-0.5, 1], {}),
                                  'y': (sp.stats.uniform.ppf, [-0.5, 1], {}),
                                  'bmaj': (sp.stats.uniform.ppf, [0, 1], {})})
+    cg_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 2], {}),
+                                 'x': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'y': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'bmaj': (sp.stats.uniform.ppf, [0, 1], {})})
     cg_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 1], {}),
                                  'x': (sp.stats.uniform.ppf, [-1, 2], {}),
-                                 'y': (sp.stats.uniform.ppf, [-1, 2], {})})
+                                 'y': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'bmaj': (sp.stats.uniform.ppf, [0, 1], {})})
+    cg_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 1], {}),
+                                 'x': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'y': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'bmaj': (sp.stats.uniform.ppf, [0, 2], {})})
 
     el_components_priors = list()
-    el_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 3], {}),
+    el_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 4], {}),
                                  'x': (sp.stats.uniform.ppf, [-0.5, 1], {}),
                                  'y': (sp.stats.uniform.ppf, [-0.5, 1], {}),
                                  'bmaj': (sp.stats.uniform.ppf, [0, 1], {}),
                                  'e': (sp.stats.uniform.ppf, [0, 1], {}),
                                  'bpa': (sp.stats.uniform.ppf, [0, np.pi], {})})
+    el_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 2], {}),
+                                 'x': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'y': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'bmaj': (sp.stats.uniform.ppf, [0, 1], {})})
     el_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 1], {}),
                                  'x': (sp.stats.uniform.ppf, [-1, 2], {}),
                                  'y': (sp.stats.uniform.ppf, [-1, 2], {}),
                                  'bmaj': (sp.stats.uniform.ppf, [0, 1], {})})
+    el_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 1], {}),
+                                 'x': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'y': (sp.stats.uniform.ppf, [-1, 2], {}),
+                                 'bmaj': (sp.stats.uniform.ppf, [0, 2], {})})
     components_priors = {'pt': pt_components_priors,
                          'cg': cg_components_priors,
                          'el': el_components_priors}

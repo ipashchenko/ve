@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from image_ops import rms_image
+import image_ops
 from from_fits import (create_image_from_fits_file,
                        create_clean_image_from_fits_file)
 from skimage.morphology import medial_axis
@@ -68,7 +68,7 @@ for source in sources:
 # cc_fits = '/home/ilya/vlbi_errors/examples/L/1038+064/rms/68/original_cc.fits'
 # cc_fits = '/home/ilya/vlbi_errors/examples/L/1633+382/rms/68/original_cc.fits'
     image = create_image_from_fits_file(os.path.join(data_dir, cc_fits))
-    rms = rms_image(image)
+    rms = image_ops.rms_image(image)
     data = image.image.copy()
     from scipy.ndimage.filters import gaussian_filter
     data = gaussian_filter(data, 5)

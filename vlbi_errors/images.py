@@ -297,7 +297,7 @@ class Images(object):
         for image in images:
             self.add_image(image)
 
-    # FIXME: If ``create_cube`` is ``False`` then we don't nee ``freq`` &
+    # FIXME: If ``create_cube`` is ``False`` then we don't need ``freq`` &
     # ``stokes``
     def create_error_image(self, freq=None, stokes=None, cred_mass=0.68):
         """
@@ -346,7 +346,7 @@ class Images(object):
         image._construct(imsize=img.imsize, pixsize=img.pixsize,
                          pixref=img.pixref, stokes=stokes,
                          freq=img.freq, pixrefval=img.pixrefval)
-        image.image = hdis
+        image.image = 0.5 * hdis
         return image
 
     # FIXME: Implement option for many (equal number) of Q & U images for each

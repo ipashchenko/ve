@@ -6,10 +6,10 @@ import itertools
 import numpy as np
 import networkx as nx
 import scipy.ndimage as nd
-from image_ops import rms_image
+import image_ops
 from from_fits import create_image_from_fits_file
 from skimage.morphology import medial_axis
-from scipy.stats import nanmean
+from scipy import nanmean
 import matplotlib.pyplot as plt
 
 

@@ -136,7 +136,9 @@ if __name__ == '__main__':
 
 
 data_dir = '/home/ilya/code/vlbi_errors/silke'
+# uv_fits = '0851+202.u.2012_11_11.uvf'
 uv_fits = '0851+202.u.2004_11_05.uvf'
+# mdl_fname = '2.mod.2012_11_11'
 mdl_fname = '1.mod.2004_11_05'
 uv_data = UVData(os.path.join(data_dir, uv_fits))
 comps = import_difmap_model(mdl_fname, data_dir)

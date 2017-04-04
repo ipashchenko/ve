@@ -9,7 +9,8 @@ from sklearn.cluster import DBSCAN
 from collections import OrderedDict
 from utils import (baselines_2_ants, index_of, get_uv_correlations,
                    find_card_from_header, get_key, to_boolean_array,
-                   check_issubset, convert_an_hdu, convert_fq_hdu)
+                   check_issubset, convert_an_hdu, convert_fq_hdu,
+                   mask_boolean_with_boolean)
 
 try:
     import pylab
@@ -193,12 +194,48 @@ class UVData(object):
             hdulist = pf.HDUList([new_hdu])
             for hdu in self.hdulist[1:]:
                 if hdu.header['EXTNAME'] == 'AIPS AN':
-                    hdu = convert_an_hdu(hdu, new_hdu)
+                    # FIXME:
+                    try:
+                        hdu = convert_an_hdu(hdu, new_hdu)
+                    except IndexError:
+                        print "You should fix that issue!"
+                        pass
                 if hdu.header['EXTNAME'] == 'AIPS FQ':
                     hdu = convert_fq_hdu(hdu)
                 hdulist.append(hdu)
             # self._downscale_uvw_by_frequency()
             hdulist.writeto(fname)
+
+    def save_fraction(self, fname, frac, random_state=0):
+        """
+        Save only fraction of of data on each baseline.
+        
+        :param fname:
+            File path to save.
+        :param frac: 
+            Float (0., 1.). Fraction of points from each baseline to save.
+        """
+        from sklearn.model_selection import ShuffleSplit
+        ss = ShuffleSplit(n_splits=1, test_size=1-frac,
+                          random_state=random_state)
+        indxs = list()
+        for bl in self.baselines:
+            bl_indxs = self._indxs_baselines[bl]
+            print "Baseline {} has {} samples".format(bl,
+                                                      np.count_nonzero(bl_indxs))
+            bl_indxs_pw = self.pw_indxs_baseline(bl, average_bands=True,
+                                                 stokes=['RR', 'LL'],
+                                                 average_stokes=True)
+            bl_indxs = mask_boolean_with_boolean(bl_indxs, bl_indxs_pw)
+            for train, test in ss.split(np.nonzero(bl_indxs)[0]):
+                # tr = to_boolean_array(np.nonzero(bl_indxs)[0][train],
+                #                       len(bl_indxs))
+                tr = np.nonzero(bl_indxs)[0][train]
+            indxs.append(tr)
+        indxs = np.hstack(indxs)
+        indxs = sorted(indxs)
+        data = self.hdu.data[indxs]
+        self.save(fname, data, rewrite=True)
 
     # TODO: for IDI extend this method
     def learn_data_structure(self, hdu):
@@ -1324,7 +1361,8 @@ class UVData(object):
                       fname=fname + '_test' + '_' + str(i + 1).zfill(2) + 'of' +
                             str(q) + '.FITS')
 
-    # TODO: normalize on data (high amplitude baselines dominate without it)
+    # TODO: Refactor to general eatimating score (RMS) of ``Model`` instance of
+    # ``self.``
     def cv_score(self, model, average_freq=True, baselines=None):
         """
         Method that returns cross-validation score for ``self`` (as testing
@@ -1344,7 +1382,7 @@ class UVData(object):
 
         baselines_cv_scores = list()
 
-        noise = self.noise_diffs(average_bands=average_freq)
+        # noise = self.noise_diffs(average_bands=average_freq)
 
         data_copied = copy.deepcopy(self)
         data_copied.substitute([model])
@@ -1361,18 +1399,19 @@ class UVData(object):
             # square difference for each baseline, divide by baseline noise
             # and then sum for current baseline
             indxs = data_copied._indxs_baselines[baseline]
-            if average_freq:
-                hands_diff = uvdata[indxs] / noise[baseline]
-            else:
-                hands_diff = uvdata[indxs] / noise[baseline][None, :, None]
+            hands_diff = uvdata[indxs]
+            # if average_freq:
+            #     hands_diff = uvdata[indxs] / noise[baseline]
+            # else:
+            #     hands_diff = uvdata[indxs] / noise[baseline][None, :, None]
             # Construct difference for Stokes ``I`` parameter
-            # diff = 0.5 * (hands_diff[..., 0] + hands_diff[..., 1])
-            print np.shape(hands_diff)
-            diff = hands_diff[..., 0]
+            diff = 0.5 * (hands_diff[..., 0] + hands_diff[..., 1])
+            # print np.shape(hands_diff)
+            # diff = hands_diff[..., 0]
             diff = diff.flatten()
             diff *= np.conjugate(diff)
             try:
-                baselines_cv_scores.append(float(diff.sum())/np.count_nonzero(~diff.mask))
+                baselines_cv_scores.append(float(diff.sum())/np.count_nonzero(~diff.mask[..., :2]))
             except ZeroDivisionError:
                 continue
 

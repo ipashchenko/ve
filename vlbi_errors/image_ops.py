@@ -859,21 +859,10 @@ def rms_image(image, hovatta_factor=True):
 def rms_image_shifted(uv_fits_path, hovatta_factor=True, shift=(1000, 1000),
                       tmp_name='shifted_clean_map.fits', tmp_dir=None,
                       stokes='I', image=None, image_fits=None,
-                      mapsize_clean=None, path_to_script=None):
+                      mapsize_clean=None, path_to_script=None,
+                      niter=None):
     """
     Estimate image per-pixel rms using shifted image.
-
-    :param uv_fits_path:
-    :param hovatta_factor:
-    :param shift:
-    :param tmp_name:
-    :param tmp_dir:
-    :param stokes:
-    :param image:
-    :param image_fits:
-    :param mapsize_clean:
-    :param path_to_script:
-    :return:
     """
     path, uv_fits_fname = os.path.split(uv_fits_path)
     if tmp_dir is None:
@@ -892,10 +881,17 @@ def rms_image_shifted(uv_fits_path, hovatta_factor=True, shift=(1000, 1000),
         mapsize_clean = (image.imsize[0], pixsize)
 
     import spydiff
-    spydiff.clean_difmap(uv_fits_fname, tmp_name, stokes=stokes,
-                         mapsize_clean=mapsize_clean, path=path,
-                         path_to_script=path_to_script, outpath=tmp_dir,
-                         shift=shift)
+    if niter is None:
+        spydiff.clean_difmap(uv_fits_fname, tmp_name, stokes=stokes,
+                             mapsize_clean=mapsize_clean, path=path,
+                             path_to_script=path_to_script, outpath=tmp_dir,
+                             shift=shift)
+    else:
+        spydiff.clean_n(uv_fits_path, tmp_name, stokes=stokes,
+                        mapsize_clean=mapsize_clean, niter=niter,
+                        path_to_script=path_to_script, outpath=tmp_dir,
+                        shift=shift)
+
     import from_fits
     image = from_fits.create_image_from_fits_file(os.path.join(tmp_dir,
                                                                tmp_name))

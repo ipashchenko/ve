@@ -14,7 +14,7 @@ from model import Model
 from spydiff import import_difmap_model, modelfit_difmap
 from spydiff import modelfit_difmap
 matplotlib.use('Agg')
-label_size = 6
+label_size = 8
 matplotlib.rcParams['xtick.labelsize'] = label_size
 matplotlib.rcParams['ytick.labelsize'] = label_size
 
@@ -114,20 +114,20 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                         pass
                     else:
                         raise Exception
-                    labels.append(lab)
+                    labels.append(r'' + '$' + lab + '$')
 
             try:
                 n = sum([c.size for c in comps_to_plot])
                 figure, axes = matplotlib.pyplot.subplots(nrows=n, ncols=n)
-                figure.set_size_inches(19.5, 19.5)
+                figure.set_size_inches(14.5, 14.5)
                 corner.corner(boot_data, labels=labels, plot_contours=False,
                               truths=np.hstack([comps_params0[i] for i in
                                                 plot_comps]),
-                              title_kwargs={"fontsize": 10},
-                              label_kwargs={"fontsize": 10},
+                              title_kwargs={"fontsize": 12},
+                              label_kwargs={"fontsize": 12},
                               quantiles=[0.16, 0.5, 0.84], fig=figure,
                               use_math_text=True, show_titles=True,
-                              title_fmt=".4f")
+                              title_fmt=".4f", max_n_ticks=3)
                 # figure.gca().annotate("Components {}".format(plot_comps),
                 #                       xy=(0.5, 1.0),
                 #                       xycoords="figure fraction",
@@ -135,7 +135,7 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                 #                       textcoords="offset points", ha="center",
                 #                       va="top")
                 figure.savefig(plot_file, bbox_inches='tight', dpi=1200,
-                               format='eps')
+                               format='pdf')
             except ValueError:
                 print("Failed to plot... ValueError")
         else:
@@ -182,20 +182,22 @@ def bootstrap_uvfits_with_difmap_model(uv_fits_path, dfm_model_path,
                                        clean_after=True,
                                        out_txt_file='txt.txt',
                                        out_plot_file='plot.png',
-                                       pairs=False, niter=100):
+                                       pairs=False, niter=100,
+                                       bootstrapped_uv_fits=None):
+    dfm_model_dir, dfm_model_fname = os.path.split(dfm_model_path)
+    comps = import_difmap_model(dfm_model_fname, dfm_model_dir)
     if boot_dir is None:
         boot_dir = os.getcwd()
-    dfm_model_dir, dfm_model_fname = os.path.split(dfm_model_path)
-    uvdata = UVData(uv_fits_path)
-    model = Model(stokes=stokes)
-    comps = import_difmap_model(dfm_model_fname, dfm_model_dir)
-    model.add_components(*comps)
-    boot = CleanBootstrap([model], uvdata)
-    os.chdir(boot_dir)
-    boot.run(nonparametric=nonparametric, use_kde=use_kde, recenter=recenter,
-             use_v=use_v, n=n_boot, pairs=pairs)
-    bootstrapped_uv_fits = sorted(glob.glob(os.path.join(boot_dir,
-                                                         'bootstrapped_data*.fits')))
+    if bootstrapped_uv_fits is None:
+        uvdata = UVData(uv_fits_path)
+        model = Model(stokes=stokes)
+        model.add_components(*comps)
+        boot = CleanBootstrap([model], uvdata)
+        os.chdir(boot_dir)
+        boot.run(nonparametric=nonparametric, use_kde=use_kde, recenter=recenter,
+                 use_v=use_v, n=n_boot, pairs=pairs)
+        bootstrapped_uv_fits = sorted(glob.glob(os.path.join(boot_dir,
+                                                             'bootstrapped_data*.fits')))
     for j, bootstrapped_fits in enumerate(bootstrapped_uv_fits):
         modelfit_difmap(bootstrapped_fits, dfm_model_fname,
                         'mdl_booted_{}.mdl'.format(j),

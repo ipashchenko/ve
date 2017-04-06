@@ -140,7 +140,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
          beam_place='ll', colorbar_label=None, show=True, contour_color='k',
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
-         show_points=None, core=None, slice_color='black'):
+         show_points=None, core=None, slice_color='black',
+         plot_colorbar=True):
     """
     Plot image(s).
 
@@ -212,6 +213,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     :param show_points: (optional)
         Iterable of 2 coordinates (``y``, ``x``) [mas] to plot points. If
         ``None`` then don't plot points. (default: ``None``)
+    :param plot_colorbar: (optional)
+        If colors is set then should we plot colorbar? (default: ``True``).
 
     :note:
         ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
@@ -350,12 +353,13 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         title = ax.set_title(plot_title, fontsize='large')
     # Add colorbar if plotting colors
     if colors is not None:
-        from mpl_toolkits.axes_grid1 import make_axes_locatable
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="10%", pad=0.00)
-        cb = fig.colorbar(im, cax=cax)
-        if colorbar_label is not None:
-            cb.set_label(colorbar_label)
+        if plot_colorbar:
+            from mpl_toolkits.axes_grid1 import make_axes_locatable
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="10%", pad=0.00)
+            cb = fig.colorbar(im, cax=cax)
+            if colorbar_label is not None:
+                cb.set_label(colorbar_label)
 
     if show_beam:
         from matplotlib.patches import Ellipse

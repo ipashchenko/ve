@@ -15,8 +15,6 @@ def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
 
     difmapout = open("difmap_commands", "w")
     difmapout.write("observe " + fname + "\n")
-    if shift is not None:
-        difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
     if windows is not None:
         difmapout.write("rwin " + str(windows) + "\n")
     difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
@@ -30,6 +28,8 @@ def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
                     str(mapsize_restore[1]) + "\n")
     if outpath is None:
         outpath = os.getcwd()
+    if shift is not None:
+        difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
     difmapout.write("wmap " + os.path.join(outpath, outfname) + "\n")
     difmapout.write("exit\n")
     difmapout.close()

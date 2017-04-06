@@ -4,7 +4,7 @@ import numpy as np
 from uv_data import UVData
 from sklearn.cross_validation import KFold
 from utils import to_boolean_array, mask_boolean_with_boolean
-from spydiff import import_difmap_model, modelfit_difmap, clean_difmap
+from spydiff import import_difmap_model, modelfit_difmap, clean_difmap, clean_n
 from model import Model
 from from_fits import create_model_from_fits_file
 import matplotlib.pyplot as plt
@@ -110,9 +110,14 @@ class KFoldCV(object):
             for i, (train_uv_fits_path, test_uv_fits_path) in enumerate(zip(train_uv_fits_paths,
                                                                             test_uv_fits_paths)):
                 out_mdl_fname = 'train_{}.fits'.format(i)
-                clean_difmap(train_uv_fits_path, out_mdl_fname, 'I',
-                             mapsize_clean, data_dir, path_to_script,
-                             outpath=data_dir, show_difmap_output=True)
+                # This used when learning curves are created
+                # clean_difmap(train_uv_fits_path, out_mdl_fname, 'I',
+                #              mapsize_clean, data_dir, path_to_script,
+                #              outpath=data_dir, show_difmap_output=True)
+                # This used when different number of iterations are tested
+                clean_n(train_uv_fits_path, out_mdl_fname, 'I',
+                        mapsize_clean, niter=niter, path_to_script=path_to_script,
+                        outpath=data_dir, show_difmap_output=True,)
                 cv_scores.append(score(test_uv_fits_path, os.path.join(data_dir, out_mdl_fname)))
                 train_scores.append(score(train_uv_fits_path, os.path.join(data_dir, out_mdl_fname)))
 
@@ -192,16 +197,16 @@ def score(uv_fits_path, mdl_path):
     return np.sqrt(float(np.sum(squared_diff)) / factor)
 
 if __name__ == '__main__':
-    data_dir = '/home/ilya/silke'
-    epoch = '2017_01_28'
-    original_model_fname = '2017_01_28us'
-    original_model_path = os.path.join(data_dir, original_model_fname)
-    from mojave import mojave_uv_fits_fname
-    uv_fits_fname = mojave_uv_fits_fname('0851+202', 'u', epoch)
-    uv_fits_path = os.path.join(data_dir, uv_fits_fname)
-    kfold = KFoldCV(uv_fits_path, 5)
-    kfold.create_train_test_data(outdir=data_dir)
-    cv_scores = kfold.cv_score(original_model_path, data_dir=data_dir)
+    # data_dir = '/home/ilya/silke'
+    # epoch = '2017_01_28'
+    # original_model_fname = '2017_01_28us'
+    # original_model_path = os.path.join(data_dir, original_model_fname)
+    # from mojave import mojave_uv_fits_fname
+    # uv_fits_fname = mojave_uv_fits_fname('0851+202', 'u', epoch)
+    # uv_fits_path = os.path.join(data_dir, uv_fits_fname)
+    # kfold = KFoldCV(uv_fits_path, 5)
+    # kfold.create_train_test_data(outdir=data_dir)
+    # cv_scores = kfold.cv_score(original_model_path, data_dir=data_dir)
 
     # dfm_mdl_files = ['k1mod1.mdl']
     # # uv_fits = '/home/ilya/code/vlbi_errors/bin_q/0235+164.q1.2008_09_02.uvf_difmap'
@@ -255,4 +260,69 @@ if __name__ == '__main__':
     # plt.xticks(range(len(dfm_mdl_files)))
     # plt.show()
 
+
+    # Plot CV-score vs. N_clean
+    data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/cv_cc/'
+    from spydiff import clean_n
+    # cc_pars = [50, 75, 100, 125, 150, 200, 300, 500, 1000, 2500, 5000, 10000]
+    cc_pars = [50, 100, 200, 500, 1000, 5000, 10000]
+    path_to_script = '/home/ilya/code/vlbi_errors/difmap/clean_n'
+    uv_fits_fname = '0055+300.u.2006_02_12.uvf'
+    uv_fits_path = os.path.join(data_dir, uv_fits_fname)
+    cv_scores = dict()
+    n_folds = 10
+    cv_scores_ncc = dict()
+    train_scores_ncc = dict()
+    for niter in cc_pars:
+        print "===================="
+        print "Using {} iterations!".format(niter)
+        print "===================="
+        cv_scores_ncc[niter] = list()
+        train_scores_ncc[niter] = list()
+        print "Using niter = {}".format(niter)
+        for i in range(10):
+            kfold = KFoldCV(uv_fits_path, n_folds, seed=np.random.randint(0, 1000))
+            kfold.create_train_test_data(outdir=data_dir)
+            cv_scores, train_scores = kfold.cv_score(initial_dfm_model_path=None,
+                                                     data_dir=data_dir,
+                                                     path_to_script=path_to_script,
+                                                     mapsize_clean=(512, 0.1),
+                                                     niter=niter)
+            cv_scores_ncc[niter].append(np.mean(cv_scores))
+            train_scores_ncc[niter].append(np.mean(train_scores))
+
+    import matplotlib.pyplot as plt
+    import matplotlib
+    label_size = 15
+    matplotlib.rcParams['xtick.labelsize'] = label_size
+    matplotlib.rcParams['ytick.labelsize'] = label_size
+    matplotlib.rcParams['axes.titlesize'] = label_size
+    matplotlib.rcParams['axes.labelsize'] = label_size
+    matplotlib.rcParams['font.size'] = label_size
+    matplotlib.rcParams['legend.fontsize'] = label_size
+    import matplotlib.pyplot as plt
+    plt.semilogy()
+    plt.semilogx()
+    plt.figure()
+    plt.errorbar(sorted(cv_scores_ncc.keys()),
+                 y=[np.mean(cv_scores_ncc[niter]) for niter in sorted(cv_scores_ncc.keys())],
+                 yerr=[np.std(cv_scores_ncc[niter]) for niter in sorted(cv_scores_ncc.keys())],
+                 label='CV', ls='solid')
+    plt.scatter(sorted(cv_scores_ncc.keys()),
+                [np.mean(cv_scores_ncc[niter]) for niter in sorted(cv_scores_ncc.keys())],
+                s=10, marker='o')
+    plt.errorbar(sorted(train_scores_ncc.keys()),
+                 y=[np.mean(train_scores_ncc[niter]) for frac in sorted(train_scores_ncc.keys())],
+                 yerr=[np.std(train_scores_ncc[niter]) for frac in sorted(train_scores_ncc.keys())],
+                 label='Train', ls='dashed')
+    plt.scatter(sorted(train_scores_ncc.keys()),
+                [np.mean(train_scores_ncc[niter]) for frac in sorted(train_scores_ncc.keys())],
+                s=10, marker='s')
+    plt.legend()
+    plt.xlabel(r"$N_{CC}$")
+    plt.ylabel(r"$RMSE$")
+    plt.show()
+
+    plt.savefig(os.path.join(data_dir, 'cv_cc.pdf'),
+                bbox_inches='tight', format='pdf', dpi=1200)
 

@@ -1,4 +1,5 @@
 import os
+import glob
 import pandas as pd
 import numpy as np
 from mojave import download_mojave_uv_fits, mojave_uv_fits_fname
@@ -9,12 +10,13 @@ from bootstrap import bootstrap_uvfits_with_difmap_model
 
 
 data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/corner'
-source = '0016+731'
-epoch = '2005_01_06'
-epoch_ = '2005-01-06'
-# source = '1226+023'
-# epoch = '2007_09_06'
-# epoch_ = '2007-09-06'
+# Done
+# source = '0016+731'
+# epoch = '2005_01_06'
+# epoch_ = '2005-01-06'
+source = '1807+698'
+epoch = '2007_07_03'
+epoch_ = '2007-07-03'
 source_dir = os.path.join(data_dir, source)
 if not os.path.exists(source_dir):
     os.mkdir(source_dir)
@@ -67,10 +69,10 @@ fn.close()
 refitted_mdl_fname = 'dfm_original_model_refitted.mdl'
 refitted_mdl_path = os.path.join(source_dir, refitted_mdl_fname)
 modelfit_difmap(uv_fits_fname, dfm_model_fname, refitted_mdl_fname,
-                niter=200, path=source_dir, mdl_path=source_dir,
+                niter=300, path=source_dir, mdl_path=source_dir,
                 out_path=source_dir)
 
-# comps = import_difmap_model(dfm_model_fname, source_dir)
+# comps = import_difmap_model(refitted_mdl_fname, source_dir)
 # model = Model(stokes='I')
 # model.add_components(*comps)
 # uvdata = UVData(uv_fits_path)
@@ -78,8 +80,16 @@ modelfit_difmap(uv_fits_fname, dfm_model_fname, refitted_mdl_fname,
 # uvdata.substitute([model])
 # uvdata.uvplot(fig=fig, color='r')
 
-fig = bootstrap_uvfits_with_difmap_model(uv_fits_path, refitted_mdl_path,
-                                         boot_dir=source_dir, n_boot=500,
-                                         clean_after=False,
-                                         out_plot_file='plot.eps',
-                                         niter=50)
+# bootstrapped_uv_fits = sorted(glob.glob(os.path.join(source_dir,
+#                                                      'bootstrapped_data*.fits')))
+# fig = bootstrap_uvfits_with_difmap_model(uv_fits_path, refitted_mdl_path,
+#                                          boot_dir=source_dir, n_boot=300,
+#                                          clean_after=False,
+#                                          out_plot_file=os.path.join(source_dir, 'plot.pdf'),
+#                                          niter=200,
+#                                          bootstrapped_uv_fits=bootstrapped_uv_fits)
+from bootstrap import analyze_bootstrap_samples
+booted_mdl_paths = glob.glob(os.path.join(source_dir, 'mdl_booted*'))
+fig = analyze_bootstrap_samples(refitted_mdl_fname, booted_mdl_paths,
+                                source_dir, [0, 1], os.path.join(source_dir, 'plot.pdf'),
+                                os.path.join(source_dir, 'txt.txt'))

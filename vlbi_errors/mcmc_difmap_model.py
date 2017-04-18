@@ -13,7 +13,8 @@ import matplotlib.pyplot as plt
 
 def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
                         nburnin_2=300, nproduction=500, nwalkers=50,
-                        samples_file=None, stokes='I', use_weights=False):
+                        samples_file=None, stokes='I', use_weights=False,
+                        plot_corner=False):
 
     # Initialize ``UVData`` instance
     uvdata = UVData(uv_fits)
@@ -134,28 +135,101 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
     else:
         fontsize = 11
 
-    corner.corner(sampler.flatchain[::10, :], fig=fig, labels=labels,
-                  truths=truths, show_titles=True,
-                  title_kwargs={'fontsize': fontsize},
-                  quantiles=[0.16, 0.5, 0.84],
-                  label_kwargs={'fontsize': fontsize}, title_fmt=".3f")
-    fig.savefig(os.path.join(outdir, 'corner_mcmc_x.png'), bbox_inches='tight',
-                dpi=200)
+    if plot_corner:
+        corner.corner(sampler.flatchain[::10, :], fig=fig, labels=labels,
+                      truths=truths, show_titles=True,
+                      title_kwargs={'fontsize': fontsize},
+                      quantiles=[0.16, 0.5, 0.84],
+                      label_kwargs={'fontsize': fontsize}, title_fmt=".3f")
+        fig.savefig(os.path.join(outdir, 'corner.png'), bbox_inches='tight',
+                    dpi=200)
     if not samples_file:
         samples_file = 'mcmc_samples.txt'
     print "Saving thinned samples to {} file...".format(samples_file)
-    np.savetxt(samples_file, sampler.flatchain[::10, :])
-    return lnpost, sampler
+    np.savetxt(os.path.join(outdir, samples_file), sampler.flatchain[::, :])
+    return sampler, labels, truths
+
+
+def plot_comps(components_to_plot, samples, original_dfm_mdl,
+               title_fontsize=12, label_fontsize=12,
+               outdir=None, outfname=None):
+    if outfname is None:
+        outfname = str(components_to_plot) + '_corner.pdf'
+    if outdir is None:
+        outdir = os.getcwd()
+
+    n_samples, n_dim = np.shape(samples)
+    indxs = np.zeros(n_dim)
+    components_to_plot = sorted(components_to_plot)
+
+    # Load difmap model
+    mdl_dir, mdl_fname = os.path.split(mdl_file)
+    comps = import_difmap_model(mdl_fname, mdl_dir)
+    # Sort components by distance from phase center
+    comps = sorted(comps, key=lambda x: np.sqrt(x.p[1]**2 + x.p[2]**2))
+
+    # Construct labels for corner and truth values (of difmap models)
+    labels = list()
+    truths = list()
+    j = 0
+    for i, comp in enumerate(comps):
+        if i in components_to_plot:
+            truths.extend(comp.p)
+            indxs[j: j+comp.size] = np.ones(comp.size)
+            if isinstance(comp, EGComponent):
+                if comp.size == 6:
+                    labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$', r'$e$', r'$bpa$'])
+                elif comp.size == 4:
+                    labels.extend([r'$flux$', r'$x$', r'$y$', r'$bmaj$'])
+                elif comp.size == 3:
+                    labels.extend([r'$flux$', r'$x$', r'$y$'])
+                else:
+                    raise Exception("Gauss component should have size 4 or 6!")
+            elif isinstance(comp, DeltaComponent):
+                labels.extend([r'$flux$', r'$x$', r'$y$'])
+            else:
+                raise Exception("Unknown type of component!")
+        j += comp.size
+
+    samples = samples[:, np.array(indxs, dtype=bool)]
+
+    ndim = len(truths)
+    fig, axes = plt.subplots(nrows=ndim, ncols=ndim)
+    fig.set_size_inches(14.5, 14.5)
+
+    fig = corner.corner(samples, fig=fig, labels=labels,
+                        truths=truths, show_titles=True,
+                        title_kwargs={'fontsize': title_fontsize},
+                        quantiles=[0.16, 0.5, 0.84],
+                        label_kwargs={'fontsize': label_fontsize},
+                        title_fmt=".4f",
+                        max_n_ticks=4)
+    # fig.tight_layout()
+    fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight',
+                dpi=200, format='pdf')
+    return fig
+
+
+
 
 if __name__ == '__main__':
 
     # uv_fits = '/home/ilya/sandbox/test_small/1458+718.u.2006_09_06.uvf'
-    uv_fits = '/home/ilya/code/vlbi_errors/silke/0851+202.u.2004_11_05.uvf'
+    # uv_fits = '/home/ilya/code/vlbi_errors/silke/0851+202.u.2004_11_05.uvf'
     # mdl_file = '/home/ilya/sandbox/test_small/dfmp_original_model.mdl'
-    mdl_file = '/home/ilya/code/vlbi_errors/silke/1.mod.2004_11_05'
-    lnpost, sampler = fit_model_with_mcmc(uv_fits, mdl_file,
-                                          nburnin_2=500, nproduction=1000,
-                                          nwalkers=200,
-                                          samples_file='samples_of_mcmc.txt',
-                                          outdir='/home/ilya/code/vlbi_errors/silke',
-                                          stokes='I')
+    # mdl_file = '/home/ilya/code/vlbi_errors/silke/1.mod.2004_11_05'
+    data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/corner/1807+698'
+    uv_fits = os.path.join(data_dir, '1807+698.u.2007_07_03.uvf')
+    mdl_file = os.path.join(data_dir, 'dfm_original_model_refitted.mdl')
+    sampler, labels, truths = fit_model_with_mcmc(uv_fits, mdl_file,
+                                                  nburnin_2=100,
+                                                  nproduction=300,
+                                                  nwalkers=200,
+                                                  samples_file='samples_of_mcmc.txt',
+                                                  outdir=data_dir,
+                                                  stokes='I')
+
+    samples = sampler.flatchain[::10, :]
+    fig = plot_comps([0, 1], samples, mdl_file, outdir=data_dir, label_fontsize=12, title_fontsize=12)
+    fig = plot_comps([8, 9], samples, mdl_file, outdir=data_dir, label_fontsize=12, title_fontsize=12)
+

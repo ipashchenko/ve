@@ -34,7 +34,7 @@ def xy_2_rtheta(params):
 def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                               dfm_model_dir=None, plot_comps=None,
                               plot_file=None, txt_file=None, cred_mass=0.68,
-                              coordinates='xy'):
+                              coordinates='xy', out_samples_path=None):
     """
     Plot bootstrap distribution of model component parameters.
 
@@ -95,7 +95,15 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                                                              comps_orig[i].size)) for
                           i in plot_comps)
 
+    # Save all bootstrap samples to file optionally
+    if out_samples_path:
+        boot_data_all = np.hstack(np.array(comps_params[i]).reshape((n_boot,
+                                                                 comps_orig[i].size)) for
+                              i in range(len(comps_orig)))
+        np.savetxt(out_samples_path, boot_data_all)
+
     # Optionally plot
+    figure = None
     if plot_file:
         if corner:
             lens = list(np.cumsum([comp.size for comp in comps_orig]))
@@ -134,10 +142,11 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                 #                       xytext=(0, -5),
                 #                       textcoords="offset points", ha="center",
                 #                       va="top")
-                figure.savefig(plot_file, bbox_inches='tight', dpi=1200,
-                               format='pdf')
-            except ValueError:
-                print("Failed to plot... ValueError")
+                figure.savefig(plot_file, bbox_inches='tight', format='png')
+            except (ValueError, RuntimeError) as e:
+                with open(plot_file + '_failed_plot', 'w'):
+                    print("Failed to plot... ValueError")
+
         else:
             print("Install ``corner`` for corner-plots")
 
@@ -183,7 +192,8 @@ def bootstrap_uvfits_with_difmap_model(uv_fits_path, dfm_model_path,
                                        out_txt_file='txt.txt',
                                        out_plot_file='plot.png',
                                        pairs=False, niter=100,
-                                       bootstrapped_uv_fits=None):
+                                       bootstrapped_uv_fits=None,
+                                       additional_noise=None):
     dfm_model_dir, dfm_model_fname = os.path.split(dfm_model_path)
     comps = import_difmap_model(dfm_model_fname, dfm_model_dir)
     if boot_dir is None:
@@ -192,7 +202,7 @@ def bootstrap_uvfits_with_difmap_model(uv_fits_path, dfm_model_path,
         uvdata = UVData(uv_fits_path)
         model = Model(stokes=stokes)
         model.add_components(*comps)
-        boot = CleanBootstrap([model], uvdata)
+        boot = CleanBootstrap([model], uvdata, additional_noise=additional_noise)
         os.chdir(boot_dir)
         boot.run(nonparametric=nonparametric, use_kde=use_kde, recenter=recenter,
                  use_v=use_v, n=n_boot, pairs=pairs)
@@ -1130,9 +1140,11 @@ class CleanBootstrap(Bootstrap):
         Path to FITS-file with uv-data (self-calibrated or not).
     """
 
-    def __init__(self, models, uvdata, sigma_ampl_scale=None):
+    def __init__(self, models, uvdata, sigma_ampl_scale=None,
+                 additional_noise=None):
         super(CleanBootstrap, self).__init__(models, uvdata)
         self.sigma_ampl_scale = sigma_ampl_scale
+        self.additional_noise = additional_noise
 
     def get_residuals(self):
         return self.data - self.model_data
@@ -1379,6 +1391,12 @@ class CleanBootstrap(Bootstrap):
             scale_factor = 1. + np.random.normal(0., self.sigma_ampl_scale)
             print "Scaling amplitudes on {}".format(scale_factor)
             copy_of_model_data.scale_amplitude(scale_factor)
+
+        if self.additional_noise is not None:
+            nif = copy_of_model_data.nif
+            copy_of_model_data.noise_add({baseline: nif*[self.additional_noise]
+                                          for baseline in copy_of_model_data.baselines})
+
         self.model_data.save(data=copy_of_model_data.hdu.data, fname=outname)
 
     def run(self, n, nonparametric, split_scans=False, recenter=True,

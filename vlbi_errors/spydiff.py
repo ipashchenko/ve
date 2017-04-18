@@ -1,4 +1,5 @@
 import os
+import datetime
 import numpy as np
 from components import DeltaComponent, CGComponent, EGComponent
 
@@ -153,7 +154,12 @@ def import_difmap_model(mdl_fname, mdl_dir=None):
             try:
                 flux, radius, theta, major, axial, phi, type_ = line.split()
             except ValueError:
-                flux, radius, theta = line.split()
+                try:
+                    flux, radius, theta = line.split()
+                except ValueError:
+                    print "Problem parsing line :\n"
+                    print line
+                    raise ValueError
                 axial = 1.0
                 major = 0.0
                 type_ = 0
@@ -223,7 +229,10 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
     if out_path is None:
         out_path = os.getcwd()
 
-    difmapout = open("difmap_commands", "w")
+    stamp = datetime.datetime.now()
+    command_file = os.path.join(out_path, "difmap_commands_{}".format(stamp.isoformat()))
+    # difmapout = open("difmap_commands", "w")
+    difmapout = open(command_file, "w")
     difmapout.write("observe " + os.path.join(path, fname) + "\n")
     difmapout.write("select " + stokes + "\n")
     difmapout.write("rmodel " + os.path.join(mdl_path, mdl_fname) + "\n")
@@ -231,7 +240,7 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
     difmapout.write("wmodel " + os.path.join(out_path, out_fname) + "\n")
     difmapout.write("exit\n")
     difmapout.close()
-    os.system("difmap < difmap_commands")
+    os.system("difmap < {}".format(command_file))
 
 # # DIFMAP_MAPPSR
 # def difmap_mappsr(source, isll, centre_ra_deg, centre_dec_deg, uvweightstr,

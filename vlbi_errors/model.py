@@ -68,6 +68,32 @@ class Model(object):
             component = DeltaComponent(flux, -x, -y)
             self.add_component(component)
 
+    def from_2darray(self, image, pixsize, pixref=None, stokes='I'):
+        """
+        Create instance from 2D numpy array.
+        :param image: 
+            2D numpy array with intensity distribution.
+        :param pixsize: 
+            Iterable with size of single pixel in mas.
+        :param pixref: (optional) 
+            Iterable of coordinates of reference pixel. If ``None`` then use
+            center of 2D array. (default: ``None``)
+        :param stokes: (optional)
+            Stokes parameters of intensity distribution. (default: ``I``)
+        """
+        imshape = np.shape(image)
+        if pixref is None:
+            pixref = (imshape[0]/2, imshape[1]/2)
+        for (x, y), flux in np.ndenumerate(image):
+            if flux:
+                x -= pixref[0]
+                y -= pixref[1]
+                x *= pixsize[0]
+                y *= pixsize[1]
+                component = DeltaComponent(flux, x, y)
+                self.add_component(component)
+        self.stokes = stokes
+
     def from_fits(self, fname, ver=1):
         hdulist = pf.open(fname)
         self.from_hdulist(hdulist, ver)

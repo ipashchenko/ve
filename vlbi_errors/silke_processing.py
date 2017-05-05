@@ -1,7 +1,9 @@
+# -*- coding: utf-8 -*-
 import os
 import glob
 from astropy.io.fits import VerifyError
 from mojave import download_mojave_uv_fits
+from uv_data import UVData
 from mojave import mojave_uv_fits_fname
 from bootstrap import bootstrap_uvfits_with_difmap_model
 import matplotlib
@@ -50,6 +52,7 @@ txt_file_dir = '/home/ilya/Dropbox/silke'
 original_dfm_models = glob.glob(os.path.join(data_dir, '*us'))
 epochs_ready = glob.glob(os.path.join(txt_file_dir, 'errors_*.png'))
 epochs_ready_ = list()
+epochs_todo = ['1996_12_06']
 for epoch_ready in epochs_ready:
     dir, fname = os.path.split(epoch_ready)
     epochs_ready_.append(fname[7:-4])
@@ -57,13 +60,20 @@ for path in original_dfm_models:
     fname = os.path.split(path)[-1]
     epoch = fname[:-2]
     print "Processing epoch : {}".format(epoch)
-    if epoch in epochs_ready_:
+    if epoch not in epochs_todo:
         print "Skipping epoch {}".format(epoch)
         continue
     original_model_fname = fname
     original_model_path = os.path.join(data_dir, original_model_fname)
     uv_fits_fname = mojave_uv_fits_fname('0851+202', 'u', epoch)
     uv_fits_path = os.path.join(data_dir, uv_fits_fname)
+
+    uvdata = UVData(uv_fits_path)
+    try:
+        del uvdata.hdu.header['HISTORY']
+        uvdata.save(rewrite=True, downscale_by_freq=False)
+    except KeyError:
+        pass
 
     out_txt_file = os.path.join(txt_file_dir, 'errors_{}.dml'.format(epoch))
     out_png_file = os.path.join(txt_file_dir, 'errors_{}.png'.format(epoch))
@@ -72,11 +82,11 @@ for path in original_dfm_models:
                                            n_boot=300, boot_dir=boot_dir,
                                            out_txt_file=out_txt_file,
                                            out_plot_file=out_png_file,
-                                           clean_after=True)
-    except IOError:
-        with open(os.path.join(txt_file_dir, '{}_io_error.txt'.format(epoch)), 'w'):
-            print "IO Error"
-        continue
+                                           clean_after=True, niter=200)
+    # except IOError:
+    #     with open(os.path.join(txt_file_dir, '{}_io_error.txt'.format(epoch)), 'w'):
+    #         print "IO Error"
+    #     continue
     except VerifyError:
         with open(os.path.join(txt_file_dir, '{}_verify_error.txt'.format(epoch)), 'w'):
             print "Verify Error"

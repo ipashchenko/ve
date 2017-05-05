@@ -14,7 +14,7 @@ from model import Model
 from spydiff import import_difmap_model, modelfit_difmap
 from spydiff import modelfit_difmap
 matplotlib.use('Agg')
-label_size = 8
+label_size = 12
 matplotlib.rcParams['xtick.labelsize'] = label_size
 matplotlib.rcParams['ytick.labelsize'] = label_size
 
@@ -34,7 +34,8 @@ def xy_2_rtheta(params):
 def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                               dfm_model_dir=None, plot_comps=None,
                               plot_file=None, txt_file=None, cred_mass=0.68,
-                              coordinates='xy', out_samples_path=None):
+                              coordinates='xy', out_samples_path=None,
+                              limits=None, fig=None):
     """
     Plot bootstrap distribution of model component parameters.
 
@@ -126,15 +127,26 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
 
             try:
                 n = sum([c.size for c in comps_to_plot])
-                figure, axes = matplotlib.pyplot.subplots(nrows=n, ncols=n)
-                figure.set_size_inches(14.5, 14.5)
-                corner.corner(boot_data, labels=labels, plot_contours=False,
+                if fig is None:
+                    fig, axes = matplotlib.pyplot.subplots(nrows=n, ncols=n)
+                    fig.set_size_inches(16.5, 16.5)
+                corner.corner(boot_data, labels=labels, plot_contours=True,
+                              plt_datapoints=False, color='green',
+                              levels=[0.68,0.95],
+                              smooth=0.5,
+                              bins=20,
+                              fill_contours=True,
+                              range=limits,
                               truths=np.hstack([comps_params0[i] for i in
                                                 plot_comps]),
-                              title_kwargs={"fontsize": 12},
-                              label_kwargs={"fontsize": 12},
-                              quantiles=[0.16, 0.5, 0.84], fig=figure,
-                              use_math_text=True, show_titles=True,
+                              title_kwargs={"fontsize": 14},
+                              label_kwargs={"fontsize": 14},
+                              quantiles=[0.16, 0.5, 0.84], fig=fig,
+                              # show_titles=True,
+                              hist_kwargs={'normed': True,
+                                           'histtype': 'step',
+                                           'stacked': True,
+                                           'ls': 'solid'},
                               title_fmt=".4f", max_n_ticks=3)
                 # figure.gca().annotate("Components {}".format(plot_comps),
                 #                       xy=(0.5, 1.0),
@@ -142,7 +154,7 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                 #                       xytext=(0, -5),
                 #                       textcoords="offset points", ha="center",
                 #                       va="top")
-                figure.savefig(plot_file, bbox_inches='tight', format='png')
+                # figure.savefig(plot_file, format='eps', dpi=600)
             except (ValueError, RuntimeError) as e:
                 with open(plot_file + '_failed_plot', 'w'):
                     print("Failed to plot... ValueError")
@@ -180,7 +192,7 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
             recorded += (j + 1)
         fn.close()
 
-    return figure
+    return fig
 
 
 # TODO: Check that numbering of bootstrapped data and their models is OK

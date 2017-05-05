@@ -164,7 +164,8 @@ class UVData(object):
         slices_dict.update({'COMPLEX': 1})
         self.hdu.data.data[slices_dict.values()] = self.uvdata.imag
 
-    def save(self, fname=None, data=None, rewrite=False):
+    def save(self, fname=None, data=None, rewrite=False,
+             downscale_by_freq=False):
         """
         Save uv-data to FITS-file.
 
@@ -178,11 +179,12 @@ class UVData(object):
             Boolean - rewrite file with original name if any? (default:
             ``False``)
         """
+        fname = fname or self.fname
         if os.path.exists(fname) and rewrite:
             os.unlink(fname)
-        fname = fname or self.fname
         if data is None:
-            self._downscale_uvw_by_frequency()
+            if downscale_by_freq:
+                self._downscale_uvw_by_frequency()
             self.hdulist.writeto(fname)
         else:
             # datas = np.array(sorted(data, key=lambda x: x['DATE']+x['_DATE']),
@@ -203,8 +205,10 @@ class UVData(object):
                 if hdu.header['EXTNAME'] == 'AIPS FQ':
                     hdu = convert_fq_hdu(hdu)
                 hdulist.append(hdu)
-            # self._downscale_uvw_by_frequency()
-            hdulist.writeto(fname)
+            # FIXME: Sometimes i need this to be commented
+            if downscale_by_freq:
+                self._downscale_uvw_by_frequency()
+            hdulist.writeto(fname, output_verify='ignore')
 
     def save_fraction(self, fname, frac, random_state=0):
         """
@@ -567,10 +571,32 @@ class UVData(object):
                 u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
                 v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
                 w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
-        if abs(np.mean(u)) < 1.:
+        if abs(np.mean(u)) > 1.:
             self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array /= self.frequency
             self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array /= self.frequency
             self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array /= self.frequency
+
+    def _upscale_uvw_by_frequency(self):
+        suffix = '--'
+        try:
+            u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
+            v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
+            w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
+        except KeyError:
+            try:
+                suffix = '---SIN'
+                u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
+                v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
+                w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
+            except KeyError:
+                suffix = ''
+                u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
+                v = self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array
+                w = self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array
+        if abs(np.mean(u)) < 1.:
+            self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array *= self.frequency
+            self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array *= self.frequency
+            self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array *= self.frequency
 
     @property
     def uvw(self):

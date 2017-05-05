@@ -596,14 +596,43 @@ class ImageComponent(Component):
 if __name__ == '__main__':
     import os
     from uv_data import UVData
-    from from_fits import create_clean_image_from_fits_file
+    from from_fits import (create_clean_image_from_fits_file,
+                           create_model_from_fits_file)
     base_dir = '/home/ilya/code/vlbi_errors/examples/'
     uvdata = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
-    uv = uvdata.uv
+    uvdata_ = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
+    uvdata__ = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
+    fig = uvdata.uvplot(bands=[1])
+    noise = uvdata.noise()
+    noise = {key: 0.1 * value for key, value in noise.items()}
+    # from spydiff import clean_difmap
+    # clean_difmap('2230+114.x.2006_02_12.uvf', 'cc.fits', 'I', (512, 0.1),
+    #              path_to_script='/home/ilya/code/vlbi_errors/difmap/final_clean_nw',
+    #              show_difmap_output=True, outpath=base_dir,
+    #              path=base_dir)
     image = create_clean_image_from_fits_file(os.path.join(base_dir, 'cc.fits'))
-    icomponent = ImageComponent(image.cc, image.xv, image.yv)
-    import time
-    t0 = time.time()
-    vis = icomponent.ft(uv)
-    t1 = time.time()
-    print t1 - t0
+
+    # Model fetched from CC-fits file
+    ccmodel = create_model_from_fits_file(os.path.join(base_dir, 'cc.fits'))
+
+    icomponent = ImageComponent(image.cc.T, -image.x[::-1], -image.y[::-1])
+    from model import Model
+    model = Model(stokes='I')
+    # Model created using ``ImageComponent``
+    model.add_component(icomponent)
+
+    # Model created using ``from_2darray``
+    model_2d = Model()
+    model_2d.from_2darray(image.cc, (0.1, 0.1))
+
+    # uvdata.substitute([model])
+    uvdata_.substitute([ccmodel])
+    uvdata__.substitute([model_2d])
+    # uvdata.noise_add(noise)
+    # # ImageComponent
+    # uvdata.uvplot(fig=fig, bands=[1], color='r')
+    # from cc-fits
+    uvdata_.uvplot(fig=fig, bands=[1], color='g')
+    # from_2darray
+    uvdata__.uvplot(fig=fig, bands=[1], color='y')
+

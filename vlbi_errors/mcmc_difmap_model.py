@@ -13,8 +13,7 @@ import matplotlib.pyplot as plt
 
 def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
                         nburnin_2=300, nproduction=500, nwalkers=50,
-                        samples_file=None, stokes='I', use_weights=False,
-                        plot_corner=False):
+                        samples_file=None, stokes='I', use_weights=False):
 
     # Initialize ``UVData`` instance
     uvdata = UVData(uv_fits)
@@ -123,26 +122,26 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
     pos, lnp, _ = sampler.run_mcmc(pos, nproduction)
     print "Acceptance fraction for production: ", sampler.acceptance_fraction
 
-    # Plot corner
-    fig, axes = plt.subplots(nrows=ndim, ncols=ndim)
-    fig.set_size_inches(14.5, 14.5)
+    # # Plot corner
+    # fig, axes = plt.subplots(nrows=ndim, ncols=ndim)
+    # fig.set_size_inches(14.5, 14.5)
 
-    # Choose fontsize
-    if len(comps) <= 2:
-        fontsize = 16
-    elif 2 < len(comps) <= 4:
-        fontsize = 13
-    else:
-        fontsize = 11
+    # # Choose fontsize
+    # if len(comps) <= 2:
+    #     fontsize = 16
+    # elif 2 < len(comps) <= 4:
+    #     fontsize = 13
+    # else:
+    #     fontsize = 11
 
-    if plot_corner:
-        corner.corner(sampler.flatchain[::10, :], fig=fig, labels=labels,
-                      truths=truths, show_titles=True,
-                      title_kwargs={'fontsize': fontsize},
-                      quantiles=[0.16, 0.5, 0.84],
-                      label_kwargs={'fontsize': fontsize}, title_fmt=".3f")
-        fig.savefig(os.path.join(outdir, 'corner.png'), bbox_inches='tight',
-                    dpi=200)
+    # if plot_corner:
+    #     corner.corner(sampler.flatchain[::10, :], fig=fig, labels=labels,
+    #                   truths=truths, show_titles=True,
+    #                   title_kwargs={'fontsize': fontsize},
+    #                   quantiles=[0.16, 0.5, 0.84],
+    #                   label_kwargs={'fontsize': fontsize}, title_fmt=".3f")
+    #     fig.savefig(os.path.join(outdir, 'corner.png'), bbox_inches='tight',
+    #                 dpi=200)
     if not samples_file:
         samples_file = 'mcmc_samples.txt'
     print "Saving thinned samples to {} file...".format(samples_file)
@@ -152,7 +151,7 @@ def fit_model_with_mcmc(uv_fits, mdl_file, outdir=None, nburnin_1=100,
 
 def plot_comps(components_to_plot, samples, original_dfm_mdl,
                title_fontsize=12, label_fontsize=12,
-               outdir=None, outfname=None):
+               outdir=None, outfname=None, fig=None, limits=None):
     if outfname is None:
         outfname = str(components_to_plot) + '_corner.pdf'
     if outdir is None:
@@ -163,7 +162,7 @@ def plot_comps(components_to_plot, samples, original_dfm_mdl,
     components_to_plot = sorted(components_to_plot)
 
     # Load difmap model
-    mdl_dir, mdl_fname = os.path.split(mdl_file)
+    mdl_dir, mdl_fname = os.path.split(original_dfm_mdl)
     comps = import_difmap_model(mdl_fname, mdl_dir)
     # Sort components by distance from phase center
     comps = sorted(comps, key=lambda x: np.sqrt(x.p[1]**2 + x.p[2]**2))
@@ -194,42 +193,73 @@ def plot_comps(components_to_plot, samples, original_dfm_mdl,
     samples = samples[:, np.array(indxs, dtype=bool)]
 
     ndim = len(truths)
-    fig, axes = plt.subplots(nrows=ndim, ncols=ndim)
-    fig.set_size_inches(14.5, 14.5)
+    if fig is None:
+        fig, axes = plt.subplots(nrows=ndim, ncols=ndim)
+        fig.set_size_inches(14.5, 14.5)
 
     fig = corner.corner(samples, fig=fig, labels=labels,
-                        truths=truths, show_titles=True,
+                        truths=truths,
+                        hist_kwargs={'normed': True,
+                                     'histtype': 'step',
+                                     'stacked': True,
+                                     'ls': 'dashdot'},
+                        smooth=0.5,
+                        # show_titles=True,
                         title_kwargs={'fontsize': title_fontsize},
-                        quantiles=[0.16, 0.5, 0.84],
+                        # quantiles=[0.16, 0.5, 0.84],
                         label_kwargs={'fontsize': label_fontsize},
                         title_fmt=".4f",
-                        max_n_ticks=4)
+                        max_n_ticks=4,
+                        plot_datapoints=False,
+                        plot_contours=True,
+                        levels=[0.68, 0.95],
+                        bins=20,
+                        range=limits,
+                        fill_contours=True, color='green')
     # fig.tight_layout()
-    fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight',
-                dpi=200, format='pdf')
+    # fig.savefig(os.path.join(outdir, outfname), bbox_inches='tight',
+    #             dpi=200, format='pdf')
     return fig
 
 
-
-
 if __name__ == '__main__':
-
-    # uv_fits = '/home/ilya/sandbox/test_small/1458+718.u.2006_09_06.uvf'
-    # uv_fits = '/home/ilya/code/vlbi_errors/silke/0851+202.u.2004_11_05.uvf'
-    # mdl_file = '/home/ilya/sandbox/test_small/dfmp_original_model.mdl'
-    # mdl_file = '/home/ilya/code/vlbi_errors/silke/1.mod.2004_11_05'
-    data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/corner/1807+698'
+    # data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/corner/1807+698'
+    # uv_fits = os.path.join(data_dir, '1807+698.u.2007_07_03.uvf')
+    # mdl_file = os.path.join(data_dir, 'dfm_original_model_refitted.mdl')
+    # data_dir = '/home/ilya/code/vlbi_errors/examples/LC/0552+398/2006_07_07'
+    # uv_fits = os.path.join(data_dir, '0552+398.u.2006_07_07.uvf')
+    # mdl_file = os.path.join(data_dir, 'initial.mdl')
+    # mdl_file_rf = os.path.join(data_dir, 'initial_refitted.mdl')
+    data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/corner/new/parametric/1807+698'
     uv_fits = os.path.join(data_dir, '1807+698.u.2007_07_03.uvf')
-    mdl_file = os.path.join(data_dir, 'dfm_original_model_refitted.mdl')
-    sampler, labels, truths = fit_model_with_mcmc(uv_fits, mdl_file,
+    mdl_file_rf = os.path.join(data_dir, 'new2.mdl')
+    # from spydiff import modelfit_difmap
+    # modelfit_difmap('0552+398.u.2006_07_07.uvf', 'initial.mdl',
+    #                 'initial_refitted.mdl', niter=300,
+    #                 path=data_dir, mdl_path=data_dir,
+    #                 out_path=data_dir)
+    sampler, labels, truths = fit_model_with_mcmc(uv_fits, mdl_file_rf,
                                                   nburnin_2=100,
                                                   nproduction=300,
                                                   nwalkers=200,
                                                   samples_file='samples_of_mcmc.txt',
-                                                  outdir=data_dir,
-                                                  stokes='I')
+                                                  outdir=data_dir)
 
     samples = sampler.flatchain[::10, :]
-    fig = plot_comps([0, 1], samples, mdl_file, outdir=data_dir, label_fontsize=12, title_fontsize=12)
-    fig = plot_comps([8, 9], samples, mdl_file, outdir=data_dir, label_fontsize=12, title_fontsize=12)
+    limits_0_1 = [(0.672, 0.696), (-0.0805, -0.0745), (-0.018, -0.015),
+                  (0.215, 0.236), (0.22, 0.33), (2.85, 2.92), (0.24, 0.266),
+                  (0.242, 0.26), (0.06, 0.07), (0.128, 0.16)]
+    limits_10_11 = [(0.002, 0.010), (7.2, 8.4), (1, 1.8), (0.8, 2.4), (0.01, 0.0185),
+              (12.2, 13.2), (2.6, 3.2), (1.8, 3.0)]
+    fig = plot_comps([0, 1], samples, mdl_file_rf, outdir=data_dir, label_fontsize=12, title_fontsize=12)
+    # fig = plot_comps([8, 9], samples, mdl_file, outdir=data_dir, label_fontsize=12, title_fontsize=12)
 
+    # from bootstrap import bootstrap_uvfits_with_difmap_model
+    # fig = bootstrap_uvfits_with_difmap_model(uv_fits, mdl_file_rf,
+    #                                          boot_dir=data_dir, n_boot=300,
+    #                                          clean_after=False,
+    #                                          use_kde=True,
+    #                                          use_v=False,
+    #                                          out_plot_file=os.path.join(data_dir, 'plot_boot.pdf'),
+    #                                          niter=100,
+    #                                          bootstrapped_uv_fits=None)

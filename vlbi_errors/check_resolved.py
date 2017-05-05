@@ -129,36 +129,6 @@ if __name__ == '__main__':
         mdl_dict.update({key: os.path.join(data_dir, value)})
     stokes = 'I'
 
-    # pt_components_priors = list()
-    # pt_components_priors.append({'flux': (sp.stats.uniform.ppf, [1, 2.5], {}),
-    #                              'x': (sp.stats.uniform.ppf, [-0.5, 1], {}),
-    #                              'y': (sp.stats.uniform.ppf, [-0.5, 1], {})})
-    # pt_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 2], {}),
-    #                              'x': (sp.stats.uniform.ppf, [-1, 2], {}),
-    #                              'y': (sp.stats.uniform.ppf, [-1, 2], {}),
-    #                              'bmaj': (sp.stats.uniform.ppf, [0, 3], {})})
-
-    # cg_components_priors = list()
-    # cg_components_priors.append({'flux': (sp.stats.uniform.ppf, [1, 2.5], {}),
-    #                              'x': (sp.stats.uniform.ppf, [-0.5, 1], {}),
-    #                              'y': (sp.stats.uniform.ppf, [-0.5, 1], {}),
-    #                              'bmaj': (sp.stats.uniform.ppf, [0, 1], {})})
-    # cg_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 2], {}),
-    #                              'x': (sp.stats.uniform.ppf, [-1, 2], {}),
-    #                              'y': (sp.stats.uniform.ppf, [-1, 2], {}),
-    #                              'bmaj': (sp.stats.uniform.ppf, [0, 3], {})})
-
-    # el_components_priors = list()
-    # el_components_priors.append({'flux': (sp.stats.uniform.ppf, [1, 2.5], {}),
-    #                              'x': (sp.stats.uniform.ppf, [-0.5, 1], {}),
-    #                              'y': (sp.stats.uniform.ppf, [-0.5, 1], {}),
-    #                              'bmaj': (sp.stats.uniform.ppf, [0, 1], {}),
-    #                              'e': (sp.stats.uniform.ppf, [0, 1], {}),
-    #                              'bpa': (sp.stats.uniform.ppf, [0, np.pi], {})})
-    # el_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 2], {}),
-    #                              'x': (sp.stats.uniform.ppf, [-1, 2], {}),
-    #                              'y': (sp.stats.uniform.ppf, [-1, 2], {}),
-    #                              'bmaj': (sp.stats.uniform.ppf, [0, 3], {})})
     pt_components_priors = list()
     pt_components_priors.append({'flux': (sp.stats.uniform.ppf, [0, 4], {}),
                                  'x': (sp.stats.uniform.ppf, [-0.5, 1], {}),

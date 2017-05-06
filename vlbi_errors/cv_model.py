@@ -12,7 +12,11 @@ import matplotlib.pyplot as plt
 
 # TODO: Use only positive weighted data for CV
 class KFoldCV(object):
-    def __init__(self, uv_fits_path, k, basename='cv', seed=None, baselines=None):
+    def __init__(self, uv_fits_path, k, basename='cv', seed=None,
+                 baselines=None, stokes='I'):
+        if stokes not in ('I', 'RR', 'LL'):
+            raise Exception("Only stokes (I, RR, LL) supported!")
+        self.stokes = stokes
         self.uv_fits_path = uv_fits_path
         self.uvdata = UVData(uv_fits_path)
         self.k = k
@@ -25,15 +29,29 @@ class KFoldCV(object):
 
     def create_folds(self, baselines=None):
         baseline_folds = dict()
+
         if baselines is None:
             baselines = self.uvdata.baselines
+
+        if self.stokes == 'I':
+            stokes = ['RR', 'LL']
+            average_stokes = True
+        elif self.stokes == 'RR':
+            stokes = ['RR']
+            average_stokes = False
+        elif self.stokes == 'LL':
+            stokes = ['LL']
+            average_stokes = False
+        else:
+            raise Exception("Only stokes (I, RR, LL) supported!")
+
         for bl in baselines:
             bl_indxs = self.uvdata._indxs_baselines[bl]
             print "Baseline {} has {} samples".format(bl,
                                                       np.count_nonzero(bl_indxs))
             bl_indxs_pw = self.uvdata.pw_indxs_baseline(bl, average_bands=True,
-                                                        stokes=['RR', 'LL'],
-                                                        average_stokes=True)
+                                                        stokes=stokes,
+                                                        average_stokes=average_stokes)
             bl_indxs = mask_boolean_with_boolean(bl_indxs, bl_indxs_pw)
             print "Baseline {} has {} samples with positive weight".format(bl,
                                                       np.count_nonzero(bl_indxs))
@@ -106,7 +124,7 @@ class KFoldCV(object):
                 modelfit_difmap(train_uv_fits_path, dfm_model_fname,
                                 out_mdl_fname, niter=niter,
                                 path=data_dir, mdl_path=dfm_model_dir,
-                                out_path=data_dir)
+                                out_path=data_dir, stokes=self.stokes)
                 cv_scores.append(score(test_uv_fits_path, os.path.join(data_dir, out_mdl_fname)))
                 train_scores.append(score(train_uv_fits_path, os.path.join(data_dir, out_mdl_fname)))
         else:
@@ -128,7 +146,7 @@ class KFoldCV(object):
 
 
 def cv_difmap_models(dfm_model_files, uv_fits, K=5, baselines=None, n_iter=50,
-                     out_dir=None, seed=None, n_rep=10):
+                     out_dir=None, seed=None, n_rep=10, stokes='I'):
     """
     Function that Cross-Validates several difmap models of the same uv-data set.
     
@@ -151,9 +169,12 @@ def cv_difmap_models(dfm_model_files, uv_fits, K=5, baselines=None, n_iter=50,
         Random seed to use. If ``None`` then use random integer - that is used
         when K-fold CV is repeated ``n_rep`` times to estimate the uncertainty
         of CV-scores. (default: ``None``)
-    :param n_rep: 
+    :param n_rep:  (optional)
         Number of times K-fold CV is repeated  to estimate the uncertainty of
         CV-scores. (default: ``10``)
+    :param stokes: (optional)
+        Stokes parameter string. ``I``, ``RR`` or ``LL`` are currently
+        supported. (default: ``I``)
     :return: 
         Dictionary with keys - number denoting the model and values - lists of
         ``n_rep`` values of CV-scores. One can use their mean and std to get
@@ -166,9 +187,16 @@ def cv_difmap_models(dfm_model_files, uv_fits, K=5, baselines=None, n_iter=50,
     mdl_dict = {i: mdl_file for (i, mdl_file) in enumerate(dfm_model_files)}
 
     cv_means = dict()
+    cv_stds = dict()
+
+    # If no seed is specified and no repetitions => choose some seed to compare
+    # models using the same splits.
+    if seed is None and n_rep == 1:
+        seed = np.random.randint(0, 1000)
     for i in mdl_dict:
         print "Calculating CV scores for model {}".format(i)
         cv_means[i] = list()
+        cv_stds[i] = list()
         for j in range(n_rep):
             print "Doing {} of {} repetitions".format(j+1, n_rep)
             if seed is None:
@@ -176,7 +204,8 @@ def cv_difmap_models(dfm_model_files, uv_fits, K=5, baselines=None, n_iter=50,
             else:
                 seed_used = seed
             print "Using seed {}".format(seed_used)
-            kfold = KFoldCV(uv_fits, K, seed=seed_used, baselines=baselines)
+            kfold = KFoldCV(uv_fits, K, seed=seed_used, baselines=baselines,
+                            stokes=stokes)
             kfold.create_train_test_data(outdir=out_dir)
             cv_scores, train_scores =\
                 kfold.cv_score(initial_dfm_model_path=mdl_dict[i],
@@ -185,11 +214,12 @@ def cv_difmap_models(dfm_model_files, uv_fits, K=5, baselines=None, n_iter=50,
             print cv_scores
             print train_scores
             cv_means[i].append(np.mean(cv_scores))
+            cv_stds[i].append(np.std(cv_scores))
 
-    return cv_means
+    return cv_means, cv_stds
 
 
-def score(uv_fits_path, mdl_path):
+def score(uv_fits_path, mdl_path, stokes='I'):
     """
     Returns rms of model on given uv-data for stokes 'I'.
     
@@ -197,10 +227,15 @@ def score(uv_fits_path, mdl_path):
         Path to uv-fits file.
     :param mdl_path: 
         Path to difmap model text file or FITS-file with CLEAN model.
+    :param stokes: (optional)
+        Stokes parameter string. ``I``, ``RR`` or ``LL`` currently supported.
+        (default: ``I``)
     :return: 
         Per-point rms between given data and model evaluated at given data
         points.
     """
+    if stokes not in ('I', 'RR', 'LL'):
+        raise Exception("Only stokes (I, RR, LL) supported!")
     uvdata = UVData(uv_fits_path)
     uvdata_model = UVData(uv_fits_path)
     try:
@@ -208,12 +243,19 @@ def score(uv_fits_path, mdl_path):
     except IOError:
         dfm_mdl_dir, dfm_mdl_fname = os.path.split(mdl_path)
         comps = import_difmap_model(dfm_mdl_fname, dfm_mdl_dir)
-        model = Model(stokes='I')
+        model = Model(stokes=stokes)
         model.add_components(*comps)
     uvdata_model.substitute([model])
     uvdata_diff = uvdata - uvdata_model
-    i_diff = 0.5 * (uvdata_diff.uvdata_weight_masked[..., 0] +
-                    uvdata_diff.uvdata_weight_masked[..., 1])
+    if stokes == 'I':
+        i_diff = 0.5 * (uvdata_diff.uvdata_weight_masked[..., 0] +
+                        uvdata_diff.uvdata_weight_masked[..., 1])
+    elif stokes == 'RR':
+        i_diff = uvdata_diff.uvdata_weight_masked[..., 0]
+    elif stokes == 'LL':
+        i_diff = uvdata_diff.uvdata_weight_masked[..., 1]
+    else:
+        raise Exception("Only stokes (I, RR, LL) supported!")
     # 2 means that Re & Im are counted independently
     factor = 2 * np.count_nonzero(i_diff)
     # factor = np.count_nonzero(~uvdata_diff.uvdata_weight_masked.mask[:, :, :2])
@@ -225,12 +267,18 @@ def score(uv_fits_path, mdl_path):
 
 if __name__ == '__main__':
 
-    dfm_mdl_files = ['/home/ilya/Dropbox/0235/tmp/to_compare/k1mod1.mdl',
-                     '/home/ilya/Dropbox/0235/tmp/to_compare/k1mod2.mdl']
+    # dfm_mdl_files = ['/home/ilya/Dropbox/0235/tmp/to_compare/k1mod1.mdl',
+    #                  '/home/ilya/Dropbox/0235/tmp/to_compare/k1mod2.mdl']
+    dfm_mdl_files = ['/home/ilya/Dropbox/0235/tmp/q_models_for_CV/q_mod1.mdl',
+                     '/home/ilya/Dropbox/0235/tmp/q_models_for_CV/q_mod2.mdl',
+                     '/home/ilya/Dropbox/0235/tmp/q_models_for_CV/q_mod3.mdl',
+                     '/home/ilya/Dropbox/0235/tmp/q_models_for_CV/q_mod4.mdl',
+                     '/home/ilya/Dropbox/0235/tmp/q_models_for_CV/q_mod5.mdl']
     uv_fits = '/home/ilya/Dropbox/0235/tmp/to_compare/0235+164.k1.2008_09_02.uvf_difmap'
-    cv_scores = cv_difmap_models(dfm_mdl_files, uv_fits, baselines=None, K=5,
+    cv_means, cv_stds =\
+        cv_difmap_models(dfm_mdl_files, uv_fits, baselines=None, K=5,
                          out_dir='/home/ilya/Dropbox/0235/tmp/to_compare',
-                         n_iter=50, n_rep=10)
+                         n_iter=300, n_rep=1, stokes='I')
     # a = np.array(cv_scores.values())
     # y = a[:, 0]
     # yerr = a[:, 1]

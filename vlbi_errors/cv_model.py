@@ -279,6 +279,13 @@ if __name__ == '__main__':
         cv_difmap_models(dfm_mdl_files, uv_fits, baselines=None, K=5,
                          out_dir='/home/ilya/Dropbox/0235/tmp/to_compare',
                          n_iter=300, n_rep=1, stokes='I')
+    # Plot CV-RMSE versus model number
+    keys = sorted(cv_means.keys())
+    plt.errorbar(keys, [cv_means[i][0] for i in keys],
+                 yerr=[cv_stds[i][0] for i in keys])
+    plt.xlabel(r'model number')
+    plt.ylabel(r'RMSE')
+
     # a = np.array(cv_scores.values())
     # y = a[:, 0]
     # yerr = a[:, 1]

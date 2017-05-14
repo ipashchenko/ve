@@ -230,8 +230,8 @@ if __name__ == '__main__':
     # uv_fits = os.path.join(data_dir, '0552+398.u.2006_07_07.uvf')
     # mdl_file = os.path.join(data_dir, 'initial.mdl')
     # mdl_file_rf = os.path.join(data_dir, 'initial_refitted.mdl')
-    data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/corner/new/parametric/1807+698'
-    uv_fits = os.path.join(data_dir, '1807+698.u.2007_07_03.uvf')
+    data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/corner/close_dim/1807+698'
+    uv_fits = os.path.join(data_dir, 'sim.uvf')
     mdl_file_rf = os.path.join(data_dir, 'new2.mdl')
     # from spydiff import modelfit_difmap
     # modelfit_difmap('0552+398.u.2006_07_07.uvf', 'initial.mdl',
@@ -246,13 +246,13 @@ if __name__ == '__main__':
                                                   outdir=data_dir)
 
     samples = sampler.flatchain[::10, :]
-    limits_0_1 = [(0.672, 0.696), (-0.0805, -0.0745), (-0.018, -0.015),
-                  (0.215, 0.236), (0.22, 0.33), (2.85, 2.92), (0.24, 0.266),
-                  (0.242, 0.26), (0.06, 0.07), (0.128, 0.16)]
-    limits_10_11 = [(0.002, 0.010), (7.2, 8.4), (1, 1.8), (0.8, 2.4), (0.01, 0.0185),
-              (12.2, 13.2), (2.6, 3.2), (1.8, 3.0)]
-    fig = plot_comps([0, 1], samples, mdl_file_rf, outdir=data_dir, label_fontsize=12, title_fontsize=12)
-    # fig = plot_comps([8, 9], samples, mdl_file, outdir=data_dir, label_fontsize=12, title_fontsize=12)
+    # limits_0_1 = [(0.672, 0.696), (-0.0805, -0.0745), (-0.018, -0.015),
+    #               (0.215, 0.236), (0.22, 0.33), (2.85, 2.92), (0.24, 0.266),
+    #               (0.242, 0.26), (0.06, 0.07), (0.128, 0.16)]
+    # limits_10_11 = [(0.002, 0.010), (7.2, 8.4), (1, 1.8), (0.8, 2.4), (0.01, 0.0185),
+    #           (12.2, 13.2), (2.6, 3.2), (1.8, 3.0)]
+    # # fig = plot_comps([0, 1], samples, mdl_file_rf, outdir=data_dir, label_fontsize=12, title_fontsize=12)
+    # fig = plot_comps([10, 11], samples, mdl_file_rf, outdir=data_dir, label_fontsize=12, title_fontsize=12)
 
     # from bootstrap import bootstrap_uvfits_with_difmap_model
     # fig = bootstrap_uvfits_with_difmap_model(uv_fits, mdl_file_rf,

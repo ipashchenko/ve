@@ -9,7 +9,7 @@ from uv_data import UVData
 from bootstrap import bootstrap_uvfits_with_difmap_model
 
 
-data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/corner/new'
+data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/corner/close_dim'
 # data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/corner/new/parametric'
 # Done
 # source = '0016+731'
@@ -22,6 +22,7 @@ source_dir = os.path.join(data_dir, source)
 # if not os.path.exists(source_dir):
 #     os.mkdir(source_dir)
 uv_fits_fname = mojave_uv_fits_fname(source, 'u', epoch)
+# uv_fits_fname = 'sim.uvf'
 uv_fits_path = os.path.join(source_dir, uv_fits_fname)
 # if not os.path.exists(uv_fits_path):
 #     download_mojave_uv_fits(source, [epoch], download_dir=source_dir)
@@ -35,6 +36,26 @@ uv_fits_path = os.path.join(source_dir, uv_fits_fname)
 # Create instance of Model and bootstrap uv-data
 dfm_model_fname = 'new2.mdl'
 dfm_model_path = os.path.join(source_dir, dfm_model_fname)
+
+
+# # Create artificial data set with known model
+# uvdata = UVData(uv_fits_path)
+# fig = uvdata.uvplot()
+# noise = uvdata.noise(use_V=False, average_freq=True)
+# model = Model(stokes='I')
+# from spydiff import import_difmap_model
+# comps = import_difmap_model(dfm_model_fname, source_dir)
+# model.add_components(*comps)
+# uvdata.substitute([model])
+# fig_ = uvdata.uvplot(fig=fig, color='r')
+# # noise = {bl: 0.1 * value for bl, value in noise.items()}
+# uvdata.noise_add(noise)
+# # fig__ = uvdata.uvplot(fig=fig_, color='g')
+# uvdata.save(os.path.join(source_dir, 'sim.uvf'))
+
+
+
+
 # fn = open(os.path.join(source_dir, dfm_model_fname), 'w')
 # model_df = df.loc[np.logical_and(df['source'] == source,
 #                                  df['epoch'] == epoch_)]
@@ -84,16 +105,16 @@ refitted_mdl_path = os.path.join(source_dir, refitted_mdl_fname)
 # bootstrapped_uv_fits = sorted(glob.glob(os.path.join(source_dir,
 #                                                      'bootstrapped_data*.fits')))
 fig = bootstrap_uvfits_with_difmap_model(uv_fits_path, refitted_mdl_path,
-                                         boot_dir=source_dir, n_boot=300,
+                                         boot_dir=source_dir, n_boot=100,
                                          clean_after=False,
-                                         use_kde=False,
+                                         use_kde=True,
                                          use_v=False,
                                          out_plot_file=os.path.join(source_dir, 'plot.pdf'),
-                                         niter=200,
+                                         niter=150,
                                          bootstrapped_uv_fits=None)
-from bootstrap import analyze_bootstrap_samples
-booted_mdl_paths = glob.glob(os.path.join(source_dir, 'mdl_booted*'))
-fig = analyze_bootstrap_samples(refitted_mdl_fname, booted_mdl_paths,
-                                dfm_model_dir=source_dir, plot_comps=[0, 9],
-                                plot_file=os.path.join(source_dir, '0_1_boot.eps'),
-                                txt_file=os.path.join(source_dir, 'txt.txt'))
+# from bootstrap import analyze_bootstrap_samples
+# booted_mdl_paths = glob.glob(os.path.join(source_dir, 'mdl_booted*'))
+# fig = analyze_bootstrap_samples(refitted_mdl_fname, booted_mdl_paths,
+#                                 dfm_model_dir=source_dir, plot_comps=[11, 10],
+#                                 plot_file=os.path.join(source_dir, '0_1_boot.eps'),
+#                                 txt_file=os.path.join(source_dir, 'txt.txt'))

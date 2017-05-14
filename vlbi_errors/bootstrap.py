@@ -131,7 +131,7 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                     fig, axes = matplotlib.pyplot.subplots(nrows=n, ncols=n)
                     fig.set_size_inches(16.5, 16.5)
                 corner.corner(boot_data, labels=labels, plot_contours=True,
-                              plt_datapoints=False, color='green',
+                              plt_datapoints=False, color='gray',
                               levels=[0.68,0.95],
                               smooth=0.5,
                               bins=20,

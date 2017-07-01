@@ -710,8 +710,10 @@ class Image(BasicImage):
         self.x_c_val, self.y_c_val = self.pixrefval
         # Create coordinate arrays
         xsize, ysize = self.imsize
-        x = np.linspace(0, xsize - 1, xsize)
-        y = np.linspace(0, ysize - 1, ysize)
+        # x = np.linspace(0, xsize - 1, xsize)
+        x = np.linspace(0, xsize, xsize)
+        # y = np.linspace(0, ysize - 1, ysize)
+        y = np.linspace(0, ysize, ysize)
         xv, yv = np.meshgrid(x, y)
         x -= self.x_c
         xv -= self.x_c

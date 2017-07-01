@@ -10,7 +10,7 @@ from beam import CleanBeam
 from skimage.feature import register_translation
 import matplotlib
 import matplotlib.pyplot as plt
-# from matplotlib.patches import Ellipse
+from matplotlib.patches import Ellipse, Circle
 
 try:
     import pylab
@@ -140,7 +140,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
          beam_place='ll', colorbar_label=None, show=True, contour_color='k',
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
-         show_points=None, core=None, slice_color='black',
+         show_points=None, components=None, slice_color='black',
          plot_colorbar=True):
     """
     Plot image(s).
@@ -393,17 +393,26 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                     alpha=beam_alpha)
         ax.add_patch(e)
 
-    if core:
-        delta = abs(x[1] - x[0])
-        print delta
-        y_c = -core[1]
-        x_c = core[2]
-        e_height = core[3]
-        e_width = core[3] * core[4]
-        e = Ellipse((y_c, x_c), e_width, e_height, angle=core[5],
-                    edgecolor=beam_edge_color, facecolor='red',
-                    alpha=beam_alpha)
-        ax.add_patch(e)
+    if components:
+        for comp in components:
+            y_c = -comp.p[1]
+            x_c = comp.p[2]
+            if len(comp) == 6:
+                e_height = comp.p[3]
+                e_width = comp.p[3] * comp.p[4]
+                e = Ellipse((y_c, x_c), e_width, e_height,
+                            angle=90+180*comp.p[5]/np.pi,
+                            edgecolor=beam_edge_color, facecolor='red',
+                            alpha=beam_alpha)
+            elif len(comp) == 4:
+                c_size = comp.p[3]
+                e = Circle((y_c, x_c), c_size,
+                            edgecolor=beam_edge_color, facecolor='red',
+                            alpha=beam_alpha)
+            else:
+                raise Exception("Only Circle or Ellipse components are plotted")
+            ax.add_patch(e)
+
 
     # Saving output
     if outfile:

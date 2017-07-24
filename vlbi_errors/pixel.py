@@ -1,9 +1,9 @@
-import triangle
+import corner as triangle
 import numpy as np
 from scipy.optimize import leastsq
 from itertools import combinations
-from pymc3 import (Model, Normal, Categorical, Dirichlet, Metropolis,
-                   HalfCauchy, sample, constant, ElemwiseCategoricalStep, NUTS)
+#from pymc3 import (Model, Normal, Categorical, Dirichlet, Metropolis,
+#                   HalfCauchy, sample, constant, ElemwiseCategoricalStep, NUTS)
 import matplotlib.pyplot as plt
 
 

@@ -134,7 +134,7 @@ def find_bbox(array, level, delta=0.):
 # class.
 def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          y=None, blc=None, trc=None, cmap='hsv', abs_levels=None,
-         rel_levels=None, min_abs_level=None, min_rel_level=None, k=2., vinc=2.,
+         rel_levels=None, min_abs_level=None, min_rel_level=None, k=2, vinc=2,
          show_beam=False, beam_corner='ll', beam=None, contours_mask=None,
          colors_mask=None, vectors_mask=None, plot_title=None, color_clim=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
@@ -299,21 +299,23 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 # Build levels (``pyplot.contour`` takes only absolute values)
                 abs_levels = [-max_level] + [max_level * i for i in rel_levels]
                 # If given only min_abs_level & increment factor ``k``
-            # from given minimal absolute level
-            elif min_abs_level is not None:
-                print "from minimal absolute level..."
-                n_max = int(math.ceil(math.log(max_level / min_abs_level, k)))
-            # from given minimal relative level
-            elif min_rel_level is not None:
-                print "from minimal relative level..."
-                min_abs_level = min_rel_level * max_level / 100.
-                n_max = int(math.ceil(math.log(max_level / min_abs_level, k)))
-            abs_levels = [-min_abs_level] + [min_abs_level * k ** i for i in
-                                             range(n_max)]
+            else:
+                # from given minimal absolute level
+                if min_abs_level is not None:
+                    print "from minimal absolute level..."
+                    n_max = int(math.ceil(math.log(max_level / min_abs_level, k)))
+                # from given minimal relative level
+                elif min_rel_level is not None:
+                    print "from minimal relative level..."
+                    min_abs_level = min_rel_level * max_level / 100.
+                    n_max = int(math.ceil(math.log(max_level / min_abs_level, k)))
+                abs_levels = [-min_abs_level] + [min_abs_level * k ** i for i in
+                                                 range(n_max)]
             print "Constructed absolute levels are: ", abs_levels
         # return y, x, contours[x_slice, y_slice]
         co = ax.contour(y, x, contours[x_slice, y_slice], abs_levels,
                         colors=contour_color)
+        print "OK"
     if colors is not None:
         im = ax.imshow(colors[x_slice, y_slice], interpolation='none',
                        origin='lower', extent=[y[0], y[-1], x[0], x[-1]],

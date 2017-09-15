@@ -314,7 +314,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             print "Constructed absolute levels are: ", abs_levels
         # return y, x, contours[x_slice, y_slice]
         co = ax.contour(y, x, contours[x_slice, y_slice], abs_levels,
-                        colors=contour_color)
+                        colors=contour_color, extent=[y[0], y[-1], x[0], x[-1]])
+        ax.invert_xaxis()
         # Make colorbar for contours if no colors is supplied
         if colors is None:
             from mpl_toolkits.axes_grid1 import make_axes_locatable

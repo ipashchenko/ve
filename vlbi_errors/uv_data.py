@@ -1569,7 +1569,7 @@ class UVData(object):
     def uvplot(self, baselines=None, bands=None, stokes=None, style='a&p',
                freq_average=False, sym=None, phase_range=None, amp_range=None,
                re_range=None, im_range=None, colors=None, color='#4682b4',
-               fig=None, start_time=None, stop_time=None):
+               fig=None, start_time=None, stop_time=None, alpha=1.0):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
 
@@ -1663,14 +1663,15 @@ class UVData(object):
                         axes[0].plot(uv_radius, a2[:, _if], syms[_if])
                     else:
                         axes[0].plot(uv_radius, a2[:, _if], syms[_if],
-                                     color=color)
+                                     color=color, alpha=alpha)
                 for _if in range(n_if):
                     # Ignore default color if colors list is supplied
                     if colors is not None:
                         axes[1].plot(uv_radius, a1[:, _if], syms[_if])
                     else:
                         axes[1].plot(uv_radius, a1[:, _if], syms[_if],
-                                     color=color)
+                                     color=color, alpha=alpha)
+                axes[1].set_xlabel('UV-radius, wavelengths')
 
             elif n_if == 1 and stokes in self.stokes:
 

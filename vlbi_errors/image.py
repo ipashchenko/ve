@@ -318,11 +318,12 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         ax.invert_xaxis()
         # Make colorbar for contours if no colors is supplied
         if colors is None:
-            from mpl_toolkits.axes_grid1 import make_axes_locatable
-            divider = make_axes_locatable(ax)
-            cax = divider.append_axes("right", size="10%", pad=0.00)
-            cb = fig.colorbar(co, cax=cax)
-            cb.set_label(colorbar_label)
+            if plot_colorbar:
+                from mpl_toolkits.axes_grid1 import make_axes_locatable
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="10%", pad=0.00)
+                cb = fig.colorbar(co, cax=cax)
+                cb.set_label(colorbar_label)
         print "OK"
     if colors is not None:
         im = ax.imshow(colors[x_slice, y_slice], interpolation='none',

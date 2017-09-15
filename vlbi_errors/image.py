@@ -416,7 +416,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                             edgecolor=beam_edge_color, facecolor='red',
                             alpha=beam_alpha)
             elif len(comp) == 4:
-                c_size = comp.p[3]
+                # It is radius so dividing in 2
+                c_size = comp.p[3]/2.0
                 e = Circle((y_c, x_c), c_size,
                             edgecolor=beam_edge_color, facecolor='red',
                             alpha=beam_alpha)

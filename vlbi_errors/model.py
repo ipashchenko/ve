@@ -165,6 +165,16 @@ class Model(object):
         for component in components:
             self._components.remove(component)
 
+    def filter_components_by_r(self, r_max_mas=None):
+        """
+        Remove all components that are further away then ``r_max_mas``.
+        :param r_max_mas:
+            Maximum distance of component to phase center to keep it in model.
+        """
+        for component in self._components:
+            if np.hypot(component.p[1], component.p[2]) < r_max_mas:
+                self.remove_component(component)
+
     def clear_components(self):
         self._components = list()
 
@@ -280,6 +290,22 @@ class Model(object):
         from stats import LnLikelihood
         lnlik = LnLikelihood(uvdata, self, average_freq=average_freq)
         return -2. * lnlik(self.p) + self.size * uvdata.sample_size
+
+    def aic(self, uvdata, average_freq=True):
+        """
+        Returns AIC for current model and given instance of ``UVData`` class.
+
+        :param uvdata:
+            Instance of ``UVData`` class.
+        :param average_freq: (optional)
+            Boolean. Average frequency when calculating BIC? (default: ``True``)
+
+        :return:
+            Value of AIC criterion (the lower - the better)
+        """
+        from stats import LnLikelihood
+        lnlik = LnLikelihood(uvdata, self, average_freq=average_freq)
+        return -2. * lnlik(self.p) + self.size
 
 
 if __name__ == "__main__":

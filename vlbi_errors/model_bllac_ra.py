@@ -50,41 +50,77 @@ model.add_component(icomp)
 uv = uvdata_core.uv
 
 lnlik = LnLikelihood(uvdata_core, model, average_freq=True, amp_only=False)
-# for angle in np.linspace(0, 2*np.pi, 12):
+
+import emcee
+
+
+def lnprior(p):
+    if not 1.0 < p[0] < 5.0:
+        return -np.inf
+    if not -20 < p[1] < 20:
+        return -np.inf
+    if not -20 < p[2] < 20:
+        return -np.inf
+    if not 0.1 < p[3] < 2.0:
+        return -np.inf
+    if not 0.0 < p[4] < 2*np.pi:
+        return -np.inf
+    return 0.0
+
+
+def lnpost(p):
+    lp = lnprior(p)
+    if not np.isfinite(lp):
+        return -np.inf
+    else:
+        return lnlik(p) + lp
+
+
+p0 = [1.0, 0.0, 0.0, 1.0, 3.14]
+from emcee.utils import sample_ball
+ndim = 5
+nwalkers = 24
+p = sample_ball(p0, [0.2, 3, 3, 0.2, 0.5], nwalkers)
+sampler = emcee.EnsembleSampler(nwalkers, ndim, lnpost, threads=4)
+pos, prob, state = sampler.run_mcmc(p, 20)
+print("Reseting sampler")
+sampler.reset()
+pos, lnp, _ = sampler.run_mcmc(pos, 50)
+
+        # for angle in np.linspace(0, 2*np.pi, 12):
 #     print(angle, lnlik(np.array([1., 0, 0, 1., angle])))
 #
-from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
-import hyperopt
-
-
-def objective(space):
-    neglnlik = -lnlik(np.array([space['flux'], space['x'], space['y'], space['scale'], space['angle']]))
-    print("Negative lnlike: {}".format(neglnlik))
-    return {'loss': neglnlik, 'status': STATUS_OK}
-
-
-space = {'flux': hp.loguniform('flux', -0.69, 1.6),
-         'x': hp.uniform('x', -20, 20),
-         'y': hp.uniform('y', -20, 20),
-         'scale': hp.loguniform('scale', -0.69, 0.69),
-         'angle': hp.uniform('angle', 0, 2*np.pi)}
-
-trials = Trials()
-best = fmin(fn=objective,
-            space=space,
-            algo=tpe.suggest,
-            max_evals=300,
-            trials=trials)
-
-print(hyperopt.space_eval(space, best))
+# from hyperopt import hp, fmin, tpe, STATUS_OK, Trials
+# import hyperopt
+#
+#
+# def objective(space):
+#     neglnlik = -lnlik(np.array([space['flux'], space['x'], space['y'], space['scale'], space['angle']]))
+#     print("Negative lnlike: {}".format(neglnlik))
+#     return {'loss': neglnlik, 'status': STATUS_OK}
+#
+#
+# space = {'flux': hp.loguniform('flux', -0.69, 2.0),
+#          'x': hp.uniform('x', -20, 20),
+#          'y': hp.uniform('y', -20, 20),
+#          'scale': hp.loguniform('scale', -2.3, 0.69),
+#          'angle': hp.uniform('angle', 0, 2*np.pi)}
+#
+# trials = Trials()
+# best = fmin(fn=objective,
+#             space=space,
+#             algo=tpe.suggest,
+#             max_evals=300,
+#             trials=trials)
+#
+# print(hyperopt.space_eval(space, best))
 
 
 # p_ml = fmin(lambda p: -lnlik(p), model.p)
 
 # # TODO: Implement analitical grad of likelihood (it's gaussian)
 # fit = minimize(lambda p: -lnlik(p), model.p, method='L-BFGS-B',
-#                options={'maxiter': 100, 'maxfev': 100, 'xtol': 0.001,
-#                         'ftol': 0.001, 'approx_grad': True},
+#                options={'factr': 10**12, 'eps': 0.2, 'disp': True},
 #                bounds=[(0.5, 2), (-20, 20), (-20, 20), (0.5, 2),
 #                        (2.4, 2.9)])
 # if fit['success']:

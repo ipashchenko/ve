@@ -3,6 +3,7 @@ import numpy as np
 # import numexpr as ne
 from utils import _function_wrapper, mas_to_rad, vcomplex, gaussian
 from ft_routines import image_ft
+from utils import transform_image
 
 try:
     import pylab
@@ -27,7 +28,7 @@ class Component(object):
 
     @property
     def parnames(self):
-        return self._parnames[~self._fixed]
+        return np.array(self._parnames)[~self._fixed]
 
     def add_prior(self, **lnprior):
         """
@@ -579,13 +580,13 @@ class ImageComponent(Component):
         add = self.image
         if beam is not None:
             add = beam.convolve(self.image)
-        image.image += add
+        image.image += np.rot90(add)[::-1, ::]
 
     def substract_from_image(self, image, beam=None):
         add = self.image
         if beam is not None:
             add = beam.convolve(self.image)
-        image.image -= add
+        image.image -= np.rot90(add)[::-1, ::]
 
     def ft(self, uv):
         u = uv[:, 0]
@@ -593,46 +594,110 @@ class ImageComponent(Component):
         return image_ft(self.image, self.x, self.y, u, v)
 
 
-if __name__ == '__main__':
-    import os
-    from uv_data import UVData
-    from from_fits import (create_clean_image_from_fits_file,
-                           create_model_from_fits_file)
-    base_dir = '/home/ilya/code/vlbi_errors/examples/'
-    uvdata = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
-    uvdata_ = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
-    uvdata__ = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
-    fig = uvdata.uvplot(bands=[1])
-    noise = uvdata.noise()
-    noise = {key: 0.1 * value for key, value in noise.items()}
-    # from spydiff import clean_difmap
-    # clean_difmap('2230+114.x.2006_02_12.uvf', 'cc.fits', 'I', (512, 0.1),
-    #              path_to_script='/home/ilya/code/vlbi_errors/difmap/final_clean_nw',
-    #              show_difmap_output=True, outpath=base_dir,
-    #              path=base_dir)
-    image = create_clean_image_from_fits_file(os.path.join(base_dir, 'cc.fits'))
+# TODO: Subclass ImageComponent
+class ModelImageComponent(Component):
+    """
+    Class that represents model image that can be translated, rotated and
+    scaled.
+    """
+    def __init__(self, image, x, y):
+        """
+        :param image:
+            2D numpy array with image.
+        :param x:
+            Iterable of zero axis coordinates.
+        :param y:
+            Iterable of first axis coordinates.
+        """
+        super(ModelImageComponent, self).__init__()
+        self.imsize = np.shape(image)
+        self._image = image
+        self.x = x
+        self.y = y
+        self._parnames.extend(['scale', 'theta'])
+        self._fixed = np.concatenate((self._fixed,
+                                      np.array([False, False]),))
+        # Model hasn't any amplitude scaling, shift_x, shift_y, scale
+        # or rotation (rad)
+        self._p = np.array([1.0, 0.0, 0.0, 1.0, 0.0])
+        self.size = 5
+        self._image_ft = None
 
-    # Model fetched from CC-fits file
-    ccmodel = create_model_from_fits_file(os.path.join(base_dir, 'cc.fits'))
+    @property
+    def image(self):
+        """
+        Returns original image rescaled, rotated, shifted and amplified.
+        """
+        print("Calculating image for parameters: {}".format(self.p))
+        return transform_image(self._image, self.p[0], self.p[1], self.p[2],
+                               self.p[3], self.p[4])
 
-    icomponent = ImageComponent(image.cc.T, -image.x[::-1], -image.y[::-1])
-    from model import Model
-    model = Model(stokes='I')
-    # Model created using ``ImageComponent``
-    model.add_component(icomponent)
+    # FIXME: I should inherit properties like image and ft and return
+    # them transformed according to parameters
 
-    # Model created using ``from_2darray``
-    model_2d = Model()
-    model_2d.from_2darray(image.cc, (0.1, 0.1))
+    def ft(self, uv):
+        print("FT current image model")
+        u = uv[:, 0]
+        v = uv[:, 1]
+        return image_ft(self.image.copy(), self.x, self.y, u, v)
 
-    # uvdata.substitute([model])
-    uvdata_.substitute([ccmodel])
-    uvdata__.substitute([model_2d])
-    # uvdata.noise_add(noise)
-    # # ImageComponent
-    # uvdata.uvplot(fig=fig, bands=[1], color='r')
-    # from cc-fits
-    uvdata_.uvplot(fig=fig, bands=[1], color='g')
-    # from_2darray
-    uvdata__.uvplot(fig=fig, bands=[1], color='y')
+    def add_to_image(self, image, beam=None):
+        add = self.image
+        if beam is not None:
+            add = beam.convolve(self.image)
+        image.image += np.rot90(add)[::-1, ::]
 
+    def substract_from_image(self, image, beam=None):
+        add = self.image
+        if beam is not None:
+            add = beam.convolve(self.image)
+        image.image -= np.rot90(add)[::-1, ::]
+
+    # def ft(self, uv):
+    #     return transform_image(self._image, self.p[0], self.p[1], self.p[2],
+    #                            self.p[3], self.p[4])
+
+#
+# if __name__ == '__main__':
+#     import os
+#     from uv_data import UVData
+#     from from_fits import (create_clean_image_from_fits_file,
+#                            create_model_from_fits_file)
+#     base_dir = '/home/ilya/code/vlbi_errors/examples/'
+#     uvdata = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
+#     uvdata_ = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
+#     uvdata__ = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
+#     fig = uvdata.uvplot(bands=[1])
+#     noise = uvdata.noise()
+#     noise = {key: 0.1 * value for key, value in noise.items()}
+#     # from spydiff import clean_difmap
+#     # clean_difmap('2230+114.x.2006_02_12.uvf', 'cc.fits', 'I', (512, 0.1),
+#     #              path_to_script='/home/ilya/code/vlbi_errors/difmap/final_clean_nw',
+#     #              show_difmap_output=True, outpath=base_dir,
+#     #              path=base_dir)
+#     image = create_clean_image_from_fits_file(os.path.join(base_dir, 'cc.fits'))
+#
+#     # Model fetched from CC-fits file
+#     ccmodel = create_model_from_fits_file(os.path.join(base_dir, 'cc.fits'))
+#
+#     icomponent = ImageComponent(image.cc.T, -image.x[::-1], -image.y[::-1])
+#     from model import Model
+#     model = Model(stokes='I')
+#     # Model created using ``ImageComponent``
+#     model.add_component(icomponent)
+#
+#     # Model created using ``from_2darray``
+#     model_2d = Model()
+#     model_2d.from_2darray(image.cc, (0.1, 0.1))
+#
+#     # uvdata.substitute([model])
+#     uvdata_.substitute([ccmodel])
+#     uvdata__.substitute([model_2d])
+#     # uvdata.noise_add(noise)
+#     # # ImageComponent
+#     # uvdata.uvplot(fig=fig, bands=[1], color='r')
+#     # from cc-fits
+#     uvdata_.uvplot(fig=fig, bands=[1], color='g')
+#     # from_2darray
+#     uvdata__.uvplot(fig=fig, bands=[1], color='y')
+#

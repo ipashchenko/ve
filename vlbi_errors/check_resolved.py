@@ -23,8 +23,8 @@ def hypercube_partial(ppfs):
     return partial(hypercube_full, ppfs=ppfs)
 
 
-def check_resolved(uv_fits, mdl_dict, components_priors, outdir=None,
-                   **nestle_kwargs):
+def check_resolved(uv_fits, mdl_dict, components_priors, stokes='I',
+                   outdir=None, **nestle_kwargs):
     """
     :param uv_fits:
         Path to uv-fits file with self-calibrated visibilities.
@@ -61,8 +61,12 @@ def check_resolved(uv_fits, mdl_dict, components_priors, outdir=None,
     result_dict = OrderedDict()
 
     for comp_type in ('pt', 'cg', 'el'):
-        print("\nWorking on component type: {}\n".format(comp_type))
-        mdl_file = mdl_dict[comp_type]
+
+        try:
+            mdl_file = mdl_dict[comp_type]
+            print("\nWorking on component type: {}\n".format(comp_type))
+        except KeyError:
+            continue
         uv_data = UVData(uv_fits)
         mdl_dir, mdl_fname = os.path.split(mdl_file)
         comps = import_difmap_model(mdl_fname, mdl_dir)

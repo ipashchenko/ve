@@ -47,8 +47,11 @@ def image_ft(image, x, y, u, v):
     xx = x[xx]
     yy = y[yy]
     visibilities = list()
-    for u0, v0 in zip(u, v):
-        visibility = (image.compressed() * np.exp(-2.0 * math.pi * 1j *
-                                                  (u0 * xx + v0 * yy))).sum()
+    image_compressed = image.compressed()
+    for i, u0, v0 in zip(xrange(len(u)), u, v):
+        # if not i % 10:
+        #     print("Doing {}th uv-point".format(i))
+        visibility = (image_compressed * np.exp(-2.0 * math.pi * 1j *
+                                                (u0 * xx + v0 * yy))).sum()
         visibilities.append(visibility)
     return np.asarray(visibilities)

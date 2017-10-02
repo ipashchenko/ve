@@ -4,16 +4,21 @@ from collections import OrderedDict
 from uv_data import UVData
 from model import Model
 from cv_model import cv_difmap_models
-from spydiff import export_difmap_model, modelfit_difmap, import_difmap_model
+from spydiff import (export_difmap_model, modelfit_difmap, import_difmap_model,
+                     clean_difmap, append_component_to_difmap_model)
 from components import CGComponent
 from check_resolved import check_resolved
+from from_fits import create_image_from_fits_file
+from utils import fit_gaussian
 
 
 priors_max_flux = None
 priors_xy_max = 5.0
 priors_bmaj_max = 3.0
+mapsize_clean = (1024, 0.1)
 out_dir = ''
 uv_fits_path = ''
+path_to_script = ''
 uvdata = UVData(uv_fits_path)
 uv_fits_dir, uv_fits_fname = os.path.split(uv_fits_path)
 performance_dict = OrderedDict()
@@ -58,5 +63,22 @@ performance_dict["cg1"] = {"aic": aic, "bic": bic, "logz": evidence,
 uvdata_ = UVData(uv_fits_path)
 uvdata_.substitute([model_cg1])
 uvdata_residual = uvdata - uvdata_
+uvdata_residual.save(os.path.join(out_dir, 'residual.FITS'), rewrite=True)
+
 
 # Image residual UV-data
+clean_difmap('residual.FITS', 'residual_image.FITS', 'I', mapsize_clean,
+             path=out_dir, path_to_script=path_to_script, outpath=out_dir)
+
+image = create_image_from_fits_file(os.path.join(out_dir, 'residual_image.FITS'))
+height, x, y, width_x, width_y = fit_gaussian(image.image)
+
+# Creating new component
+new_comp = CGComponent(height, x, y, 0.5*(width_x+width_y))
+
+import shutil
+shutil.copy(os.path.join(out_dir, 'cg1_fitted.mdl'),
+            os.path.join(out_dir, 'cg2_init.mdl'))
+# Repeat all modelling stuff with new model
+append_component_to_difmap_model(new_comp,
+                                 os.path.join(out_dir, 'cg2_init.mdl'))

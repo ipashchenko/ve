@@ -241,6 +241,29 @@ class UVData(object):
         data = self.hdu.data[indxs]
         self.save(fname, data, rewrite=True)
 
+    def save_uvrange(self, fname, uv_min):
+        """
+        Save only fraction of of data on each baseline.
+
+        :param fname:
+            File path to save.
+        """
+        indxs = list()
+        for bl in self.baselines:
+            bl_indxs = self._indxs_baselines[bl]
+            bl_indxs_pw = self.pw_indxs_baseline(bl, average_bands=True,
+                                                 stokes=['RR', 'LL'],
+                                                 average_stokes=True)
+            bl_indxs = mask_boolean_with_boolean(bl_indxs, bl_indxs_pw)
+            uv = self.uv[np.nonzero(bl_indxs)[0]]
+            uv_rad = np.hypot(uv[:, 0], uv[:, 1])
+            tr = np.nonzero(bl_indxs)[0][uv_rad > uv_min]
+            indxs.append(tr)
+        indxs = np.hstack(indxs)
+        indxs = sorted(indxs)
+        data = self.hdu.data[indxs]
+        self.save(fname, data, rewrite=True)
+
     # TODO: for IDI extend this method
     def learn_data_structure(self, hdu):
         # Learn parameters

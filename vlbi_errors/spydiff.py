@@ -1,6 +1,7 @@
 import os
 import datetime
 import numpy as np
+from utils import degree_to_rad
 from components import DeltaComponent, CGComponent, EGComponent
 
 
@@ -197,6 +198,97 @@ def import_difmap_model(mdl_fname, mdl_dir=None):
             raise NotImplementedError("Only CC, CG & EG are implemented")
         comps.append(comp)
     return comps
+
+
+def export_difmap_model(comps, out_fname, freq_hz):
+    """
+    Function that export iterable of ``Component`` instances to difmap format
+    model file.
+    :param comps:
+        Iterable of ``Component`` instances.
+    :param out_fname:
+        Path for saving file.
+    """
+    with open(out_fname, "w") as fo:
+        fo.write("! Flux (Jy) Radius (mas)  Theta (deg)  Major (mas)  Axial ratio   Phi (deg) T\n\
+! Freq (Hz)     SpecIndex\n")
+        for comp in comps:
+            if isinstance(comp, EGComponent):
+                if comp.size == 4:
+                    # Jy, mas, mas, mas
+                    flux, x, y, bmaj = comp.p
+                    e = "1.00000"
+                    bpa = "000.000"
+                    type = "1"
+                    bmaj = "{}v".format(bmaj)
+                elif comp.size == 6:
+                    # Jy, mas, mas, mas, -, deg
+                    flux, x, y, bmaj, e, bpa = comp.p
+                    e = "{}v".format(e)
+                    bpa = "{}v".format((bpa-np.pi/2)/degree_to_rad)
+                    bmaj = "{}v".format(bmaj)
+                    type = "1"
+                else:
+                    raise Exception
+            elif isinstance(comp, DeltaComponent):
+                flux, x, y = comp.p
+                e = "1.00000"
+                bmaj = "0.0000"
+                bpa = "000.000"
+                type = "0"
+            else:
+                raise Exception
+            # mas
+            r = np.hypot(x, y)
+            # rad
+            theta = np.arctan2(-x, -y)
+            theta /= degree_to_rad
+            fo.write("{}v {}v {}v {} {} {} {} {} 0\n".format(flux, r, theta,
+                                                           bmaj, e, bpa, type,
+                                                           freq_hz))
+
+
+def append_component_to_difmap_model(comp, out_fname, freq_hz):
+    """
+    :param comp:
+        Instance of ``Component``.
+    :param fname:
+        File with difmap model.
+    """
+    with open(out_fname, "a") as fo:
+        if isinstance(comp, EGComponent):
+            if comp.size == 4:
+                # Jy, mas, mas, mas
+                flux, x, y, bmaj = comp.p
+                e = "1.00000"
+                bpa = "000.000"
+                type = "1"
+                bmaj = "{}v".format(bmaj)
+            elif comp.size == 6:
+                # Jy, mas, mas, mas, -, deg
+                flux, x, y, bmaj, e, bpa = comp.p
+                e = "{}v".format(e)
+                bpa = "{}v".format((bpa - np.pi / 2) / degree_to_rad)
+                bmaj = "{}v".format(bmaj)
+                type = "1"
+            else:
+                raise Exception
+        elif isinstance(comp, DeltaComponent):
+            flux, x, y = comp.p
+            e = "1.00000"
+            bmaj = "0.0000"
+            bpa = "000.000"
+            type = "0"
+        else:
+            raise Exception
+        # mas
+        r = np.hypot(x, y)
+        # rad
+        theta = np.arctan2(-x, -y)
+        theta /= degree_to_rad
+        fo.write("{}v {}v {}v {} {} {} {} {} 0\n".format(flux, r, theta,
+                                                         bmaj, e, bpa, type,
+                                                         freq_hz))
 
 
 def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',

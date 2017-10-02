@@ -20,7 +20,21 @@ path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
 uvdata = UVData(uv_fits_path)
 freq_hz = uvdata.frequency
 
+# # Setting ground truth model
+# cg1 = CGComponent(1.0, 0.0, 0.0, 0.1)
+# cg2 = CGComponent(0.5, -1.0, 1.0, 0.3)
+# cg3 = CGComponent(0.35, -3.0, 2.5, 0.7)
+# model = Model(stokes="I")
+# model.add_components(cg1, cg2, cg3)
+# noise = uvdata.noise()
+# uvdata.substitute([model])
+# uvdata.noise_add(noise)
+# uvdata.save("FAKE.uvf", rewrite=True)
+# uv_fits_fname = 'FAKE.uvf'
+# uv_fits_path = os.path.join(out_dir, uv_fits_fname)
 
+
+# TODO: Remove beam from ``bmaj``
 def suggest_cg_component(uv_fits_path, mapsize_clean, path_to_script,
                          outname='image_cc.fits', out_dir=None):
     """
@@ -50,7 +64,7 @@ def suggest_cg_component(uv_fits_path, mapsize_clean, path_to_script,
     image = create_image_from_fits_file(os.path.join(out_dir, outname))
     imsize = image.imsize[0]
     mas_in_pix = abs(image.pixsize[0] / mas_to_rad)
-    amp, x, y, bmaj = infer_gaussian(image.image)
+    amp, y, x, bmaj = infer_gaussian(image.image)
     x = mas_in_pix * (x - imsize / 2) * np.sign(image.dx)
     y = mas_in_pix * (y - imsize / 2) * np.sign(image.dy)
     bmaj *= mas_in_pix
@@ -72,26 +86,33 @@ def create_residuals(uv_fits_path, model=None, out_fname='residuals.uvf',
     return out_fits_path
 
 
+model = None
 cv_scores = list()
 for i in range(1, n_max_comps+1):
-    model = None
+    print("{}-th iteration begins".format(i))
     uv_fits_path_res = create_residuals(uv_fits_path, model=model,
                                         out_dir=out_dir)
     # 1. Modelfit in difmap with CG
+    print("Suggesting CG component to add...")
     cg = suggest_cg_component(uv_fits_path_res, mapsize_clean, path_to_script,
                               out_dir=out_dir)
+    print("Suggested: {}".format(cg.p))
+
     try:
+        # If this is not first iteration then append component to existing file
+        print("Our initial model will be last one + new component.")
         shutil.copy(os.path.join(out_dir, 'cg_fitted_{}.mdl'.format(i-1)),
                     os.path.join(out_dir, 'cg_init_{}.mdl'.format(i)))
+        print("Appending component to model")
+        append_component_to_difmap_model(cg, os.path.join(out_dir, 'cg_init_{}.mdl'.format(i)),
+                                         freq_hz)
     except IOError:
-        pass
-    append_component_to_difmap_model(cg, os.path.join(out_dir, 'cg_init_{}.mdl'.format(i)),
-                                     freq_hz)
-    out_fname = os.path.join(out_dir, 'cg_init_{}.mdl'.format(i))
-    export_difmap_model([cg], out_fname, freq_hz)
+        # If this is first iteration then create model file
+        export_difmap_model([cg], 'cg_init_{}.mdl'.format(i), freq_hz)
+
     modelfit_difmap(uv_fits_fname, 'cg_init_{}.mdl'.format(i),
                     'cg_fitted_{}.mdl'.format(i), path=out_dir,
-                    mdl_path=out_dir, out_path=out_dir)
+                    mdl_path=out_dir, out_path=out_dir, niter=100)
     model = Model(stokes='I')
     comps = import_difmap_model('cg_fitted_{}.mdl'.format(i), out_dir)
     model.add_components(*comps)

@@ -17,6 +17,8 @@ from sklearn import svm
 from sklearn.covariance import EllipticEnvelope, MinCovDet
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
+from skimage import transform
+from scipy.ndimage import interpolation
 try:
     # Python 3 moved reduce to the functools module
     from functools import reduce
@@ -1632,3 +1634,33 @@ def slice_2darray(array, pix1, pix2):
         y = np.linspace(pix1[1], pix2[1], length)
 
     return array[v_round(x).astype(np.int), v_round(y).astype(np.int)]
+
+
+def transform_image(image, amplitude, shift_x, shift_y, scale_factor, rotation,
+                    cleaning_threshold=10**(-5)):
+    imsize = image.shape[0]
+    new_size = int(np.round(imsize*scale_factor))
+    if new_size % 2:
+        scale_factor = (1.0 + new_size)/imsize
+        new_size = int(np.round(imsize * scale_factor))
+    zoomed_image = interpolation.zoom(image, scale_factor)
+    delta = scale_factor - 1
+    if abs(delta) > 0.0001:
+        if delta > 0:
+            window_large = slice(new_size / 2 - imsize / 2,
+                                 new_size / 2 + imsize / 2, None)
+            tr_image = zoomed_image[window_large, window_large]
+        else:
+            tr_image = np.zeros((imsize, imsize), dtype=float)
+            window_small = slice(imsize / 2 - new_size / 2,
+                                 imsize / 2 + new_size / 2, None)
+            tr_image[window_small, window_small] = zoomed_image
+    else:
+        tr_image = image.copy()
+    tr_image = transform.rotate(tr_image, rotation/degree_to_rad)
+    tf_shift = transform.SimilarityTransform(translation=[shift_x, shift_y])
+
+    tr_image = transform.warp(tr_image, tf_shift)
+    tr_image *= amplitude
+    tr_image[tr_image < cleaning_threshold] = 0.0
+    return tr_image

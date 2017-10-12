@@ -8,7 +8,7 @@ from components import DeltaComponent, CGComponent, EGComponent
 def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
             path_to_script=None, mapsize_restore=None, beam_restore=None,
             outpath=None, shift=None, show_difmap_output=False,
-            windows=None):
+            txt_windows=None, clean_box=None):
     if outpath is None:
         outpath = os.getcwd()
 
@@ -17,8 +17,14 @@ def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
 
     difmapout = open("difmap_commands", "w")
     difmapout.write("observe " + fname + "\n")
-    if windows is not None:
-        difmapout.write("rwin " + str(windows) + "\n")
+    if txt_windows is not None:
+        difmapout.write("rwin " + str(txt_windows) + "\n")
+
+    if clean_box is not None:
+        difmapout.write("addwin " + str(clean_box[0]) + ', ' +
+                        str(clean_box[1]) + ', ' + str(clean_box[2]) + ', ' +
+                        str(clean_box[3]) + "\n")
+
     difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
                     str(mapsize_clean[1]) + "\n")
     difmapout.write("@" + path_to_script + " " + stokes + ", " + str(niter) + "\n")
@@ -48,7 +54,7 @@ def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
 def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  path_to_script=None, mapsize_restore=None, beam_restore=None,
                  outpath=None, shift=None, show_difmap_output=False,
-                 command_file=None):
+                 command_file=None, clean_box=None):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
@@ -103,6 +109,10 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     #     difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
     difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
                     str(mapsize_clean[1]) + "\n")
+    if clean_box is not None:
+        difmapout.write("addwin " + str(clean_box[0]) + ', ' +
+                        str(clean_box[1]) + ', ' + str(clean_box[2]) + ', ' +
+                        str(clean_box[3]) + "\n")
     difmapout.write("@" + path_to_script + " " + stokes + "\n")
     if beam_restore:
         difmapout.write("restore " + str(beam_restore[0]) + ', ' +

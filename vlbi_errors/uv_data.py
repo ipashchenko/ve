@@ -148,9 +148,38 @@ class UVData(object):
                                        stokes=stokes,
                                        average_stokes=average_stokes)
 
-    @property
-    def sample_size(self):
-        raise NotImplementedError
+    # FIXME: Finish it!
+    def sample_size(self, stokes='I', average_freq=True):
+        assert self._check_stokes_present(stokes)
+        if average_freq:
+            size = self.uvdata_freq_averaged.mask[0]
+        else:
+            size = self.uvdata_weight_masked.shape[0] * self.uvdata_weight_masked[1]
+
+        stokes_multiplyer = 1
+        if stokes == 'I':
+            stokes_multiplyer = 2
+
+    def _check_stokes_present(self, stokes):
+        """
+        Check if ``stokes`` is present in data (could be calculated from data).
+        :param stokes:
+            String of Stokes parameters ("I, Q, U, V, RR, LL, RL, LR").
+        :return:
+            Boolean value.
+        """
+        stokes_present = self.stokes
+        if stokes in stokes_present:
+            return True
+        elif stokes in ("I", "Q", "U", "V"):
+            if stokes in ("I", "V"):
+                return "RR" in stokes_present and "LL" in stokes_present
+            # If "Q" or "U"
+            else:
+                return "RL" in stokes_present and "LR" in stokes_present
+        else:
+            raise Exception("stokes must be from I, Q, U, V, RR, LL, RL or LR!")
+
 
     def sync(self):
         """

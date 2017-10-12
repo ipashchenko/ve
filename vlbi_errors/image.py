@@ -141,7 +141,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          beam_place='ll', colorbar_label=None, show=True, contour_color='k',
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
          show_points=None, components=None, slice_color='black',
-         plot_colorbar=True):
+         plot_colorbar=True, label_size=16):
     """
     Plot image(s).
 
@@ -221,7 +221,6 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         converted to python-like zero-indexing. If none are specified then use
         default values. All images plotted must have the same shape.
     """
-    label_size = 14
     matplotlib.rcParams['xtick.labelsize'] = label_size
     matplotlib.rcParams['ytick.labelsize'] = label_size
     matplotlib.rcParams['axes.titlesize'] = label_size
@@ -406,19 +405,19 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
 
     if components:
         for comp in components:
-            y_c = -comp.p[1]
-            x_c = comp.p[2]
+            x_c = -comp.p[1]
+            y_c = -comp.p[2]
             if len(comp) == 6:
                 e_height = comp.p[3]
                 e_width = comp.p[3] * comp.p[4]
-                e = Ellipse((y_c, x_c), e_width, e_height,
+                e = Ellipse((x_c, y_c), e_width, e_height,
                             angle=90+180*comp.p[5]/np.pi,
                             edgecolor=beam_edge_color, facecolor='red',
                             alpha=beam_alpha)
             elif len(comp) == 4:
                 # It is radius so dividing in 2
                 c_size = comp.p[3]/2.0
-                e = Circle((y_c, x_c), c_size,
+                e = Circle((x_c, y_c), c_size,
                             edgecolor=beam_edge_color, facecolor='red',
                             alpha=beam_alpha)
             else:

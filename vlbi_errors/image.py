@@ -272,6 +272,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     x = np.linspace(x_[0], x_[-1], imsize_x)
     y = np.linspace(y_[0], y_[-1], imsize_y)
 
+    plot_pixel_size = np.hypot((x[1]-x[0]), (y[1]-y[0]))
+
     # Optionally mask arrays
     if contours is not None and contours_mask is not None:
         contours = np.ma.array(contours, mask=contours_mask)
@@ -290,27 +292,27 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     if contours is not None:
         # If no absolute levels are supplied then construct them
         if abs_levels is None:
-            print "constructing absolute levels for contours..."
+            # print("constructing absolute levels for contours...")
             max_level = contours[x_slice, y_slice].max()
             # from given relative levels
             if rel_levels is not None:
-                print "from relative levels..."
+                # print("from relative levels...")
                 # Build levels (``pyplot.contour`` takes only absolute values)
                 abs_levels = [-max_level] + [max_level * i for i in rel_levels]
                 # If given only min_abs_level & increment factor ``k``
             else:
                 # from given minimal absolute level
                 if min_abs_level is not None:
-                    print "from minimal absolute level..."
+                    # print("from minimal absolute level...")
                     n_max = int(math.ceil(math.log(max_level / min_abs_level, k)))
                 # from given minimal relative level
                 elif min_rel_level is not None:
-                    print "from minimal relative level..."
+                    # print("from minimal relative level...")
                     min_abs_level = min_rel_level * max_level / 100.
                     n_max = int(math.ceil(math.log(max_level / min_abs_level, k)))
                 abs_levels = [-min_abs_level] + [min_abs_level * k ** i for i in
                                                  range(n_max)]
-            print "Constructed absolute levels are: ", abs_levels
+            print("Constructed absolute levels are: {}".format(abs_levels))
         # return y, x, contours[x_slice, y_slice]
         co = ax.contour(y, x, contours[x_slice, y_slice], abs_levels,
                         colors=contour_color, extent=[y[0], y[-1], x[0], x[-1]])
@@ -323,7 +325,6 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 cax = divider.append_axes("right", size="10%", pad=0.00)
                 cb = fig.colorbar(co, cax=cax)
                 cb.set_label(colorbar_label)
-        print "OK"
     if colors is not None:
         im = ax.imshow(colors[x_slice, y_slice], interpolation='none',
                        origin='lower', extent=[y[0], y[-1], x[0], x[-1]],
@@ -404,26 +405,44 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         ax.add_patch(e)
 
     if components:
+        facecolor = "red"
         for comp in components:
             x_c = -comp.p[1]
             y_c = -comp.p[2]
             if len(comp) == 6:
                 e_height = comp.p[3]
                 e_width = comp.p[3] * comp.p[4]
+                if e_height < plot_pixel_size and e_width < plot_pixel_size:
+                    facecolor = "green"
+                if e_height < plot_pixel_size:
+                    e_height = 0.25*plot_pixel_size
+                if e_width < plot_pixel_size:
+                    e_width = 0.25*plot_pixel_size*comp.p[4]
+                else:
+                    facecolor = "red"
                 e = Ellipse((x_c, y_c), e_width, e_height,
                             angle=90+180*comp.p[5]/np.pi,
-                            edgecolor=beam_edge_color, facecolor='red',
+                            edgecolor=beam_edge_color, facecolor=facecolor,
                             alpha=beam_alpha)
             elif len(comp) == 4:
                 # It is radius so dividing in 2
                 c_size = comp.p[3]/2.0
+                if c_size < plot_pixel_size:
+                    c_size = 0.25*plot_pixel_size
+                    facecolor = "green"
+                else:
+                    facecolor = "red"
                 e = Circle((x_c, y_c), c_size,
-                            edgecolor=beam_edge_color, facecolor='red',
+                            edgecolor=beam_edge_color, facecolor=facecolor,
+                            alpha=beam_alpha)
+            elif len(comp) == 3:
+                e = Circle((x_c, y_c), plot_pixel_size,
+                            edgecolor=beam_edge_color, facecolor='green',
                             alpha=beam_alpha)
             else:
-                raise Exception("Only Circle or Ellipse components are plotted")
+                raise Exception("Only Point, Circle or Ellipse components are"
+                                " plotted")
             ax.add_patch(e)
-
 
     # Saving output
     if outfile:
@@ -434,7 +453,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             os.makedirs(outdir)
 
         path = os.path.join(outdir, outfile)
-        print "Saving to {}.{}".format(path, ext)
+        print("Saving to {}.{}".format(path, ext))
         plt.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=200)
 
     if show:

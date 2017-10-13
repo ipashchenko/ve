@@ -466,7 +466,7 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
     # Choose best model
     files = glob.glob(os.path.join(out_dir, "{}_{}_{}_fitted*".format(source, freq, epoch)))
     # Save files in archive
-    with tarfile.open(os.path.join(out_dir, "{}_fitted_models.tar.gz".format(source)), "w:gz") as tar:
+    with tarfile.open(os.path.join(out_dir, "{}_{}_{}_fitted_models.tar.gz".format(source, freq, epoch)), "w:gz") as tar:
         for fn in files:
             tar.add(fn, arcname=os.path.split(fn)[-1])
 

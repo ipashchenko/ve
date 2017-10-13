@@ -177,8 +177,9 @@ def create_residuals(uv_fits_path, model=None, out_fname='residuals.uvf',
     return out_fits_path
 
 
-def find_best(files, frac_flux=0.002, delta_flux=0.001, delta_size=0.001,
-              small_size=10**(-5)):
+def find_best(files, frac_flux=0.01, delta_flux=0.001, frac_size=0.01,
+              delta_size=0.001, small_size=10**(-5),
+              threshold_flux_small_sized_component=0.1):
     """
     Select best model from given difmap model files.
 
@@ -207,8 +208,10 @@ def find_best(files, frac_flux=0.002, delta_flux=0.001, delta_size=0.001,
         n_flux = 0
 
     sizes = np.array([comp.p[3] for comp in comps])
+    last_size = sizes[-1]
     sizes_inv = sizes[::-1]
-    a = (abs(sizes_inv - sizes_inv[0]) < delta_size)[::-1]
+    size_min = max(delta_size, frac_size * last_size)
+    a = (abs(sizes_inv - sizes_inv[0]) < size_min)[::-1]
     try:
         n_size = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
     except IndexError:
@@ -218,14 +221,21 @@ def find_best(files, frac_flux=0.002, delta_flux=0.001, delta_size=0.001,
     # components
     n = max(n_flux, n_size)
     print("Flux+Size==>{}".format(n))
-    if n == 1:
+    if n == 0:
         raise FailedFindBestModelException
     n_best = n
     for model_file in files[:n][::-1]:
         comps = import_difmap_model(model_file)
         small_sizes = [comp.p[3] > small_size for comp in comps[1:]]
-        if not np.alltrue(small_sizes):
+        fluxes_of_small_sized_components = [comp.p[0] for comp in comps[1:] if comp.p[3] < small_size]
+        fluxes_of_small_sized_components = [flux > threshold_flux_small_sized_component for flux in fluxes_of_small_sized_components]
+        print(fluxes_of_small_sized_components)
+        print(small_sizes)
+        if not np.alltrue(small_sizes) and not np.alltrue(fluxes_of_small_sized_components):
+            print("Decreasing complexity because of small component present")
             n_best = n_best - 1
+        else:
+            break
 
     return files[n_best-1]
 
@@ -283,10 +293,11 @@ def stop_adding_models_(files, n_check=5, frac_flux_min=0.002,
 
 def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
                       core_elliptic=False, compute_CV=False, n_CV=5, n_rep_CV=1,
-                      n_max_comps=30, frac_flux=0.002, delta_flux=0.001,
+                      n_max_comps=30, frac_flux=0.01, delta_flux=0.001,
                       delta_size=0.001, small_size=10**(-5),
+                      threshold_flux_small_sized_component=0.1,
                       n_check=5,
-                      check_frac_flux_min=0.002,
+                      check_frac_flux_min=0.01,
                       check_delta_size_min=0.001
                       ):
     """
@@ -337,6 +348,10 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
     :param small_size: (optional)
         The smallest size [mas] of single component allowed to present in best
         model. (default: ``0.00001``)
+    :param threshold_flux_small_sized_component: (optional)
+        Current best model is changed to more simple one if it contains small
+        component with flux less then ``hreshold_flux_small_sized_component``
+        [Jy]. (default: ``0.1``)
     :param n_check: (optional)
         Number of last consequence models to check while checking stopping
         criteria. (default: ``5``)

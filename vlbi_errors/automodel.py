@@ -27,6 +27,7 @@ matplotlib.rcParams['axes.labelsize'] = label_size
 matplotlib.rcParams['font.size'] = 20
 matplotlib.rcParams['legend.fontsize'] = 20
 import matplotlib.pyplot as plt
+import tarfile
 
 
 class FailedFindBestModelException(Exception):
@@ -187,7 +188,7 @@ def find_best(files, delta_flux=0.001, delta_size=0.001, small_size=10**(-5)):
     """
     out_dir = os.path.split(files[0])[0]
     files = [os.path.split(file_path)[-1] for file_path in files]
-    files = sorted(files, key=lambda x: int(x.split('_')[2].split('.')[0]))
+    files = sorted(files, key=lambda x: int(x.split('_')[-1].split('.')[0]))
     files = [os.path.join(out_dir, file_) for file_ in files]
     comps = list()
     for file_ in files:
@@ -199,22 +200,21 @@ def find_best(files, delta_flux=0.001, delta_size=0.001, small_size=10**(-5)):
     a = (abs(fluxes_inv - fluxes_inv[0]) < delta_flux)[::-1]
     try:
         n_flux = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
-        n_flux -= 1
     except IndexError:
-        n_flux = 1
+        n_flux = 0
 
     sizes = np.array([comp.p[3] for comp in comps])
     sizes_inv = sizes[::-1]
     a = (abs(sizes_inv - sizes_inv[0]) < delta_size)[::-1]
     try:
         n_size = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
-        n_size -= 1
     except IndexError:
-        n_size = 1
+        n_size = 0
 
     # Now go from largest model to simpler ones and excluding models with small
     # components
     n = max(n_flux, n_size)
+    print("Flux+Size==>{}".format(n))
     if n == 1:
         raise FailedFindBestModelException
     n_best = n
@@ -227,9 +227,57 @@ def find_best(files, delta_flux=0.001, delta_size=0.001, small_size=10**(-5)):
     return files[n_best-1]
 
 
+def stop_adding_models(files, n_check=5, delta_flux_min=0.001,
+                       delta_size_min=0.001):
+    """
+    Since last ``n_check`` models parameters of core haven't changed.
+    """
+    out_dir = os.path.split(files[0])[0]
+    files = [os.path.split(file_path)[-1] for file_path in files]
+    files = sorted(files, key=lambda x: int(x.split('_')[-1].split('.')[0]))
+    files = [os.path.join(out_dir, file_) for file_ in files]
+    last_file = files[-1]
+    files = files[-n_check-1: -1]
+    comps = list()
+    last_comp = import_difmap_model(last_file)[0]
+    for file_ in files:
+        comps_ = import_difmap_model(file_)
+        comps.append(comps_[0])
+    last_flux = last_comp.p[0]
+    last_size = last_comp.p[3]
+    fluxes = np.array([comp.p[0] for comp in comps])
+    sizes = np.array([comp.p[3] for comp in comps])
+    delta_fluxes = abs(fluxes - last_flux)
+    delta_sizes = abs(sizes - last_size)
+    return np.alltrue(delta_fluxes < delta_flux_min) or np.alltrue(delta_sizes < delta_size_min)
+
+
+def stop_adding_models_(files, n_check=5, delta_flux_min=0.001,
+                        delta_size_min=0.001):
+    """
+    Each of the last ``n_check`` models differs from previous one by less then
+    specified values.
+    """
+    out_dir = os.path.split(files[0])[0]
+    files = [os.path.split(file_path)[-1] for file_path in files]
+    files = sorted(files, key=lambda x: int(x.split('_')[-1].split('.')[0]))
+    files = [os.path.join(out_dir, file_) for file_ in files]
+    files = files[-n_check-1:]
+    comps = list()
+    for file_ in files:
+        comps_ = import_difmap_model(file_)
+        comps.append(comps_[0])
+    fluxes = np.array([comp.p[0] for comp in comps])
+    sizes = np.array([comp.p[3] for comp in comps])
+    delta_fluxes = abs(fluxes[:-1]-fluxes[1:])
+    delta_sizes = abs(sizes[:-1]-sizes[1:])
+    return np.alltrue(delta_fluxes < delta_flux_min) and np.alltrue(delta_sizes < delta_size_min)
+
+
 def automodel_uv_fits(uv_fits_path, out_dir, mapsize_clean=None,
                       path_to_script='/home/ilya/github/vlbi_errors/difmap/final_clean_nw',
-                      core_elliptic=False, compute_CV=False, n_max_comps=30):
+                      core_elliptic=False, compute_CV=False, n_max_comps=30,
+                      n_check=5):
     # mapsize_clean = (1024, 0.1)
     # out_dir = '/home/ilya/github/vlbi_errors/0552'
     # uv_fits_fname = '0552+398.u.2006_07_07.uvf'
@@ -312,6 +360,12 @@ def automodel_uv_fits(uv_fits_path, out_dir, mapsize_clean=None,
                                          uv_fits_path, K=5, out_dir=out_dir, n_rep=1)
             cv_scores.append((cv_score[0][0][0], cv_score[1][0][0]))
 
+        # Check if we need go further
+        if i > n_check:
+            fitted_model_files = glob.glob(os.path.join(out_dir, "{}_{}_{}_fitted*".format(source, freq, epoch)))
+            if stop_adding_models(fitted_model_files, n_check=n_check):
+                break
+
     # # Optionally plot CV-scores
     # import matplotlib.pyplot as plt
     # plt.errorbar(range(1, len(cv_scores)+1), np.atleast_2d(cv_scores)[:, 0],
@@ -321,8 +375,13 @@ def automodel_uv_fits(uv_fits_path, out_dir, mapsize_clean=None,
 
     # Choose best model
     files = glob.glob(os.path.join(out_dir, "{}_{}_{}_fitted*".format(source, freq, epoch)))
+    # Save files in archive
+    with tarfile.open(os.path.join(out_dir, "{}_fitted_models.tar.gz".format(source)), "w:gz") as tar:
+        for fn in files:
+            tar.add(fn, arcname=os.path.split(fn)[-1])
+
     files = [os.path.split(file_path)[-1] for file_path in files]
-    files = sorted(files, key=lambda x: int(x.split('_')[2].split('.')[0]))
+    files = sorted(files, key=lambda x: int(x.split('_')[-1].split('.')[0]))
     files = [os.path.join(out_dir, file_) for file_ in files]
     comps = list()
     for file_ in files:
@@ -347,5 +406,11 @@ def automodel_uv_fits(uv_fits_path, out_dir, mapsize_clean=None,
     axes[1].axvline(k)
     fig.savefig(os.path.join(out_dir, '{}_{}_{}_core_parameters_vs_ncomps.png'.format(source, freq, epoch)),
                 bbox_inches='tight', dpi=200)
+
+    # Clean
+    files = glob.glob(
+        os.path.join(out_dir, "{}_{}_{}_fitted*".format(source, freq, epoch)))
+    for fn in files:
+        os.unlink(fn)
 
     return best_model_file

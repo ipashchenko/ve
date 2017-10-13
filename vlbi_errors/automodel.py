@@ -500,9 +500,15 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
     fig.savefig(os.path.join(out_dir, '{}_{}_{}_core_parameters_vs_ncomps.png'.format(source, freq, epoch)),
                 bbox_inches='tight', dpi=200)
 
-    # Clean
-    files = glob.glob(
-        os.path.join(out_dir, "{}_{}_{}_fitted*".format(source, freq, epoch)))
+    # Clean model files (we have copies in archive)
+    files = glob.glob(os.path.join(out_dir, "{}_{}_{}_fitted_*.mdl".format(source, freq, epoch)))
+    for fn in files:
+        os.unlink(fn)
+    # Clean images with components superimposed (we have copies in archive)
+    files = glob.glob(os.path.join(out_dir, "{}_{}_{}_image_*.png".format(source, freq, epoch)))
+    with tarfile.open(os.path.join(out_dir, "{}_{}_{}_images.tar.gz".format(source, freq, epoch)), "w:gz") as tar:
+        for fn in files:
+            tar.add(fn, arcname=os.path.split(fn)[-1])
     for fn in files:
         os.unlink(fn)
 

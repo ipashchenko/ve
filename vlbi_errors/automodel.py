@@ -177,7 +177,8 @@ def create_residuals(uv_fits_path, model=None, out_fname='residuals.uvf',
     return out_fits_path
 
 
-def find_best(files, delta_flux=0.001, delta_size=0.001, small_size=10**(-5)):
+def find_best(files, frac_flux=0.002, delta_flux=0.001, delta_size=0.001,
+              small_size=10**(-5)):
     """
     Select best model from given difmap model files.
 
@@ -196,8 +197,10 @@ def find_best(files, delta_flux=0.001, delta_size=0.001, small_size=10**(-5)):
         comps.append(comps_[0])
 
     fluxes = np.array([comp.p[0] for comp in comps])
+    last_flux = fluxes[-1]
     fluxes_inv = fluxes[::-1]
-    a = (abs(fluxes_inv - fluxes_inv[0]) < delta_flux)[::-1]
+    flux_min = max(delta_flux, frac_flux*last_flux)
+    a = (abs(fluxes_inv - fluxes_inv[0]) < flux_min)[::-1]
     try:
         n_flux = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
     except IndexError:
@@ -227,8 +230,8 @@ def find_best(files, delta_flux=0.001, delta_size=0.001, small_size=10**(-5)):
     return files[n_best-1]
 
 
-def stop_adding_models(files, n_check=5, delta_flux_min=0.001,
-                       delta_size_min=0.001):
+def stop_adding_models(files, n_check=5, frac_flux_min=0.002,
+                       delta_flux_min=0.001, delta_size_min=0.001):
     """
     Since last ``n_check`` models parameters of core haven't changed.
     """
@@ -249,10 +252,12 @@ def stop_adding_models(files, n_check=5, delta_flux_min=0.001,
     sizes = np.array([comp.p[3] for comp in comps])
     delta_fluxes = abs(fluxes - last_flux)
     delta_sizes = abs(sizes - last_size)
-    return np.alltrue(delta_fluxes < delta_flux_min) or np.alltrue(delta_sizes < delta_size_min)
+    flux_min = max(delta_flux_min, last_flux*frac_flux_min)
+    return np.alltrue(delta_fluxes < flux_min) or np.alltrue(delta_sizes < delta_size_min)
 
 
-def stop_adding_models_(files, n_check=5, delta_flux_min=0.001,
+def stop_adding_models_(files, n_check=5, frac_flux_min=0.002,
+                        delta_flux_min=0.001,
                         delta_size_min=0.001):
     """
     Each of the last ``n_check`` models differs from previous one by less then
@@ -268,22 +273,27 @@ def stop_adding_models_(files, n_check=5, delta_flux_min=0.001,
         comps_ = import_difmap_model(file_)
         comps.append(comps_[0])
     fluxes = np.array([comp.p[0] for comp in comps])
+    last_flux = fluxes[-1]
     sizes = np.array([comp.p[3] for comp in comps])
     delta_fluxes = abs(fluxes[:-1]-fluxes[1:])
     delta_sizes = abs(sizes[:-1]-sizes[1:])
-    return np.alltrue(delta_fluxes < delta_flux_min) and np.alltrue(delta_sizes < delta_size_min)
+    flux_min = max(delta_flux_min, last_flux * frac_flux_min)
+    return np.alltrue(delta_fluxes < flux_min) and np.alltrue(delta_sizes < delta_size_min)
 
 
 def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
                       core_elliptic=False, compute_CV=False, n_CV=5, n_rep_CV=1,
-                      n_max_comps=30, delta_flux=0.001,
+                      n_max_comps=30, frac_flux=0.002, delta_flux=0.001,
                       delta_size=0.001, small_size=10**(-5),
                       n_check=5,
-                      check_delta_flux_min=0.001,
+                      check_frac_flux_min=0.002,
                       check_delta_size_min=0.001
                       ):
     """
     Function that automatically models uv-data in difmap.
+
+    It's just like CLEAN but using gaussians. Function uses ``difmap`` for
+    CLEAN and modelling.
 
     :param uv_fits_path:
         Path to FITS uv-data file to model.
@@ -308,10 +318,18 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
     :param n_max_comps:
         Maximum number of components to try. Try models up to ``n_max_comps``
         components while searching. (default: ``30``)
+    :param frac_flux: (optional)
+        The best model is the simplest one that has core flux that differs by
+        less than ``frac_flux`` of last models core flux [Jy] from all more
+        complex models. (default: ``0.002``)
+    :note:
+        Used together with ``delta_flux`` and max of two is used.
     :param delta_flux: (optional)
         The best model is the simplest one that has core flux that differs by
-        less than ``delta_flux`` [Jy] from all more complex models. (default:
-        ``0.001``)
+        less than ``delta_flux`` of last models core flux [Jy] from all more
+        complex models. (default: ``0.001``)
+    :note:
+        Used together with ``frac_flux`` and max of two is used.
     :param delta_size: (optional)
         The best model is the simplest one that has core size that differs by
         less than ``delta_size`` [mas] from all more complex models. (default:
@@ -322,10 +340,10 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
     :param n_check: (optional)
         Number of last consequence models to check while checking stopping
         criteria. (default: ``5``)
-    :param check_delta_flux_min: (optional)
+    :param check_frac_flux_min: (optional)
         All last ``n_check`` models must have core fluxes that differs not more
-        than ``check_delta_flux_min`` [Jy] to stop adding components.
-        (default: ``0.001``)
+        than ``check_frac_flux_min`` of last model core [Jy] to stop adding
+        components. (default: ``0.002``)
     :param check_delta_size_min: (optional)
         All last ``n_check`` models must have core sizes that differs not more
         than ``check_delta_size_min`` [mas] to stop adding components.
@@ -343,9 +361,9 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
 
     if mapsize_clean is None:
         if freq == 'u':
-            mapsize_clean = (1024, 0.1)
+            mapsize_clean = (512, 0.1)
         elif freq == 'q':
-            mapsize_clean = (1024, 0.03)
+            mapsize_clean = (512, 0.03)
         else:
             raise Exception("Indicate mapsize_clean!")
 
@@ -418,7 +436,8 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
         if i > n_check:
             fitted_model_files = glob.glob(os.path.join(out_dir, "{}_{}_{}_fitted*".format(source, freq, epoch)))
             if stop_adding_models(fitted_model_files, n_check=n_check,
-                                  delta_flux_min=check_delta_flux_min,
+                                  delta_flux_min=delta_flux,
+                                  frac_flux_min=check_frac_flux_min,
                                   delta_size_min=check_delta_size_min):
                 break
 
@@ -445,7 +464,8 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
         comps.append(comps_[0])
 
     try:
-        best_model_file = find_best(files, delta_flux=delta_flux,
+        best_model_file = find_best(files, frac_flux=frac_flux,
+                                    delta_flux=delta_flux,
                                     delta_size=delta_size,
                                     small_size=small_size)
         k = files.index(best_model_file) + 1
@@ -475,7 +495,7 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
 
 
 if __name__ == '__main__':
-    uv_fits_path = "/home/ilya/fs/sshfs/frb/data/0235+164.u.2004_08_28.uvf"
+    uv_fits_path = "/home/ilya/fs/sshfs/frb/data/2251+158.u.2013_02_28.uvf"
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
     best_model_file = automodel_uv_fits(uv_fits_path, "/home/ilya/STACK",
                                         path_to_script, n_max_comps=40)

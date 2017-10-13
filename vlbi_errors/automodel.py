@@ -274,10 +274,64 @@ def stop_adding_models_(files, n_check=5, delta_flux_min=0.001,
     return np.alltrue(delta_fluxes < delta_flux_min) and np.alltrue(delta_sizes < delta_size_min)
 
 
-def automodel_uv_fits(uv_fits_path, out_dir, mapsize_clean=None,
-                      path_to_script='/home/ilya/github/vlbi_errors/difmap/final_clean_nw',
-                      core_elliptic=False, compute_CV=False, n_max_comps=30,
-                      n_check=5):
+def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
+                      core_elliptic=False, compute_CV=False, n_CV=5, n_rep_CV=1,
+                      n_max_comps=30, delta_flux=0.001,
+                      delta_size=0.001, small_size=10**(-5),
+                      n_check=5,
+                      check_delta_flux_min=0.001,
+                      check_delta_size_min=0.001
+                      ):
+    """
+    Function that automatically models uv-data in difmap.
+
+    :param uv_fits_path:
+        Path to FITS uv-data file to model.
+    :param out_dir:
+        Directory to keep results.
+    :param path_to_script:
+        Path to D.Homan difmap script for automatical cleaning (final_clean_nw).
+    :param mapsize_clean: (optional)
+        Tuple of number of pixels and pixel size [mas]. If ``None`` then use
+        default values for Q & U bands (512, 0.03) & (512, 0.1). (default:
+        ``None``)
+    :param core_elliptic:
+        Boolean - use elliptical core? If ``False`` then use circular gaussian.
+        (default: ``False``)
+    :param compute_CV: (optional)
+        Boolean - compute CV-score for each model? (default: ``False``)
+    :param n_CV: (optional)
+        Number of CV folds to use when computing CV-score. (default: ``5``)
+    :param n_rep_CV: (optional)
+        Number of CV repetitions with different seed to use. Used to estimate
+        the error of CV-score more precisely. (default: ``1``)
+    :param n_max_comps:
+        Maximum number of components to try. Try models up to ``n_max_comps``
+        components while searching. (default: ``30``)
+    :param delta_flux: (optional)
+        The best model is the simplest one that has core flux that differs by
+        less than ``delta_flux`` [Jy] from all more complex models. (default:
+        ``0.001``)
+    :param delta_size: (optional)
+        The best model is the simplest one that has core size that differs by
+        less than ``delta_size`` [mas] from all more complex models. (default:
+        ``0.001``)
+    :param small_size: (optional)
+        The smallest size [mas] of single component allowed to present in best
+        model. (default: ``0.00001``)
+    :param n_check: (optional)
+        Number of last consequence models to check while checking stopping
+        criteria. (default: ``5``)
+    :param check_delta_flux_min: (optional)
+        All last ``n_check`` models must have core fluxes that differs not more
+        than ``check_delta_flux_min`` [Jy] to stop adding components.
+        (default: ``0.001``)
+    :param check_delta_size_min: (optional)
+        All last ``n_check`` models must have core sizes that differs not more
+        than ``check_delta_size_min`` [mas] to stop adding components.
+        (default: ``0.001``)
+    :return:
+    """
     # mapsize_clean = (1024, 0.1)
     # out_dir = '/home/ilya/github/vlbi_errors/0552'
     # uv_fits_fname = '0552+398.u.2006_07_07.uvf'
@@ -357,13 +411,15 @@ def automodel_uv_fits(uv_fits_path, out_dir, mapsize_clean=None,
         if compute_CV:
             cv_score = cv_difmap_models([os.path.join(out_dir,
                                                       '{}_{}_{}_fitted_{}.mdl'.format(source, freq, epoch, i))],
-                                         uv_fits_path, K=5, out_dir=out_dir, n_rep=1)
+                                         uv_fits_path, K=n_CV, out_dir=out_dir, n_rep=n_rep_CV)
             cv_scores.append((cv_score[0][0][0], cv_score[1][0][0]))
 
         # Check if we need go further
         if i > n_check:
             fitted_model_files = glob.glob(os.path.join(out_dir, "{}_{}_{}_fitted*".format(source, freq, epoch)))
-            if stop_adding_models(fitted_model_files, n_check=n_check):
+            if stop_adding_models(fitted_model_files, n_check=n_check,
+                                  delta_flux_min=check_delta_flux_min,
+                                  delta_size_min=check_delta_size_min):
                 break
 
     # # Optionally plot CV-scores
@@ -389,7 +445,9 @@ def automodel_uv_fits(uv_fits_path, out_dir, mapsize_clean=None,
         comps.append(comps_[0])
 
     try:
-        best_model_file = find_best(files)
+        best_model_file = find_best(files, delta_flux=delta_flux,
+                                    delta_size=delta_size,
+                                    small_size=small_size)
         k = files.index(best_model_file) + 1
     except FailedFindBestModelException:
         return None
@@ -414,3 +472,10 @@ def automodel_uv_fits(uv_fits_path, out_dir, mapsize_clean=None,
         os.unlink(fn)
 
     return best_model_file
+
+
+if __name__ == '__main__':
+    uv_fits_path = "/home/ilya/fs/sshfs/frb/data/0235+164.u.2004_08_28.uvf"
+    path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
+    best_model_file = automodel_uv_fits(uv_fits_path, "/home/ilya/STACK",
+                                        path_to_script, n_max_comps=40)

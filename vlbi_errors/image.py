@@ -412,11 +412,11 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             if len(comp) == 6:
                 e_height = comp.p[3]
                 e_width = comp.p[3] * comp.p[4]
-                if e_height < plot_pixel_size and e_width < plot_pixel_size:
+                if e_height < 0.25*plot_pixel_size and e_width < 0.25*plot_pixel_size:
                     facecolor = "green"
-                if e_height < plot_pixel_size:
+                if e_height < 0.25*plot_pixel_size:
                     e_height = 0.25*plot_pixel_size
-                if e_width < plot_pixel_size:
+                if e_width < 0.25*plot_pixel_size:
                     e_width = 0.25*plot_pixel_size*comp.p[4]
                 else:
                     facecolor = "red"
@@ -427,7 +427,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             elif len(comp) == 4:
                 # It is radius so dividing in 2
                 c_size = comp.p[3]/2.0
-                if c_size < plot_pixel_size:
+                if c_size < 0.25*plot_pixel_size:
                     c_size = 0.25*plot_pixel_size
                     facecolor = "green"
                 else:

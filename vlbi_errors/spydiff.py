@@ -302,7 +302,8 @@ def append_component_to_difmap_model(comp, out_fname, freq_hz):
 
 
 def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
-                    path=None, mdl_path=None, out_path=None):
+                    path=None, mdl_path=None, out_path=None,
+                    show_difmap_output=False):
     """
     Modelfit self-calibrated uv-data in difmap.
 
@@ -342,7 +343,13 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
     difmapout.write("wmodel " + os.path.join(out_path, out_fname) + "\n")
     difmapout.write("exit\n")
     difmapout.close()
-    os.system("difmap < {}".format(command_file))
+
+    # TODO: Use subprocess?
+    shell_command = "difmap < " + command_file + " 2>&1"
+    if not show_difmap_output:
+        shell_command += " >/dev/null"
+    os.system(shell_command)
+
 
 # # DIFMAP_MAPPSR
 # def difmap_mappsr(source, isll, centre_ra_deg, centre_dec_deg, uvweightstr,

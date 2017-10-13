@@ -313,9 +313,10 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 abs_levels = [-min_abs_level] + [min_abs_level * k ** i for i in
                                                  range(n_max)]
             print("Constructed absolute levels are: {}".format(abs_levels))
-        # return y, x, contours[x_slice, y_slice]
+
         co = ax.contour(y, x, contours[x_slice, y_slice], abs_levels,
-                        colors=contour_color, extent=[y[0], y[-1], x[0], x[-1]])
+                        colors=contour_color, extent=[y[0], y[-1], x[0], x[-1]],
+                        linewidths=0.25)
         ax.invert_xaxis()
         # Make colorbar for contours if no colors is supplied
         if colors is None:

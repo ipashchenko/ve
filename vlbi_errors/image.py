@@ -997,6 +997,10 @@ class CleanImage(Image):
         """
         return self._image
 
+    @property
+    def total_flux(self):
+        return np.sum(self.cc)
+
     # FIXME: Should be read-only as residuals have sense only for naitive clean
     @property
     def residuals(self):

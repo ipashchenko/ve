@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import tqdm
 import glob
 import shutil
 from scipy import ndimage
@@ -229,8 +230,8 @@ def find_best(files, frac_flux=0.01, delta_flux=0.001, frac_size=0.01,
         small_sizes = [comp.p[3] > small_size for comp in comps[1:]]
         fluxes_of_small_sized_components = [comp.p[0] for comp in comps[1:] if comp.p[3] < small_size]
         fluxes_of_small_sized_components = [flux > threshold_flux_small_sized_component for flux in fluxes_of_small_sized_components]
-        print(fluxes_of_small_sized_components)
-        print(small_sizes)
+        # print(fluxes_of_small_sized_components)
+        # print(small_sizes)
         if not np.alltrue(small_sizes) and not np.alltrue(fluxes_of_small_sized_components):
             print("Decreasing complexity because of small component present")
             n_best = n_best - 1
@@ -291,6 +292,7 @@ def stop_adding_models_(files, n_check=5, frac_flux_min=0.002,
     return np.alltrue(delta_fluxes < flux_min) and np.alltrue(delta_sizes < delta_size_min)
 
 
+# TODO: Add option to begin with some specified model
 def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
                       core_elliptic=False, compute_CV=False, n_CV=5, n_rep_CV=1,
                       n_max_comps=30, frac_flux=0.01, delta_flux=0.001,
@@ -364,7 +366,20 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
         than ``check_delta_size_min`` [mas] to stop adding components.
         (default: ``0.001``)
     :return:
+        Path to best difmap model.
+
+    :notes:
+        When working with strong complex structured sources (like 3C273) one
+        should use lower ``frac_*`` parameters, as gaussian components model
+        has high bias for such sources thus less variance in component's
+        parameters (and we use this variance as stopping and best-model
+        criteria).
     """
+    if core_elliptic:
+        core_type = 'eg'
+    else:
+        core_type = 'cg'
+
     # mapsize_clean = (1024, 0.1)
     # out_dir = '/home/ilya/github/vlbi_errors/0552'
     # uv_fits_fname = '0552+398.u.2006_07_07.uvf'
@@ -396,16 +411,20 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
     # # Use this for model selection
     # uv_fits_path = os.path.join(out_dir, 'image_cc_model.uvf')
 
-    for i in range(1, n_max_comps+1):
-        print("{}-th iteration begins".format(i))
+    for i in tqdm.tqdm(range(1, n_max_comps+1), initial=1,
+                       desc="# of components", unit_scale=1,
+                       dynamic_ncols=True,
+                       bar_format='{desc}: {n}|{bar}| {n}/{total} [{elapsed}<{remaining}, {rate_fmt}]'):
+        # print("{}-th iteration begins".format(i))
         uv_fits_path_res = create_residuals(uv_fits_path, model=model,
                                             out_dir=out_dir)
         # 1. Modelfit in difmap with CG
-        print("Suggesting CG component to add...")
         if i == 1 and core_elliptic:
+            print("Suggesting EG component to add...")
             cg, image_cc_fits = suggest_eg_component(uv_fits_path_res, mapsize_clean,
                                                      path_to_script, out_dir=out_dir)
         else:
+            print("Suggesting CG component to add...")
             cg, image_cc_fits = suggest_cg_component(uv_fits_path_res, mapsize_clean,
                                                      path_to_script, out_dir=out_dir)
         # Saving original CLEAN image
@@ -414,42 +433,43 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
             ccimage_orig = create_clean_image_from_fits_file(image_cc_fits)
             sign_x = np.sign(ccimage_orig.dx)
             sign_y = np.sign(ccimage_orig.dy)
-        print("Suggested: {}".format(cg.p))
+        print("Suggested: {}".format(cg))
 
         if i > 1:
             # If this is not first iteration then append component to existing file
-            print("Our initial model will be last one + new component.")
-            shutil.copy(os.path.join(out_dir, '{}_{}_{}_fitted_{}.mdl'.format(source, freq, epoch, i-1)),
+            # print("Our initial model will be last one + new component.")
+            shutil.copy(os.path.join(out_dir, '{}_{}_{}_{}_fitted_{}.mdl'.format(source, freq, epoch, core_type, i-1)),
                         os.path.join(out_dir, 'init_{}.mdl'.format(i)))
-            print("Appending component to model")
+            # print("Appending component to model")
             append_component_to_difmap_model(cg, os.path.join(out_dir, 'init_{}.mdl'.format(i)),
                                              freq_hz)
         else:
             # If this is first iteration then create model file
-            print("Initialize model")
+            # print("Initialize model")
             export_difmap_model([cg],
                                 os.path.join(out_dir, 'init_{}.mdl'.format(i)),
                                 freq_hz)
 
         modelfit_difmap(uv_fits_fname, 'init_{}.mdl'.format(i),
-                        '{}_{}_{}_fitted_{}.mdl'.format(source, freq, epoch, i), path=uv_fits_dir,
-                        mdl_path=out_dir, out_path=out_dir, niter=100)
+                        '{}_{}_{}_{}_fitted_{}.mdl'.format(source, freq, epoch, core_type, i), path=uv_fits_dir,
+                        mdl_path=out_dir, out_path=out_dir, niter=100,
+                        show_difmap_output=False)
         model = Model(stokes='I')
-        comps = import_difmap_model('{}_{}_{}_fitted_{}.mdl'.format(source, freq, epoch, i), out_dir)
+        comps = import_difmap_model('{}_{}_{}_{}_fitted_{}.mdl'.format(source, freq, epoch, core_type, i), out_dir)
         plot_clean_image_and_components(ccimage_orig, comps,
-                                        outname=os.path.join(out_dir, "{}_{}_{}_image_{}.png".format(source, freq, epoch, i)))
+                                        outname=os.path.join(out_dir, "{}_{}_{}_{}_image_{}.png".format(source, freq, epoch, core_type, i)))
         model.add_components(*comps)
 
         # Cross-Validation
         if compute_CV:
             cv_score = cv_difmap_models([os.path.join(out_dir,
-                                                      '{}_{}_{}_fitted_{}.mdl'.format(source, freq, epoch, i))],
+                                                      '{}_{}_{}_{}_fitted_{}.mdl'.format(source, freq, epoch, core_type, i))],
                                          uv_fits_path, K=n_CV, out_dir=out_dir, n_rep=n_rep_CV)
             cv_scores.append((cv_score[0][0][0], cv_score[1][0][0]))
 
         # Check if we need go further
         if i > n_check:
-            fitted_model_files = glob.glob(os.path.join(out_dir, "{}_{}_{}_fitted*".format(source, freq, epoch)))
+            fitted_model_files = glob.glob(os.path.join(out_dir, "{}_{}_{}_{}_fitted*.mdl".format(source, freq, epoch, core_type)))
             if stop_adding_models(fitted_model_files, n_check=n_check,
                                   delta_flux_min=delta_flux,
                                   frac_flux_min=check_frac_flux_min,
@@ -464,9 +484,9 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
     # plt.show()
 
     # Choose best model
-    files = glob.glob(os.path.join(out_dir, "{}_{}_{}_fitted*".format(source, freq, epoch)))
+    files = glob.glob(os.path.join(out_dir, "{}_{}_{}_{}_fitted*.mdl".format(source, freq, epoch, core_type)))
     # Save files in archive
-    with tarfile.open(os.path.join(out_dir, "{}_{}_{}_fitted_models.tar.gz".format(source, freq, epoch)), "w:gz") as tar:
+    with tarfile.open(os.path.join(out_dir, "{}_{}_{}_{}_fitted_models.tar.gz".format(source, freq, epoch, core_type)), "w:gz") as tar:
         for fn in files:
             tar.add(fn, arcname=os.path.split(fn)[-1])
 
@@ -497,16 +517,16 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
     axes[1].set_ylabel("Core Size, [mas]")
     axes[0].axvline(k)
     axes[1].axvline(k)
-    fig.savefig(os.path.join(out_dir, '{}_{}_{}_core_parameters_vs_ncomps.png'.format(source, freq, epoch)),
+    fig.savefig(os.path.join(out_dir, '{}_{}_{}_{}_core_parameters_vs_ncomps.png'.format(source, freq, epoch, core_type)),
                 bbox_inches='tight', dpi=200)
 
     # Clean model files (we have copies in archive)
-    files = glob.glob(os.path.join(out_dir, "{}_{}_{}_fitted_*.mdl".format(source, freq, epoch)))
+    files = glob.glob(os.path.join(out_dir, "{}_{}_{}_{}_fitted_*.mdl".format(source, freq, epoch, core_type)))
     for fn in files:
         os.unlink(fn)
     # Clean images with components superimposed (we have copies in archive)
-    files = glob.glob(os.path.join(out_dir, "{}_{}_{}_image_*.png".format(source, freq, epoch)))
-    with tarfile.open(os.path.join(out_dir, "{}_{}_{}_images.tar.gz".format(source, freq, epoch)), "w:gz") as tar:
+    files = glob.glob(os.path.join(out_dir, "{}_{}_{}_{}_image_*.png".format(source, freq, epoch, core_type)))
+    with tarfile.open(os.path.join(out_dir, "{}_{}_{}_{}_images.tar.gz".format(source, freq, epoch, core_type)), "w:gz") as tar:
         for fn in files:
             tar.add(fn, arcname=os.path.split(fn)[-1])
     for fn in files:
@@ -516,7 +536,8 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
 
 
 if __name__ == '__main__':
-    uv_fits_path = "/home/ilya/fs/sshfs/frb/data/2251+158.u.2013_02_28.uvf"
+    uv_fits_path = "/home/ilya/fs/sshfs/odin/fs/sshfs/frb/data/0235+164.u.2000_01_01.uvf"
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
-    best_model_file = automodel_uv_fits(uv_fits_path, "/home/ilya/STACK",
-                                        path_to_script, n_max_comps=40)
+    best_model_file = automodel_uv_fits(uv_fits_path, "/home/ilya/STACK/tmp",
+                                        path_to_script, n_max_comps=40,
+                                        core_elliptic=False)

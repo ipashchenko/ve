@@ -301,6 +301,61 @@ def append_component_to_difmap_model(comp, out_fname, freq_hz):
                                                          freq_hz))
 
 
+def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
+                                        outpath=None, perc_distant=75):
+    """
+    Function that re-arrange components in a such a way that closest to "counter
+    jet" components goes first.
+
+    :param mdl_path:
+        Path to difmap-format model file.
+    :param freq_hz:
+        Frequency in Hz.
+    :param n_check_for_core: (optional)
+        Number of closest to phase center components to check for being on "cj"
+        side. (default: ``2``)
+    :param outpath:
+        Path to save re-arranged model. If ``None`` then re-write ``mdl_path``.
+        (default: ``None``)
+    :param perc_distant:
+        Percentile of the component's distance distribution to use as border
+        line that defines "distant" component. Position of such components is
+        then used to compare polar angles of "cj-candidates".
+    """
+    mdl_dir, mdl_fname = os.path.split(mdl_path)
+    comps = import_difmap_model(mdl_fname, mdl_dir)
+    comps = sorted(comps, key=lambda x: np.hypot(x.p[1], x.p[2]))
+    r = [np.hypot(comp.p[1], comp.p[2]) for comp in comps]
+    dist = np.percentile(r, perc_distant)
+    remote_comps = [comp for r_, comp in zip(r, comps) if r_ > dist]
+    theta_remote = np.mean([np.arctan2(-comp.p[1], -comp.p[2])/degree_to_rad for
+                            comp in remote_comps])
+
+    found_cj_comps = list()
+    for i in range(1, n_check_for_core+1):
+        comp = comps[i]
+        if abs(np.arctan2(-comp.p[1], -comp.p[2])/degree_to_rad -
+               theta_remote) > 90.:
+            print("Found cj components - {}".format(comp))
+            found_cj_comps.append(comp)
+
+    result_comps = list()
+    if found_cj_comps:
+        for comp in found_cj_comps:
+            comps.remove(comp)
+
+        for comp in sorted(found_cj_comps,
+                           key=lambda x: np.hypot(x.p[1], x.p[2])):
+            result_comps.append(comp)
+
+    for comp in comps:
+        result_comps.append(comp)
+
+    if outpath is None:
+        outpath = mdl_path
+    export_difmap_model(result_comps, outpath, freq_hz)
+
+
 def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
                     path=None, mdl_path=None, out_path=None,
                     show_difmap_output=False):

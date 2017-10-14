@@ -277,6 +277,29 @@ def stop_adding_models(files, n_check=5, frac_flux_min=0.002,
     return np.alltrue(delta_fluxes < flux_min) or np.alltrue(delta_sizes < delta_size_min)
 
 
+def stop_adding_models_by_total_flux(last_difmap_model, total_flux,
+                                     abs_threshold=None,
+                                     rel_threshold=0.001):
+    """
+    Total flux of last difmap model doesn't differ by more then specified
+    values.
+
+    :param last_difmap_model:
+        Path to last difmap model file.
+    :param total_flux:
+        Total flux to compare with [Jy].
+    :param abs_threshold: (optional)
+        Absolute deviations must be less then this value [Jy]. If ``None`` then
+        don't use absolute deviations. (default: ``None``)
+    :param rel_threshold: (optional)
+        Fractional deviations must be less then this value. (default: ``0.001``)
+    :return:
+        Boolean - stop iterations?
+    """
+    threshold = abs_threshold or total_flux*rel_threshold
+    return abs(difmap_model_flux(last_difmap_model) - total_flux) < threshold
+
+
 def stop_adding_models_(files, n_check=5, frac_flux_min=0.002,
                         delta_flux_min=0.001,
                         delta_size_min=0.001):

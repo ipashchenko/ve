@@ -9,7 +9,7 @@ from model import Model
 from cv_model import cv_difmap_models
 from spydiff import (export_difmap_model, modelfit_difmap, import_difmap_model,
                      clean_difmap, append_component_to_difmap_model,
-                     clean_n)
+                     clean_n, difmap_model_flux)
 from components import CGComponent, EGComponent
 from from_fits import (create_image_from_fits_file,
                        create_clean_image_from_fits_file,
@@ -205,6 +205,8 @@ def find_best(files, frac_flux=0.01, delta_flux=0.001, frac_size=0.01,
     flux_min = max(delta_flux, frac_flux*last_flux)
     a = (abs(fluxes_inv - fluxes_inv[0]) < flux_min)[::-1]
     try:
+        # This is index not number! Number is index + 1 (python 0-based
+        # indexing)
         n_flux = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
     except IndexError:
         n_flux = 0
@@ -220,6 +222,8 @@ def find_best(files, frac_flux=0.01, delta_flux=0.001, frac_size=0.01,
     else:
         a = (abs(sizes_inv - sizes_inv[0]) < size_min)[::-1]
     try:
+        # This is index not number! Number is index + 1 (python 0-based
+        # indexing)
         n_size = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
     except IndexError:
         n_size = 0
@@ -227,11 +231,11 @@ def find_best(files, frac_flux=0.01, delta_flux=0.001, frac_size=0.01,
     # Now go from largest model to simpler ones and excluding models with small
     # components
     n = max(n_flux, n_size)
-    print("Flux+Size==>{}".format(n))
+    print("Flux+Size==>{}th model".format(n+1))
     if n == 0:
         raise FailedFindBestModelException
     n_best = n
-    for model_file in files[:n][::-1]:
+    for model_file in files[:n+1][::-1]:
         comps = import_difmap_model(model_file)
         small_sizes = [comp.p[3] > small_size for comp in comps[1:]]
         fluxes_of_small_sized_components = [comp.p[0] for comp in comps[1:] if comp.p[3] < small_size]
@@ -244,7 +248,7 @@ def find_best(files, frac_flux=0.01, delta_flux=0.001, frac_size=0.01,
         else:
             break
 
-    return files[n_best-1]
+    return files[n_best]
 
 
 def stop_adding_models(files, n_check=5, frac_flux_min=0.002,

@@ -335,8 +335,10 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
                       small_size_of_the_core=0.001,
                       n_check=5,
                       check_frac_flux_min=0.01,
-                      check_delta_size_min=0.001
-                      ):
+                      check_delta_size_min=0.001,
+                      use_total_flux_as_criterion=False,
+                      abs_diff_total_flux=None,
+                      rel_diff_total_flux=0.001):
     """
     Function that automatically models uv-data in difmap.
 
@@ -408,6 +410,12 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
         All last ``n_check`` models must have core sizes that differs not more
         than ``check_delta_size_min`` [mas] to stop adding components.
         (default: ``0.001``)
+    :param use_total_flux_as_criterion: (optional)
+        Boolean - use criterion of total flux? (default: ``False``)
+    :param abs_diff_total_flux: (optional)
+        See ``stop_adding_models_by_total_flux`` docs. (default: ``None``)
+    :param rel_diff_total_flux: (optional)
+        See ``stop_adding_models_by_total_flux`` docs. (default: ``0.001``)
     :return:
         Path to best difmap model.
 
@@ -452,14 +460,11 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
         model = Model(stokes="I")
         model.add_components(*comps)
     cv_scores = list()
+    # ``CleanImage`` instance for CLEANed original uv data set.
     ccimage_orig = None
-
-    # # First create cc-model and transfer it to uv-plane
-    # print("Creating UV-data with CLEAN-model instead of real data")
-    # create_cc_model_uvf(uv_fits_path, (1024, 0.1), path_to_script=path_to_script,
-    #                     out_dir=out_dir)
-    # # Use this for model selection
-    # uv_fits_path = os.path.join(out_dir, 'image_cc_model.uvf')
+    # Total flux of all CC components in CLEAN model of the original uv data
+    # set.
+    total_flux = None
 
     for i in tqdm.tqdm(range(1, n_max_comps+1), initial=1,
                        desc="# of components", unit_scale=1,
@@ -494,7 +499,7 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
                              path_to_script=path_to_script,
                              outpath=out_dir)
                 ccimage_orig = create_clean_image_from_fits_file(os.path.join(out_dir, 'image_cc_orig.fits'))
-
+            total_flux = ccimage_orig.total_flux
         print("Suggested: {}".format(cg))
 
         if i > 1:
@@ -599,10 +604,9 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
 
 
 if __name__ == '__main__':
-    uv_fits_path = "/home/ilya/STACK/0235+164.u.2000_01_01.uvf"
+    uv_fits_path = "/home/ilya/STACK/uvf/0716+714.u.2010_11_13.uvf"
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
-    start_model_file = "/home/ilya/STACK/tmp/0235+164_u_2000_01_01_start.mdl"
-    best_model_file = automodel_uv_fits(uv_fits_path, "/home/ilya/STACK/tmp",
-                                        path_to_script, n_max_comps=40,
-                                        core_elliptic=False,
-                                        start_model_file=start_model_file)
+    # start_model_file = "/home/ilya/STACK/tmp/0235+164_u_2000_01_01_start.mdl"
+    best_model_file = automodel_uv_fits(uv_fits_path, "/home/ilya/STACK/0716+714",
+                                        path_to_script, n_max_comps=30,
+                                        core_elliptic=True)

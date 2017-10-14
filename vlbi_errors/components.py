@@ -32,6 +32,18 @@ class Component(object):
             result += (" {} = {:.3f},".format(parname, parvalue))
         return str(result[:-1])
 
+    def __eq__(self, other):
+        """
+        Compares current instance of ``Component`` class with other instance.
+        """
+        return np.all(self.p == other.p) and np.all(self._p == other._p)
+
+    def __ne__(self, other):
+        """
+        Compares current instance of ``Component`` class with other instance.
+        """
+        return np.any(self.p != other.p) or np.any(self._p != other._p)
+
     @property
     def parnames(self):
         return np.array(self._parnames)[~self._fixed]

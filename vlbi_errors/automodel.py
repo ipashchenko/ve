@@ -180,7 +180,8 @@ def create_residuals(uv_fits_path, model=None, out_fname='residuals.uvf',
 
 def find_best(files, frac_flux=0.01, delta_flux=0.001, frac_size=0.01,
               delta_size=0.001, small_size=10**(-5),
-              threshold_flux_small_sized_component=0.1):
+              threshold_flux_small_sized_component=0.1,
+              small_size_of_the_core=0.001):
     """
     Select best model from given difmap model files.
 
@@ -212,7 +213,12 @@ def find_best(files, frac_flux=0.01, delta_flux=0.001, frac_size=0.01,
     last_size = sizes[-1]
     sizes_inv = sizes[::-1]
     size_min = max(delta_size, frac_size * last_size)
-    a = (abs(sizes_inv - sizes_inv[0]) < size_min)[::-1]
+    # If last model's core size is too small then not compare differences, but
+    # compare fraction changes
+    if last_size < small_size_of_the_core:
+        a = (abs((sizes_inv-sizes_inv[0])/sizes_inv[0]) < frac_size)[::-1]
+    else:
+        a = (abs(sizes_inv - sizes_inv[0]) < size_min)[::-1]
     try:
         n_size = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
     except IndexError:
@@ -293,11 +299,13 @@ def stop_adding_models_(files, n_check=5, frac_flux_min=0.002,
 
 
 # TODO: Add option to begin with some specified model
-def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
+def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=None,
+                      mapsize_clean=None,
                       core_elliptic=False, compute_CV=False, n_CV=5, n_rep_CV=1,
                       n_max_comps=30, frac_flux=0.01, delta_flux=0.001,
                       delta_size=0.001, small_size=10**(-5),
                       threshold_flux_small_sized_component=0.1,
+                      small_size_of_the_core=0.001,
                       n_check=5,
                       check_frac_flux_min=0.01,
                       check_delta_size_min=0.001
@@ -314,6 +322,10 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
         Directory to keep results.
     :param path_to_script:
         Path to D.Homan difmap script for automatical cleaning (final_clean_nw).
+    :param start_model_file: (optional)
+        Path to difmap file with model to start with. If ``None`` than start
+        from scratch (estimate one-component model using uv-data specified by
+        ``uv_fits_path``). (default: ``None``)
     :param mapsize_clean: (optional)
         Tuple of number of pixels and pixel size [mas]. If ``None`` then use
         default values for Q & U bands (512, 0.03) & (512, 0.1). (default:
@@ -354,6 +366,10 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
         Current best model is changed to more simple one if it contains small
         component with flux less then ``hreshold_flux_small_sized_component``
         [Jy]. (default: ``0.1``)
+    :param small_size_of_the_core: (optional)
+        When core size of the last component is less then
+        ``small_size_of_the_core`` [mas] then use fractions (not difference) to
+        select the best model. (default: ``0.001``)
     :param n_check: (optional)
         Number of last consequence models to check while checking stopping
         criteria. (default: ``5``)
@@ -400,7 +416,14 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
     epoch = uv_fits_fname.split(".")[2]
     uvdata = UVData(uv_fits_path)
     freq_hz = uvdata.frequency
-    model = None
+    if start_model_file is None:
+        model = None
+    else:
+        mdl_dir, mdl_fname = os.path.split(start_model_file)
+        print("Using model from {} as starting point".format(mdl_fname))
+        comps = import_difmap_model(mdl_fname, mdl_dir)
+        model = Model(stokes="I")
+        model.add_components(*comps)
     cv_scores = list()
     ccimage_orig = None
 
@@ -419,7 +442,7 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
         uv_fits_path_res = create_residuals(uv_fits_path, model=model,
                                             out_dir=out_dir)
         # 1. Modelfit in difmap with CG
-        if i == 1 and core_elliptic:
+        if i == 1 and core_elliptic and not model:
             print("Suggesting EG component to add...")
             cg, image_cc_fits = suggest_eg_component(uv_fits_path_res, mapsize_clean,
                                                      path_to_script, out_dir=out_dir)
@@ -427,25 +450,35 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
             print("Suggesting CG component to add...")
             cg, image_cc_fits = suggest_cg_component(uv_fits_path_res, mapsize_clean,
                                                      path_to_script, out_dir=out_dir)
-        # Saving original CLEAN image
-        shutil.copy(image_cc_fits, os.path.join(out_dir, 'image_cc_orig.fits'))
+
+        # Saving original CLEAN image to plot pictures with models
         if ccimage_orig is None:
-            ccimage_orig = create_clean_image_from_fits_file(image_cc_fits)
-            sign_x = np.sign(ccimage_orig.dx)
-            sign_y = np.sign(ccimage_orig.dy)
+            # If starting from scratch than CC FITS-file is ``image_cc_fits``
+            if model is None:
+                shutil.copy(image_cc_fits,
+                            os.path.join(out_dir, 'image_cc_orig.fits'))
+                ccimage_orig = create_clean_image_from_fits_file(os.path.join(out_dir, 'image_cc_orig.fits'))
+            else:
+                # If first iteration with some model that we need to CLEAN
+                # original UV-data
+                clean_difmap(uv_fits_fname,
+                             os.path.join(out_dir, 'image_cc_orig.fits'), 'I',
+                             mapsize_clean, path=uv_fits_dir,
+                             path_to_script=path_to_script,
+                             outpath=out_dir)
+                ccimage_orig = create_clean_image_from_fits_file(os.path.join(out_dir, 'image_cc_orig.fits'))
+
         print("Suggested: {}".format(cg))
 
         if i > 1:
-            # If this is not first iteration then append component to existing file
-            # print("Our initial model will be last one + new component.")
+            # If this is not first iteration then append component to existing
+            # file
             shutil.copy(os.path.join(out_dir, '{}_{}_{}_{}_fitted_{}.mdl'.format(source, freq, epoch, core_type, i-1)),
                         os.path.join(out_dir, 'init_{}.mdl'.format(i)))
-            # print("Appending component to model")
             append_component_to_difmap_model(cg, os.path.join(out_dir, 'init_{}.mdl'.format(i)),
                                              freq_hz)
         else:
             # If this is first iteration then create model file
-            # print("Initialize model")
             export_difmap_model([cg],
                                 os.path.join(out_dir, 'init_{}.mdl'.format(i)),
                                 freq_hz)
@@ -464,7 +497,8 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
         if compute_CV:
             cv_score = cv_difmap_models([os.path.join(out_dir,
                                                       '{}_{}_{}_{}_fitted_{}.mdl'.format(source, freq, epoch, core_type, i))],
-                                         uv_fits_path, K=n_CV, out_dir=out_dir, n_rep=n_rep_CV)
+                                        uv_fits_path, K=n_CV, out_dir=out_dir,
+                                        n_rep=n_rep_CV)
             cv_scores.append((cv_score[0][0][0], cv_score[1][0][0]))
 
         # Check if we need go further
@@ -502,7 +536,9 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
         best_model_file = find_best(files, frac_flux=frac_flux,
                                     delta_flux=delta_flux,
                                     delta_size=delta_size,
-                                    small_size=small_size)
+                                    small_size=small_size,
+                                    threshold_flux_small_sized_component=threshold_flux_small_sized_component,
+                                    small_size_of_the_core=small_size_of_the_core)
         k = files.index(best_model_file) + 1
     except FailedFindBestModelException:
         return None
@@ -536,8 +572,10 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, mapsize_clean=None,
 
 
 if __name__ == '__main__':
-    uv_fits_path = "/home/ilya/fs/sshfs/odin/fs/sshfs/frb/data/0235+164.u.2000_01_01.uvf"
+    uv_fits_path = "/home/ilya/STACK/0235+164.u.2000_01_01.uvf"
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
+    start_model_file = "/home/ilya/STACK/tmp/0235+164_u_2000_01_01_start.mdl"
     best_model_file = automodel_uv_fits(uv_fits_path, "/home/ilya/STACK/tmp",
                                         path_to_script, n_max_comps=40,
-                                        core_elliptic=False)
+                                        core_elliptic=False,
+                                        start_model_file=start_model_file)

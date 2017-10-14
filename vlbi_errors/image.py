@@ -422,7 +422,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 else:
                     facecolor = "red"
                 e = Ellipse((x_c, y_c), e_width, e_height,
-                            angle=90+180*comp.p[5]/np.pi,
+                            angle=180*comp.p[5]/np.pi,
                             edgecolor=beam_edge_color, facecolor=facecolor,
                             alpha=beam_alpha)
             elif len(comp) == 4:

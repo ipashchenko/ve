@@ -1,6 +1,7 @@
 import os
 import datetime
 import numpy as np
+import copy
 from utils import degree_to_rad
 from components import DeltaComponent, CGComponent, EGComponent
 
@@ -302,10 +303,12 @@ def append_component_to_difmap_model(comp, out_fname, freq_hz):
 
 
 def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
-                                        outpath=None, perc_distant=75):
+                                        outpath=None, perc_distant=75,
+                                        only_indicate=False):
     """
     Function that re-arrange components in a such a way that closest to "counter
-    jet" components goes first.
+    jet" components goes first. If components were already sorted by distance
+    from "counter-jet" then does nothing and return ``False``.
 
     :param mdl_path:
         Path to difmap-format model file.
@@ -314,17 +317,24 @@ def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
     :param n_check_for_core: (optional)
         Number of closest to phase center components to check for being on "cj"
         side. (default: ``2``)
-    :param outpath:
+    :param outpath: (optional)
         Path to save re-arranged model. If ``None`` then re-write ``mdl_path``.
         (default: ``None``)
-    :param perc_distant:
+    :param perc_distant: (optional)
         Percentile of the component's distance distribution to use as border
         line that defines "distant" component. Position of such components is
-        then used to compare polar angles of "cj-candidates".
+        then used to compare polar angles of "cj-candidates". (default: ``75``)
+    :param only_indicate: (optional)
+        Boolean - ust indicate by the returned value or also do re-arangment of
+        components? (default: ``False``)
+    :return:
+        Boolean if there any "cj"-components that weren't sorted by distance
+        from "CJ".
     """
     mdl_dir, mdl_fname = os.path.split(mdl_path)
     comps = import_difmap_model(mdl_fname, mdl_dir)
     comps = sorted(comps, key=lambda x: np.hypot(x.p[1], x.p[2]))
+    comps_c = import_difmap_model(mdl_fname, mdl_dir)
     r = [np.hypot(comp.p[1], comp.p[2]) for comp in comps]
     dist = np.percentile(r, perc_distant)
     remote_comps = [comp for r_, comp in zip(r, comps) if r_ > dist]
@@ -334,6 +344,7 @@ def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
     found_cj_comps = list()
     for i in range(1, n_check_for_core+1):
         comp = comps[i]
+        # This checks that cj component have different PA
         if abs(np.arctan2(-comp.p[1], -comp.p[2])/degree_to_rad -
                theta_remote) > 90.:
             print("Found cj components - {}".format(comp))
@@ -348,12 +359,27 @@ def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
                            key=lambda x: np.hypot(x.p[1], x.p[2])):
             result_comps.append(comp)
 
+        # Now check if cj-components were not first ones
+        is_changed = False
+        sorted_found_cj_comps = sorted(found_cj_comps,
+                                       key=lambda x: np.hypot(x.p[1], x.p[2]))
+        for comp1, comp2 in zip(comps_c[:len(sorted_found_cj_comps)],
+                                sorted_found_cj_comps[::-1]):
+            if comp1 != comp2:
+                is_changed = True
+        # If all job was already done just return
+        if not is_changed:
+            print("Components are already sorted")
+            return False
+
     for comp in comps:
         result_comps.append(comp)
 
     if outpath is None:
         outpath = mdl_path
-    export_difmap_model(result_comps, outpath, freq_hz)
+    if not only_indicate:
+        export_difmap_model(result_comps, outpath, freq_hz)
+    return bool(found_cj_comps)
 
 
 def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
@@ -491,3 +517,13 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
 #    difmapout.write("print imstat(bmin)\n")
 #    difmapout.write("print imstat(bmaj)\n")
 #    difmapout.write("print imstat(bpa)\n")
+
+if __name__ == "__main__":
+    mdl_file = "/home/ilya/STACK/2251+158_u_2013_02_28_fitted_10_out.mdl"
+    out_mdl = "/home/ilya/STACK/2251+158_u_2013_02_28_fitted_10_out.mdl"
+    is_cj = sort_components_by_distance_from_cj(mdl_file, 15*10**9,
+                                                outpath=out_mdl)
+    if is_cj:
+        print("CJ detected!")
+    else:
+        print("No")

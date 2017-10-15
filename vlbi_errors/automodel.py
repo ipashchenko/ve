@@ -90,7 +90,7 @@ class TotalFluxStopping(ImageBasedStoppingCriterion):
     Total flux of difmap model must be close to total flux of CC to stop.
     """
     def __init__(self, total_flux=None, abs_threshold=None,
-                 rel_threshold=0.001):
+                 rel_threshold=0.005):
         super(ImageBasedStoppingCriterion, self).__init__()
         self._total_flux = total_flux
         self.abs_threshold = abs_threshold
@@ -458,13 +458,13 @@ class AutoModeler(object):
             set as residuals.
         """
         if model is not None:
-            print("Creating residuals from model :")
+            print("Creating residuals using model :")
             print(model)
             uvdata_ = UVData(self.uv_fits_path)
             uvdata_.substitute([model])
             uvdata_residual = self.uvdata - uvdata_
         else:
-            print("Creating residuals from original data alone")
+            print("Creating \"residuals\" from original data alone")
             uvdata_residual = self.uvdata
         uvdata_residual.save(self._uv_residuals_fits_path, rewrite=True)
 
@@ -572,11 +572,10 @@ class AutoModeler(object):
             if decisions[-1]:
                 break
 
-        best_model_file = self.select_best()
-        self.archive_images()
-        self.archive_models()
-        self.clean()
-        return best_model_file
+        # best_model_file = self.select_best()
+        # self.archive_images()
+        # self.archive_models()
+        # self.clean()
 
     def select_best(self, frac_flux=0.01, delta_flux=0.001, delta_size=0.001,
                     small_size=10**(-5),
@@ -594,40 +593,38 @@ class AutoModeler(object):
         except FailedFindBestModelException:
             return None
 
-        if do_plot:
-            comps = list()
-            for file_ in self.fitted_model_paths:
-                comps_ = import_difmap_model(file_)
-                comps.append(comps_[0])
-            fig, axes = plt.subplots(2, 1, sharex=True)
-            axes[0].plot(range(1, len(comps) + 1), [comp.p[0] for comp in comps])
-            axes[0].plot(range(1, len(comps) + 1), [comp.p[0] for comp in comps],
-                         '.k')
-            axes[0].set_ylabel("Core Flux, [Jy]")
-            axes[1].plot(range(1, len(comps) + 1), [comp.p[3] for comp in comps])
-            axes[1].plot(range(1, len(comps) + 1), [comp.p[3] for comp in comps],
-                         '.k')
-            axes[1].set_xlabel("Number of components")
-            axes[1].set_ylabel("Core Size, [mas]")
-            axes[0].axvline(k)
-            axes[1].axvline(k)
-            fig.savefig(os.path.join(out_dir, '{}_core_parameters_vs_ncomps.png'.format(self._mdl_prefix)),
-                        bbox_inches='tight', dpi=200)
+    def plot_results(self, id_best):
+        comps = list()
+        for file_ in self.fitted_model_paths:
+            comps_ = import_difmap_model(file_)
+            comps.append(comps_[0])
+        fig, axes = plt.subplots(2, 1, sharex=True)
+        axes[0].plot(range(1, len(comps) + 1), [comp.p[0] for comp in comps])
+        axes[0].plot(range(1, len(comps) + 1), [comp.p[0] for comp in comps],
+                     '.k')
+        axes[0].set_ylabel("Core Flux, [Jy]")
+        axes[1].plot(range(1, len(comps) + 1), [comp.p[3] for comp in comps])
+        axes[1].plot(range(1, len(comps) + 1), [comp.p[3] for comp in comps],
+                     '.k')
+        axes[1].set_xlabel("Number of components")
+        axes[1].set_ylabel("Core Size, [mas]")
+        axes[0].axvline(id_best+1)
+        axes[1].axvline(id_best+1)
+        fig.savefig(os.path.join(out_dir, '{}_core_parameters_vs_ncomps.png'.format(self._mdl_prefix)),
+                    bbox_inches='tight', dpi=200)
 
-            fig, axes = plt.subplots(1, 1, sharex=True)
-            axes.plot(range(1, len(comps) + 1), [difmap_model_flux(fn) for
-                                                 fn in self.fitted_model_paths])
-            axes.plot(range(1, len(comps) + 1), [difmap_model_flux(fn) for
-                                                 fn in self.fitted_model_paths],
-                      '.k')
-            axes.set_ylabel("Total Flux, [Jy]")
-            axes.set_xlabel("Number of components")
-            axes.axvline(k)
-            axes.axhline(self.total_flux)
-            fig.savefig(os.path.join(out_dir, '{}_total_flux_vs_ncomps.png'.format(self._mdl_prefix)),
-                        bbox_inches='tight', dpi=200)
-
-        return best_model_file
+        fig, axes = plt.subplots(1, 1, sharex=True)
+        axes.plot(range(1, len(comps) + 1), [difmap_model_flux(fn) for
+                                             fn in self.fitted_model_paths])
+        axes.plot(range(1, len(comps) + 1), [difmap_model_flux(fn) for
+                                             fn in self.fitted_model_paths],
+                  '.k')
+        axes.set_ylabel("Total Flux, [Jy]")
+        axes.set_xlabel("Number of components")
+        axes.axvline(id_best+1)
+        axes.axhline(self.total_flux)
+        fig.savefig(os.path.join(out_dir, '{}_total_flux_vs_ncomps.png'.format(self._mdl_prefix)),
+                    bbox_inches='tight', dpi=200)
 
     def archive_models(self):
         with tarfile.open(os.path.join(self.out_dir, "{}_fitted_models.tar.gz".format(self._mdl_prefix)),
@@ -1224,23 +1221,35 @@ if __name__ == '__main__':
     uv_fits_path = "/home/ilya/STACK/uvf/0716+714.u.2010_11_13.uvf"
     out_dir = "/home/ilya/STACK/0716+714"
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
-    # # start_model_file = "/home/ilya/STACK/tmp/0235+164_u_2000_01_01_start.mdl"
-    # best_model_file = automodel_uv_fits(uv_fits_path, "/home/ilya/STACK/0716+714",
-    #                                     path_to_script, n_max_comps=30,
-    #                                     core_elliptic=True)
     automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
                               n_comps_terminate=30, core_elliptic=True)
+    # Stoppers define when to stop adding components to model
     stoppers = [TotalFluxStopping(),
                 AddedComponentFluxLessRMSStopping(),
                 NLastDifferesFromLast(),
                 NLastDifferencesAreSmall()]
+    # Selectors choose best model using different heuristics
     selectors = [FluxBasedModelSelector(),
                  SizeBasedModelSelector()]
-    filters = [SmallSizedComponentsModelFilter(),
-               ComponentAwayFromSourceModelFilter()]
-    files = automodeler.run(stoppers)
+    # Filters additionally remove complex models with non-physical components
+    filters = [SmallSizedComponentsModelFilter()]
+               # ComponentAwayFromSourceModelFilter()]
+
+    # Run number of iterations that is defined by stoppers
+    automodeler.run(stoppers)
+
+    # Select best model using custom selectors
+    files = automodeler.fitted_model_paths
     id_best = max(selector.select(files) for selector in selectors)
     files = files[:id_best+1]
+
+    # Additionally filter too small, too distant components
     for flt in filters:
         files = flt.filter(files)
+    id_best = len(files)-1
     print("Best model is {}".format(files[-1]))
+
+    automodeler.plot_results(id_best)
+    automodeler.archive_images()
+    automodeler.archive_models()
+    automodeler.clean()

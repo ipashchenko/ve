@@ -11,14 +11,12 @@ from spydiff import (export_difmap_model, modelfit_difmap, import_difmap_model,
                      clean_difmap, append_component_to_difmap_model,
                      clean_n, difmap_model_flux)
 from components import CGComponent, EGComponent
-from from_fits import (create_image_from_fits_file,
-                       create_clean_image_from_fits_file,
+from from_fits import (create_clean_image_from_fits_file,
                        create_model_from_fits_file)
 from utils import mas_to_rad, infer_gaussian
 from image import plot as iplot
 from image import find_bbox
 from image_ops import rms_image
-from utils import create_mask
 label_size = 16
 import matplotlib
 matplotlib.rcParams['xtick.labelsize'] = label_size
@@ -33,6 +31,625 @@ import tarfile
 
 class FailedFindBestModelException(Exception):
     pass
+
+
+class StoppingIterationsCriterion(object):
+    def __init__(self):
+        self.files = list()
+
+    def check_criterion(self):
+        """
+        :return:
+            Boolean - is criterion fulfilled?
+        """
+        raise NotImplementedError
+
+    def is_applicable(self):
+        raise NotImplementedError
+
+    def do_stop(self, new_file):
+        """
+        :param new_file:
+            Path to current difmap model file.
+        :return:
+            Boolean - is criterion fulfilled?
+        """
+        self.files.append(new_file)
+        if self.is_applicable():
+            return self.check_criterion()
+        else:
+            return False
+
+
+class ImageBasedStoppingCriterion(StoppingIterationsCriterion):
+    def __init__(self):
+        super(ImageBasedStoppingCriterion, self).__init__()
+        self.ccimage = None
+
+    def is_applicable(self):
+        return self.files
+
+    def set_ccimage(self, ccimage):
+        self.ccimage = ccimage
+
+
+class UVDataBasedStoppingCriterion(StoppingIterationsCriterion):
+    def __init__(self):
+        super(UVDataBasedStoppingCriterion, self).__init__()
+        self.uvdata = None
+
+    def is_applicable(self):
+        return self.files
+
+    def set_uvdata(self, uvdata):
+        self.uvdata = uvdata
+
+
+class TotalFluxStopping(ImageBasedStoppingCriterion):
+    """
+    Total flux of difmap model must be close to total flux of CC to stop.
+    """
+    def __init__(self, total_flux=None, abs_threshold=None,
+                 rel_threshold=0.001):
+        super(ImageBasedStoppingCriterion, self).__init__()
+        self._total_flux = total_flux
+        self.abs_threshold = abs_threshold
+        self.rel_threshold = rel_threshold
+
+    @property
+    def total_flux(self):
+        if self._total_flux is None:
+            self._total_flux = self.ccimage.total_flux
+        return self._total_flux
+
+    def check_criterion(self):
+        threshold = self.abs_threshold or self.rel_threshold * self.total_flux
+        print("{} message:".format(self.__class__.__name__))
+        print("Last model has flux = {} while CC total flux = {}".format(difmap_model_flux(self.files[-1]), self.total_flux))
+        return abs(difmap_model_flux(self.files[-1]) -
+                   self.total_flux) < threshold
+
+
+class AddedComponentFluxLessRMSStopping(ImageBasedStoppingCriterion):
+    """
+    Last added component must have flux less the ``n_rms`` of image RMS to stop.
+    """
+    def __init__(self, n_rms=7.0):
+        super(AddedComponentFluxLessRMSStopping, self).__init__()
+        self.n_rms = n_rms
+        self._threshold = None
+
+    @property
+    def threshold(self):
+        if self._threshold is None:
+            self._threshold = self.n_rms*rms_image(self.ccimage,
+                                                   hovatta_factor=False)
+        return self._threshold
+
+    def check_criterion(self):
+        _dir, _fn = os.path.split(self.files[-1])
+        last_comp = import_difmap_model(_fn, _dir)[-1]
+        print("{} message:".format(self.__class__.__name__))
+        print("Last added component has flux = {} while threshold = {}".format(last_comp.p[0], self.threshold))
+        return last_comp.p[0] < self.threshold
+
+
+class NLast(StoppingIterationsCriterion):
+    """
+    Abstract class defines criteria that need several iterations before starting
+    to work.
+    """
+    def __init__(self, n_check):
+        super(NLast, self).__init__()
+        self.n_check = n_check
+
+    def is_applicable(self):
+        if len(self.files) > self.n_check:
+            return True
+        else:
+            return False
+
+
+class NLastDifferesFromLast(NLast):
+    """
+    Since last ``n_check`` iterations parameters of core component haven't
+    changed.
+    """
+    def __init__(self, n_check=5, frac_flux_min=0.002, delta_flux_min=0.001,
+                 delta_size_min=0.001):
+        super(NLastDifferesFromLast, self).__init__(n_check)
+        self.flux_min = None
+        self.delta_flux_min = delta_flux_min
+        self.frac_flux_min = frac_flux_min
+        self.delta_size_min = delta_size_min
+
+    def check_criterion(self):
+        files = self.files[-self.n_check-1: -1]
+        comps = list()
+        for fn in files:
+            core = import_difmap_model(fn)[0]
+            comps.append(core)
+        last_comp = comps[-1]
+        last_flux = last_comp.p[0]
+        last_size = last_comp.p[3]
+        fluxes = np.array([comp.p[0] for comp in comps])
+        sizes = np.array([comp.p[3] for comp in comps])
+        self.flux_min = max(self.delta_flux_min, last_flux*self.frac_flux_min)
+        delta_fluxes = abs(fluxes - last_flux)
+        delta_sizes = abs(sizes - last_size)
+        return np.alltrue(delta_fluxes < self.flux_min) or\
+               np.alltrue(delta_sizes < self.delta_size_min)
+
+
+class NLastDifferencesAreSmall(NLast):
+    """
+    Since last ``n_check`` iterations differences of core parameters are small
+    enough.
+    """
+    def __init__(self, n_check=5, frac_flux_min=0.002, delta_flux_min=0.001,
+                 delta_size_min=0.001):
+        super(NLastDifferencesAreSmall, self).__init__(n_check)
+        self.flux_min = None
+        self.delta_flux_min = delta_flux_min
+        self.frac_flux_min = frac_flux_min
+        self.delta_size_min = delta_size_min
+
+    def check_criterion(self):
+        files = self.files[-self.n_check-1: -1]
+        comps = list()
+        for fn in files:
+            core = import_difmap_model(fn)[0]
+            comps.append(core)
+
+        last_comp = comps[-1]
+        last_flux = last_comp.p[0]
+
+        fluxes = np.array([comp.p[0] for comp in comps])
+        sizes = np.array([comp.p[3] for comp in comps])
+        delta_fluxes = abs(fluxes[:-1]-fluxes[1:])
+        delta_sizes = abs(sizes[:-1]-sizes[1:])
+        self.flux_min = max(self.delta_flux_min, last_flux*self.frac_flux_min)
+        return np.alltrue(delta_fluxes < self.flux_min) and\
+               np.alltrue(delta_sizes < self.delta_size_min)
+
+
+class NLastJustStop(NLast):
+    """
+    Just stop after specified number of iterations.
+    """
+    def __init__(self, n):
+        super(NLastJustStop, self).__init__(n)
+        self.n_stop = n
+
+    def check_criterion(self):
+        return True
+
+
+class ModelSelector(object):
+    """
+    Basic class for selecting among several models.
+    """
+
+    def order_files(self, files):
+        out_dir = os.path.split(files[0])[0]
+        files = [os.path.split(file_path)[-1] for file_path in files]
+        files = sorted(files, key=lambda x: int(x.split('_')[-1].split('.')[0]))
+        files = [os.path.join(out_dir, file_) for file_ in files]
+        return files
+
+    def select(self, files):
+        """
+        Returns index (not number) of the best model in ``files`` list.
+        """
+        raise NotImplementedError
+
+
+class FluxBasedModelSelector(ModelSelector):
+    def __init__(self, frac_flux=0.01, delta_flux=0.001):
+        self.frac_flux = frac_flux
+        self.delta_flux = delta_flux
+
+    def select(self, files):
+        files = self.order_files(files)
+        comps = list()
+        for file_ in files:
+            comps_ = import_difmap_model(file_)
+            comps.append(comps_[0])
+        fluxes = np.array([comp.p[0] for comp in comps])
+        last_flux = fluxes[-1]
+        fluxes_inv = fluxes[::-1]
+        flux_min = min(self.delta_flux, self.frac_flux*last_flux)
+        a = (abs(fluxes_inv - fluxes_inv[0]) < flux_min)[::-1]
+        try:
+            # This is index not number! Number is index + 1 (python 0-based
+            # indexing)
+            k = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
+        except ValueError:
+            k = 0
+        return k
+
+
+class SizeBasedModelSelector(ModelSelector):
+    def __init__(self, frac_size=0.01, delta_size=0.001,
+                 small_size_of_the_core=0.001):
+        self.frac_size = frac_size
+        self.delta_size = delta_size
+        self.small_size_of_the_core = small_size_of_the_core
+
+    def select(self, files):
+        files = self.order_files(files)
+        comps = list()
+        for file_ in files:
+            comps_ = import_difmap_model(file_)
+            comps.append(comps_[0])
+        sizes = np.array([comp.p[3] for comp in comps])
+        last_size = sizes[-1]
+        sizes_inv = sizes[::-1]
+        size_min = min(self.delta_size, self.frac_size * last_size)
+        # If last model's core size is too small then not compare differences,
+        # but compare only fraction changes
+        if last_size < self.small_size_of_the_core:
+            a = (abs((sizes_inv - sizes_inv[0]) / sizes_inv[0]) < self.frac_size)[::-1]
+        else:
+            a = (abs(sizes_inv - sizes_inv[0]) < size_min)[::-1]
+        try:
+            # This is index not number! Number is index + 1 (python 0-based
+            # indexing)
+            k = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
+        except ValueError:
+            k = 0
+        return k
+
+
+class ModelFilter(object):
+    """
+    Basic class that filters models (e.g. discards models with very small
+    components or components that are far away from source.
+    """
+    def order_files(self, files):
+        out_dir = os.path.split(files[0])[0]
+        files = [os.path.split(file_path)[-1] for file_path in files]
+        files = sorted(files, key=lambda x: int(x.split('_')[-1].split('.')[0]))
+        files = [os.path.join(out_dir, file_) for file_ in files]
+        return files
+
+    def filter(self, files):
+        raise NotImplementedError
+
+
+class SmallSizedComponentsModelFilter(ModelFilter):
+    def __init__(self, small_size=10**(-5),
+                 threshold_flux_small_sized_component=0.1):
+        self.small_size = small_size
+        self.threshold_flux_small_sized_component = threshold_flux_small_sized_component
+
+    def filter(self, files):
+        files = self.order_files(files)
+        # Index of the last model
+        k = len(files) - 1
+        for model_file in files[::-1]:
+            comps = import_difmap_model(model_file)
+            small_sizes = [comp.p[3] > self.small_size for comp in comps[1:]]
+            fluxes_of_small_sized_components = [comp.p[0] for comp in comps[1:]
+                                                if comp.p[3] < self.small_size]
+            fluxes_of_small_sized_components =\
+                [flux > self.threshold_flux_small_sized_component for flux in
+                 fluxes_of_small_sized_components]
+            if not np.alltrue(small_sizes) and\
+                    not np.alltrue(fluxes_of_small_sized_components):
+                print("Decreasing complexity because of too small component(s) present")
+                k = k - 1
+            else:
+                break
+
+        return files[:k+1]
+
+
+# FIXME: How to check if comp in bbox?
+class ComponentAwayFromSourceModelFilter(ModelFilter):
+    def __init__(self, cc_image_fits=None, ccimage=None, n_rms=3,
+                 hovatta_factor=False):
+        if ccimage is None:
+            if cc_image_fits is None:
+                raise Exception("Need CLEAN image to proceed!")
+            self.ccimage = create_clean_image_from_fits_file(cc_image_fits)
+        threshold = n_rms*rms_image(self.ccimage, hovatta_factor)
+        blc, trc = find_bbox(ccimage.image, threshold)
+
+    def filter(self, files):
+        files = self.order_files(files)
+        # Index of the last model
+        k = len(files) - 1
+        # for model_file in files[::-1]:
+        #     comps = import_difmap_model(model_file)
+        #     do_comps_in_bbox = []
+        #     if not np.alltrue(do_comps_in_bbox):
+        #         print("Decreasing complexity because of too distant component(s) present")
+        #         k = k - 1
+        #     else:
+        #         break
+
+        return files[:k+1]
+
+
+class AutoModeler(object):
+    def __init__(self, uv_fits_path, out_dir, path_to_script,
+                 mapsize_clean=None, core_elliptic=False,
+                 compute_CV=False, n_CV=5, n_rep_CV=1, n_comps_terminate=50,
+                 niter_difmap=100, show_difmap_output_clean=False,
+                 show_difmap_output_modelfit=False):
+        self.uv_fits_path = uv_fits_path
+        self.uv_fits_dir, self.uv_fits_fname = os.path.split(uv_fits_path)
+        self.out_dir = out_dir
+        self.path_to_script = path_to_script
+        self.compute_CV = compute_CV
+        self.n_CV = n_CV
+        self.n_rep_CV = n_rep_CV
+        self.n_comps_terminate = n_comps_terminate
+        if core_elliptic:
+            self.core_type = 'eg'
+        else:
+            self.core_type = 'cg'
+
+        self.source = self.uv_fits_fname.split(".")[0]
+        self.freq = self.uv_fits_fname.split(".")[1]
+
+        if mapsize_clean is None:
+            if self.freq == 'u':
+                self.mapsize_clean = (512, 0.1)
+            elif self.freq == 'q':
+                self.mapsize_clean = (512, 0.03)
+            else:
+                raise Exception("Indicate mapsize_clean!")
+
+        self.epoch = self.uv_fits_fname.split(".")[2]
+        self._uvdata = UVData(uv_fits_path)
+        self.freq_hz = self.uvdata.frequency
+
+        self.niter_difmap = niter_difmap
+        self.show_difmap_output_clean = show_difmap_output_clean
+        self.show_difmap_output_modelfit = show_difmap_output_modelfit
+
+        self.cv_scores = list()
+        # ``CleanImage`` instance for CLEANed original uv data set
+        self._ccimage = None
+        # Path to original CLEAN image
+        self._ccimage_path = os.path.join(self.out_dir, 'image_cc_orig_{}_{}_{}.fits'.format(self.source, self.epoch, self.freq))
+        # Path to image with residuals. It will be overrided each iteration
+        self._ccimage_residuals_path = os.path.join(self.out_dir, 'image_cc_residuals.fits')
+        # Total flux of all CC components in CLEAN model of the original uv data
+        # set
+        self._total_flux = None
+        self._uv_residuals_fits_path = os.path.join(self.out_dir, "residuals.uvf")
+        # Number of iterations passed
+        self.counter = 0
+        # Instance of ``Model`` class that represents current model
+        self.model = None
+        self._mdl_prefix = '{}_{}_{}_{}_fitted'.format(self.source, self.freq,
+                                                       self.epoch, self.core_type)
+        self.fitted_model_paths = list()
+
+    @property
+    def ccimage(self):
+        if self._ccimage is None:
+            print("CLEANing original uv data set")
+            clean_difmap(self.uv_fits_fname, self._ccimage_path, 'I',
+                         self.mapsize_clean, path=self.uv_fits_dir,
+                         path_to_script=self.path_to_script,
+                         outpath=self.out_dir,
+                         show_difmap_output=self.show_difmap_output_clean)
+            self._ccimage = create_clean_image_from_fits_file(self._ccimage_path)
+        return self._ccimage
+
+    @property
+    def total_flux(self):
+        if self._total_flux is None:
+            self._total_flux = self.ccimage.total_flux
+        return self._total_flux
+
+    @property
+    def uvdata(self):
+        return self._uvdata
+
+    def create_residuals(self, model):
+        """
+        :param model: (optional)
+            Instance of ``Model`` class. If ``None`` then treat original uv data
+            set as residuals.
+        """
+        if model is not None:
+            print("Creating residuals from model :")
+            print(model)
+            uvdata_ = UVData(self.uv_fits_path)
+            uvdata_.substitute([model])
+            uvdata_residual = self.uvdata - uvdata_
+        else:
+            print("Creating residuals from original data alone")
+            uvdata_residual = self.uvdata
+        uvdata_residual.save(self._uv_residuals_fits_path, rewrite=True)
+
+    def suggest_component(self, type='cg'):
+        """
+        Suggest single circular gaussian component using self-calibrated uv-data
+        FITS file.
+
+        :return:
+            Instance of ``CGComponent``.
+        """
+        print("Suggesting component...")
+        clean_difmap(self._uv_residuals_fits_path, self._ccimage_residuals_path,
+                     'I', self.mapsize_clean, path=self.out_dir,
+                     path_to_script=self.path_to_script, outpath=self.out_dir)
+
+        image = create_clean_image_from_fits_file(self._ccimage_residuals_path)
+        beam = np.sqrt(image.beam[0] * image.beam[1])
+        imsize = image.imsize[0]
+        mas_in_pix = abs(image.pixsize[0] / mas_to_rad)
+        amp, y, x, bmaj = infer_gaussian(image.image)
+        x = mas_in_pix * (x - imsize / 2) * np.sign(image.dx)
+        y = mas_in_pix * (y - imsize / 2) * np.sign(image.dy)
+        bmaj *= mas_in_pix
+        bmaj = np.sqrt(bmaj**2 - beam**2)
+        if type == 'cg':
+            comp = CGComponent(amp, x, y, bmaj)
+        elif type == 'eg':
+            comp = EGComponent(amp, x, y, bmaj, 1.0, 0.0)
+        else:
+            raise Exception
+
+        print("Suggested: {}".format(comp))
+        return comp
+
+    def do_iteration(self):
+        self.counter += 1
+        self.create_residuals(self.model)
+        if self.counter == 1:
+            core_type = self.core_type
+        else:
+            core_type = 'cg'
+        comp = self.suggest_component(core_type)
+
+        if self.counter > 1:
+            # If this is not first iteration then append component to existing
+            # file
+            shutil.copy(os.path.join(self.out_dir, '{}_{}.mdl'.format(self._mdl_prefix, self.counter-1)),
+                        os.path.join(self.out_dir, 'init_{}.mdl'.format(self.counter)))
+            append_component_to_difmap_model(comp, os.path.join(self.out_dir, 'init_{}.mdl'.format(self.counter)),
+                                             self.freq_hz)
+        else:
+            # If this is first iteration then create model file
+            export_difmap_model([comp],
+                                os.path.join(self.out_dir, 'init_{}.mdl'.format(self.counter)),
+                                self.freq_hz)
+
+        modelfit_difmap(self.uv_fits_fname, 'init_{}.mdl'.format(self.counter),
+                        '{}_{}.mdl'.format(self._mdl_prefix, self.counter),
+                        path=self.uv_fits_dir, mdl_path=out_dir, out_path=out_dir,
+                        niter=self.niter_difmap,
+                        show_difmap_output=self.show_difmap_output_modelfit)
+
+        # Update model and plot results of current iteration
+        model = Model(stokes='I')
+        comps = import_difmap_model('{}_{}.mdl'.format(self._mdl_prefix, self.counter), self.out_dir)
+        plot_clean_image_and_components(self.ccimage, comps,
+                                        outname=os.path.join(out_dir, "{}_image_{}.png".format(self._mdl_prefix, self.counter)))
+        model.add_components(*comps)
+        self.model = model
+
+        return os.path.join(self.out_dir,
+                            '{}_{}.mdl'.format(self._mdl_prefix, self.counter))
+
+    def run(self, stoppers, start_model_fname=None):
+        stoppers = list(stoppers)
+        stoppers.append(NLastJustStop(self.n_comps_terminate))
+        for stopper in stoppers:
+            if isinstance(stopper, ImageBasedStoppingCriterion):
+                stopper.set_ccimage(self.ccimage)
+            elif isinstance(stopper, UVDataBasedStoppingCriterion):
+                stopper.set_uvdata(self.uvdata)
+
+        if start_model_fname is not None:
+            mdl_dir, mdl_fname = os.path.split(start_model_fname)
+            print("Using model from {} as starting point".format(mdl_fname))
+            comps = import_difmap_model(mdl_fname, mdl_dir)
+            model = Model(stokes="I")
+            model.add_components(*comps)
+            self.model = model
+
+        while True:
+            new_mdl_file = self.do_iteration()
+            self.fitted_model_paths.append(new_mdl_file)
+            decisions = [stopper.do_stop(new_mdl_file) for stopper in stoppers
+                         if stoppers]
+            do_stop = np.alltrue(decisions[:-1])
+            print("Stopping criteria :")
+            for stopper, decision in zip(stoppers[:-1], decisions[:-1]):
+                print("{} - {}".format(stopper.__class__.__name__, decision))
+            # If all except ``NLastJustStop``
+            if do_stop:
+                break
+            # ``NLastJustStop`` alone
+            if decisions[-1]:
+                break
+
+        best_model_file = self.select_best()
+        self.archive_images()
+        self.archive_models()
+        self.clean()
+        return best_model_file
+
+    def select_best(self, frac_flux=0.01, delta_flux=0.001, delta_size=0.001,
+                    small_size=10**(-5),
+                    threshold_flux_small_sized_component=0.1,
+                    small_size_of_the_core=0.001, do_plot=True):
+        try:
+            best_model_file = find_best(self.fitted_model_paths,
+                                        frac_flux=frac_flux,
+                                        delta_flux=delta_flux,
+                                        delta_size=delta_size,
+                                        small_size=small_size,
+                                        threshold_flux_small_sized_component=threshold_flux_small_sized_component,
+                                        small_size_of_the_core=small_size_of_the_core)
+            k = self.fitted_model_paths.index(best_model_file) + 1
+        except FailedFindBestModelException:
+            return None
+
+        if do_plot:
+            comps = list()
+            for file_ in self.fitted_model_paths:
+                comps_ = import_difmap_model(file_)
+                comps.append(comps_[0])
+            fig, axes = plt.subplots(2, 1, sharex=True)
+            axes[0].plot(range(1, len(comps) + 1), [comp.p[0] for comp in comps])
+            axes[0].plot(range(1, len(comps) + 1), [comp.p[0] for comp in comps],
+                         '.k')
+            axes[0].set_ylabel("Core Flux, [Jy]")
+            axes[1].plot(range(1, len(comps) + 1), [comp.p[3] for comp in comps])
+            axes[1].plot(range(1, len(comps) + 1), [comp.p[3] for comp in comps],
+                         '.k')
+            axes[1].set_xlabel("Number of components")
+            axes[1].set_ylabel("Core Size, [mas]")
+            axes[0].axvline(k)
+            axes[1].axvline(k)
+            fig.savefig(os.path.join(out_dir, '{}_core_parameters_vs_ncomps.png'.format(self._mdl_prefix)),
+                        bbox_inches='tight', dpi=200)
+
+            fig, axes = plt.subplots(1, 1, sharex=True)
+            axes.plot(range(1, len(comps) + 1), [difmap_model_flux(fn) for
+                                                 fn in self.fitted_model_paths])
+            axes.plot(range(1, len(comps) + 1), [difmap_model_flux(fn) for
+                                                 fn in self.fitted_model_paths],
+                      '.k')
+            axes.set_ylabel("Total Flux, [Jy]")
+            axes.set_xlabel("Number of components")
+            axes.axvline(k)
+            axes.axhline(self.total_flux)
+            fig.savefig(os.path.join(out_dir, '{}_total_flux_vs_ncomps.png'.format(self._mdl_prefix)),
+                        bbox_inches='tight', dpi=200)
+
+        return best_model_file
+
+    def archive_models(self):
+        with tarfile.open(os.path.join(self.out_dir, "{}_fitted_models.tar.gz".format(self._mdl_prefix)),
+                          "w:gz") as tar:
+            for fn in self.fitted_model_paths:
+                tar.add(fn, arcname=os.path.split(fn)[-1])
+
+    def archive_images(self):
+        files = glob.glob(os.path.join(self.out_dir, "{}_image_*.png".format(self._mdl_prefix)))
+        with tarfile.open(os.path.join(self.out_dir, "{}_images.tar.gz".format(self._mdl_prefix)),
+                          "w:gz") as tar:
+            for fn in files:
+                tar.add(fn, arcname=os.path.split(fn)[-1])
+
+    def clean(self):
+        # Clean model files (we have copies in archive)
+        for fn in self.fitted_model_paths:
+            os.unlink(fn)
+        # Clean images with components superimposed (we have copies in archive)
+        files = glob.glob(os.path.join(self.out_dir, "{}_image_*.png".format(self._mdl_prefix)))
+        for fn in files:
+            os.unlink(fn)
 
 
 def create_cc_model_uvf(uv_fits_path, mapsize_clean, path_to_script,
@@ -202,7 +819,7 @@ def find_best(files, frac_flux=0.01, delta_flux=0.001, frac_size=0.01,
     fluxes = np.array([comp.p[0] for comp in comps])
     last_flux = fluxes[-1]
     fluxes_inv = fluxes[::-1]
-    flux_min = max(delta_flux, frac_flux*last_flux)
+    flux_min = min(delta_flux, frac_flux*last_flux)
     a = (abs(fluxes_inv - fluxes_inv[0]) < flux_min)[::-1]
     try:
         # This is index not number! Number is index + 1 (python 0-based
@@ -214,7 +831,7 @@ def find_best(files, frac_flux=0.01, delta_flux=0.001, frac_size=0.01,
     sizes = np.array([comp.p[3] for comp in comps])
     last_size = sizes[-1]
     sizes_inv = sizes[::-1]
-    size_min = max(delta_size, frac_size * last_size)
+    size_min = min(delta_size, frac_size * last_size)
     # If last model's core size is too small then not compare differences, but
     # compare fraction changes
     if last_size < small_size_of_the_core:
@@ -605,8 +1222,25 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
 
 if __name__ == '__main__':
     uv_fits_path = "/home/ilya/STACK/uvf/0716+714.u.2010_11_13.uvf"
+    out_dir = "/home/ilya/STACK/0716+714"
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
-    # start_model_file = "/home/ilya/STACK/tmp/0235+164_u_2000_01_01_start.mdl"
-    best_model_file = automodel_uv_fits(uv_fits_path, "/home/ilya/STACK/0716+714",
-                                        path_to_script, n_max_comps=30,
-                                        core_elliptic=True)
+    # # start_model_file = "/home/ilya/STACK/tmp/0235+164_u_2000_01_01_start.mdl"
+    # best_model_file = automodel_uv_fits(uv_fits_path, "/home/ilya/STACK/0716+714",
+    #                                     path_to_script, n_max_comps=30,
+    #                                     core_elliptic=True)
+    automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
+                              n_comps_terminate=30, core_elliptic=True)
+    stoppers = [TotalFluxStopping(),
+                AddedComponentFluxLessRMSStopping(),
+                NLastDifferesFromLast(),
+                NLastDifferencesAreSmall()]
+    selectors = [FluxBasedModelSelector(),
+                 SizeBasedModelSelector()]
+    filters = [SmallSizedComponentsModelFilter(),
+               ComponentAwayFromSourceModelFilter()]
+    files = automodeler.run(stoppers)
+    id_best = max(selector.select(files) for selector in selectors)
+    files = files[:id_best+1]
+    for flt in filters:
+        files = flt.filter(files)
+    print("Best model is {}".format(files[-1]))

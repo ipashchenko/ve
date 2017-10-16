@@ -120,8 +120,16 @@ def find_bbox(array, level, delta=0.):
             max_prop = prop
 
     bbox = max_prop.bbox
-    blc = (int(bbox[1] - delta), int(bbox[0] - delta))
-    trc = (int(bbox[3] + delta), int(bbox[2] + delta))
+    blc = (int(bbox[1]), int(bbox[0]))
+    trc = (int(bbox[3]), int(bbox[2]))
+    delta_blc = delta
+    delta_trc = delta
+    if blc[0] == 0 or blc[1] == 0:
+        delta_blc = -1
+    if trc[0] == array.shape[0] or trc[1] == array.shape[1]:
+        delta_trc = 0
+    blc = (int(blc[0] - delta_blc), int(blc[1] - delta_blc))
+    trc = (int(trc[0] + delta_trc), int(trc[1] + delta_trc))
     return blc, trc
 
 
@@ -422,7 +430,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 else:
                     facecolor = "red"
                 e = Ellipse((x_c, y_c), e_width, e_height,
-                            angle=180*comp.p[5]/np.pi,
+                            angle=90.0+180*comp.p[5]/np.pi,
                             edgecolor=beam_edge_color, facecolor=facecolor,
                             alpha=beam_alpha)
             elif len(comp) == 4:

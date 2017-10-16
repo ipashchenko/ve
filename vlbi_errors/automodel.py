@@ -90,7 +90,7 @@ class TotalFluxStopping(ImageBasedStoppingCriterion):
     Total flux of difmap model must be close to total flux of CC to stop.
     """
     def __init__(self, total_flux=None, abs_threshold=None,
-                 rel_threshold=0.005):
+                 rel_threshold=0.01):
         super(ImageBasedStoppingCriterion, self).__init__()
         self._total_flux = total_flux
         self.abs_threshold = abs_threshold
@@ -106,6 +106,8 @@ class TotalFluxStopping(ImageBasedStoppingCriterion):
         threshold = self.abs_threshold or self.rel_threshold * self.total_flux
         print("{} message:".format(self.__class__.__name__))
         print("Last model has flux = {} while CC total flux = {}".format(difmap_model_flux(self.files[-1]), self.total_flux))
+        if difmap_model_flux(self.files[-1]) > self.total_flux:
+            return True
         return abs(difmap_model_flux(self.files[-1]) -
                    self.total_flux) < threshold
 
@@ -396,9 +398,9 @@ class AutoModeler(object):
 
         if mapsize_clean is None:
             if self.freq == 'u':
-                self.mapsize_clean = (512, 0.1)
+                self.mapsize_clean = (1024, 0.1)
             elif self.freq == 'q':
-                self.mapsize_clean = (512, 0.03)
+                self.mapsize_clean = (1024, 0.03)
             else:
                 raise Exception("Indicate mapsize_clean!")
 
@@ -691,7 +693,6 @@ def plot_clean_image_and_components(image, comps, outname=None):
     beam = image.beam
     rms = rms_image(image)
     blc, trc = find_bbox(image.image, rms, 10)
-    # mask = create_mask(image.image.shape, (blc[0], blc[1], trc[0], trc[1]))
     fig = iplot(image.image, x=image.x, y=image.y, min_abs_level=3 * rms,
                 beam=beam, show_beam=True, blc=blc, trc=trc, components=comps,
                 close=True, colorbar_label="Jy/beam")
@@ -1218,8 +1219,8 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
 
 
 if __name__ == '__main__':
-    uv_fits_path = "/home/ilya/STACK/uvf/0716+714.u.2010_11_13.uvf"
-    out_dir = "/home/ilya/STACK/0716+714"
+    uv_fits_path = "/home/ilya/STACK/uvf/0219+428.u.2011_05_26.uvf"
+    out_dir = "/home/ilya/STACK/0219+428"
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
     automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
                               n_comps_terminate=30, core_elliptic=True)

@@ -302,6 +302,20 @@ def append_component_to_difmap_model(comp, out_fname, freq_hz):
                                                          freq_hz))
 
 
+def difmap_model_flux(mdl_file):
+    """
+    Returns flux of the difmap model.
+
+    :param mdl_file:
+        Path to difmap model file.
+    :return:
+        Sum of all component fluxes [Jy].
+    """
+    comps = import_difmap_model(mdl_file)
+    fluxes = [comp.p[0] for comp in comps]
+    return sum(fluxes)
+
+
 def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
                                         outpath=None, perc_distant=75,
                                         only_indicate=False):

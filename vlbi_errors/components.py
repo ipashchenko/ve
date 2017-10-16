@@ -27,7 +27,7 @@ class Component(object):
         return len(self._parnames)
 
     def __str__(self):
-        result = "{} with parameters : ".format(self.__class__.__name__)
+        result = "{} : ".format(self.__class__.__name__)
         for parname, parvalue in zip(self.parnames, self.p):
             result += (" {} = {:.3f},".format(parname, parvalue))
         return str(result[:-1])

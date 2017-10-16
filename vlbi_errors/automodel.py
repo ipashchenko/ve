@@ -405,7 +405,10 @@ class AutoModeler(object):
                 raise Exception("Indicate mapsize_clean!")
 
         self.epoch = self.uv_fits_fname.split(".")[2]
-        self._uvdata = UVData(uv_fits_path)
+        self.uvdata = UVData(uv_fits_path)
+
+        self.choose_stokes()
+
         self.freq_hz = self.uvdata.frequency
 
         self.niter_difmap = niter_difmap
@@ -435,7 +438,7 @@ class AutoModeler(object):
     def ccimage(self):
         if self._ccimage is None:
             print("CLEANing original uv data set")
-            clean_difmap(self.uv_fits_fname, self._ccimage_path, 'I',
+            clean_difmap(self.uv_fits_fname, self._ccimage_path, self.stokes,
                          self.mapsize_clean, path=self.uv_fits_dir,
                          path_to_script=self.path_to_script,
                          outpath=self.out_dir,
@@ -449,10 +452,6 @@ class AutoModeler(object):
             self._total_flux = self.ccimage.total_flux
         return self._total_flux
 
-    @property
-    def uvdata(self):
-        return self._uvdata
-
     def create_residuals(self, model):
         """
         :param model: (optional)
@@ -460,7 +459,7 @@ class AutoModeler(object):
             set as residuals.
         """
         if model is not None:
-            print("Creating residuals using model :")
+            print("Creating residuals using fitted model :")
             print(model)
             uvdata_ = UVData(self.uv_fits_path)
             uvdata_.substitute([model])
@@ -480,7 +479,7 @@ class AutoModeler(object):
         """
         print("Suggesting component...")
         clean_difmap(self._uv_residuals_fits_path, self._ccimage_residuals_path,
-                     'I', self.mapsize_clean, path=self.out_dir,
+                     self.stokes, self.mapsize_clean, path=self.out_dir,
                      path_to_script=self.path_to_script, outpath=self.out_dir)
 
         image = create_clean_image_from_fits_file(self._ccimage_residuals_path)
@@ -527,7 +526,7 @@ class AutoModeler(object):
         modelfit_difmap(self.uv_fits_fname, 'init_{}.mdl'.format(self.counter),
                         '{}_{}.mdl'.format(self._mdl_prefix, self.counter),
                         path=self.uv_fits_dir, mdl_path=out_dir, out_path=out_dir,
-                        niter=self.niter_difmap,
+                        niter=self.niter_difmap, stokes=self.stokes,
                         show_difmap_output=self.show_difmap_output_modelfit)
 
         # Update model and plot results of current iteration
@@ -554,7 +553,7 @@ class AutoModeler(object):
             mdl_dir, mdl_fname = os.path.split(start_model_fname)
             print("Using model from {} as starting point".format(mdl_fname))
             comps = import_difmap_model(mdl_fname, mdl_dir)
-            model = Model(stokes="I")
+            model = Model(stokes=self.stokes)
             model.add_components(*comps)
             self.model = model
 
@@ -629,7 +628,7 @@ class AutoModeler(object):
                     bbox_inches='tight', dpi=200)
 
     def archive_models(self):
-        with tarfile.open(os.path.join(self.out_dir, "{}_fitted_models.tar.gz".format(self._mdl_prefix)),
+        with tarfile.open(os.path.join(self.out_dir, "{}_models.tar.gz".format(self._mdl_prefix)),
                           "w:gz") as tar:
             for fn in self.fitted_model_paths:
                 tar.add(fn, arcname=os.path.split(fn)[-1])
@@ -649,6 +648,16 @@ class AutoModeler(object):
         files = glob.glob(os.path.join(self.out_dir, "{}_image_*.png".format(self._mdl_prefix)))
         for fn in files:
             os.unlink(fn)
+
+    def choose_stokes(self):
+        if self.uvdata._check_stokes_present('I'):
+            self.stokes = 'I'
+        elif self.uvdata._check_stokes_present('RR'):
+            self.stokes = 'RR'
+        elif self.uvdata._check_stokes_present('LL'):
+            self.stokes = 'LL'
+        else:
+            raise Exception("No Stokes I, RR or LL in {}".format(self.uv_fits_fname))
 
 
 def create_cc_model_uvf(uv_fits_path, mapsize_clean, path_to_script,
@@ -1219,8 +1228,11 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
 
 
 if __name__ == '__main__':
+    # uv_fits_path = "/home/ilya/STACK/uvf/0716+714.u.2010_11_13.uvf"
     uv_fits_path = "/home/ilya/STACK/uvf/0219+428.u.2011_05_26.uvf"
-    out_dir = "/home/ilya/STACK/0219+428"
+    # out_dir = "/home/ilya/STACK/0219+428"
+    out_dir = "/home/ilya/STACK/tmp"
+    # out_dir = "/home/ilya/STACK/0716+714"
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
     automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
                               n_comps_terminate=30, core_elliptic=True)

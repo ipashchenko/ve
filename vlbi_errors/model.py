@@ -42,6 +42,14 @@ class Model(object):
         self._components = list()
         self._stokes = stokes
 
+    # FIXME:
+    def __str__(self):
+        result = ""
+        for comp in self._components:
+            result += result.join([str(comp)])
+            result += result.join(["\n"])
+        return result
+
     @property
     def stokes(self):
         return self._stokes

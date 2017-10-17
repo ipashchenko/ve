@@ -9,7 +9,8 @@ from model import Model
 from cv_model import cv_difmap_models
 from spydiff import (export_difmap_model, modelfit_difmap, import_difmap_model,
                      clean_difmap, append_component_to_difmap_model,
-                     clean_n, difmap_model_flux)
+                     clean_n, difmap_model_flux,
+                     sort_components_by_distance_from_cj)
 from components import CGComponent, EGComponent
 from from_fits import (create_clean_image_from_fits_file,
                        create_model_from_fits_file)
@@ -31,6 +32,10 @@ from colorama import Fore, Back, Style
 
 
 class FailedFindBestModelException(Exception):
+    pass
+
+
+class ChangeOfCoreModelException(Exception):
     pass
 
 
@@ -63,12 +68,12 @@ class StoppingIterationsCriterion(object):
             return False
 
 
-class AddedOverlappingComponentStoppin(StoppingIterationsCriterion):
+class AddedOverlappingComponentStopping(StoppingIterationsCriterion):
     """
     Added component overlaps with some other components.
     """
     def __init__(self, mode="or"):
-        super(AddedOverlappingComponentStoppin, self).__init__(mode=mode)
+        super(AddedOverlappingComponentStopping, self).__init__(mode=mode)
 
     def check_criterion(self):
         last_comps = import_difmap_model(self.files[-1])
@@ -76,10 +81,20 @@ class AddedOverlappingComponentStoppin(StoppingIterationsCriterion):
         distances = [np.hypot((comp.p[1]-last_comp.p[1]),
                               (comp.p[2]-last_comp.p[2])) for comp in
                      last_comps[:-1]]
-        sizes = [comp.p[3] for comp in last_comps[:-1]]
+        sizes = list()
+        for comp in last_comps[:-1]:
+            if len(comp) == 4:
+                sizes.append(comp.p[3])
+            elif len(comp) == 6:
+                sizes.append(comp.p[3]*comp.p[4])
+            else:
+                raise Exception("Using only CG or EG components")
         ratios = [dist/max(size, last_comp.p[3]) for dist, size in
                   zip(distances, sizes)]
         return np.any(np.array(ratios) < 1.0)
+
+    def is_applicable(self):
+        return len(self.files) > 1
 
 
 class ImageBasedStoppingCriterion(StoppingIterationsCriterion):
@@ -172,7 +187,7 @@ class AddedTooDistantComponentStopping(ImageBasedStoppingCriterion):
         self._bbox = None
 
     def is_applicable(self):
-        return len(self.files) > 1
+        return self.files
 
     @property
     def bbox(self):
@@ -202,6 +217,23 @@ class AddedTooDistantComponentStopping(ImageBasedStoppingCriterion):
                                                           ra_range[1]) +
               Style.RESET_ALL)
         return not last_comp.is_within(blc, trc, self.ccimage)
+
+
+class AddedTooSmallComponentStopping(ImageBasedStoppingCriterion):
+    """
+    Last added component must be larger then specified threshold.
+    """
+    def __init__(self, size_limit=0.001):
+        super(AddedTooSmallComponentStopping, self).__init__(mode="or")
+        self.size_limit = size_limit
+
+    def is_applicable(self):
+        return self.files
+
+    def check_criterion(self):
+        _dir, _fn = os.path.split(self.files[-1])
+        last_comp = import_difmap_model(_fn, _dir)[-1]
+        return last_comp.p[3] < self.size_limit
 
 
 class NLast(StoppingIterationsCriterion):
@@ -315,7 +347,7 @@ class ModelSelector(object):
 
 
 class FluxBasedModelSelector(ModelSelector):
-    def __init__(self, frac_flux=0.01, delta_flux=0.005):
+    def __init__(self, frac_flux=0.01, delta_flux=0.001):
         self.frac_flux = frac_flux
         self.delta_flux = delta_flux
 
@@ -343,7 +375,7 @@ class FluxBasedModelSelector(ModelSelector):
 
 
 class SizeBasedModelSelector(ModelSelector):
-    def __init__(self, frac_size=0.01, delta_size=0.002,
+    def __init__(self, frac_size=0.01, delta_size=0.001,
                  small_size_of_the_core=0.001):
         self.frac_size = frac_size
         self.delta_size = delta_size
@@ -397,7 +429,7 @@ class ModelFilter(object):
 
 
 class SmallSizedComponentsModelFilter(ModelFilter):
-    def __init__(self, small_size=10**(-5),
+    def __init__(self, small_size=10**(-3),
                  threshold_flux_small_sized_component=0.1):
         self.small_size = small_size
         self.threshold_flux_small_sized_component = threshold_flux_small_sized_component
@@ -556,8 +588,8 @@ class AutoModeler(object):
             set as residuals.
         """
         if model is not None:
-            print(Style.DIM + "Creating residuals using fitted model :" +
-                  Style.RESET_ALL)
+            print(Style.DIM + "Creating residuals using " + Style.RESET_ALL +
+                  "fitted model :")
             print(model)
             uvdata_ = UVData(self.uv_fits_path)
             uvdata_.substitute([model])
@@ -639,6 +671,10 @@ class AutoModeler(object):
         return os.path.join(self.out_dir,
                             '{}_{}.mdl'.format(self._mdl_prefix, self.counter))
 
+    def clear(self):
+        self.counter = 0
+        self.fitted_model_paths = list()
+
     def run(self, stoppers, start_model_fname=None):
         stoppers = list(stoppers)
         stoppers.append(NLastJustStop(self.n_comps_terminate))
@@ -674,22 +710,18 @@ class AutoModeler(object):
                   Style.RESET_ALL)
             for stopper, decision in zip(stoppers_and, decisions_and):
                 if decision:
-                    print(Fore.RED + "{} - {}".format(stopper.__class__.__name__,
-                                                      decision) +
+                    print(Fore.RED + "{}".format(stopper.__class__.__name__) +
                           Style.RESET_ALL)
                 else:
-                    print(Fore.GREEN + "{} - {}".format(stopper.__class__.__name__,
-                                                        decision) +
+                    print(Fore.GREEN + "{}".format(stopper.__class__.__name__) +
                           Style.RESET_ALL)
             print(Back.GREEN + "Stopping criteria (OR):" + Style.RESET_ALL)
             for stopper, decision in zip(stoppers_or, decisions_or):
                 if decision:
-                    print(Fore.RED + "{} - {}".format(stopper.__class__.__name__,
-                                                      decision) +
+                    print(Fore.RED + "{}".format(stopper.__class__.__name__) +
                           Style.RESET_ALL)
                 else:
-                    print(Fore.GREEN + "{} - {}".format(stopper.__class__.__name__,
-                                                        decision) +
+                    print(Fore.GREEN + "{}".format(stopper.__class__.__name__) +
                           Style.RESET_ALL)
 
             if do_stop:
@@ -1378,17 +1410,21 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
 
 if __name__ == '__main__':
     # uv_fits_path = "/home/ilya/STACK/uvf/0716+714.u.2010_11_13.uvf"
-    uv_fits_path = "/home/ilya/STACK/uvf/0219+428.u.2011_05_26.uvf"
+    uv_fits_path = "/home/ilya/STACK/uvf/0528+134.u.2011_06_24.uvf"
+    # uv_fits_path = "/home/ilya/STACK/uvf/0219+428.u.2011_05_26.uvf"
     # out_dir = "/home/ilya/STACK/0219+428"
-    out_dir = "/home/ilya/STACK/tmp"
+    # out_dir = "/home/ilya/STACK/tmp"
     # out_dir = "/home/ilya/STACK/0716+714"
+    out_dir = "/home/ilya/STACK/0528+134"
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
     automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
-                              n_comps_terminate=30, core_elliptic=True)
+                              n_comps_terminate=30, core_elliptic=False)
     # Stoppers define when to stop adding components to model
     stoppers = [TotalFluxStopping(),
                 AddedComponentFluxLessRMSStopping(),
                 AddedTooDistantComponentStopping(),
+                AddedTooSmallComponentStopping(),
+                # AddedOverlappingComponentStopping(),
                 NLastDifferesFromLast(),
                 NLastDifferencesAreSmall()]
     # Selectors choose best model using different heuristics
@@ -1416,6 +1452,65 @@ if __name__ == '__main__':
         else:
             break
     print("Best model is {}".format(files[id_best]))
+
+    best_model = files[id_best]
+
+    ##### EXPERIMENTAL #########################################################
+    # if sort_components_by_distance_from_cj(best_model, automodeler.freq_hz,
+    #                                        outpath=os.path.join(out_dir, "best_cjsorted.mdl")):
+    #     print(Back.RED + "Core has changed position!" + Style.RESET_ALL)
+    #     print(Back.RED + "Starting new round" + Style.RESET_ALL)
+    #     comps = import_difmap_model("best_cjsorted.mdl", out_dir)
+    #     first_comp = comps[0]
+    #
+    #     # Create new model with EG component first and CG others
+    #     new_comps = list()
+    #     new_comps.append(EGComponent(first_comp.p[0], first_comp.p[1],
+    #                                  first_comp.p[2], first_comp.p[3], 1.0, 0))
+    #     for comp in comps[1:]:
+    #         if len(comp) == 6:
+    #             new_comps.append(CGComponent(comp.p[0], comp.p[1], comp.p[2],
+    #                                          comp.p[3]))
+    #         else:
+    #             new_comps.append(comp)
+    #     automodeler.clean()
+    #     export_difmap_model(new_comps, os.path.join(out_dir, "{}_{}.mdl".format(automodeler._mdl_prefix, id_best+1)),
+    #                         automodeler.freq_hz)
+    #     # Clear all
+    #     automodeler.clear()
+    #     for stopper in stoppers:
+    #         try:
+    #             stopper.files = []
+    #         except AttributeError:
+    #             pass
+    #
+    #     for selector in selectors:
+    #         try:
+    #             selector.files = []
+    #         except AttributeError:
+    #             pass
+    #
+    #     automodeler.fitted_model_paths.append(os.path.join(out_dir, "{}_{}.mdl".format(automodeler._mdl_prefix, id_best+1)))
+    #     automodeler.counter = id_best + 1
+    #     # Run number of iterations that is defined by stoppers
+    #     automodeler.run(stoppers, start_model_fname=os.path.join(out_dir, "{}_{}.mdl".format(automodeler._mdl_prefix, id_best+1)))
+    #
+    #     files = automodeler.fitted_model_paths
+    #     id_best = max(selector.select(files) for selector in selectors)
+    #     files = files[:id_best + 1]
+    #
+    #     filters = [SmallSizedComponentsModelFilter(),
+    #                ComponentAwayFromSourceModelFilter(
+    #                    ccimage=automodeler.ccimage),
+    #                ToElongatedCoreModelFilter()]
+    #
+    #     for fn in files[::-1]:
+    #         if np.any([flt.do_filter(fn) for flt in filters]):
+    #             id_best -= 1
+    #         else:
+    #             break
+    #     print("Best model is {}".format(files[id_best]))
+    ##### EXPERIMENTAL #########################################################
 
     automodeler.plot_results(id_best)
     automodeler.archive_images()

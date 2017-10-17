@@ -503,6 +503,31 @@ class ComponentAwayFromSourceModelFilter(ModelFilter):
             return False
 
 
+class OverlappingComponentsModelFilter(ModelFilter):
+
+    def do_filter(self, model_file):
+        comps = import_difmap_model(model_file)
+        do_any_overlap = list()
+        for last_comp in comps:
+            others = comps[:]
+            others.remove(last_comp)
+            distances = [np.hypot((comp.p[1]-last_comp.p[1]),
+                                  (comp.p[2]-last_comp.p[2])) for comp in
+                         others]
+            sizes = list()
+            for comp in others:
+                if len(comp) == 4:
+                    sizes.append(comp.p[3])
+                elif len(comp) == 6:
+                    sizes.append(comp.p[3]*comp.p[4])
+                else:
+                    raise Exception("Using only CG or EG components")
+            ratios = [dist/max(size, last_comp.p[3]) for dist, size in
+                      zip(distances, sizes)]
+            do_any_overlap.append(np.any(np.array(ratios) < 1.0))
+        return np.any(do_any_overlap)
+
+
 class AutoModeler(object):
     def __init__(self, uv_fits_path, out_dir, path_to_script,
                  mapsize_clean=None, core_elliptic=False,
@@ -1410,15 +1435,17 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
 
 if __name__ == '__main__':
     # uv_fits_path = "/home/ilya/STACK/uvf/0716+714.u.2010_11_13.uvf"
-    uv_fits_path = "/home/ilya/STACK/uvf/0528+134.u.2011_06_24.uvf"
+    # uv_fits_path = "/home/ilya/STACK/uvf/0528+134.u.2011_06_24.uvf"
     # uv_fits_path = "/home/ilya/STACK/uvf/0219+428.u.2011_05_26.uvf"
+    uv_fits_path = "/home/ilya/STACK/uvf/0430+052.u.2012_07_12.uvf"
     # out_dir = "/home/ilya/STACK/0219+428"
     # out_dir = "/home/ilya/STACK/tmp"
     # out_dir = "/home/ilya/STACK/0716+714"
-    out_dir = "/home/ilya/STACK/0528+134"
+    # out_dir = "/home/ilya/STACK/0528+134"
+    out_dir = "/home/ilya/STACK/0430+052"
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
     automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
-                              n_comps_terminate=30, core_elliptic=False)
+                              n_comps_terminate=30, core_elliptic=True)
     # Stoppers define when to stop adding components to model
     stoppers = [TotalFluxStopping(),
                 AddedComponentFluxLessRMSStopping(),
@@ -1443,7 +1470,8 @@ if __name__ == '__main__':
     # (e.g. too small faint component or component located far away from source.
     filters = [SmallSizedComponentsModelFilter(),
                ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
-               ToElongatedCoreModelFilter()]
+               ToElongatedCoreModelFilter(),
+               OverlappingComponentsModelFilter()]
 
     # Additionally filter too small, too distant components
     for fn in files[::-1]:

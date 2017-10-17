@@ -17,16 +17,17 @@ from utils import mas_to_rad, infer_gaussian
 from image import plot as iplot
 from image import find_bbox
 from image_ops import rms_image
-label_size = 16
+label_size = 14
 import matplotlib
 matplotlib.rcParams['xtick.labelsize'] = label_size
 matplotlib.rcParams['ytick.labelsize'] = label_size
-matplotlib.rcParams['axes.titlesize'] = 20
+matplotlib.rcParams['axes.titlesize'] = label_size
 matplotlib.rcParams['axes.labelsize'] = label_size
-matplotlib.rcParams['font.size'] = 20
-matplotlib.rcParams['legend.fontsize'] = 20
+matplotlib.rcParams['font.size'] = label_size
+matplotlib.rcParams['legend.fontsize'] = label_size
 import matplotlib.pyplot as plt
 import tarfile
+from colorama import Fore, Back, Style
 
 
 class FailedFindBestModelException(Exception):
@@ -34,8 +35,9 @@ class FailedFindBestModelException(Exception):
 
 
 class StoppingIterationsCriterion(object):
-    def __init__(self):
+    def __init__(self, mode="and"):
         self.files = list()
+        self.mode = mode
 
     def check_criterion(self):
         """
@@ -61,9 +63,28 @@ class StoppingIterationsCriterion(object):
             return False
 
 
+class AddedOverlappingComponentStoppin(StoppingIterationsCriterion):
+    """
+    Added component overlaps with some other components.
+    """
+    def __init__(self, mode="or"):
+        super(AddedOverlappingComponentStoppin, self).__init__(mode=mode)
+
+    def check_criterion(self):
+        last_comps = import_difmap_model(self.files[-1])
+        last_comp = last_comps[-1]
+        distances = [np.hypot((comp.p[1]-last_comp.p[1]),
+                              (comp.p[2]-last_comp.p[2])) for comp in
+                     last_comps[:-1]]
+        sizes = [comp.p[3] for comp in last_comps[:-1]]
+        ratios = [dist/max(size, last_comp.p[3]) for dist, size in
+                  zip(distances, sizes)]
+        return np.any(np.array(ratios) < 1.0)
+
+
 class ImageBasedStoppingCriterion(StoppingIterationsCriterion):
-    def __init__(self):
-        super(ImageBasedStoppingCriterion, self).__init__()
+    def __init__(self, mode="and"):
+        super(ImageBasedStoppingCriterion, self).__init__(mode=mode)
         self.ccimage = None
 
     def is_applicable(self):
@@ -74,8 +95,8 @@ class ImageBasedStoppingCriterion(StoppingIterationsCriterion):
 
 
 class UVDataBasedStoppingCriterion(StoppingIterationsCriterion):
-    def __init__(self):
-        super(UVDataBasedStoppingCriterion, self).__init__()
+    def __init__(self, mode="and"):
+        super(UVDataBasedStoppingCriterion, self).__init__(mode=mode)
         self.uvdata = None
 
     def is_applicable(self):
@@ -104,8 +125,10 @@ class TotalFluxStopping(ImageBasedStoppingCriterion):
 
     def check_criterion(self):
         threshold = self.abs_threshold or self.rel_threshold * self.total_flux
-        print("{} message:".format(self.__class__.__name__))
-        print("Last model has flux = {} while CC total flux = {}".format(difmap_model_flux(self.files[-1]), self.total_flux))
+        print(Style.DIM + "{} message:".format(self.__class__.__name__))
+        print(Style.DIM + "Last model has flux = {:.3f}"
+                          " while CC total flux = {:.3f}".format(difmap_model_flux(self.files[-1]), self.total_flux) +
+              Style.RESET_ALL)
         if difmap_model_flux(self.files[-1]) > self.total_flux:
             return True
         return abs(difmap_model_flux(self.files[-1]) -
@@ -131,9 +154,54 @@ class AddedComponentFluxLessRMSStopping(ImageBasedStoppingCriterion):
     def check_criterion(self):
         _dir, _fn = os.path.split(self.files[-1])
         last_comp = import_difmap_model(_fn, _dir)[-1]
-        print("{} message:".format(self.__class__.__name__))
-        print("Last added component has flux = {} while threshold = {}".format(last_comp.p[0], self.threshold))
+        print(Style.DIM + "{} message:".format(self.__class__.__name__))
+        print(Style.DIM + "Last added component has flux = {:.4f}"
+                          " while threshold = {:.4f}".format(last_comp.p[0], self.threshold) +
+              Style.RESET_ALL)
         return last_comp.p[0] < self.threshold
+
+
+class AddedTooDistantComponentStopping(ImageBasedStoppingCriterion):
+    """
+    Last added component must be located too far away to stop.
+    """
+    def __init__(self, n_rms=1.0, hovatta_factor=False):
+        super(AddedTooDistantComponentStopping, self).__init__(mode="or")
+        self.n_rms = n_rms
+        self.hovatta_factor = hovatta_factor
+        self._bbox = None
+
+    def is_applicable(self):
+        return len(self.files) > 1
+
+    @property
+    def bbox(self):
+        if self._bbox is None:
+            threshold = self.n_rms*rms_image(self.ccimage, self.hovatta_factor)
+            blc, trc = find_bbox(self.ccimage.image, threshold)
+            print(Style.DIM + "Calculating BLC, TRC in {}".format(self.__class__.__name__))
+            print(blc, trc)
+            print(Style.RESET_ALL)
+            self._bbox = (blc, trc)
+        return self._bbox
+
+    def check_criterion(self):
+        _dir, _fn = os.path.split(self.files[-1])
+        last_comp = import_difmap_model(_fn, _dir)[-1]
+        ra_mas, dec_mas = -last_comp.p[1], -last_comp.p[2]
+        blc, trc = self.bbox
+        dec_range, ra_range = self.ccimage._convert_array_bbox(blc, trc)
+        print(Style.DIM + "{} message:".format(self.__class__.__name__))
+        print(Style.DIM + "Last added component located at "
+                          "(dec,ra) = {:.2f}, {:.2f}"
+                          " while BBOX DEC : {:.2f} to {:.2f},"
+                          " RA : {:.2f} to {:.2f}".format(dec_mas, ra_mas,
+                                                          dec_range[0],
+                                                          dec_range[1],
+                                                          ra_range[0],
+                                                          ra_range[1]) +
+              Style.RESET_ALL)
+        return not last_comp.is_within(blc, trc, self.ccimage)
 
 
 class NLast(StoppingIterationsCriterion):
@@ -141,8 +209,8 @@ class NLast(StoppingIterationsCriterion):
     Abstract class defines criteria that need several iterations before starting
     to work.
     """
-    def __init__(self, n_check):
-        super(NLast, self).__init__()
+    def __init__(self, n_check, mode="and"):
+        super(NLast, self).__init__(mode=mode)
         self.n_check = n_check
 
     def is_applicable(self):
@@ -219,8 +287,8 @@ class NLastJustStop(NLast):
     """
     Just stop after specified number of iterations.
     """
-    def __init__(self, n):
-        super(NLastJustStop, self).__init__(n)
+    def __init__(self, n, mode="or"):
+        super(NLastJustStop, self).__init__(n, mode=mode)
         self.n_stop = n
 
     def check_criterion(self):
@@ -247,7 +315,7 @@ class ModelSelector(object):
 
 
 class FluxBasedModelSelector(ModelSelector):
-    def __init__(self, frac_flux=0.01, delta_flux=0.001):
+    def __init__(self, frac_flux=0.01, delta_flux=0.005):
         self.frac_flux = frac_flux
         self.delta_flux = delta_flux
 
@@ -265,14 +333,17 @@ class FluxBasedModelSelector(ModelSelector):
         try:
             # This is index not number! Number is index + 1 (python 0-based
             # indexing)
-            k = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
+            if np.count_nonzero(a) == 1:
+                k = list(a.astype(np.int)).index(1)
+            else:
+                k = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
         except ValueError:
             k = 0
         return k
 
 
 class SizeBasedModelSelector(ModelSelector):
-    def __init__(self, frac_size=0.01, delta_size=0.001,
+    def __init__(self, frac_size=0.01, delta_size=0.002,
                  small_size_of_the_core=0.001):
         self.frac_size = frac_size
         self.delta_size = delta_size
@@ -297,7 +368,10 @@ class SizeBasedModelSelector(ModelSelector):
         try:
             # This is index not number! Number is index + 1 (python 0-based
             # indexing)
-            k = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
+            if np.count_nonzero(a) == 1:
+                k = list(a.astype(np.int)).index(1)
+            else:
+                k = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
         except ValueError:
             k = 0
         return k
@@ -315,7 +389,10 @@ class ModelFilter(object):
         files = [os.path.join(out_dir, file_) for file_ in files]
         return files
 
-    def filter(self, files):
+    def do_filter(self, model_file):
+        """Returns ``True`` if model specified in file ``model_file`` should be
+        filtered out.
+        """
         raise NotImplementedError
 
 
@@ -325,53 +402,73 @@ class SmallSizedComponentsModelFilter(ModelFilter):
         self.small_size = small_size
         self.threshold_flux_small_sized_component = threshold_flux_small_sized_component
 
-    def filter(self, files):
-        files = self.order_files(files)
-        # Index of the last model
-        k = len(files) - 1
-        for model_file in files[::-1]:
-            comps = import_difmap_model(model_file)
-            small_sizes = [comp.p[3] > self.small_size for comp in comps[1:]]
-            fluxes_of_small_sized_components = [comp.p[0] for comp in comps[1:]
-                                                if comp.p[3] < self.small_size]
-            fluxes_of_small_sized_components =\
-                [flux > self.threshold_flux_small_sized_component for flux in
-                 fluxes_of_small_sized_components]
-            if not np.alltrue(small_sizes) and\
-                    not np.alltrue(fluxes_of_small_sized_components):
-                print("Decreasing complexity because of too small component(s) present")
-                k = k - 1
-            else:
-                break
-
-        return files[:k+1]
+    def do_filter(self, model_file):
+        print(Style.DIM + "Checking {} in {}".format(os.path.basename(model_file),
+                                                     self.__class__.__name__) +
+              Style.RESET_ALL)
+        comps = import_difmap_model(model_file)
+        small_sizes = [comp.p[3] > self.small_size for comp in comps[1:]]
+        fluxes_of_small_sized_components = [comp.p[0] for comp in comps[1:]
+                                            if comp.p[3] < self.small_size]
+        fluxes_of_small_sized_components =\
+            [flux > self.threshold_flux_small_sized_component for flux in
+             fluxes_of_small_sized_components]
+        if not np.alltrue(small_sizes) and\
+                not np.alltrue(fluxes_of_small_sized_components):
+            print(Fore.RED + "Decreasing complexity because of too small"
+                             " component(s) present" + Style.RESET_ALL)
+            return True
+        else:
+            return False
 
 
-# FIXME: How to check if comp in bbox?
+class ToElongatedCoreModelFilter(ModelFilter):
+    def __init__(self, small_e=10**(-3)):
+        self.small_e = small_e
+
+    def do_filter(self, model_file):
+        print(Style.DIM + "Checking {} in {}".format(os.path.basename(model_file),
+                                                     self.__class__.__name__) +
+              Style.RESET_ALL)
+        core = import_difmap_model(model_file)[0]
+        try:
+            e = core.p[4]
+        except IndexError:
+            return False
+        if e < self.small_e:
+            print(Fore.RED +
+                  "Decreasing complexity because of too elongated core" +
+                  Style.RESET_ALL)
+            return True
+        else:
+            return False
+
+
 class ComponentAwayFromSourceModelFilter(ModelFilter):
-    def __init__(self, cc_image_fits=None, ccimage=None, n_rms=3,
+    def __init__(self, ccimage=None, cc_image_fits=None, n_rms=3,
                  hovatta_factor=False):
         if ccimage is None:
             if cc_image_fits is None:
                 raise Exception("Need CLEAN image to proceed!")
-            self.ccimage = create_clean_image_from_fits_file(cc_image_fits)
+            ccimage = create_clean_image_from_fits_file(cc_image_fits)
+        self.ccimage = ccimage
         threshold = n_rms*rms_image(self.ccimage, hovatta_factor)
-        blc, trc = find_bbox(ccimage.image, threshold)
+        self.blc, self.trc = find_bbox(ccimage.image, threshold)
 
-    def filter(self, files):
-        files = self.order_files(files)
-        # Index of the last model
-        k = len(files) - 1
-        # for model_file in files[::-1]:
-        #     comps = import_difmap_model(model_file)
-        #     do_comps_in_bbox = []
-        #     if not np.alltrue(do_comps_in_bbox):
-        #         print("Decreasing complexity because of too distant component(s) present")
-        #         k = k - 1
-        #     else:
-        #         break
-
-        return files[:k+1]
+    def do_filter(self, model_file):
+        print(Style.DIM + "Checking {} in {}".format(os.path.basename(model_file),
+                                                     self.__class__.__name__) +
+              Style.RESET_ALL)
+        comps = import_difmap_model(model_file)
+        do_comps_in_bbox = [comp.is_within(self.blc, self.trc, self.ccimage)
+                            for comp in comps]
+        if not np.alltrue(do_comps_in_bbox):
+            print(Fore.RED +
+                  "Decreasing complexity because of too distant component(s)"
+                  " present" + Style.RESET_ALL)
+            return True
+        else:
+            return False
 
 
 class AutoModeler(object):
@@ -437,7 +534,7 @@ class AutoModeler(object):
     @property
     def ccimage(self):
         if self._ccimage is None:
-            print("CLEANing original uv data set")
+            print(Style.DIM + "CLEANing original uv data set" + Style.RESET_ALL)
             clean_difmap(self.uv_fits_fname, self._ccimage_path, self.stokes,
                          self.mapsize_clean, path=self.uv_fits_dir,
                          path_to_script=self.path_to_script,
@@ -459,13 +556,15 @@ class AutoModeler(object):
             set as residuals.
         """
         if model is not None:
-            print("Creating residuals using fitted model :")
+            print(Style.DIM + "Creating residuals using fitted model :" +
+                  Style.RESET_ALL)
             print(model)
             uvdata_ = UVData(self.uv_fits_path)
             uvdata_.substitute([model])
             uvdata_residual = self.uvdata - uvdata_
         else:
-            print("Creating \"residuals\" from original data alone")
+            print(Style.DIM + "Creating \"residuals\" from original data alone" +
+                  Style.RESET_ALL)
             uvdata_residual = self.uvdata
         uvdata_residual.save(self._uv_residuals_fits_path, rewrite=True)
 
@@ -477,7 +576,7 @@ class AutoModeler(object):
         :return:
             Instance of ``CGComponent``.
         """
-        print("Suggesting component...")
+        print(Style.DIM + "Suggesting component..." + Style.RESET_ALL)
         clean_difmap(self._uv_residuals_fits_path, self._ccimage_residuals_path,
                      self.stokes, self.mapsize_clean, path=self.out_dir,
                      path_to_script=self.path_to_script, outpath=self.out_dir)
@@ -498,7 +597,7 @@ class AutoModeler(object):
         else:
             raise Exception
 
-        print("Suggested: {}".format(comp))
+        print(Style.DIM + "Suggested: {}".format(comp) + Style.RESET_ALL)
         return comp
 
     def do_iteration(self):
@@ -551,7 +650,8 @@ class AutoModeler(object):
 
         if start_model_fname is not None:
             mdl_dir, mdl_fname = os.path.split(start_model_fname)
-            print("Using model from {} as starting point".format(mdl_fname))
+            print(Style.DIM + "Using model from {} as starting point".format(mdl_fname) +
+                  Style.RESET_ALL)
             comps = import_difmap_model(mdl_fname, mdl_dir)
             model = Model(stokes=self.stokes)
             model.add_components(*comps)
@@ -560,17 +660,39 @@ class AutoModeler(object):
         while True:
             new_mdl_file = self.do_iteration()
             self.fitted_model_paths.append(new_mdl_file)
-            decisions = [stopper.do_stop(new_mdl_file) for stopper in stoppers
-                         if stoppers]
-            do_stop = np.alltrue(decisions[:-1])
-            print("Stopping criteria :")
-            for stopper, decision in zip(stoppers[:-1], decisions[:-1]):
-                print("{} - {}".format(stopper.__class__.__name__, decision))
-            # If all except ``NLastJustStop``
+            stoppers_and = [stopper for stopper in stoppers if
+                            stopper.mode == "and"]
+            stoppers_or = [stopper for stopper in stoppers if
+                           stopper.mode == "or"]
+            decisions_and = [stopper.do_stop(new_mdl_file) for stopper in
+                             stoppers_and]
+            decisions_or = [stopper.do_stop(new_mdl_file) for stopper in
+                            stoppers_or]
+            decision = decisions_and + decisions_or
+            do_stop = np.alltrue(decisions_and) or np.any(decisions_or)
+            print(Back.GREEN + "Stopping criteria (AND):" +
+                  Style.RESET_ALL)
+            for stopper, decision in zip(stoppers_and, decisions_and):
+                if decision:
+                    print(Fore.RED + "{} - {}".format(stopper.__class__.__name__,
+                                                      decision) +
+                          Style.RESET_ALL)
+                else:
+                    print(Fore.GREEN + "{} - {}".format(stopper.__class__.__name__,
+                                                        decision) +
+                          Style.RESET_ALL)
+            print(Back.GREEN + "Stopping criteria (OR):" + Style.RESET_ALL)
+            for stopper, decision in zip(stoppers_or, decisions_or):
+                if decision:
+                    print(Fore.RED + "{} - {}".format(stopper.__class__.__name__,
+                                                      decision) +
+                          Style.RESET_ALL)
+                else:
+                    print(Fore.GREEN + "{} - {}".format(stopper.__class__.__name__,
+                                                        decision) +
+                          Style.RESET_ALL)
+
             if do_stop:
-                break
-            # ``NLastJustStop`` alone
-            if decisions[-1]:
                 break
 
         # best_model_file = self.select_best()
@@ -595,29 +717,56 @@ class AutoModeler(object):
             return None
 
     def plot_results(self, id_best):
-        comps = list()
+        cores = list()
         for file_ in self.fitted_model_paths:
-            comps_ = import_difmap_model(file_)
-            comps.append(comps_[0])
-        fig, axes = plt.subplots(2, 1, sharex=True)
-        axes[0].plot(range(1, len(comps) + 1), [comp.p[0] for comp in comps])
-        axes[0].plot(range(1, len(comps) + 1), [comp.p[0] for comp in comps],
-                     '.k')
-        axes[0].set_ylabel("Core Flux, [Jy]")
-        axes[1].plot(range(1, len(comps) + 1), [comp.p[3] for comp in comps])
-        axes[1].plot(range(1, len(comps) + 1), [comp.p[3] for comp in comps],
-                     '.k')
-        axes[1].set_xlabel("Number of components")
-        axes[1].set_ylabel("Core Size, [mas]")
-        axes[0].axvline(id_best+1)
-        axes[1].axvline(id_best+1)
+            core = import_difmap_model(file_)[0]
+            cores.append(core)
+        if len(core) == 4:
+            fig, axes = plt.subplots(2, 1, sharex=True)
+            axes[0].plot(range(1, len(cores) + 1),
+                         [comp.p[0] for comp in cores])
+            axes[0].plot(range(1, len(cores) + 1),
+                         [comp.p[0] for comp in cores], '.k')
+            axes[0].set_ylabel("Flux, [Jy]")
+            axes[1].plot(range(1, len(cores) + 1),
+                         [comp.p[3] for comp in cores])
+            axes[1].plot(range(1, len(cores) + 1),
+                         [comp.p[3] for comp in cores],
+                         '.k')
+            axes[1].set_xlabel("Number of components")
+            axes[1].set_ylabel("Size, [mas]")
+            axes[0].axvline(id_best+1)
+            axes[1].axvline(id_best+1)
+        elif len(core) == 6:
+            fig, axes = plt.subplots(3, 1, sharex=True)
+            axes[0].plot(range(1, len(cores) + 1),
+                         [comp.p[0] for comp in cores])
+            axes[0].plot(range(1, len(cores) + 1),
+                         [comp.p[0] for comp in cores], '.k')
+            axes[0].set_ylabel("Flux, [Jy]")
+            axes[1].plot(range(1, len(cores) + 1),
+                         [comp.p[3] for comp in cores])
+            axes[1].plot(range(1, len(cores) + 1),
+                         [comp.p[3] for comp in cores],
+                         '.k')
+            axes[1].set_ylabel("Size, [mas]")
+            axes[2].plot(range(1, len(cores) + 1),
+                         [comp.p[4] for comp in cores])
+            axes[2].plot(range(1, len(cores) + 1),
+                         [comp.p[4] for comp in cores], '.k')
+            axes[2].set_ylabel("e")
+            axes[2].set_xlabel("Number of components")
+            axes[0].axvline(id_best+1)
+            axes[1].axvline(id_best+1)
+            axes[2].axvline(id_best+1)
+
         fig.savefig(os.path.join(out_dir, '{}_core_parameters_vs_ncomps.png'.format(self._mdl_prefix)),
                     bbox_inches='tight', dpi=200)
 
         fig, axes = plt.subplots(1, 1, sharex=True)
-        axes.plot(range(1, len(comps) + 1), [difmap_model_flux(fn) for
+        axes.plot(range(1, len(cores) + 1), [difmap_model_flux(fn) for
                                              fn in self.fitted_model_paths])
-        axes.plot(range(1, len(comps) + 1), [difmap_model_flux(fn) for
+        axes.plot(range(1, len(cores) + 1), [difmap_model_flux(fn) for
                                              fn in self.fitted_model_paths],
                   '.k')
         axes.set_ylabel("Total Flux, [Jy]")
@@ -1239,14 +1388,12 @@ if __name__ == '__main__':
     # Stoppers define when to stop adding components to model
     stoppers = [TotalFluxStopping(),
                 AddedComponentFluxLessRMSStopping(),
+                AddedTooDistantComponentStopping(),
                 NLastDifferesFromLast(),
                 NLastDifferencesAreSmall()]
     # Selectors choose best model using different heuristics
     selectors = [FluxBasedModelSelector(),
                  SizeBasedModelSelector()]
-    # Filters additionally remove complex models with non-physical components
-    filters = [SmallSizedComponentsModelFilter()]
-               # ComponentAwayFromSourceModelFilter()]
 
     # Run number of iterations that is defined by stoppers
     automodeler.run(stoppers)
@@ -1256,11 +1403,19 @@ if __name__ == '__main__':
     id_best = max(selector.select(files) for selector in selectors)
     files = files[:id_best+1]
 
+    # Filters additionally remove complex models with non-physical components
+    # (e.g. too small faint component or component located far away from source.
+    filters = [SmallSizedComponentsModelFilter(),
+               ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
+               ToElongatedCoreModelFilter()]
+
     # Additionally filter too small, too distant components
-    for flt in filters:
-        files = flt.filter(files)
-    id_best = len(files)-1
-    print("Best model is {}".format(files[-1]))
+    for fn in files[::-1]:
+        if np.any([flt.do_filter(fn) for flt in filters]):
+            id_best -= 1
+        else:
+            break
+    print("Best model is {}".format(files[id_best]))
 
     automodeler.plot_results(id_best)
     automodeler.archive_images()

@@ -85,6 +85,26 @@ class Component(object):
         self._p[np.logical_not(self._fixed)] = p[:]
         # print "After: ", self._p
 
+    def is_within(self, blc, trc, image):
+        """
+        If component center contained within rectangular box defined by ``blc``
+        and ``trc``
+        :param blc:
+            Pair of Bottom Left Corner coordinates in mas.
+        :param trc:
+            Pair of Top Right Corner coordinates in mas.
+        :param image:
+            Instance of ``Image`` class that deifnes mapping between physical
+            coordinates and pixels using `_convert_coordinate` method.
+        :return:
+            Boolean.
+        """
+        # Coordinates in mas
+        ra_mas = -self.p[1]
+        dec_mas = -self.p[2]
+        dec_range, ra_range = image._convert_array_bbox(blc, trc)
+        return ((ra_range[0] < ra_mas < ra_range[1]) and (dec_range[0] < dec_mas < dec_range[1]))
+
     def ft(self, uv):
         """
         Method that returns Fourier Transform of component in given points of

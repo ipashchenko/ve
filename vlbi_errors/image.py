@@ -122,14 +122,14 @@ def find_bbox(array, level, delta=0.):
     bbox = max_prop.bbox
     blc = (int(bbox[1]), int(bbox[0]))
     trc = (int(bbox[3]), int(bbox[2]))
-    delta_blc = delta
-    delta_trc = delta
-    if blc[0] == 0 or blc[1] == 0:
-        delta_blc = -1
-    if trc[0] == array.shape[0] or trc[1] == array.shape[1]:
-        delta_trc = 0
-    blc = (int(blc[0] - delta_blc), int(blc[1] - delta_blc))
-    trc = (int(trc[0] + delta_trc), int(trc[1] + delta_trc))
+    # delta_blc = delta
+    # delta_trc = delta
+    # if blc[0] == 0 or blc[1] == 0:
+    #     delta_blc = -1
+    # if trc[0] == array.shape[0] or trc[1] == array.shape[1]:
+    #     delta_trc = 0
+    blc = (int(blc[0] - delta), int(blc[1] - delta))
+    trc = (int(trc[0] + delta), int(trc[1] + delta))
     return blc, trc
 
 
@@ -430,7 +430,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 else:
                     facecolor = "red"
                 e = Ellipse((x_c, y_c), e_width, e_height,
-                            angle=90.0+180*comp.p[5]/np.pi,
+                            angle=-90.0+180*comp.p[5]/np.pi,
                             edgecolor=beam_edge_color, facecolor=facecolor,
                             alpha=beam_alpha)
             elif len(comp) == 4:
@@ -750,6 +750,7 @@ class Image(BasicImage):
         # Create coordinate arrays
         xsize, ysize = self.imsize
         # x = np.linspace(0, xsize - 1, xsize)
+        # There should be (1, ...)?
         x = np.linspace(0, xsize, xsize)
         # y = np.linspace(0, ysize - 1, ysize)
         y = np.linspace(0, ysize, ysize)
@@ -767,11 +768,11 @@ class Image(BasicImage):
         self.y = y
         self.yv = yv
 
-    def _convert_coordinate(self, point):
+    def _convert_coordinate(self, point_mas):
         """
-        Convert coordinates from image scale [mas] to pixels
+        Convert coordinates from image scale [mas] to pixels.
 
-        :param point:
+        :param point_mas:
             Iterable of coordinates of pixel [mas].
         :return:
             Tuples of coordinates for pixel [pixels].
@@ -779,17 +780,42 @@ class Image(BasicImage):
         ycoords = self.y / mas_to_rad
         xcoords = self.x / mas_to_rad
 
-        y0 = np.argmin(np.abs(ycoords - point[0]))
-        x0 = np.argmin(np.abs(xcoords - point[1]))
+        y0 = np.argmin(np.abs(ycoords - point_mas[0]))
+        x0 = np.argmin(np.abs(xcoords - point_mas[1]))
         return x0, y0
 
-    def _convert_coordinates(self, point1, point2):
-        """
-        Convert coordinates from image scale [mas] to pixels
+    def _convert_array_coordinate(self, coord):
+        dec = (self.x/mas_to_rad)[coord[1]]
+        ra = (self.y/mas_to_rad)[coord[0]]
+        return dec, ra
 
-        :param point1:
+    def _convert_array_bbox(self, blc, trc):
+        dec0, ra0 = self._convert_array_coordinate(blc)
+        dec1, ra1 = self._convert_array_coordinate(trc)
+        min_dec = min(dec0, dec1)
+        max_dec = max(dec0, dec1)
+        min_ra = min(ra0, ra1)
+        max_ra = max(ra0, ra1)
+        return (min_dec, max_dec), (min_ra, max_ra)
+
+    def _inv_convert_coordinate(self, point_pix):
+        """
+        Convert coordinates from pixels to image scale [mas].
+
+        :param point_pix:
+            Iterable of coordinates in pixel.
+        :return:
+            Tuples of image coordinates for pixel [mas].
+        """
+        raise NotImplementedError
+
+    def _convert_coordinates(self, point1_mas, point2_mas):
+        """
+        Convert coordinates from image scale [mas] to pixels.
+
+        :param point1_mas:
             Iterable of coordinates of first pixel [mas].
-        :param point2:
+        :param point2_mas:
             Iterable of coordinates of second pixel [mas].
         :return:
             Tuples of coordinates for first & second pixel [pixels].
@@ -797,11 +823,24 @@ class Image(BasicImage):
         ycoords = self.y / mas_to_rad
         xcoords = self.x / mas_to_rad
 
-        y0 = np.argmin(np.abs(ycoords - point1[0]))
-        y1 = np.argmin(np.abs(ycoords - point2[0]))
-        x0 = np.argmin(np.abs(xcoords - point1[1]))
-        x1 = np.argmin(np.abs(xcoords - point2[1]))
-        return (x0, y0), (x1, y1)
+        y0 = np.argmin(np.abs(ycoords - point1_mas[0]))
+        y1 = np.argmin(np.abs(ycoords - point2_mas[0]))
+        x0 = np.argmin(np.abs(xcoords - point1_mas[1]))
+        x1 = np.argmin(np.abs(xcoords - point2_mas[1]))
+        return (x0/mas_to_rad, y0/mas_to_rad), (x1/mas_to_rad, y1/mas_to_rad)
+
+    def _inv_convert_coordinates(self, point1_pix, point2_pix):
+        """
+        Convert coordinates from pixels to image scale [mas].
+
+        :param point1_pix:
+            Iterable of coordinates of first pixel.
+        :param point2_pix:
+            Iterable of coordinates of second pixel.
+        :return:
+            Tuples of image coordinates for first & second pixel [mas].
+        """
+        raise NotImplementedError
 
     def slice(self, pix1=None, pix2=None, point1=None, point2=None):
         """

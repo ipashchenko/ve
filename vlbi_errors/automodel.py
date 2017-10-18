@@ -89,7 +89,7 @@ class AddedOverlappingComponentStopping(StoppingIterationsCriterion):
                 sizes.append(comp.p[3]*comp.p[4])
             else:
                 raise Exception("Using only CG or EG components")
-        ratios = [dist/(0.5*max(size, last_comp.p[3])) for dist, size in
+        ratios = [dist/(size/2 + last_comp.p[3]/2) for dist, size in
                   zip(distances, sizes)]
         return np.any(np.array(ratios) < 1.0)
 
@@ -522,7 +522,7 @@ class OverlappingComponentsModelFilter(ModelFilter):
                     sizes.append(comp.p[3]*comp.p[4])
                 else:
                     raise Exception("Using only CG or EG components")
-            ratios = [dist/(0.5*max(size, last_comp.p[3])) for dist, size in
+            ratios = [dist/(size/2 + last_comp.p[3]/2) for dist, size in
                       zip(distances, sizes)]
             do_any_overlap.append(np.any(np.array(ratios) < 1.0))
         if np.any(do_any_overlap):

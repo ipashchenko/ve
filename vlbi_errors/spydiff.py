@@ -446,6 +446,36 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
     os.system(shell_command)
 
 
+def make_map_with_core_at_zero(mdl_file, uv_fits_fname, mapsize_clean,
+                               path_to_script, outfname="shifted_cc.fits",
+                               stokes="I"):
+    """
+    Function that shifts map in a way that core in new map will have zero
+    coordinates.
+
+    :param mdl_file:
+        Path to difmap model file with the core being the first component.
+    :param uv_fits_fname:
+        Path to UV FITS data.
+    :param mapsize_clean:
+        Iterable of number of pixels and pixel size [mas].
+    :param path_to_script:
+        Path to D.Homan difmap final CLEAN script.
+    :param outfname:
+        Where to save new FITS file with map.
+    :param stokes: (optional)
+        Stokes parameter. (default: ``I``)
+    """
+    mdl_dir, mdl_fn = os.path.split(mdl_file)
+    uv_dir, uv_fn = os.path.split(uv_fits_fname)
+    core = import_difmap_model(mdl_file, mdl_dir)[0]
+    ra_mas = -core.p[1]
+    dec_mas = -core.p[2]
+    shift = (ra_mas, dec_mas)
+    clean_difmap(uv_fn, outfname, stokes, mapsize_clean, uv_dir, path_to_script,
+                 shift=shift)
+
+
 # # DIFMAP_MAPPSR
 # def difmap_mappsr(source, isll, centre_ra_deg, centre_dec_deg, uvweightstr,
 #                   experiment, difmappath, uvprefix, uvsuffix, jmsuffix, \

@@ -89,7 +89,7 @@ class AddedOverlappingComponentStopping(StoppingIterationsCriterion):
                 sizes.append(comp.p[3]*comp.p[4])
             else:
                 raise Exception("Using only CG or EG components")
-        ratios = [dist/max(size, last_comp.p[3]) for dist, size in
+        ratios = [dist/(0.5*max(size, last_comp.p[3])) for dist, size in
                   zip(distances, sizes)]
         return np.any(np.array(ratios) < 1.0)
 
@@ -522,10 +522,15 @@ class OverlappingComponentsModelFilter(ModelFilter):
                     sizes.append(comp.p[3]*comp.p[4])
                 else:
                     raise Exception("Using only CG or EG components")
-            ratios = [dist/max(size, last_comp.p[3]) for dist, size in
+            ratios = [dist/(0.5*max(size, last_comp.p[3])) for dist, size in
                       zip(distances, sizes)]
             do_any_overlap.append(np.any(np.array(ratios) < 1.0))
-        return np.any(do_any_overlap)
+        if np.any(do_any_overlap):
+            print(Fore.RED + "Decreasing complexity because of overlapping"
+                             " component(s) present" + Style.RESET_ALL)
+            return True
+        else:
+            return False
 
 
 class AutoModeler(object):
@@ -1436,13 +1441,19 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
 if __name__ == '__main__':
     # uv_fits_path = "/home/ilya/STACK/uvf/0716+714.u.2010_11_13.uvf"
     # uv_fits_path = "/home/ilya/STACK/uvf/0528+134.u.2011_06_24.uvf"
-    # uv_fits_path = "/home/ilya/STACK/uvf/0219+428.u.2011_05_26.uvf"
-    uv_fits_path = "/home/ilya/STACK/uvf/0430+052.u.2012_07_12.uvf"
-    # out_dir = "/home/ilya/STACK/0219+428"
+    uv_fits_path = "/home/ilya/STACK/uvf/0219+428.u.2011_05_26.uvf"
+    # uv_fits_path = "/home/ilya/STACK/uvf/0430+052.u.2012_07_12.uvf"
+    # uv_fits_path = "/home/ilya/STACK/uvf/0415+379.u.2012_07_12.uvf"
+    # uv_fits_path = "/home/ilya/STACK/uvf/0336-019.u.2010_10_25.uvf"
+    # uv_fits_path = "/home/ilya/STACK/uvf/0316+413.u.2011_06_24.uvf"
+    out_dir = "/home/ilya/STACK/0219+428"
     # out_dir = "/home/ilya/STACK/tmp"
     # out_dir = "/home/ilya/STACK/0716+714"
     # out_dir = "/home/ilya/STACK/0528+134"
-    out_dir = "/home/ilya/STACK/0430+052"
+    # out_dir = "/home/ilya/STACK/0430+052"
+    # out_dir = "/home/ilya/STACK/0415+379"
+    # out_dir = "/home/ilya/STACK/0336-019"
+    # out_dir = "/home/ilya/STACK/0316+413"
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
     automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
                               n_comps_terminate=30, core_elliptic=True)
@@ -1451,12 +1462,12 @@ if __name__ == '__main__':
                 AddedComponentFluxLessRMSStopping(),
                 AddedTooDistantComponentStopping(),
                 AddedTooSmallComponentStopping(),
-                # AddedOverlappingComponentStopping(),
+                AddedOverlappingComponentStopping(),
                 NLastDifferesFromLast(),
                 NLastDifferencesAreSmall()]
     # Selectors choose best model using different heuristics
-    selectors = [FluxBasedModelSelector(),
-                 SizeBasedModelSelector()]
+    selectors = [FluxBasedModelSelector(delta_flux=0.005),
+                 SizeBasedModelSelector(delta_size=0.002)]
 
     # Run number of iterations that is defined by stoppers
     automodeler.run(stoppers)
@@ -1470,7 +1481,7 @@ if __name__ == '__main__':
     # (e.g. too small faint component or component located far away from source.
     filters = [SmallSizedComponentsModelFilter(),
                ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
-               ToElongatedCoreModelFilter(),
+               # ToElongatedCoreModelFilter(),
                OverlappingComponentsModelFilter()]
 
     # Additionally filter too small, too distant components

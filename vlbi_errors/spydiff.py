@@ -396,6 +396,48 @@ def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
     return bool(found_cj_comps)
 
 
+# FIXME: Check if it works to ``DeltaComponent``!
+def transform_component(difmap_model_file, new_type, freq_hz, comp_id=0,
+                        outname=None, **kwargs):
+    """
+    Change component type in difmap model file.
+
+    :param difmap_model_file:
+        Path to difmap file with model.
+    :param new_type:
+        String that defines what is the new component type (delta, cg, eg).
+    :param freq_hz:
+        Frequency in Hz.
+    :param comp_id: (optional)
+        Number (ID) of component to transform. ``0`` means transform first
+        component (core). (default: ``0``)
+    :param outname: (optional)
+        Where to save the result. If ``None`` then rewrite
+        ``difmap_model_file``.
+    :param kwargs: (optional)
+        Arguments needed for transforming simple component to more complex.
+    """
+    if new_type not in ("delta", "cg", "eg"):
+        raise Exception
+    comps = import_difmap_model(difmap_model_file)
+    comp_to_transform = comps[comp_id]
+    new_comps = list()
+    for comp in comps[:comp_id]:
+        new_comps.append(comp)
+    if new_type == "delta":
+        new_comps.append(comp_to_transform.to_delta())
+    elif new_type == "cg":
+        new_comps.append(comp_to_transform.to_cirular(**kwargs))
+    else:
+        new_comps.append(comp_to_transform.to_elliptic(**kwargs))
+    for comp in comps[comp_id+1:]:
+        new_comps.append(comp)
+
+    if outname is None:
+        outname = difmap_model_file
+    export_difmap_model(new_comps, outname, freq_hz)
+
+
 def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
                     path=None, mdl_path=None, out_path=None,
                     show_difmap_output=False):

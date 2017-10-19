@@ -185,8 +185,9 @@ class EGComponent(Component):
         :param bpa:
             Positional angle of major axis. Angle counted from x-axis of image
             plane counter clockwise [rad].
-        :param fixed optional:
-            If not None then it is iterable of parameter's names that are fixed.
+        :param fixed: (optional)
+            Iterable of parameter's names that are fixed. If ``None`` then all
+            parameters are not fixed. (default: ``None``)
         """
         super(EGComponent, self).__init__()
         self._parnames.extend(['bmaj', 'e', 'bpa'])
@@ -200,6 +201,21 @@ class EGComponent(Component):
                     raise Exception('Uknown parameter ' + str(par) + ' !')
                 self._fixed[self._parnames.index(par)] = True
             self.size = 6 - np.count_nonzero(self._fixed)
+
+    def to_circular(self, fixed=None):
+        """
+        Create a circular gaussian component from current elliptical.
+
+        :param fixed: (optional)
+            Iterable of parameter's names that are fixed. If ``None`` use
+            parameters of elliptical components.
+        :return:
+            Instance of ``CGcomponent``.
+        """
+        if fixed is None:
+            fixed = self._fixed[:len(self)]
+        return CGComponent(self.p[0], self.p[1], self.p[2], self.p[3],
+                           fixed=fixed)
 
     def ft(self, uv):
         """
@@ -489,6 +505,25 @@ class CGComponent(EGComponent):
         self._parnames.remove('bpa')
         self._p = self._p[:-2]
         self.size = 4 - np.count_nonzero(self._fixed)
+
+    def to_elliptic(self, e=1, bpa=0, fixed=None):
+        """
+        Create elliptical gaussian component from current circular.
+
+        :param e: (optional)
+            Eccentricity . (default: ``1``)
+        :param bpa: (optional)
+            Positional angle of the component major axis. (defualt: ``0``)
+        :param fixed: (optional)
+            Iterable of parameter's names that are fixed. If ``None`` use
+            parameters of elliptical components.
+        :return:
+            Instance of ``EGcomponent``.
+        """
+        if fixed is None:
+            fixed = np.concatenate((self._fixed, np.array([False, False])))
+        return EGComponent(self.p[0], self.p[1], self.p[2], self.p[3], e, bpa,
+                           fixed=fixed)
 
 
 class DeltaComponent(Component):

@@ -202,6 +202,20 @@ class EGComponent(Component):
                 self._fixed[self._parnames.index(par)] = True
             self.size = 6 - np.count_nonzero(self._fixed)
 
+    def to_delta(self, fixed=None):
+        """
+        Create a delta function component from current elliptical.
+
+        :param fixed: (optional)
+            Iterable of parameter's names that are fixed. If ``None`` use
+            parameters of elliptical components.
+        :return:
+            Instance of ``DeltaComponent``
+        """
+        if fixed is None:
+            fixed = self._fixed[:DeltaComponent.size]
+        return DeltaComponent(self.p[0], self.p[1], self.p[2], fixed=fixed)
+
     def to_circular(self, fixed=None):
         """
         Create a circular gaussian component from current elliptical.
@@ -213,7 +227,7 @@ class EGComponent(Component):
             Instance of ``CGcomponent``.
         """
         if fixed is None:
-            fixed = self._fixed[:len(self)]
+            fixed = self._fixed[:CGComponent.size]
         return CGComponent(self.p[0], self.p[1], self.p[2], self.p[3],
                            fixed=fixed)
 

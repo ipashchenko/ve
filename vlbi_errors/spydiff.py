@@ -471,7 +471,7 @@ def make_map_with_core_at_zero(mdl_file, uv_fits_fname, mapsize_clean,
     core = import_difmap_model(mdl_file, mdl_dir)[0]
     ra_mas = -core.p[1]
     dec_mas = -core.p[2]
-    shift = (ra_mas, dec_mas)
+    shift = (-ra_mas, -dec_mas)
     clean_difmap(uv_fn, outfname, stokes, mapsize_clean, uv_dir, path_to_script,
                  shift=shift)
 

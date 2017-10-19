@@ -563,6 +563,44 @@ class DeltaComponent(Component):
                 self._fixed[self._parnames.index(par)] = True
             self.size = 3 - np.count_nonzero(self._fixed)
 
+    def to_circular(self, bmaj, fixed=None):
+        """
+        Create circular gaussian component from current delta.
+
+        :param bmaj:
+            Major axis size [mas].
+        :param fixed: (optional)
+            Iterable of parameter's names that are fixed. If ``None`` use
+            parameters of elliptical components.
+        :return:
+            Instance of ``CGcomponent``.
+        """
+        if fixed is None:
+            fixed = np.concatenate((self._fixed, np.array([False])))
+        return CGComponent(self.p[0], self.p[1], self.p[2], bmaj, fixed=fixed)
+
+    def to_elliptic(self, bmaj, e=1, bpa=0, fixed=None):
+        """
+        Create elliptical gaussian component from current delta.
+
+        :param bmaj:
+            Major axis size [mas].
+        :param e: (optional)
+            Eccentricity . (default: ``1``)
+        :param bpa: (optional)
+            Positional angle of the component major axis. (defualt: ``0``)
+        :param fixed: (optional)
+            Iterable of parameter's names that are fixed. If ``None`` use
+            parameters of elliptical components.
+        :return:
+            Instance of ``EGcomponent``.
+        """
+        if fixed is None:
+            fixed = np.concatenate((self._fixed,
+                                    np.array([False, False, False])))
+        return EGComponent(self.p[0], self.p[1], self.p[2], bmaj, e, bpa,
+                           fixed=fixed)
+
     def ft(self, uv):
         """
         Return the Fourier Transform of component for given uv-points.

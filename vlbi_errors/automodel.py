@@ -562,6 +562,8 @@ class AutoModeler(object):
                 self.mapsize_clean = (1024, 0.03)
             else:
                 raise Exception("Indicate mapsize_clean!")
+        else:
+            self.mapsize_clean = mapsize_clean
 
         self.epoch = self.uv_fits_fname.split(".")[2]
         self.uvdata = UVData(uv_fits_path)

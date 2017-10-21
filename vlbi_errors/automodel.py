@@ -67,6 +67,9 @@ class StoppingIterationsCriterion(object):
         else:
             return False
 
+    def clear(self):
+        self.files = list()
+
 
 class AddedOverlappingComponentStopping(StoppingIterationsCriterion):
     """

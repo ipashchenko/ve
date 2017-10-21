@@ -177,6 +177,8 @@ class UVData(object):
             # If "Q" or "U"
             else:
                 return "RL" in stokes_present and "LR" in stokes_present
+        elif stokes in ("RR", "LL", "RL", "LR"):
+            return stokes in stokes_present
         else:
             raise Exception("stokes must be from I, Q, U, V, RR, LL, RL or LR!")
 

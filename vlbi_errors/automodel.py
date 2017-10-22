@@ -846,7 +846,8 @@ class AutoModeler(object):
 
         while True:
             new_mdl_file = self.do_iteration()
-            self.fitted_model_paths.append(new_mdl_file)
+            if new_mdl_file not in self.fitted_model_paths:
+                self.fitted_model_paths.append(new_mdl_file)
             stoppers_and = [stopper for stopper in stoppers if
                             stopper.mode == "and"]
             stoppers_or = [stopper for stopper in stoppers if

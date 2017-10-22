@@ -11,15 +11,16 @@ except ImportError:
     pylab = None
 
 
-# TODO: Add optional argument ``beam`` to ``add_to_image`` methods.
-# FIXME: Implement (x, y) <-> (r, theta)
+# TODO: Make parnames and size - class attributes
 class Component(object):
     """
     Basic class that implements single component of model.
     """
+    _parnames = ['flux', 'x', 'y']
+    size = len(_parnames)
+
     def __init__(self):
         self._p = None
-        self._parnames = ['flux', 'x', 'y']
         self._fixed = np.array([False, False, False])
         self._lnprior = dict()
 
@@ -85,14 +86,21 @@ class Component(object):
         self._p[np.logical_not(self._fixed)] = p[:]
         # print "After: ", self._p
 
+    def is_within_radec(self, ra_range, dec_range):
+        # Coordinates in mas
+        ra_mas = -self.p[1]
+        dec_mas = -self.p[2]
+        return ((ra_range[0] < ra_mas < ra_range[1]) and
+                (dec_range[0] < dec_mas < dec_range[1]))
+
     def is_within(self, blc, trc, image):
         """
         If component center contained within rectangular box defined by ``blc``
         and ``trc``
         :param blc:
-            Pair of Bottom Left Corner coordinates in mas.
+            Pair of Bottom Left Corner coordinates [pixels].
         :param trc:
-            Pair of Top Right Corner coordinates in mas.
+            Pair of Top Right Corner coordinates [pixels].
         :param image:
             Instance of ``Image`` class that deifnes mapping between physical
             coordinates and pixels using `_convert_coordinate` method.
@@ -103,7 +111,8 @@ class Component(object):
         ra_mas = -self.p[1]
         dec_mas = -self.p[2]
         dec_range, ra_range = image._convert_array_bbox(blc, trc)
-        return ((ra_range[0] < ra_mas < ra_range[1]) and (dec_range[0] < dec_mas < dec_range[1]))
+        return ((ra_range[0] < ra_mas < ra_range[1]) and
+                (dec_range[0] < dec_mas < dec_range[1]))
 
     def ft(self, uv):
         """
@@ -170,6 +179,9 @@ class EGComponent(Component):
     """
     Class that implements elliptical gaussian component.
     """
+    _parnames = ['flux', 'x', 'y', 'bmaj', 'e', 'bpa']
+    size = len(_parnames)
+
     def __init__(self, flux, x, y, bmaj, e, bpa, fixed=None):
         """
         :param flux:
@@ -190,7 +202,6 @@ class EGComponent(Component):
             parameters are not fixed. (default: ``None``)
         """
         super(EGComponent, self).__init__()
-        self._parnames.extend(['bmaj', 'e', 'bpa'])
         self._fixed = np.concatenate((self._fixed,
                                       np.array([False, False, False]),))
         self._p = np.array([flux, x, y, bmaj, e, bpa])
@@ -214,7 +225,8 @@ class EGComponent(Component):
         """
         if fixed is None:
             fixed = self._fixed[:DeltaComponent.size]
-        return DeltaComponent(self.p[0], self.p[1], self.p[2], fixed=fixed)
+        return DeltaComponent(self.p[0], self.p[1], self.p[2],
+                              fixed=np.array(DeltaComponent._parnames)[fixed])
 
     def to_circular(self, fixed=None):
         """
@@ -229,7 +241,7 @@ class EGComponent(Component):
         if fixed is None:
             fixed = self._fixed[:CGComponent.size]
         return CGComponent(self.p[0], self.p[1], self.p[2], self.p[3],
-                           fixed=fixed)
+                           fixed=np.array(CGComponent._parnames)[fixed])
 
     def ft(self, uv):
         """
@@ -501,6 +513,9 @@ class CGComponent(EGComponent):
     """
     Class that implements circular gaussian component.
     """
+    _parnames = ["flux", "x", "y", "bmaj"]
+    size = len(_parnames)
+
     def __init__(self, flux, x, y, bmaj, fixed=None):
         """
         :param flux:
@@ -515,8 +530,6 @@ class CGComponent(EGComponent):
         super(CGComponent, self).__init__(flux, x, y, bmaj, e=1., bpa=0.,
                                           fixed=fixed)
         self._fixed = self._fixed[:-2]
-        self._parnames.remove('e')
-        self._parnames.remove('bpa')
         self._p = self._p[:-2]
         self.size = 4 - np.count_nonzero(self._fixed)
 
@@ -537,7 +550,7 @@ class CGComponent(EGComponent):
         if fixed is None:
             fixed = np.concatenate((self._fixed, np.array([False, False])))
         return EGComponent(self.p[0], self.p[1], self.p[2], self.p[3], e, bpa,
-                           fixed=fixed)
+                           fixed=np.array(EGComponent._parnames)[fixed])
 
 
 class DeltaComponent(Component):
@@ -577,7 +590,8 @@ class DeltaComponent(Component):
         """
         if fixed is None:
             fixed = np.concatenate((self._fixed, np.array([False])))
-        return CGComponent(self.p[0], self.p[1], self.p[2], bmaj, fixed=fixed)
+        return CGComponent(self.p[0], self.p[1], self.p[2], bmaj,
+                           fixed=np.array(CGComponent._parnames)[fixed])
 
     def to_elliptic(self, bmaj, e=1, bpa=0, fixed=None):
         """
@@ -599,7 +613,7 @@ class DeltaComponent(Component):
             fixed = np.concatenate((self._fixed,
                                     np.array([False, False, False])))
         return EGComponent(self.p[0], self.p[1], self.p[2], bmaj, e, bpa,
-                           fixed=fixed)
+                           fixed=np.array(EGComponent._parnames)[fixed])
 
     def ft(self, uv):
         """

@@ -890,22 +890,6 @@ class AutoModeler(object):
         # self.archive_models()
         # self.clean()
 
-    def select_best(self, frac_flux=0.01, delta_flux=0.001, delta_size=0.001,
-                    small_size=10**(-5),
-                    threshold_flux_small_sized_component=0.1,
-                    small_size_of_the_core=0.001, do_plot=True):
-        try:
-            best_model_file = find_best(self.fitted_model_paths,
-                                        frac_flux=frac_flux,
-                                        delta_flux=delta_flux,
-                                        delta_size=delta_size,
-                                        small_size=small_size,
-                                        threshold_flux_small_sized_component=threshold_flux_small_sized_component,
-                                        small_size_of_the_core=small_size_of_the_core)
-            k = self.fitted_model_paths.index(best_model_file) + 1
-        except FailedFindBestModelException:
-            return None
-
     def plot_results(self, id_best):
         cores = list()
         for file_ in self.fitted_model_paths:

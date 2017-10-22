@@ -339,8 +339,8 @@ def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
         line that defines "distant" component. Position of such components is
         then used to compare polar angles of "cj-candidates". (default: ``75``)
     :param only_indicate: (optional)
-        Boolean - ust indicate by the returned value or also do re-arangment of
-        components? (default: ``False``)
+        Boolean - ust indicate by the returned value or also do re-arrangement
+        of components? (default: ``False``)
     :return:
         Boolean if there any "cj"-components that weren't sorted by distance
         from "CJ".
@@ -351,6 +351,8 @@ def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
     comps_c = import_difmap_model(mdl_fname, mdl_dir)
     r = [np.hypot(comp.p[1], comp.p[2]) for comp in comps]
     dist = np.percentile(r, perc_distant)
+    # Components that are more distant from phase center than ``perc_distant``
+    # of components
     remote_comps = [comp for r_, comp in zip(r, comps) if r_ > dist]
     theta_remote = np.mean([np.arctan2(-comp.p[1], -comp.p[2])/degree_to_rad for
                             comp in remote_comps])
@@ -394,6 +396,88 @@ def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
     if not only_indicate:
         export_difmap_model(result_comps, outpath, freq_hz)
     return bool(found_cj_comps)
+
+
+def sum_components(comp0, comp1, type="eg"):
+    print("Summing components {} and {}".format(comp0, comp1))
+    flux = comp0.p[0] + comp1.p[0]
+    x = (comp0.p[0] * comp0.p[1] + comp1.p[0] * comp1.p[1]) / flux
+    y = (comp0.p[0] * comp0.p[2] + comp1.p[0] * comp1.p[2]) / flux
+    bmaj = (comp0.p[0] * comp0.p[3] + comp1.p[0] * comp1.p[3]) / flux
+    if type == "cg":
+        component = CGComponent(flux, x, y, bmaj)
+    elif type == "eg":
+        dx = comp0.p[1]-comp1.p[1]
+        dy = comp0.p[2]-comp1.p[2]
+        bpa = 180*np.arctan(dx/dy)/np.pi
+        e = 0.5*(comp0.p[3]+comp1.p[3])/np.hypot(comp0.p[1]-comp1.p[1], comp0.p[2]-comp1.p[2])
+        component = EGComponent(flux, x, y, bmaj, e, bpa)
+    else:
+        raise Exception
+    print("Sum = {}".format(component))
+    return component
+
+
+def component_joiner_serial(difmap_model_file, beam_size, freq_hz,
+                            distance_to_join_max=1.0, outname=None, new_type="eg"):
+    joined = False
+    comps = import_difmap_model(difmap_model_file)
+    print("Len = {}".format(len(comps)))
+    new_comps = list()
+    skip_next = False
+    for i, comp0 in enumerate(comps):
+        print("{} and {}".format(i, i+1))
+        if skip_next:
+            skip_next = False
+            print ("Skipping {}th component".format(i))
+            continue
+        try:
+            comp1 = comps[i+1]
+        except IndexError:
+            new_comps.append(comp0)
+            print("Writing component {} and exiting".format(i))
+            break
+        print("Fluxes: {} and {}".format(comp0.p[0], comp1.p[0]))
+
+        if i != 0:
+            distance_before = max(np.hypot(comp0.p[1]-comps[i-1].p[1], comp0.p[2]-comps[i-1].p[2]),
+                                  np.hypot(comp1.p[1]-comps[i-1].p[1], comp1.p[2]-comps[i-1].p[2]))
+        else:
+            distance_before = 10**10
+        print("Distance before = {}".format(distance_before))
+
+        distance_between = np.hypot(comp0.p[1]-comp1.p[1],
+                                    comp0.p[2]-comp1.p[2])
+        print("Distance between = {}".format(distance_between))
+
+        if i < len(comps)-2:
+            distance_after = max(np.hypot(comp0.p[1] - comps[i + 2].p[1],
+                                          comp0.p[2] - comps[i + 2].p[2]),
+                                 np.hypot(comp1.p[1] - comps[i + 2].p[1],
+                                          comp1.p[2] - comps[i + 2].p[2]))
+        else:
+            distance_after = 0.0
+        print("Distance after = {}".format(distance_after))
+
+        if distance_before > beam_size and\
+                        distance_after > beam_size and\
+                        distance_between < distance_to_join_max*beam_size and\
+                len(comp0) == len(comp1):
+            joined = True
+            new_comps.append(sum_components(comp0, comp1, type=new_type))
+            skip_next = True
+        else:
+            new_comps.append(comp0)
+            skip_next = False
+
+    if outname is None:
+            outname = difmap_model_file
+
+    export_difmap_model(new_comps, outname, freq_hz)
+    return joined
+
+
+
 
 
 # FIXME: Check if it works to ``DeltaComponent``!

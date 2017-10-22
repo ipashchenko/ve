@@ -10,7 +10,8 @@ from cv_model import cv_difmap_models
 from spydiff import (export_difmap_model, modelfit_difmap, import_difmap_model,
                      clean_difmap, append_component_to_difmap_model,
                      clean_n, difmap_model_flux,
-                     sort_components_by_distance_from_cj)
+                     sort_components_by_distance_from_cj,
+                     component_joiner_serial)
 from components import CGComponent, EGComponent
 from from_fits import (create_clean_image_from_fits_file,
                        create_model_from_fits_file)
@@ -129,8 +130,8 @@ class TotalFluxStopping(ImageBasedStoppingCriterion):
     Total flux of difmap model must be close to total flux of CC to stop.
     """
     def __init__(self, total_flux=None, abs_threshold=None,
-                 rel_threshold=0.01):
-        super(ImageBasedStoppingCriterion, self).__init__()
+                 rel_threshold=0.01, mode="and"):
+        super(ImageBasedStoppingCriterion, self).__init__(mode=mode)
         self._total_flux = total_flux
         self.abs_threshold = abs_threshold
         self.rel_threshold = rel_threshold
@@ -157,8 +158,8 @@ class AddedComponentFluxLessRMSStopping(ImageBasedStoppingCriterion):
     """
     Last added component must have flux less the ``n_rms`` of image RMS to stop.
     """
-    def __init__(self, n_rms=7.0):
-        super(AddedComponentFluxLessRMSStopping, self).__init__()
+    def __init__(self, n_rms=7.0, mode="and"):
+        super(AddedComponentFluxLessRMSStopping, self).__init__(mode=mode)
         self.n_rms = n_rms
         self._threshold = None
 
@@ -181,13 +182,18 @@ class AddedComponentFluxLessRMSStopping(ImageBasedStoppingCriterion):
 
 class AddedTooDistantComponentStopping(ImageBasedStoppingCriterion):
     """
-    Last added component must be located too far away to stop.
+    Stopping when distant component is added. Distance is determined by
+    specified RA & DEC ranges or by using area of image that is inside
+    ``n_rms`` rectangular area. In last case image must be specified.
     """
-    def __init__(self, n_rms=1.0, hovatta_factor=False):
-        super(AddedTooDistantComponentStopping, self).__init__(mode="or")
+    def __init__(self, n_rms=1.0, hovatta_factor=False, dec_range=None,
+                 ra_range=None, mode="or"):
+        super(AddedTooDistantComponentStopping, self).__init__(mode=mode)
         self.n_rms = n_rms
         self.hovatta_factor = hovatta_factor
         self._bbox = None
+        self.dec_range = dec_range
+        self.ra_range = ra_range
 
     def is_applicable(self):
         return self.files
@@ -207,8 +213,12 @@ class AddedTooDistantComponentStopping(ImageBasedStoppingCriterion):
         _dir, _fn = os.path.split(self.files[-1])
         last_comp = import_difmap_model(_fn, _dir)[-1]
         ra_mas, dec_mas = -last_comp.p[1], -last_comp.p[2]
-        blc, trc = self.bbox
-        dec_range, ra_range = self.ccimage._convert_array_bbox(blc, trc)
+        if self.ra_range is None and self.dec_range is None:
+            blc, trc = self.bbox
+            dec_range, ra_range = self.ccimage._convert_array_bbox(blc, trc)
+        else:
+            dec_range = self.dec_range
+            ra_range = self.ra_range
         print(Style.DIM + "{} message:".format(self.__class__.__name__))
         print(Style.DIM + "Last added component located at "
                           "(dec,ra) = {:.2f}, {:.2f}"
@@ -219,16 +229,18 @@ class AddedTooDistantComponentStopping(ImageBasedStoppingCriterion):
                                                           ra_range[0],
                                                           ra_range[1]) +
               Style.RESET_ALL)
-        return not last_comp.is_within(blc, trc, self.ccimage)
+        return not last_comp.is_within_radec(ra_range, dec_range)
 
 
 class AddedTooSmallComponentStopping(ImageBasedStoppingCriterion):
     """
-    Last added component must be larger then specified threshold.
+    Last added component must be larger then specified threshold. Component
+    must be dimmer then specified flux for this criterion to work.
     """
-    def __init__(self, size_limit=0.001):
-        super(AddedTooSmallComponentStopping, self).__init__(mode="or")
+    def __init__(self, size_limit=0.001, flux_limit=0.1, mode="or"):
+        super(AddedTooSmallComponentStopping, self).__init__(mode=mode)
         self.size_limit = size_limit
+        self.flux_limit = flux_limit
 
     def is_applicable(self):
         return self.files
@@ -236,7 +248,10 @@ class AddedTooSmallComponentStopping(ImageBasedStoppingCriterion):
     def check_criterion(self):
         _dir, _fn = os.path.split(self.files[-1])
         last_comp = import_difmap_model(_fn, _dir)[-1]
-        return last_comp.p[3] < self.size_limit
+        if last_comp.p[0] < self.flux_limit:
+            return last_comp.p[3] < self.size_limit
+        else:
+            return False
 
 
 class NLast(StoppingIterationsCriterion):
@@ -432,6 +447,10 @@ class ModelFilter(object):
 
 
 class SmallSizedComponentsModelFilter(ModelFilter):
+    """
+    Filter out models with small components that are dimmer then specified
+    flux.
+    """
     def __init__(self, small_size=10**(-3),
                  threshold_flux_small_sized_component=0.1):
         self.small_size = small_size
@@ -480,22 +499,30 @@ class ToElongatedCoreModelFilter(ModelFilter):
 
 
 class ComponentAwayFromSourceModelFilter(ModelFilter):
-    def __init__(self, ccimage=None, cc_image_fits=None, n_rms=3,
-                 hovatta_factor=False):
+    """
+    Filters out models with distant component. Distance is determined by
+    specified RA & DEC ranges or by using area of image that is inside
+    ``n_rms`` rectangular area. In last case image must be specified.
+    """
+    def __init__(self, ccimage=None, cc_image_fits=None, n_rms=1,
+                 hovatta_factor=False, ra_range=None, dec_range=None):
         if ccimage is None:
-            if cc_image_fits is None:
-                raise Exception("Need CLEAN image to proceed!")
-            ccimage = create_clean_image_from_fits_file(cc_image_fits)
-        self.ccimage = ccimage
-        threshold = n_rms*rms_image(self.ccimage, hovatta_factor)
-        self.blc, self.trc = find_bbox(ccimage.image, threshold)
+            if cc_image_fits is not None:
+                ccimage = create_clean_image_from_fits_file(cc_image_fits)
+        if ccimage is not None:
+            threshold = n_rms*rms_image(ccimage, hovatta_factor)
+            blc, trc = find_bbox(ccimage.image, threshold)
+            dec_range, ra_range = ccimage._convert_array_bbox(blc, trc)
+
+        self.ra_range = ra_range
+        self.dec_range = dec_range
 
     def do_filter(self, model_file):
         print(Style.DIM + "Checking {} in {}".format(os.path.basename(model_file),
                                                      self.__class__.__name__) +
               Style.RESET_ALL)
         comps = import_difmap_model(model_file)
-        do_comps_in_bbox = [comp.is_within(self.blc, self.trc, self.ccimage)
+        do_comps_in_bbox = [comp.is_within_radec(self.ra_range, self.dec_range)
                             for comp in comps]
         if not np.alltrue(do_comps_in_bbox):
             print(Fore.RED +
@@ -541,7 +568,8 @@ class AutoModeler(object):
                  mapsize_clean=None, core_elliptic=False,
                  compute_CV=False, n_CV=5, n_rep_CV=1, n_comps_terminate=50,
                  niter_difmap=100, show_difmap_output_clean=False,
-                 show_difmap_output_modelfit=False):
+                 show_difmap_output_modelfit=False,
+                 ra_range_plot=None, dec_range_plot=None):
         self.uv_fits_path = uv_fits_path
         self.uv_fits_dir, self.uv_fits_fname = os.path.split(uv_fits_path)
         self.out_dir = out_dir
@@ -560,9 +588,9 @@ class AutoModeler(object):
 
         if mapsize_clean is None:
             if self.freq == 'u':
-                self.mapsize_clean = (1024, 0.1)
+                self.mapsize_clean = (512, 0.1)
             elif self.freq == 'q':
-                self.mapsize_clean = (1024, 0.03)
+                self.mapsize_clean = (512, 0.03)
             else:
                 raise Exception("Indicate mapsize_clean!")
         else:
@@ -582,6 +610,7 @@ class AutoModeler(object):
         self.cv_scores = list()
         # ``CleanImage`` instance for CLEANed original uv data set
         self._ccimage = None
+        self._beam = None
         # Path to original CLEAN image
         self._ccimage_path = os.path.join(self.out_dir, 'image_cc_orig_{}_{}_{}.fits'.format(self.source, self.epoch, self.freq))
         # Path to image with residuals. It will be overrided each iteration
@@ -597,6 +626,8 @@ class AutoModeler(object):
         self._mdl_prefix = '{}_{}_{}_{}_fitted'.format(self.source, self.freq,
                                                        self.epoch, self.core_type)
         self.fitted_model_paths = list()
+        self.dec_range_plot = dec_range_plot
+        self.ra_range_plot = ra_range_plot
 
     @property
     def ccimage(self):
@@ -609,6 +640,12 @@ class AutoModeler(object):
                          show_difmap_output=self.show_difmap_output_clean)
             self._ccimage = create_clean_image_from_fits_file(self._ccimage_path)
         return self._ccimage
+
+    @property
+    def beam(self):
+        if self._beam is None:
+            self._beam = np.sqrt(self.ccimage.beam[0] * self.ccimage.beam[1])
+        return self._beam
 
     @property
     def total_flux(self):
@@ -635,10 +672,16 @@ class AutoModeler(object):
             uvdata_residual = self.uvdata
         uvdata_residual.save(self._uv_residuals_fits_path, rewrite=True)
 
-    def suggest_component(self, type='cg'):
+    def suggest_component(self, type='cg', bmaj_nan=0.1):
         """
         Suggest single circular gaussian component using self-calibrated uv-data
         FITS file.
+        :param type: (optional)
+            Type of component to suggest. Circular ("cg") or Elliptical ("eg")
+             gaussian. (default: "cg")
+        :param bmaj_nan: (optional)
+            When estimated ``bmaj`` is NaN this value is used as ``bmaj`` [mas].
+            (default: ``0.1``)
 
         :return:
             Instance of ``CGComponent``.
@@ -653,10 +696,17 @@ class AutoModeler(object):
         imsize = image.imsize[0]
         mas_in_pix = abs(image.pixsize[0] / mas_to_rad)
         amp, y, x, bmaj = infer_gaussian(image.image)
+        print("Suggested bmaj = {} pixels".format(bmaj))
         x = mas_in_pix * (x - imsize / 2) * np.sign(image.dx)
         y = mas_in_pix * (y - imsize / 2) * np.sign(image.dy)
-        bmaj *= mas_in_pix
-        bmaj = np.sqrt(bmaj**2 - beam**2)
+        if np.isnan(bmaj):
+            bmaj = bmaj_nan
+        else:
+            bmaj *= mas_in_pix
+            bmaj = np.sqrt(bmaj ** 2 - beam ** 2)
+        # If ``bmaj`` is less then beam than use ``bmaj_nan`` instead
+        if np.isnan(bmaj):
+            bmaj = bmaj_nan
         if type == 'cg':
             comp = CGComponent(amp, x, y, bmaj)
         elif type == 'eg':
@@ -695,11 +745,77 @@ class AutoModeler(object):
                         niter=self.niter_difmap, stokes=self.stokes,
                         show_difmap_output=self.show_difmap_output_modelfit)
 
+
+
+        # Check that first component is elliptic one and adjust model in case it
+        # is not
+        if self.counter > 1 and self.core_type == "eg":
+            print(Fore.GREEN + "Checking if elliptic core goes first!" + Style.RESET_ALL)
+            model_2check = os.path.join(self.out_dir,
+                                        '{}_{}.mdl'.format(self._mdl_prefix,
+                                                           self.counter))
+            cj_sorted = sort_components_by_distance_from_cj(model_2check,
+                                                            automodeler.freq_hz,
+                                                            n_check_for_core=1,
+                                                            perc_distant=60)
+            comps = import_difmap_model(model_2check, out_dir)
+            ell_first = len(comps[0]) == 6
+            if not ell_first:
+                print(Back.RED + "Core has changed position!" + Style.RESET_ALL)
+                comps = import_difmap_model(model_2check, out_dir)
+                first_comp = comps[0]
+
+                # Create new model with EG component first and CG all others
+                new_comps = list()
+                new_comps.append(first_comp.to_elliptic())
+                for comp in comps[1:]:
+                    new_comps.append(comp.to_circular())
+
+                export_difmap_model(new_comps, model_2check,
+                                    automodeler.freq_hz)
+                modelfit_difmap(self.uv_fits_fname,
+                                '{}_{}.mdl'.format(self._mdl_prefix,
+                                                   self.counter),
+                                '{}_{}.mdl'.format(self._mdl_prefix,
+                                                   self.counter),
+                                path=self.uv_fits_dir, mdl_path=out_dir,
+                                out_path=out_dir,
+                                niter=self.niter_difmap, stokes=self.stokes,
+                                show_difmap_output=self.show_difmap_output_modelfit)
+
+
+
+        # Check if there any close circular gaussians that can be merged in one
+        # elliptical component
+        if self.counter > 1:
+            print(Fore.GREEN + "Checking if components could be merged!" + Style.RESET_ALL)
+            model_2check = os.path.join(self.out_dir,
+                                        '{}_{}.mdl'.format(self._mdl_prefix,
+                                                           self.counter))
+            joined = component_joiner_serial(model_2check, self.beam, self.freq_hz)
+            if joined:
+                print(Fore.RED + "Merged components" + Style.RESET_ALL)
+                modelfit_difmap(self.uv_fits_fname,
+                                '{}_{}.mdl'.format(self._mdl_prefix,
+                                                   self.counter),
+                                '{}_{}.mdl'.format(self._mdl_prefix,
+                                                   self.counter-1),
+                                path=self.uv_fits_dir, mdl_path=out_dir,
+                                out_path=out_dir,
+                                niter=self.niter_difmap, stokes=self.stokes,
+                                show_difmap_output=self.show_difmap_output_modelfit)
+                self.counter -= 1
+
+
+
+
         # Update model and plot results of current iteration
         model = Model(stokes='I')
         comps = import_difmap_model('{}_{}.mdl'.format(self._mdl_prefix, self.counter), self.out_dir)
         plot_clean_image_and_components(self.ccimage, comps,
-                                        outname=os.path.join(out_dir, "{}_image_{}.png".format(self._mdl_prefix, self.counter)))
+                                        outname=os.path.join(out_dir, "{}_image_{}.png".format(self._mdl_prefix, self.counter)),
+                                        ra_range=self.ra_range_plot,
+                                        dec_range=self.dec_range_plot)
         model.add_components(*comps)
         self.model = model
 
@@ -735,11 +851,17 @@ class AutoModeler(object):
                             stopper.mode == "and"]
             stoppers_or = [stopper for stopper in stoppers if
                            stopper.mode == "or"]
+            stoppers_while = [stopper for stopper in stoppers if
+                              stopper.mode == "while"]
             decisions_and = [stopper.do_stop(new_mdl_file) for stopper in
                              stoppers_and]
             decisions_or = [stopper.do_stop(new_mdl_file) for stopper in
                             stoppers_or]
-            decision = decisions_and + decisions_or
+            decisions_while = [not stopper.do_stop(new_mdl_file) for stopper in
+                               stoppers_while]
+            if np.any(decisions_while):
+                continue
+            # decision = decisions_and + decisions_or
             do_stop = np.alltrue(decisions_and) or np.any(decisions_or)
             print(Back.GREEN + "Stopping criteria (AND):" +
                   Style.RESET_ALL)
@@ -876,6 +998,63 @@ class AutoModeler(object):
             raise Exception("No Stokes I, RR or LL in {}".format(self.uv_fits_fname))
 
 
+def redo_automodel(automodeler, stoppers, selectors, filters, id_best):
+    ##### EXPERIMENTAL #########################################################
+    if sort_components_by_distance_from_cj(best_model, automodeler.freq_hz,
+                                           outpath=os.path.join(out_dir,
+                                                                "best_cjsorted.mdl")):
+        print(Back.RED + "Core has changed position!" + Style.RESET_ALL)
+        print(Back.RED + "Starting new round" + Style.RESET_ALL)
+        comps = import_difmap_model("best_cjsorted.mdl", out_dir)
+        first_comp = comps[0]
+
+        # Create new model with EG component first and CG all others
+        new_comps = list()
+        new_comps.append(first_comp.to_elliptic())
+        for comp in comps[1:]:
+            new_comps.append(comp.to_circular())
+
+        automodeler.clean()
+        export_difmap_model(new_comps, os.path.join(out_dir, "{}_{}.mdl".format(
+            automodeler._mdl_prefix, id_best + 1)),
+                            automodeler.freq_hz)
+
+        # Clear all
+        automodeler.clear()
+        for stopper in stoppers:
+            stopper.clear()
+
+        automodeler.fitted_model_paths.append(os.path.join(out_dir,
+                                                           "{}_{}.mdl".format(
+                                                               automodeler._mdl_prefix,
+                                                               id_best + 1)))
+        automodeler.counter = id_best + 1
+        # Run number of iterations that is defined by stoppers
+        automodeler.run(stoppers, start_model_fname=os.path.join(out_dir,
+                                                                 "{}_{}.mdl".format(
+                                                                     automodeler._mdl_prefix,
+                                                                     id_best + 1)))
+
+        files = automodeler.fitted_model_paths
+        id_best = max(selector.select(files) for selector in selectors)
+        files = files[:id_best + 1]
+
+        filters = [SmallSizedComponentsModelFilter(),
+                   ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
+                   ToElongatedCoreModelFilter()]
+
+        for fn in files[::-1]:
+            if np.any([flt.do_filter(fn) for flt in filters]):
+                id_best -= 1
+            else:
+                break
+
+        best_model = files[id_best]
+        print("Best model is {}".format(best_model))
+        return best_model
+        ##### EXPERIMENTAL #########################################################
+
+
 def create_cc_model_uvf(uv_fits_path, mapsize_clean, path_to_script,
                         outname='image_cc_model.uvf', out_dir=None):
     """
@@ -906,7 +1085,9 @@ def create_cc_model_uvf(uv_fits_path, mapsize_clean, path_to_script,
     uvdata.save(os.path.join(out_dir, outname))
 
 
-def plot_clean_image_and_components(image, comps, outname=None):
+def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
+                                    dec_range=None, n_rms_level=3.0,
+                                    n_rms_size=1.0):
     """
     :param image:
         Instance of ``CleanImage`` class.
@@ -917,10 +1098,15 @@ def plot_clean_image_and_components(image, comps, outname=None):
     """
     beam = image.beam
     rms = rms_image(image)
-    blc, trc = find_bbox(image.image, rms, 10)
-    fig = iplot(image.image, x=image.x, y=image.y, min_abs_level=3 * rms,
+    if ra_range is None or dec_range is None:
+        blc, trc = find_bbox(image.image, n_rms_size*rms, 10)
+    else:
+        blc, trc = None, None
+    fig = iplot(image.image, x=image.x, y=image.y,
+                min_abs_level=n_rms_level*rms,
                 beam=beam, show_beam=True, blc=blc, trc=trc, components=comps,
-                close=True, colorbar_label="Jy/beam")
+                close=True, colorbar_label="Jy/beam", ra_range=ra_range,
+                dec_range=dec_range)
     if outname is not None:
         fig.savefig(outname, bbox_inches='tight', dpi=300)
     return fig
@@ -928,7 +1114,7 @@ def plot_clean_image_and_components(image, comps, outname=None):
 
 # TODO: Remove beam from ``bmaj``
 def suggest_cg_component(uv_fits_path, mapsize_clean, path_to_script,
-                         outname='image_cc.fits', out_dir=None):
+                         outname='image_cc.fits', out_dir=None, bmaj_nan=0.1):
     """
     Suggest single circular gaussian component using self-calibrated uv-data
     FITS file.
@@ -943,6 +1129,9 @@ def suggest_cg_component(uv_fits_path, mapsize_clean, path_to_script,
     :param out_dir: (optional)
         Optional directory to save CC FITS-file. If ``None`` use CWD. (default:
         ``None``)
+    :param bmaj_nan: (optional)
+        When estimated ``bmaj`` is NaN this value is used as ``bmaj`` [mas].
+        (default: ``0.1``)
     :return:
         Instance of ``CGComponent``.
     """
@@ -958,15 +1147,23 @@ def suggest_cg_component(uv_fits_path, mapsize_clean, path_to_script,
     imsize = image.imsize[0]
     mas_in_pix = abs(image.pixsize[0] / mas_to_rad)
     amp, y, x, bmaj = infer_gaussian(image.image)
+    print("Estimated bmaj = {}".format(bmaj))
     x = mas_in_pix * (x - imsize / 2) * np.sign(image.dx)
     y = mas_in_pix * (y - imsize / 2) * np.sign(image.dy)
-    bmaj *= mas_in_pix
-    bmaj = np.sqrt(bmaj**2 - beam**2)
+    if np.isnan(bmaj):
+        bmaj = bmaj_nan
+    else:
+        bmaj *= mas_in_pix
+        bmaj = np.sqrt(bmaj**2 - beam**2)
+    # If ``bmaj`` is less then beam than use ``bmaj_nan`` instead
+    if np.isnan(bmaj):
+        bmaj = bmaj_nan
     return CGComponent(amp, x, y, bmaj), os.path.join(out_dir, outname)
 
 
 def suggest_eg_component(uv_fits_path, mapsize_clean, path_to_script,
-                         outname='image_cc.fits', out_dir=None):
+                         outname='image_cc.fits', out_dir=None,
+                         bmaj_nan=0.1):
     """
     Suggest single circular gaussian component using self-calibrated uv-data
     FITS file.
@@ -981,6 +1178,9 @@ def suggest_eg_component(uv_fits_path, mapsize_clean, path_to_script,
     :param out_dir: (optional)
         Optional directory to save CC FITS-file. If ``None`` use CWD. (default:
         ``None``)
+    :param bmaj_nan: (optional)
+        When estimated ``bmaj`` is NaN this value is used as ``bmaj`` [mas].
+        (default: ``0.1``)
     :return:
         Instance of ``CGComponent``.
     """
@@ -998,8 +1198,14 @@ def suggest_eg_component(uv_fits_path, mapsize_clean, path_to_script,
     amp, y, x, bmaj = infer_gaussian(image.image)
     x = mas_in_pix * (x - imsize / 2) * np.sign(image.dx)
     y = mas_in_pix * (y - imsize / 2) * np.sign(image.dy)
-    bmaj *= mas_in_pix
-    bmaj = np.sqrt(bmaj ** 2 - beam ** 2)
+    if np.isnan(bmaj):
+        bmaj = bmaj_nan
+    else:
+        bmaj *= mas_in_pix
+        bmaj = np.sqrt(bmaj ** 2 - beam ** 2)
+    # If ``bmaj`` is less then beam than use ``bmaj_nan`` instead
+    if np.isnan(bmaj):
+        bmaj = bmaj_nan
     return EGComponent(amp, x, y, bmaj, 1.0, 0.0), os.path.join(out_dir, outname)
 
 
@@ -1444,119 +1650,79 @@ def automodel_uv_fits(uv_fits_path, out_dir, path_to_script, start_model_file=No
 
 
 if __name__ == '__main__':
-    # uv_fits_path = "/home/ilya/STACK/uvf/0716+714.u.2010_11_13.uvf"
-    # uv_fits_path = "/home/ilya/STACK/uvf/0528+134.u.2011_06_24.uvf"
-    uv_fits_path = "/home/ilya/STACK/uvf/0219+428.u.2011_05_26.uvf"
-    # uv_fits_path = "/home/ilya/STACK/uvf/0430+052.u.2012_07_12.uvf"
-    # uv_fits_path = "/home/ilya/STACK/uvf/0415+379.u.2012_07_12.uvf"
-    # uv_fits_path = "/home/ilya/STACK/uvf/0336-019.u.2010_10_25.uvf"
-    # uv_fits_path = "/home/ilya/STACK/uvf/0316+413.u.2011_06_24.uvf"
-    out_dir = "/home/ilya/STACK/0219+428"
-    # out_dir = "/home/ilya/STACK/tmp"
-    # out_dir = "/home/ilya/STACK/0716+714"
-    # out_dir = "/home/ilya/STACK/0528+134"
-    # out_dir = "/home/ilya/STACK/0430+052"
-    # out_dir = "/home/ilya/STACK/0415+379"
-    # out_dir = "/home/ilya/STACK/0336-019"
-    # out_dir = "/home/ilya/STACK/0316+413"
+    sources = ["2251+158", "2230+114", "2223-052", "2200+420"]
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
-    automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
-                              n_comps_terminate=30, core_elliptic=True)
-    # Stoppers define when to stop adding components to model
-    stoppers = [TotalFluxStopping(),
-                AddedComponentFluxLessRMSStopping(),
-                AddedTooDistantComponentStopping(),
-                AddedTooSmallComponentStopping(),
-                AddedOverlappingComponentStopping(),
-                NLastDifferesFromLast(),
-                NLastDifferencesAreSmall()]
-    # Selectors choose best model using different heuristics
-    selectors = [FluxBasedModelSelector(delta_flux=0.005),
-                 SizeBasedModelSelector(delta_size=0.002)]
+    for source in sources[:1]:
+        out_dir = "/home/ilya/STACK/{}".format(source)
+        if not os.path.exists(out_dir):
+            os.mkdir(out_dir)
+        for freq in ("u", "q")[:1]:
+            files = glob.glob("/home/ilya/STACK/uvf/to_process/{}.{}.*.uvf".format(source, freq))
+            epochs = sorted([os.path.basename(fn).split(".")[-2] for fn in files])
+            for epoch in epochs:
+                # epoch = "2007_01_26"
+                epoch = "2006_12_04"
+                uv_fits_path = "/home/ilya/STACK/uvf/to_process/{}.{}.{}.uvf".format(source, freq, epoch)
+                out_dir = "/home/ilya/STACK/{}/{}".format(source, epoch)
+                if not os.path.exists(out_dir):
+                    os.mkdir(out_dir)
 
-    # Run number of iterations that is defined by stoppers
-    automodeler.run(stoppers)
+                automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
+                                          n_comps_terminate=20, core_elliptic=True)
+                # Stoppers define when to stop adding components to model
+                stoppers = [TotalFluxStopping(),
+                            AddedComponentFluxLessRMSStopping(),
+                            AddedTooDistantComponentStopping(),
+                            AddedTooSmallComponentStopping(),
+                            # for 0430 exclude it
+                            # AddedOverlappingComponentStopping(),
+                            NLastDifferesFromLast(),
+                            NLastDifferencesAreSmall(),
+                            # Keep iterating while this stopper fires
+                            TotalFluxStopping(rel_threshold=0.2, mode="while")]
+                # Selectors choose best model using different heuristics
+                selectors = [FluxBasedModelSelector(delta_flux=0.001),
+                             SizeBasedModelSelector(delta_size=0.001)]
 
-    # Select best model using custom selectors
-    files = automodeler.fitted_model_paths
-    id_best = max(selector.select(files) for selector in selectors)
-    files = files[:id_best+1]
+                # Run number of iterations that is defined by stoppers
+                automodeler.run(stoppers)
 
-    # Filters additionally remove complex models with non-physical components
-    # (e.g. too small faint component or component located far away from source.
-    filters = [SmallSizedComponentsModelFilter(),
-               ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
-               # ToElongatedCoreModelFilter(),
-               OverlappingComponentsModelFilter()]
+                # Select best model using custom selectors
+                files = automodeler.fitted_model_paths
+                id_best = max(selector.select(files) for selector in selectors)
+                files = files[:id_best+1]
 
-    # Additionally filter too small, too distant components
-    for fn in files[::-1]:
-        if np.any([flt.do_filter(fn) for flt in filters]):
-            id_best -= 1
-        else:
-            break
-    print("Best model is {}".format(files[id_best]))
+                # Filters additionally remove complex models with non-physical components
+                # (e.g. too small faint component or component located far away from
+                # source.)
+                filters = [SmallSizedComponentsModelFilter(),
+                           ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage)]
+                           # ToElongatedCoreModelFilter()]
+                           # OverlappingComponentsModelFilter()]
 
-    best_model = files[id_best]
+                # Additionally filter too small, too distant components
+                for fn in files[::-1]:
+                    if np.any([flt.do_filter(fn) for flt in filters]):
+                        id_best -= 1
+                    else:
+                        break
+                print("Best model is {}".format(files[id_best]))
 
-    ##### EXPERIMENTAL #########################################################
-    # if sort_components_by_distance_from_cj(best_model, automodeler.freq_hz,
-    #                                        outpath=os.path.join(out_dir, "best_cjsorted.mdl")):
-    #     print(Back.RED + "Core has changed position!" + Style.RESET_ALL)
-    #     print(Back.RED + "Starting new round" + Style.RESET_ALL)
-    #     comps = import_difmap_model("best_cjsorted.mdl", out_dir)
-    #     first_comp = comps[0]
-    #
-    #     # Create new model with EG component first and CG others
-    #     new_comps = list()
-    #     new_comps.append(EGComponent(first_comp.p[0], first_comp.p[1],
-    #                                  first_comp.p[2], first_comp.p[3], 1.0, 0))
-    #     for comp in comps[1:]:
-    #         if len(comp) == 6:
-    #             new_comps.append(CGComponent(comp.p[0], comp.p[1], comp.p[2],
-    #                                          comp.p[3]))
-    #         else:
-    #             new_comps.append(comp)
-    #     automodeler.clean()
-    #     export_difmap_model(new_comps, os.path.join(out_dir, "{}_{}.mdl".format(automodeler._mdl_prefix, id_best+1)),
-    #                         automodeler.freq_hz)
-    #     # Clear all
-    #     automodeler.clear()
-    #     for stopper in stoppers:
-    #         try:
-    #             stopper.files = []
-    #         except AttributeError:
-    #             pass
-    #
-    #     for selector in selectors:
-    #         try:
-    #             selector.files = []
-    #         except AttributeError:
-    #             pass
-    #
-    #     automodeler.fitted_model_paths.append(os.path.join(out_dir, "{}_{}.mdl".format(automodeler._mdl_prefix, id_best+1)))
-    #     automodeler.counter = id_best + 1
-    #     # Run number of iterations that is defined by stoppers
-    #     automodeler.run(stoppers, start_model_fname=os.path.join(out_dir, "{}_{}.mdl".format(automodeler._mdl_prefix, id_best+1)))
-    #
-    #     files = automodeler.fitted_model_paths
-    #     id_best = max(selector.select(files) for selector in selectors)
-    #     files = files[:id_best + 1]
-    #
-    #     filters = [SmallSizedComponentsModelFilter(),
-    #                ComponentAwayFromSourceModelFilter(
-    #                    ccimage=automodeler.ccimage),
-    #                ToElongatedCoreModelFilter()]
-    #
-    #     for fn in files[::-1]:
-    #         if np.any([flt.do_filter(fn) for flt in filters]):
-    #             id_best -= 1
-    #         else:
-    #             break
-    #     print("Best model is {}".format(files[id_best]))
-    ##### EXPERIMENTAL #########################################################
+                best_model = files[id_best]
 
-    automodeler.plot_results(id_best)
-    automodeler.archive_images()
-    automodeler.archive_models()
-    automodeler.clean()
+                # EXPERIMENTAL
+                # In case of using elliptical model for core check that core is the first
+                # one.
+                # if automodeler.core_type == 'eg':
+                #     core_changed = sort_components_by_distance_from_cj(best_model,
+                #                                                        automodeler.freq_hz)
+                #     if core_changed:
+                #         best_model = redo_automodel(automodeler, stoppers, selectors,
+                #                                     filters)
+                # EXPERIMENTAL
+
+                automodeler.plot_results(id_best)
+                break
+                automodeler.archive_images()
+                automodeler.archive_models()
+                automodeler.clean()

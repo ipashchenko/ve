@@ -316,6 +316,14 @@ def difmap_model_flux(mdl_file):
     return sum(fluxes)
 
 
+def find_ids(comps0, comps1):
+    assert len(comps0) == len(comps1)
+    ids = list()
+    for comp in comps0:
+        ids.append(comps1.index(comp))
+    return ids
+
+
 def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
                                         outpath=None, perc_distant=75,
                                         only_indicate=False):
@@ -456,7 +464,7 @@ def component_joiner_serial(difmap_model_file, beam_size, freq_hz,
                                  np.hypot(comp1.p[1] - comps[i + 2].p[1],
                                           comp1.p[2] - comps[i + 2].p[2]))
         else:
-            distance_after = 0.0
+            distance_after = 10000.0
         print("Distance after = {}".format(distance_after))
 
         if distance_before > beam_size and\

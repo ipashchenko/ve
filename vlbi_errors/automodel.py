@@ -101,6 +101,21 @@ class AddedOverlappingComponentStopping(StoppingIterationsCriterion):
         return len(self.files) > 1
 
 
+class AddedNegativeFluxComponentStopping(StoppingIterationsCriterion):
+    """
+    Added component overlaps with some other components.
+    """
+    def __init__(self, mode="or"):
+        super(AddedNegativeFluxComponentStopping, self).__init__(mode=mode)
+
+    def check_criterion(self):
+        comps = import_difmap_model(self.files[-1])
+        return np.any([comp.p[0] < 0.0 for comp in comps])
+
+    def is_applicable(self):
+        return self.files
+
+
 class ImageBasedStoppingCriterion(StoppingIterationsCriterion):
     def __init__(self, mode="and"):
         super(ImageBasedStoppingCriterion, self).__init__(mode=mode)
@@ -167,7 +182,7 @@ class AddedComponentFluxLessRMSStopping(ImageBasedStoppingCriterion):
     def threshold(self):
         if self._threshold is None:
             self._threshold = self.n_rms*rms_image(self.ccimage,
-                                                   hovatta_factor=False)
+                                                   hovatta_factor=True)
         return self._threshold
 
     def check_criterion(self):
@@ -178,6 +193,43 @@ class AddedComponentFluxLessRMSStopping(ImageBasedStoppingCriterion):
                           " while threshold = {:.4f}".format(last_comp.p[0], self.threshold) +
               Style.RESET_ALL)
         return last_comp.p[0] < self.threshold
+
+
+class AddedComponentFluxLessRMSFluxStopping(ImageBasedStoppingCriterion):
+    """
+    Last added component must have flux less the it's area multiplyied by
+    image RMS.
+    """
+    def __init__(self, mode="and"):
+        super(AddedComponentFluxLessRMSFluxStopping, self).__init__(mode=mode)
+        self._threshold = None
+        self._beam_size = None
+
+    @property
+    def threshold(self):
+        if self._threshold is None:
+            self._threshold = rms_image(self.ccimage, hovatta_factor=True)
+        return self._threshold
+
+    @property
+    def beam_size(self):
+        """
+        Beam area in pixels
+        """
+        if self._beam_size is None:
+            self._beam_size = np.sqrt(self.ccimage.beam[0] * self.ccimage.beam[1])
+        return self._beam_size
+
+    def check_criterion(self):
+        _dir, _fn = os.path.split(self.files[-1])
+        last_comp = import_difmap_model(_fn, _dir)[-1]
+        square_pixels = (np.hypot(self.beam_size, last_comp.p[3])/(2*self.ccimage.pixsize[0]/mas_to_rad))**2
+        threshold = square_pixels*self.threshold
+        print(Style.DIM + "{} message:".format(self.__class__.__name__))
+        print(Style.DIM + "Last added component has flux = {:.4f}"
+                          " while threshold = {:.4f}".format(last_comp.p[0], threshold) +
+              Style.RESET_ALL)
+        return last_comp.p[0] < threshold
 
 
 class AddedTooDistantComponentStopping(ImageBasedStoppingCriterion):
@@ -476,6 +528,21 @@ class SmallSizedComponentsModelFilter(ModelFilter):
             return False
 
 
+class NegativeFluxComponentModelFilter(ModelFilter):
+    def do_filter(self, model_file):
+        print(Style.DIM + "Checking {} in {}".format(os.path.basename(model_file),
+                                                     self.__class__.__name__) +
+              Style.RESET_ALL)
+        comps = import_difmap_model(model_file)
+        negative_fluxes = [comp.p[0] < 0 for comp in comps]
+        if np.any(negative_fluxes):
+            print(Fore.RED + "Decreasing complexity because of too negative flux"
+                             " component(s) present" + Style.RESET_ALL)
+            return True
+        else:
+            return False
+
+
 class ToElongatedCoreModelFilter(ModelFilter):
     def __init__(self, small_e=10**(-3)):
         self.small_e = small_e
@@ -717,6 +784,65 @@ class AutoModeler(object):
         print(Style.DIM + "Suggested: {}".format(comp) + Style.RESET_ALL)
         return comp
 
+    def check_first_elliptic(self):
+        # Check that first component is elliptic one and adjust model in case it
+        # is not
+        if self.counter > 1 and self.core_type == "eg":
+            print(Fore.GREEN + "Checking if elliptic core goes first!" + Style.RESET_ALL)
+            model_2check = os.path.join(self.out_dir,
+                                        '{}_{}.mdl'.format(self._mdl_prefix,
+                                                           self.counter))
+            cj_sorted = sort_components_by_distance_from_cj(model_2check,
+                                                            automodeler.freq_hz,
+                                                            n_check_for_core=1,
+                                                            perc_distant=75)
+            comps = import_difmap_model(model_2check, out_dir)
+            ell_first = len(comps[0]) == 6
+            if not ell_first:
+                print(Back.RED + "Core has changed position!" + Style.RESET_ALL)
+                comps = import_difmap_model(model_2check, out_dir)
+                first_comp = comps[0]
+
+                # Create new model with EG component first and CG all others
+                new_comps = list()
+                new_comps.append(first_comp.to_elliptic())
+                for comp in comps[1:]:
+                    new_comps.append(comp.to_circular())
+
+                export_difmap_model(new_comps, model_2check,
+                                    automodeler.freq_hz)
+                modelfit_difmap(self.uv_fits_fname,
+                                '{}_{}.mdl'.format(self._mdl_prefix,
+                                                   self.counter),
+                                '{}_{}.mdl'.format(self._mdl_prefix,
+                                                   self.counter),
+                                path=self.uv_fits_dir, mdl_path=out_dir,
+                                out_path=out_dir,
+                                niter=self.niter_difmap, stokes=self.stokes,
+                                show_difmap_output=self.show_difmap_output_modelfit)
+
+    def check_merging(self):
+        # Check if there any close circular gaussians that can be merged in one
+        # elliptical component
+        if self.counter > 1:
+            print(Fore.GREEN + "Checking if components could be merged!" + Style.RESET_ALL)
+            model_2check = os.path.join(self.out_dir,
+                                        '{}_{}.mdl'.format(self._mdl_prefix,
+                                                           self.counter))
+            joined = component_joiner_serial(model_2check, self.beam, self.freq_hz)
+            if joined:
+                print(Fore.RED + "Merged components" + Style.RESET_ALL)
+                modelfit_difmap(self.uv_fits_fname,
+                                '{}_{}.mdl'.format(self._mdl_prefix,
+                                                   self.counter),
+                                '{}_{}.mdl'.format(self._mdl_prefix,
+                                                   self.counter-1),
+                                path=self.uv_fits_dir, mdl_path=out_dir,
+                                out_path=out_dir,
+                                niter=self.niter_difmap, stokes=self.stokes,
+                                show_difmap_output=self.show_difmap_output_modelfit)
+                self.counter -= 1
+
     def do_iteration(self):
         self.counter += 1
         self.create_residuals(self.model)
@@ -745,69 +871,9 @@ class AutoModeler(object):
                         niter=self.niter_difmap, stokes=self.stokes,
                         show_difmap_output=self.show_difmap_output_modelfit)
 
-
-
-        # Check that first component is elliptic one and adjust model in case it
-        # is not
-        if self.counter > 1 and self.core_type == "eg":
-            print(Fore.GREEN + "Checking if elliptic core goes first!" + Style.RESET_ALL)
-            model_2check = os.path.join(self.out_dir,
-                                        '{}_{}.mdl'.format(self._mdl_prefix,
-                                                           self.counter))
-            cj_sorted = sort_components_by_distance_from_cj(model_2check,
-                                                            automodeler.freq_hz,
-                                                            n_check_for_core=1,
-                                                            perc_distant=60)
-            comps = import_difmap_model(model_2check, out_dir)
-            ell_first = len(comps[0]) == 6
-            if not ell_first:
-                print(Back.RED + "Core has changed position!" + Style.RESET_ALL)
-                comps = import_difmap_model(model_2check, out_dir)
-                first_comp = comps[0]
-
-                # Create new model with EG component first and CG all others
-                new_comps = list()
-                new_comps.append(first_comp.to_elliptic())
-                for comp in comps[1:]:
-                    new_comps.append(comp.to_circular())
-
-                export_difmap_model(new_comps, model_2check,
-                                    automodeler.freq_hz)
-                modelfit_difmap(self.uv_fits_fname,
-                                '{}_{}.mdl'.format(self._mdl_prefix,
-                                                   self.counter),
-                                '{}_{}.mdl'.format(self._mdl_prefix,
-                                                   self.counter),
-                                path=self.uv_fits_dir, mdl_path=out_dir,
-                                out_path=out_dir,
-                                niter=self.niter_difmap, stokes=self.stokes,
-                                show_difmap_output=self.show_difmap_output_modelfit)
-
-
-
-        # Check if there any close circular gaussians that can be merged in one
-        # elliptical component
-        if self.counter > 1:
-            print(Fore.GREEN + "Checking if components could be merged!" + Style.RESET_ALL)
-            model_2check = os.path.join(self.out_dir,
-                                        '{}_{}.mdl'.format(self._mdl_prefix,
-                                                           self.counter))
-            joined = component_joiner_serial(model_2check, self.beam, self.freq_hz)
-            if joined:
-                print(Fore.RED + "Merged components" + Style.RESET_ALL)
-                modelfit_difmap(self.uv_fits_fname,
-                                '{}_{}.mdl'.format(self._mdl_prefix,
-                                                   self.counter),
-                                '{}_{}.mdl'.format(self._mdl_prefix,
-                                                   self.counter-1),
-                                path=self.uv_fits_dir, mdl_path=out_dir,
-                                out_path=out_dir,
-                                niter=self.niter_difmap, stokes=self.stokes,
-                                show_difmap_output=self.show_difmap_output_modelfit)
-                self.counter -= 1
-
-
-
+        # Checks that alter model files
+        self.check_first_elliptic()
+        self.check_merging()
 
         # Update model and plot results of current iteration
         model = Model(stokes='I')
@@ -1638,6 +1704,7 @@ if __name__ == '__main__':
     sources = ["2251+158", "2230+114", "2223-052", "2200+420"]
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
     for source in sources[:1]:
+        source = "2223-052"
         out_dir = "/home/ilya/STACK/{}".format(source)
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
@@ -1646,7 +1713,10 @@ if __name__ == '__main__':
             epochs = sorted([os.path.basename(fn).split(".")[-2] for fn in files])
             for epoch in epochs:
                 # epoch = "2007_01_26"
-                epoch = "2006_12_04"
+                # epoch = "2006_12_04"
+                # epoch = "2005_09_16"
+                epoch = "2008_08_06"
+                # epoch = "1995_04_07"
                 uv_fits_path = "/home/ilya/STACK/uvf/to_process/{}.{}.{}.uvf".format(source, freq, epoch)
                 out_dir = "/home/ilya/STACK/{}/{}".format(source, epoch)
                 if not os.path.exists(out_dir):
@@ -1657,8 +1727,10 @@ if __name__ == '__main__':
                 # Stoppers define when to stop adding components to model
                 stoppers = [TotalFluxStopping(),
                             AddedComponentFluxLessRMSStopping(),
+                            AddedComponentFluxLessRMSFluxStopping(),
                             AddedTooDistantComponentStopping(),
                             AddedTooSmallComponentStopping(),
+                            AddedNegativeFluxComponentStopping(),
                             # for 0430 exclude it
                             # AddedOverlappingComponentStopping(),
                             NLastDifferesFromLast(),
@@ -1681,9 +1753,10 @@ if __name__ == '__main__':
                 # (e.g. too small faint component or component located far away from
                 # source.)
                 filters = [SmallSizedComponentsModelFilter(),
-                           ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage)]
+                           ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
+                           NegativeFluxComponentModelFilter(),
                            # ToElongatedCoreModelFilter()]
-                           # OverlappingComponentsModelFilter()]
+                           OverlappingComponentsModelFilter()]
 
                 # Additionally filter too small, too distant components
                 for fn in files[::-1]:

@@ -149,7 +149,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          beam_place='ll', colorbar_label=None, show=True, contour_color='k',
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
          show_points=None, components=None, slice_color='black',
-         plot_colorbar=True, label_size=16):
+         plot_colorbar=True, label_size=16, ra_range=None, dec_range=None):
     """
     Plot image(s).
 
@@ -295,6 +295,10 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
     ax.set_xlabel(u'Relative R.A. (mas)')
     ax.set_ylabel(u'Relative Decl. (mas)')
+    if ra_range:
+        ax.set_xlim(ra_range)
+    if dec_range:
+        ax.set_ylim(dec_range)
 
     # Plot contours
     if contours is not None:
@@ -429,6 +433,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                     e_width = 0.25*plot_pixel_size*comp.p[4]
                 else:
                     facecolor = "red"
+                if comp.p[0] < 0:
+                    facecolor = "blue"
                 e = Ellipse((x_c, y_c), e_width, e_height,
                             angle=-90.0+180*comp.p[5]/np.pi,
                             edgecolor=beam_edge_color, facecolor=facecolor,
@@ -441,6 +447,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                     facecolor = "green"
                 else:
                     facecolor = "red"
+                if comp.p[0] < 0:
+                    facecolor = "blue"
                 e = Circle((x_c, y_c), c_size,
                             edgecolor=beam_edge_color, facecolor=facecolor,
                             alpha=beam_alpha)

@@ -362,12 +362,16 @@ def sort_components_by_distance_from_cj(mdl_path, freq_hz, n_check_for_core=2,
     # Components that are more distant from phase center than ``perc_distant``
     # of components
     remote_comps = [comp for r_, comp in zip(r, comps) if r_ > dist]
-    theta_remote = np.mean([np.arctan2(-comp.p[1], -comp.p[2])/degree_to_rad for
-                            comp in remote_comps])
+    x_mean = np.mean([-comp.p[1] for comp in remote_comps])
+    y_mean = np.mean([-comp.p[2] for comp in remote_comps])
+    theta_remote = np.arctan2(x_mean, y_mean)/degree_to_rad
 
     found_cj_comps = list()
-    for i in range(1, n_check_for_core+1):
+    for i in range(0, n_check_for_core):
         comp = comps[i]
+        # Don't count EG component
+        if len(comp) == 6:
+            continue
         # This checks that cj component have different PA
         if abs(np.arctan2(-comp.p[1], -comp.p[2])/degree_to_rad -
                theta_remote) > 90.:

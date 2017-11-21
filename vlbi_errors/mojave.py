@@ -73,6 +73,14 @@ def get_epochs_for_source(source, use_db='u'):
     return sorted(set(epochs))
 
 
+def convert_mojave_epoch_to_float(epoch):
+    year = epoch.split('-')[0]
+    month = epoch.split('-')[1]
+    day = epoch.split('-')[2]
+    result = float(year) + float(month)/12.0 + float(day)/30.0
+    return result
+
+
 def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
     """
     Download FITS-files with self-calibrated uv-data from MOJAVE server.

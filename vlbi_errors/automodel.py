@@ -109,11 +109,25 @@ class AddedNegativeFluxComponentStopping(StoppingIterationsCriterion):
         super(AddedNegativeFluxComponentStopping, self).__init__(mode=mode)
 
     def check_criterion(self):
+        print(Style.DIM + "{} message:".format(self.__class__.__name__))
         comps = import_difmap_model(self.files[-1])
         return np.any([comp.p[0] < 0.0 for comp in comps])
 
     def is_applicable(self):
         return self.files
+
+
+class AddedTheSameComponentStopping(StoppingIterationsCriterion):
+    def __init__(self, mode="or"):
+        super(AddedTheSameComponentStopping, self).__init__(mode=mode)
+
+    def check_criterion(self):
+        print(Style.DIM + "{} message:".format(self.__class__.__name__))
+        comps = import_difmap_model(self.files[-1])
+        return comps[-2] == comps[1]
+
+    def is_applicable(self):
+        return len(self.files) > 1
 
 
 class ImageBasedStoppingCriterion(StoppingIterationsCriterion):
@@ -636,7 +650,8 @@ class AutoModeler(object):
                  compute_CV=False, n_CV=5, n_rep_CV=1, n_comps_terminate=50,
                  niter_difmap=100, show_difmap_output_clean=False,
                  show_difmap_output_modelfit=False,
-                 ra_range_plot=None, dec_range_plot=None):
+                 ra_range_plot=None, dec_range_plot=None,
+                 merge_close_components=False):
         self.uv_fits_path = uv_fits_path
         self.uv_fits_dir, self.uv_fits_fname = os.path.split(uv_fits_path)
         self.out_dir = out_dir
@@ -691,10 +706,16 @@ class AutoModeler(object):
         # Instance of ``Model`` class that represents current model
         self.model = None
         self._mdl_prefix = '{}_{}_{}_{}_fitted'.format(self.source, self.freq,
-                                                       self.epoch, self.core_type)
+                                                       self.epoch,
+                                                       self.core_type)
         self.fitted_model_paths = list()
         self.dec_range_plot = dec_range_plot
         self.ra_range_plot = ra_range_plot
+        self.merge_close_components = merge_close_components
+
+    # @property
+    # def files(self):
+    #     return list(set(self.fitted_model_paths))
 
     @property
     def ccimage(self):
@@ -793,14 +814,14 @@ class AutoModeler(object):
                                         '{}_{}.mdl'.format(self._mdl_prefix,
                                                            self.counter))
             cj_sorted = sort_components_by_distance_from_cj(model_2check,
-                                                            automodeler.freq_hz,
+                                                            self.freq_hz,
                                                             n_check_for_core=1,
                                                             perc_distant=75)
-            comps = import_difmap_model(model_2check, out_dir)
+            comps = import_difmap_model(model_2check, self.out_dir)
             ell_first = len(comps[0]) == 6
             if not ell_first:
                 print(Back.RED + "Core has changed position!" + Style.RESET_ALL)
-                comps = import_difmap_model(model_2check, out_dir)
+                comps = import_difmap_model(model_2check, self.out_dir)
                 first_comp = comps[0]
 
                 # Create new model with EG component first and CG all others
@@ -810,14 +831,14 @@ class AutoModeler(object):
                     new_comps.append(comp.to_circular())
 
                 export_difmap_model(new_comps, model_2check,
-                                    automodeler.freq_hz)
+                                    self.freq_hz)
                 modelfit_difmap(self.uv_fits_fname,
                                 '{}_{}.mdl'.format(self._mdl_prefix,
                                                    self.counter),
                                 '{}_{}.mdl'.format(self._mdl_prefix,
                                                    self.counter),
-                                path=self.uv_fits_dir, mdl_path=out_dir,
-                                out_path=out_dir,
+                                path=self.uv_fits_dir, mdl_path=self.out_dir,
+                                out_path=self.out_dir,
                                 niter=self.niter_difmap, stokes=self.stokes,
                                 show_difmap_output=self.show_difmap_output_modelfit)
 
@@ -837,8 +858,31 @@ class AutoModeler(object):
                                                    self.counter),
                                 '{}_{}.mdl'.format(self._mdl_prefix,
                                                    self.counter-1),
-                                path=self.uv_fits_dir, mdl_path=out_dir,
-                                out_path=out_dir,
+                                path=self.uv_fits_dir, mdl_path=self.out_dir,
+                                out_path=self.out_dir,
+                                niter=self.niter_difmap, stokes=self.stokes,
+                                show_difmap_output=self.show_difmap_output_modelfit)
+                self.counter -= 1
+
+    # FIXME: Incorporate this into self.run
+    def check_small(self):
+        # Check if there any small gaussian component (not the last one!) that
+        # can be removed
+        if self.counter > 1:
+            print(Fore.GREEN + "Checking if there any small CG components!" + Style.RESET_ALL)
+            model_2check = os.path.join(self.out_dir,
+                                        '{}_{}.mdl'.format(self._mdl_prefix,
+                                                           self.counter))
+            joined = component_joiner_serial(model_2check, self.beam, self.freq_hz)
+            if joined:
+                print(Fore.RED + "Merged components" + Style.RESET_ALL)
+                modelfit_difmap(self.uv_fits_fname,
+                                '{}_{}.mdl'.format(self._mdl_prefix,
+                                                   self.counter),
+                                '{}_{}.mdl'.format(self._mdl_prefix,
+                                                   self.counter-1),
+                                path=self.uv_fits_dir, mdl_path=self.out_dir,
+                                out_path=self.out_dir,
                                 niter=self.niter_difmap, stokes=self.stokes,
                                 show_difmap_output=self.show_difmap_output_modelfit)
                 self.counter -= 1
@@ -867,19 +911,21 @@ class AutoModeler(object):
 
         modelfit_difmap(self.uv_fits_fname, 'init_{}.mdl'.format(self.counter),
                         '{}_{}.mdl'.format(self._mdl_prefix, self.counter),
-                        path=self.uv_fits_dir, mdl_path=out_dir, out_path=out_dir,
-                        niter=self.niter_difmap, stokes=self.stokes,
+                        path=self.uv_fits_dir, mdl_path=self.out_dir,
+                        out_path=self.out_dir, niter=self.niter_difmap,
+                        stokes=self.stokes,
                         show_difmap_output=self.show_difmap_output_modelfit)
 
         # Checks that alter model files
         self.check_first_elliptic()
-        self.check_merging()
+        if self.merge_close_components:
+            self.check_merging()
 
         # Update model and plot results of current iteration
         model = Model(stokes='I')
         comps = import_difmap_model('{}_{}.mdl'.format(self._mdl_prefix, self.counter), self.out_dir)
         plot_clean_image_and_components(self.ccimage, comps,
-                                        outname=os.path.join(out_dir, "{}_image_{}.png".format(self._mdl_prefix, self.counter)),
+                                        outname=os.path.join(self.out_dir, "{}_image_{}.png".format(self._mdl_prefix, self.counter)),
                                         ra_range=self.ra_range_plot,
                                         dec_range=self.dec_range_plot)
         model.add_components(*comps)
@@ -1000,7 +1046,7 @@ class AutoModeler(object):
             axes[1].axvline(id_best+1)
             axes[2].axvline(id_best+1)
 
-        fig.savefig(os.path.join(out_dir, '{}_core_parameters_vs_ncomps.png'.format(self._mdl_prefix)),
+        fig.savefig(os.path.join(self.out_dir, '{}_core_parameters_vs_ncomps.png'.format(self._mdl_prefix)),
                     bbox_inches='tight', dpi=200)
 
         fig, axes = plt.subplots(1, 1, sharex=True)
@@ -1013,7 +1059,7 @@ class AutoModeler(object):
         axes.set_xlabel("Number of components")
         axes.axvline(id_best+1)
         axes.axhline(self.total_flux)
-        fig.savefig(os.path.join(out_dir, '{}_total_flux_vs_ncomps.png'.format(self._mdl_prefix)),
+        fig.savefig(os.path.join(self.out_dir, '{}_total_flux_vs_ncomps.png'.format(self._mdl_prefix)),
                     bbox_inches='tight', dpi=200)
 
     def archive_models(self):
@@ -1107,42 +1153,52 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
 
 
 if __name__ == '__main__':
-    sources = ["2251+158", "2230+114", "2223-052", "2200+420"]
+    # sources = ["2251+158", "2230+114", "2223-052", "2200+420"]
+    import pandas as pd
+    source_file = "/home/ilya/Dropbox/stack/src_tab.dat"
+    df = df = pd.read_table(source_file, names=["source", "N43", "N15"],
+                            sep=r"\s*", skiprows=1)
+    sources = list(df.source)
+    # sources.remove("0219+428")
+    # sources.remove("0235+164")
+    # sources.remove("0316+413")
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
-    for source in sources[:1]:
-        source = "2223-052"
-        out_dir = "/home/ilya/STACK/{}".format(source)
+    for source in sources[28:]:
+        # source = "1622-297"
+        out_dir = "/home/ilya/STACK/all/{}".format(source)
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
         for freq in ("u", "q")[:1]:
-            files = glob.glob("/home/ilya/STACK/uvf/to_process/{}.{}.*.uvf".format(source, freq))
+            files = glob.glob("/home/ilya/STACK/uvf/all/{}.{}.*.uvf".format(source, freq))
             epochs = sorted([os.path.basename(fn).split(".")[-2] for fn in files])
             for epoch in epochs:
                 # epoch = "2007_01_26"
                 # epoch = "2006_12_04"
                 # epoch = "2005_09_16"
-                epoch = "2008_08_06"
+                # epoch = "2008_08_06"
                 # epoch = "1995_04_07"
-                uv_fits_path = "/home/ilya/STACK/uvf/to_process/{}.{}.{}.uvf".format(source, freq, epoch)
-                out_dir = "/home/ilya/STACK/{}/{}".format(source, epoch)
+                uv_fits_path = "/home/ilya/STACK/uvf/all/{}.{}.{}.uvf".format(source, freq, epoch)
+                out_dir = "/home/ilya/STACK/all/{}/{}".format(source, epoch)
                 if not os.path.exists(out_dir):
                     os.mkdir(out_dir)
 
                 automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
-                                          n_comps_terminate=20, core_elliptic=True)
+                                          n_comps_terminate=20,
+                                          core_elliptic=True,
+                                          mapsize_clean=(512, 0.1))
                 # Stoppers define when to stop adding components to model
                 stoppers = [TotalFluxStopping(),
-                            AddedComponentFluxLessRMSStopping(),
+                            AddedComponentFluxLessRMSStopping(mode="or"),
                             AddedComponentFluxLessRMSFluxStopping(),
-                            AddedTooDistantComponentStopping(),
+                            AddedTooDistantComponentStopping(mode="or"),
                             AddedTooSmallComponentStopping(),
                             AddedNegativeFluxComponentStopping(),
                             # for 0430 exclude it
                             # AddedOverlappingComponentStopping(),
                             NLastDifferesFromLast(),
-                            NLastDifferencesAreSmall(),
+                            NLastDifferencesAreSmall()]
                             # Keep iterating while this stopper fires
-                            TotalFluxStopping(rel_threshold=0.2, mode="while")]
+                            # TotalFluxStopping(rel_threshold=0.2, mode="while")]
                 # Selectors choose best model using different heuristics
                 selectors = [FluxBasedModelSelector(delta_flux=0.001),
                              SizeBasedModelSelector(delta_size=0.001)]
@@ -1175,7 +1231,6 @@ if __name__ == '__main__':
                 best_model = files[id_best]
 
                 automodeler.plot_results(id_best)
-                break
-                automodeler.archive_images()
-                automodeler.archive_models()
-                automodeler.clean()
+                # automodeler.archive_images()
+                # automodeler.archive_models()
+                # automodeler.clean()

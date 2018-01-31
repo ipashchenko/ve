@@ -21,18 +21,18 @@ from automodel import (AutoModeler, TotalFluxStopping,
 
 def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=False,
                  n_max_components=20, mapsize_clean=(512, 0.1), out_dir=None,
-                 path_to_script=None):
+                 path_to_script=None, source=None, freq=None, epoch=None):
     # uv_fits_fname = "bk_{}_8.1.fits".format(str(i).zfill(2))
     # simulated_uv_fits_path = os.path.join(data_dir, uv_fits_fname)
 
     automodeler = AutoModeler(simulated_uv_fits_path, out_dir, path_to_script,
                               n_comps_terminate=n_max_components,
                               core_elliptic=core_elliptic,
-                              mapsize_clean=mapsize_clean)
+                              mapsize_clean=mapsize_clean, source=source,
+                              freq=freq, epoch=epoch)
 
     # Stoppers define when to stop adding components to model
-    stoppers = [TotalFluxStopping(),
-                AddedComponentFluxLessRMSStopping(mode="or"),
+    stoppers = [AddedComponentFluxLessRMSStopping(mode="or"),
                 AddedComponentFluxLessRMSFluxStopping(),
                 AddedTooDistantComponentStopping(mode="or"),
                 AddedTooSmallComponentStopping(),

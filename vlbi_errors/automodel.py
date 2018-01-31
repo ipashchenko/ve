@@ -330,7 +330,9 @@ class NLast(StoppingIterationsCriterion):
         self.n_check = n_check
 
     def is_applicable(self):
+        print("In NLast.is_applicable")
         if len(self.files) > self.n_check:
+            print("Len files > n_check={} => applicable!".format(self.n_check))
             return True
         else:
             return False
@@ -406,8 +408,10 @@ class NLastJustStop(NLast):
     def __init__(self, n, mode="or"):
         super(NLastJustStop, self).__init__(n, mode=mode)
         self.n_stop = n
+        print("NLastJustStop.init - n_stop = {}".format(n))
 
     def check_criterion(self):
+        print("NLastJustStop.check_criterion => stopping now!")
         return True
 
 
@@ -647,26 +651,37 @@ class OverlappingComponentsModelFilter(ModelFilter):
 class AutoModeler(object):
     def __init__(self, uv_fits_path, out_dir, path_to_script,
                  mapsize_clean=None, core_elliptic=False,
-                 compute_CV=False, n_CV=5, n_rep_CV=1, n_comps_terminate=50,
+                 compute_CV=False, n_CV=5, n_rep_CV=1, n_comps_terminate=20,
                  niter_difmap=100, show_difmap_output_clean=False,
                  show_difmap_output_modelfit=False,
                  ra_range_plot=None, dec_range_plot=None,
-                 merge_close_components=False):
+                 merge_close_components=False, source=None, freq=None,
+                 epoch=None):
         self.uv_fits_path = uv_fits_path
         self.uv_fits_dir, self.uv_fits_fname = os.path.split(uv_fits_path)
-        self.out_dir = out_dir
+        if out_dir is None:
+            self.out_dir = os.getcwd()
+        else:
+            self.out_dir = out_dir
         self.path_to_script = path_to_script
         self.compute_CV = compute_CV
         self.n_CV = n_CV
         self.n_rep_CV = n_rep_CV
         self.n_comps_terminate = n_comps_terminate
+        print("Automodeler.init n_comps_terminate = {}".format(n_comps_terminate))
         if core_elliptic:
             self.core_type = 'eg'
         else:
             self.core_type = 'cg'
 
-        self.source = self.uv_fits_fname.split(".")[0]
-        self.freq = self.uv_fits_fname.split(".")[1]
+        if source is None:
+            self.source = self.uv_fits_fname.split(".")[0]
+        else:
+            self.source = source
+        if freq is None:
+            self.freq = self.uv_fits_fname.split(".")[1]
+        else:
+            self.freq = freq
 
         if mapsize_clean is None:
             if self.freq == 'u':
@@ -678,7 +693,10 @@ class AutoModeler(object):
         else:
             self.mapsize_clean = mapsize_clean
 
-        self.epoch = self.uv_fits_fname.split(".")[2]
+        if epoch is None:
+            self.epoch = self.uv_fits_fname.split(".")[2]
+        else:
+            self.epoch = None
         self.uvdata = UVData(uv_fits_path)
 
         self.choose_stokes()
@@ -894,6 +912,7 @@ class AutoModeler(object):
             core_type = self.core_type
         else:
             core_type = 'cg'
+            # core_type = self.core_type
         comp = self.suggest_component(core_type)
 
         if self.counter > 1:
@@ -917,7 +936,7 @@ class AutoModeler(object):
                         show_difmap_output=self.show_difmap_output_modelfit)
 
         # Checks that alter model files
-        self.check_first_elliptic()
+        # self.check_first_elliptic()
         if self.merge_close_components:
             self.check_merging()
 
@@ -1146,7 +1165,7 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
                 min_abs_level=n_rms_level*rms,
                 beam=beam, show_beam=True, blc=blc, trc=trc, components=comps,
                 close=True, colorbar_label="Jy/beam", ra_range=ra_range,
-                dec_range=dec_range)
+                dec_range=dec_range, show=False)
     if outname is not None:
         fig.savefig(outname, bbox_inches='tight', dpi=300)
     return fig
@@ -1154,38 +1173,42 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
 
 if __name__ == '__main__':
     # sources = ["2251+158", "2230+114", "2223-052", "2200+420"]
-    import pandas as pd
-    source_file = "/home/ilya/Dropbox/stack/src_tab.dat"
-    df = df = pd.read_table(source_file, names=["source", "N43", "N15"],
-                            sep=r"\s*", skiprows=1)
-    sources = list(df.source)
+    # import pandas as pd
+    # source_file = "/home/ilya/Dropbox/stack/src_tab.dat"
+    # df = df = pd.read_table(source_file, names=["source", "N43", "N15"],
+    #                         sep=r"\s*", skiprows=1)
+    # sources = list(df.source)
     # sources.remove("0219+428")
     # sources.remove("0235+164")
     # sources.remove("0316+413")
+    sources = ["2200+420"]
     path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
-    for source in sources[28:]:
+    for source in sources:
         # source = "1622-297"
-        out_dir = "/home/ilya/STACK/all/{}".format(source)
+        out_dir = "/home/ilya/STACK/uvf/all/Q/allEG/{}".format(source)
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
-        for freq in ("u", "q")[:1]:
-            files = glob.glob("/home/ilya/STACK/uvf/all/{}.{}.*.uvf".format(source, freq))
+        for freq in ("u", "q")[1:]:
+            files = glob.glob("/home/ilya/STACK/uvf/all/Q/{}.{}.*.uvf".format(source, freq))
             epochs = sorted([os.path.basename(fn).split(".")[-2] for fn in files])
+            # epochs.remove("2007_06_13")
             for epoch in epochs:
-                # epoch = "2007_01_26"
+                # epoch = "2007_06_13"
                 # epoch = "2006_12_04"
                 # epoch = "2005_09_16"
                 # epoch = "2008_08_06"
                 # epoch = "1995_04_07"
-                uv_fits_path = "/home/ilya/STACK/uvf/all/{}.{}.{}.uvf".format(source, freq, epoch)
-                out_dir = "/home/ilya/STACK/all/{}/{}".format(source, epoch)
+                uv_fits_path = "/home/ilya/STACK/uvf/all/Q/{}.{}.{}.uvf".format(source, freq, epoch)
+                out_dir = "/home/ilya/STACK/uvf/all/Q/allEG/{}/{}".format(source, epoch)
                 if not os.path.exists(out_dir):
                     os.mkdir(out_dir)
 
                 automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
                                           n_comps_terminate=20,
                                           core_elliptic=True,
-                                          mapsize_clean=(512, 0.1))
+                                          mapsize_clean=(512, 0.03),
+                                          ra_range_plot=[-2, 2],
+                                          dec_range_plot=[-6, 2])
                 # Stoppers define when to stop adding components to model
                 stoppers = [TotalFluxStopping(),
                             AddedComponentFluxLessRMSStopping(mode="or"),
@@ -1216,9 +1239,9 @@ if __name__ == '__main__':
                 # located far away from source.)
                 filters = [SmallSizedComponentsModelFilter(),
                            ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
-                           NegativeFluxComponentModelFilter(),
+                           NegativeFluxComponentModelFilter()]
                            # ToElongatedCoreModelFilter()]
-                           OverlappingComponentsModelFilter()]
+                           # OverlappingComponentsModelFilter()]
 
                 # Additionally filter too small, too distant components
                 for fn in files[::-1]:

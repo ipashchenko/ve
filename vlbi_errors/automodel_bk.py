@@ -34,7 +34,7 @@ def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=Fals
     # Stoppers define when to stop adding components to model
     stoppers = [AddedComponentFluxLessRMSStopping(mode="or"),
                 AddedComponentFluxLessRMSFluxStopping(),
-                AddedTooDistantComponentStopping(mode="or"),
+                AddedTooDistantComponentStopping(n_rms=2, mode="or"),
                 AddedTooSmallComponentStopping(),
                 AddedNegativeFluxComponentStopping(),
                 # for 0430 exclude it

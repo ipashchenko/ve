@@ -489,8 +489,30 @@ def component_joiner_serial(difmap_model_file, beam_size, freq_hz,
     return joined
 
 
+def remove_furthest_component(difmap_model_file, freq_hz, outname=None):
+    comps = import_difmap_model(difmap_model_file)
+    # Sort by distance
+    furthest_comp = sorted(comps, key=lambda x: np.hypot(x.p[1], x.p[2]))[-1]
+
+    new_comps = [comp for comp in comps if comp != furthest_comp]
+    if outname is None:
+        outname = difmap_model_file
+    export_difmap_model(new_comps, outname, freq_hz)
+    return True
 
 
+def remove_small_component(difmap_model_file, freq_hz, size_limit=0.01,
+                           outname=None):
+    comps = import_difmap_model(difmap_model_file)
+    small_comps = [comp for comp in comps if (len(comp.p) ==4 and
+                                              comp.p[3] < size_limit)]
+    if not small_comps:
+        return False
+    new_comps = [comp for comp in comps if comp not in small_comps]
+    if outname is None:
+        outname = difmap_model_file
+    export_difmap_model(new_comps, outname, freq_hz)
+    return True
 
 # FIXME: Check if it works to ``DeltaComponent``!
 def transform_component(difmap_model_file, new_type, freq_hz, comp_id=0,

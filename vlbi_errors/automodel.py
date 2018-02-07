@@ -55,14 +55,14 @@ class StoppingIterationsCriterion(object):
     def is_applicable(self):
         raise NotImplementedError
 
-    def do_stop(self, new_file):
+    def do_stop(self, info):
         """
-        :param new_file:
-            Path to current difmap model file.
+        :param info:
+            Dictionary with results of current iteration.
         :return:
             Boolean - is criterion fulfilled?
         """
-        self.files.append(new_file)
+        self.files.append(info["model_file"])
         if self.is_applicable():
             return self.check_criterion()
         else:
@@ -70,6 +70,30 @@ class StoppingIterationsCriterion(object):
 
     def clear(self):
         self.files = list()
+
+
+class RChiSquaredStopping(StoppingIterationsCriterion):
+    """
+    Stop iterations when reduced chi-squared doesn't decreasing significantly
+    anymore
+    """
+    def __init__(self, mode="or", delta_min=0.1):
+        super(RChiSquaredStopping, self).__init__(mode=mode)
+        self.delta_min = delta_min
+        self.rchisquared = list()
+
+    def is_applicable(self):
+        return len(self.files) > 1
+
+    def check_criterion(self):
+        if self.rchisquared[-1] - self.rchisquared[-2] < self.delta_min:
+            return True
+        else:
+            return False
+
+    def do_stop(self, info):
+        self.rchisquared.append(info["rchisquared"])
+        super(RChiSquaredStopping, self).do_stop(info)
 
 
 class AddedOverlappingComponentStopping(StoppingIterationsCriterion):
@@ -928,7 +952,7 @@ class AutoModeler(object):
                                 os.path.join(self.out_dir, 'init_{}.mdl'.format(self.counter)),
                                 self.freq_hz)
 
-        modelfit_difmap(self.uv_fits_fname, 'init_{}.mdl'.format(self.counter),
+        rchisq = modelfit_difmap(self.uv_fits_fname, 'init_{}.mdl'.format(self.counter),
                         '{}_{}.mdl'.format(self._mdl_prefix, self.counter),
                         path=self.uv_fits_dir, mdl_path=self.out_dir,
                         out_path=self.out_dir, niter=self.niter_difmap,
@@ -955,14 +979,15 @@ class AutoModeler(object):
         model.add_components(*comps)
         self.model = model
 
-        return os.path.join(self.out_dir,
-                            '{}_{}.mdl'.format(self._mdl_prefix, self.counter))
+        result = {"rchisquared": rchisq, "model_file": os.path.join(self.out_dir, '{}_{}.mdl'.format(self._mdl_prefix, self.counter))}
+
+        return result
 
     def clear(self):
         self.counter = 0
         self.fitted_model_paths = list()
 
-    def run(self, stoppers, start_model_fname=None):
+    def run(self, stoppers, start_model_fname=None, refit_start_model=True):
         stoppers = list(stoppers)
         stoppers.append(NLastJustStop(self.n_comps_terminate))
         for stopper in stoppers:
@@ -972,16 +997,37 @@ class AutoModeler(object):
                 stopper.set_uvdata(self.uvdata)
 
         if start_model_fname is not None:
-            mdl_dir, mdl_fname = os.path.split(start_model_fname)
-            print(Style.DIM + "Using model from {} as starting point".format(mdl_fname) +
+            print(Style.DIM + "Using model from {} as starting point".format(start_model_fname) +
                   Style.RESET_ALL)
-            comps = import_difmap_model(mdl_fname, mdl_dir)
-            model = Model(stokes=self.stokes)
-            model.add_components(*comps)
-            self.model = model
+
+            if refit_start_model:
+                comps = import_difmap_model(start_model_fname)
+                self.counter += len(comps)
+                modelfit_difmap(self.uv_fits_fname, start_model_fname,
+                                '{}_{}.mdl'.format(self._mdl_prefix,
+                                                   self.counter),
+                                path=self.uv_fits_dir, mdl_path=self.out_dir,
+                                out_path=self.out_dir, niter=self.niter_difmap,
+                                stokes=self.stokes,
+                                show_difmap_output=self.show_difmap_output_modelfit)
+                # Update model and plot results of current iteration
+                model = Model(stokes='I')
+                comps = import_difmap_model(
+                    '{}_{}.mdl'.format(self._mdl_prefix, self.counter),
+                    self.out_dir)
+                model.add_components(*comps)
+                self.model = model
+
+            else:
+                comps = import_difmap_model(start_model_fname)
+                model = Model(stokes=self.stokes)
+                model.add_components(*comps)
+                self.model = model
 
         while True:
-            new_mdl_file = self.do_iteration()
+            result = self.do_iteration()
+            new_mdl_file = result["model_file"]
+            info = {"rchisquared": result["rchisquared"]}
             if new_mdl_file not in self.fitted_model_paths:
                 self.fitted_model_paths.append(new_mdl_file)
             stoppers_and = [stopper for stopper in stoppers if
@@ -990,11 +1036,11 @@ class AutoModeler(object):
                            stopper.mode == "or"]
             stoppers_while = [stopper for stopper in stoppers if
                               stopper.mode == "while"]
-            decisions_and = [stopper.do_stop(new_mdl_file) for stopper in
+            decisions_and = [stopper.do_stop(result) for stopper in
                              stoppers_and]
-            decisions_or = [stopper.do_stop(new_mdl_file) for stopper in
+            decisions_or = [stopper.do_stop(result) for stopper in
                             stoppers_or]
-            decisions_while = [not stopper.do_stop(new_mdl_file) for stopper in
+            decisions_while = [not stopper.do_stop(result) for stopper in
                                stoppers_while]
             if np.any(decisions_while):
                 continue
@@ -1197,8 +1243,8 @@ if __name__ == '__main__':
             files = glob.glob("/home/ilya/STACK/uvf/all/Q/{}.{}.*.uvf".format(source, freq))
             epochs = sorted([os.path.basename(fn).split(".")[-2] for fn in files])
             # epochs.remove("2007_06_13")
-            for epoch in epochs:
-                # epoch = "2007_06_13"
+            for epoch in epochs[:1]:
+                epoch = "2007_06_13"
                 # epoch = "2006_12_04"
                 # epoch = "2005_09_16"
                 # epoch = "2008_08_06"
@@ -1216,15 +1262,16 @@ if __name__ == '__main__':
                                           dec_range_plot=[-6, 2])
                 # Stoppers define when to stop adding components to model
                 stoppers = [TotalFluxStopping(),
-                            AddedComponentFluxLessRMSStopping(mode="or"),
+                            AddedComponentFluxLessRMSStopping(),
                             AddedComponentFluxLessRMSFluxStopping(),
                             AddedTooDistantComponentStopping(mode="or"),
-                            AddedTooSmallComponentStopping(),
+                            AddedTooSmallComponentStopping(mode="and"),
                             AddedNegativeFluxComponentStopping(),
                             # for 0430 exclude it
                             # AddedOverlappingComponentStopping(),
                             NLastDifferesFromLast(),
-                            NLastDifferencesAreSmall()]
+                            NLastDifferencesAreSmall(),
+                            RChiSquaredStopping()]
                             # Keep iterating while this stopper fires
                             # TotalFluxStopping(rel_threshold=0.2, mode="while")]
                 # Selectors choose best model using different heuristics

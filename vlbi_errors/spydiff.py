@@ -556,6 +556,8 @@ def transform_component(difmap_model_file, new_type, freq_hz, comp_id=0,
     export_difmap_model(new_comps, outname, freq_hz)
 
 
+# TODO: Add iteration till chi-squared is increasing for some number of
+# iterations
 def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
                     path=None, mdl_path=None, out_path=None,
                     show_difmap_output=False):
@@ -587,6 +589,9 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
     if out_path is None:
         out_path = os.getcwd()
 
+    # Remove old log-file if any
+    os.unlink(os.path.join(os.getcwd(), "difmap.log"))
+
     stamp = datetime.datetime.now()
     command_file = os.path.join(out_path, "difmap_commands_{}".format(stamp.isoformat()))
     # difmapout = open("difmap_commands", "w")
@@ -604,6 +609,14 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
     if not show_difmap_output:
         shell_command += " >/dev/null"
     os.system(shell_command)
+
+    # Get final reduced chi_squared
+    log = os.path.join(os.getcwd(), "difmap.log")
+    with open(log, "r") as fo:
+        lines = fo.readlines()
+    line = [line for line in lines if "Reduced Chi-squared=" in line][-1]
+    rchisq = float(line.split(" ")[4].split("=")[1])
+    return rchisq
 
 
 def make_map_with_core_at_zero(mdl_file, uv_fits_fname, mapsize_clean,

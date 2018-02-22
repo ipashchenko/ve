@@ -31,6 +31,7 @@ class UVData(object):
     def __init__(self, fname, mode='readonly'):
         self.fname = fname
         self.hdulist = pf.open(fname, mode=mode, save_backup=True)
+        self.hdulist.verify('silentfix')
         self.hdu = self.hdulist[0]
         self._stokes_dict = {'RR': 0, 'LL': 1, 'RL': 2, 'LR': 3}
         self.learn_data_structure(self.hdu)
@@ -1165,7 +1166,8 @@ class UVData(object):
         """
         self.uvdata *= scale
 
-    # TODO: use different stokes and symmetry!
+    # FIXME: This is shitty method - make it more comfortable (AIPS style args
+    # is shit)
     def uv_coverage(self, antennas=None, baselines=None, sym='.k',
                     start_time=None, stop_time=None):
         """
@@ -1863,6 +1865,8 @@ class UVData(object):
 
 if __name__ == '__main__':
     import os
-    data_dir = '/home/ilya/code/vlbi_errors/bin'
-    uvdata = UVData(os.path.join(data_dir, '0125+487_L.uvf_difmap'))
-    noises = uvdata.noise(split_scans=True, use_V=False, average_freq=False)
+    data_dir = '/home/ilya/data/sashaplavin'
+    uvdata = UVData(os.path.join(data_dir,
+                                 'J0345+1453_X_2007_06_01_sok_vis.fits'))
+    uvdata.uvplot()
+

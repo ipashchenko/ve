@@ -674,6 +674,9 @@ class OverlappingComponentsModelFilter(ModelFilter):
             return False
 
 
+# TODO: Suggesting component by fitting residuals in uv-plane with difmap
+# TDOD: Determine image region with image convolved with some gaussian - to
+# catch extended regions
 class AutoModeler(object):
     def __init__(self, uv_fits_path, out_dir, path_to_script,
                  mapsize_clean=None, core_elliptic=False,
@@ -946,7 +949,7 @@ class AutoModeler(object):
                         show_difmap_output=self.show_difmap_output_modelfit)
 
         # Checks that alter model files
-        # self.check_first_elliptic()
+        self.check_first_elliptic()
         if self.merge_close_components:
             self.check_merging()
 

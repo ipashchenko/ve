@@ -28,6 +28,7 @@ matplotlib.rcParams['axes.labelsize'] = label_size
 matplotlib.rcParams['font.size'] = label_size
 matplotlib.rcParams['legend.fontsize'] = label_size
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import tarfile
 from colorama import Fore, Back, Style
 
@@ -80,19 +81,20 @@ class RChiSquaredStopping(StoppingIterationsCriterion):
     def __init__(self, mode="or", delta_min=0.1):
         super(RChiSquaredStopping, self).__init__(mode=mode)
         self.delta_min = delta_min
-        self.rchisquared = list()
+        self.values = list()
 
     def is_applicable(self):
         return len(self.files) > 1
 
     def check_criterion(self):
-        if self.rchisquared[-1] - self.rchisquared[-2] < self.delta_min:
+        if self.values[-1] - self.values[-2] < self.delta_min:
             return True
         else:
             return False
 
     def do_stop(self, info):
-        self.rchisquared.append(info["rchisquared"])
+        self.values.append(info["values"])
+        print("ChiSquared = {}".format(info["values"]))
         super(RChiSquaredStopping, self).do_stop(info)
 
 
@@ -368,8 +370,8 @@ class NLastDifferesFromLast(NLast):
     changed.
     """
     def __init__(self, n_check=5, frac_flux_min=0.002, delta_flux_min=0.001,
-                 delta_size_min=0.001):
-        super(NLastDifferesFromLast, self).__init__(n_check)
+                 delta_size_min=0.001, mode="and"):
+        super(NLastDifferesFromLast, self).__init__(n_check, mode=mode)
         self.flux_min = None
         self.delta_flux_min = delta_flux_min
         self.frac_flux_min = frac_flux_min
@@ -399,8 +401,8 @@ class NLastDifferencesAreSmall(NLast):
     enough.
     """
     def __init__(self, n_check=5, frac_flux_min=0.002, delta_flux_min=0.001,
-                 delta_size_min=0.001):
-        super(NLastDifferencesAreSmall, self).__init__(n_check)
+                 delta_size_min=0.001, mode="and"):
+        super(NLastDifferencesAreSmall, self).__init__(n_check, mode=mode)
         self.flux_min = None
         self.delta_flux_min = delta_flux_min
         self.frac_flux_min = frac_flux_min
@@ -679,8 +681,7 @@ class AutoModeler(object):
                  niter_difmap=100, show_difmap_output_clean=False,
                  show_difmap_output_modelfit=False,
                  ra_range_plot=None, dec_range_plot=None,
-                 merge_close_components=False, source=None, freq=None,
-                 epoch=None):
+                 merge_close_components=False):
         self.uv_fits_path = uv_fits_path
         self.uv_fits_dir, self.uv_fits_fname = os.path.split(uv_fits_path)
         if out_dir is None:
@@ -698,15 +699,6 @@ class AutoModeler(object):
         else:
             self.core_type = 'cg'
 
-        if source is None:
-            self.source = self.uv_fits_fname.split(".")[0]
-        else:
-            self.source = source
-        if freq is None:
-            self.freq = self.uv_fits_fname.split(".")[1]
-        else:
-            self.freq = freq
-
         if mapsize_clean is None:
             if self.freq == 'u':
                 self.mapsize_clean = (512, 0.1)
@@ -717,10 +709,6 @@ class AutoModeler(object):
         else:
             self.mapsize_clean = mapsize_clean
 
-        if epoch is None:
-            self.epoch = self.uv_fits_fname.split(".")[2]
-        else:
-            self.epoch = None
         self.uvdata = UVData(uv_fits_path)
 
         self.choose_stokes()
@@ -736,7 +724,7 @@ class AutoModeler(object):
         self._ccimage = None
         self._beam = None
         # Path to original CLEAN image
-        self._ccimage_path = os.path.join(self.out_dir, 'image_cc_orig_{}_{}_{}.fits'.format(self.source, self.epoch, self.freq))
+        self._ccimage_path = os.path.join(self.out_dir, 'image_cc_orig.fits')
         # Path to image with residuals. It will be overrided each iteration
         self._ccimage_residuals_path = os.path.join(self.out_dir, 'image_cc_residuals.fits')
         # Total flux of all CC components in CLEAN model of the original uv data
@@ -747,9 +735,7 @@ class AutoModeler(object):
         self.counter = 0
         # Instance of ``Model`` class that represents current model
         self.model = None
-        self._mdl_prefix = '{}_{}_{}_{}_fitted'.format(self.source, self.freq,
-                                                       self.epoch,
-                                                       self.core_type)
+        self._mdl_prefix = '{}_fitted'.format(self.core_type)
         self.fitted_model_paths = list()
         self.dec_range_plot = dec_range_plot
         self.ra_range_plot = ra_range_plot
@@ -979,7 +965,7 @@ class AutoModeler(object):
         model.add_components(*comps)
         self.model = model
 
-        result = {"rchisquared": rchisq, "model_file": os.path.join(self.out_dir, '{}_{}.mdl'.format(self._mdl_prefix, self.counter))}
+        result = {"values": rchisq, "model_file": os.path.join(self.out_dir, '{}_{}.mdl'.format(self._mdl_prefix, self.counter))}
 
         return result
 
@@ -1027,7 +1013,7 @@ class AutoModeler(object):
         while True:
             result = self.do_iteration()
             new_mdl_file = result["model_file"]
-            info = {"rchisquared": result["rchisquared"]}
+            # info = {"values": result["values"]}
             if new_mdl_file not in self.fitted_model_paths:
                 self.fitted_model_paths.append(new_mdl_file)
             stoppers_and = [stopper for stopper in stoppers if
@@ -1072,29 +1058,81 @@ class AutoModeler(object):
         # self.archive_models()
         # self.clean()
 
-    def plot_results(self, id_best):
+    def select_best(self, selectors, filters):
+        # Select best model using custom selectors
+        files = self.fitted_model_paths
+        id_best = max(selector.select(files) for selector in selectors)
+        files = files[:id_best+1]
+
+        # Additionally filter
+        for fn in files[::-1]:
+            if np.any([flt.do_filter(fn) for flt in filters]):
+                id_best -= 1
+            else:
+                break
+        print("Best model is {}".format(files[id_best]))
+        best_model = files[id_best]
+        return best_model
+
+    def plot_results(self, id_best=None, best_model=None, stoppers_dict=None):
+        """
+        Plot picture with values of core parameter and other statistics
+        collected in specified stoppers versus number of components in model.
+
+        :param id_best: (optional)
+            ID of the best model. If ``None`` then use ``best_model`` to specify
+            it. (default: ``None``)
+        :param best_model: (optional)
+            Path to the best model. If ``None`` then use ``id_best`` to specify
+            it. (default: ``None``)
+        :param stoppers_dict: (optional)
+            Dictionary with keys - names (e.g. "ChiSquared") and values -
+            stopper that collect some statistics during modelling (e.g.
+            ``RChiSquaredStopping``) - that has ``values`` container attribute.
+        """
+
+        if id_best is None:
+            if best_model is None:
+                raise Exception("Specify id_best or best_model argument")
+            else:
+                id_best = self.fitted_model_paths.index(best_model)
+
+        if stoppers_dict is not None:
+            n_additional = len(stoppers_dict)
+        else:
+            n_additional = 0
+
         cores = list()
         for file_ in self.fitted_model_paths:
             core = import_difmap_model(file_)[0]
             cores.append(core)
         if len(core) == 4:
-            fig, axes = plt.subplots(2, 1, sharex=True)
+            fig, axes = plt.subplots(2+n_additional, 1, sharex=True)
             axes[0].plot(range(1, len(cores) + 1),
                          [comp.p[0] for comp in cores])
             axes[0].plot(range(1, len(cores) + 1),
                          [comp.p[0] for comp in cores], '.k')
-            axes[0].set_ylabel("Flux, [Jy]")
             axes[1].plot(range(1, len(cores) + 1),
                          [comp.p[3] for comp in cores])
             axes[1].plot(range(1, len(cores) + 1),
                          [comp.p[3] for comp in cores],
                          '.k')
-            axes[1].set_xlabel("Number of components")
+            for i, (name, stopper) in zip(range(n_additional),
+                                          stoppers_dict.items()):
+                axes[i+2].plot(range(2, len(cores)+1), stopper.values[1:])
+                axes[i+2].plot(range(2, len(cores)+1), stopper.values[1:], '.k')
+                axes[i+2].set_ylabel(name)
+                axes[i+2].axvline(id_best+1, color='r')
+
+            # On the last axis
+            axes[1+n_additional].set_xlabel("Number of components")
+            axes[1+n_additional].xaxis.set_major_locator(MaxNLocator(integer=True))
+            axes[0].set_ylabel("Flux, [Jy]")
             axes[1].set_ylabel("Size, [mas]")
-            axes[0].axvline(id_best+1)
-            axes[1].axvline(id_best+1)
+            axes[0].axvline(id_best+1, color='r')
+            axes[1].axvline(id_best+1, color='r')
         elif len(core) == 6:
-            fig, axes = plt.subplots(3, 1, sharex=True)
+            fig, axes = plt.subplots(3+n_additional, 1, sharex=True)
             axes[0].plot(range(1, len(cores) + 1),
                          [comp.p[0] for comp in cores])
             axes[0].plot(range(1, len(cores) + 1),
@@ -1111,10 +1149,19 @@ class AutoModeler(object):
             axes[2].plot(range(1, len(cores) + 1),
                          [comp.p[4] for comp in cores], '.k')
             axes[2].set_ylabel("e")
-            axes[2].set_xlabel("Number of components")
-            axes[0].axvline(id_best+1)
-            axes[1].axvline(id_best+1)
-            axes[2].axvline(id_best+1)
+
+            for i, (name, stopper) in zip(range(n_additional),
+                                          stoppers_dict.items()):
+                axes[i+3].plot(range(2, len(cores)+1), stopper.values[1:])
+                axes[i+3].plot(range(2, len(cores)+1), stopper.values[1:], '.k')
+                axes[i+3].set_ylabel(name)
+                axes[i+3].axvline(id_best+1, color='r')
+
+            axes[2+n_additional].set_xlabel("Number of components")
+            axes[2+n_additional].xaxis.set_major_locator(MaxNLocator(integer=True))
+            axes[0].axvline(id_best+1, color='r')
+            axes[1].axvline(id_best+1, color='r')
+            axes[2].axvline(id_best+1, color='r')
 
         fig.savefig(os.path.join(self.out_dir, '{}_core_parameters_vs_ncomps.png'.format(self._mdl_prefix)),
                     bbox_inches='tight', dpi=200)
@@ -1127,7 +1174,7 @@ class AutoModeler(object):
                   '.k')
         axes.set_ylabel("Total Flux, [Jy]")
         axes.set_xlabel("Number of components")
-        axes.axvline(id_best+1)
+        axes.axvline(id_best+1, color='r')
         axes.axhline(self.total_flux)
         fig.savefig(os.path.join(self.out_dir, '{}_total_flux_vs_ncomps.png'.format(self._mdl_prefix)),
                     bbox_inches='tight', dpi=200)
@@ -1223,89 +1270,58 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
 
 
 if __name__ == '__main__':
-    # sources = ["2251+158", "2230+114", "2223-052", "2200+420"]
-    # import pandas as pd
-    # source_file = "/home/ilya/Dropbox/stack/src_tab.dat"
-    # df = df = pd.read_table(source_file, names=["source", "N43", "N15"],
-    #                         sep=r"\s*", skiprows=1)
-    # sources = list(df.source)
-    # sources.remove("0219+428")
-    # sources.remove("0235+164")
-    # sources.remove("0316+413")
-    sources = ["2200+420"]
-    path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
-    for source in sources:
-        # source = "1622-297"
-        out_dir = "/home/ilya/STACK/uvf/all/Q/allEG/{}".format(source)
+    import glob
+    data_dir = "/home/ilya/data/sashaplavin"
+    uv_fits_paths = glob.glob(os.path.join(data_dir, "*_S_*"))
+    # uv_fits_path = os.path.join(data_dir, "J0151+2744_S_2007_03_01_sok_vis.fits")
+
+    for uv_fits_path in uv_fits_paths:
+        # Create directory for current source
+        source = os.path.split(uv_fits_path)[-1].split("_")[0]
+        out_dir = "/home/ilya/data/sashaplavin/results/eg/{}".format(source)
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
-        for freq in ("u", "q")[1:]:
-            files = glob.glob("/home/ilya/STACK/uvf/all/Q/{}.{}.*.uvf".format(source, freq))
-            epochs = sorted([os.path.basename(fn).split(".")[-2] for fn in files])
-            # epochs.remove("2007_06_13")
-            for epoch in epochs[:1]:
-                epoch = "2007_06_13"
-                # epoch = "2006_12_04"
-                # epoch = "2005_09_16"
-                # epoch = "2008_08_06"
-                # epoch = "1995_04_07"
-                uv_fits_path = "/home/ilya/STACK/uvf/all/Q/{}.{}.{}.uvf".format(source, freq, epoch)
-                out_dir = "/home/ilya/STACK/uvf/all/Q/allEG/{}/{}".format(source, epoch)
-                if not os.path.exists(out_dir):
-                    os.mkdir(out_dir)
 
-                automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
-                                          n_comps_terminate=20,
-                                          core_elliptic=True,
-                                          mapsize_clean=(512, 0.03),
-                                          ra_range_plot=[-2, 2],
-                                          dec_range_plot=[-6, 2])
-                # Stoppers define when to stop adding components to model
-                stoppers = [TotalFluxStopping(),
-                            AddedComponentFluxLessRMSStopping(),
-                            AddedComponentFluxLessRMSFluxStopping(),
-                            AddedTooDistantComponentStopping(mode="or"),
-                            AddedTooSmallComponentStopping(mode="and"),
-                            AddedNegativeFluxComponentStopping(),
-                            # for 0430 exclude it
-                            # AddedOverlappingComponentStopping(),
-                            NLastDifferesFromLast(),
-                            NLastDifferencesAreSmall(),
-                            RChiSquaredStopping()]
-                            # Keep iterating while this stopper fires
-                            # TotalFluxStopping(rel_threshold=0.2, mode="while")]
-                # Selectors choose best model using different heuristics
-                selectors = [FluxBasedModelSelector(delta_flux=0.001),
-                             SizeBasedModelSelector(delta_size=0.001)]
+        path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
 
-                # Run number of iterations that is defined by stoppers
-                automodeler.run(stoppers)
+        automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
+                                  n_comps_terminate=20,
+                                  core_elliptic=True,
+                                  mapsize_clean=(1024, 0.5),
+                                  ra_range_plot=None,
+                                  dec_range_plot=None)
+        # Stoppers define when to stop adding components to model
+        rchsq_stopping = RChiSquaredStopping(mode="or")
+        stoppers = [TotalFluxStopping(),
+                    AddedComponentFluxLessRMSStopping(mode="or"),
+                    AddedComponentFluxLessRMSFluxStopping(mode="or"),
+                    AddedTooDistantComponentStopping(mode="or"),
+                    # AddedTooSmallComponentStopping(mode="and"),
+                    AddedNegativeFluxComponentStopping(mode="or"),
+                    # for 0430 exclude it
+                    # AddedOverlappingComponentStopping(),
+                    NLastDifferesFromLast(mode="and"),
+                    NLastDifferencesAreSmall(mode="and"),
+                    rchsq_stopping]
+                    # Keep iterating while this stopper fires
+                    # TotalFluxStopping(rel_threshold=0.2, mode="while")]
+        # Selectors choose best model using different heuristics
+        selectors = [FluxBasedModelSelector(delta_flux=0.001),
+                     SizeBasedModelSelector(delta_size=0.001)]
 
-                # Select best model using custom selectors
-                files = automodeler.fitted_model_paths
-                id_best = max(selector.select(files) for selector in selectors)
-                files = files[:id_best+1]
+        # Filters additionally remove complex models with non-physical
+        # components (e.g. too small faint component or component
+        # located far away from source.)
+        filters = [SmallSizedComponentsModelFilter(),
+                   ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
+                   NegativeFluxComponentModelFilter()]
+                   # ToElongatedCoreModelFilter()]
+                   # OverlappingComponentsModelFilter()]
 
-                # Filters additionally remove complex models with non-physical
-                # components (e.g. too small faint component or component
-                # located far away from source.)
-                filters = [SmallSizedComponentsModelFilter(),
-                           ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
-                           NegativeFluxComponentModelFilter()]
-                           # ToElongatedCoreModelFilter()]
-                           # OverlappingComponentsModelFilter()]
-
-                # Additionally filter too small, too distant components
-                for fn in files[::-1]:
-                    if np.any([flt.do_filter(fn) for flt in filters]):
-                        id_best -= 1
-                    else:
-                        break
-                print("Best model is {}".format(files[id_best]))
-
-                best_model = files[id_best]
-
-                automodeler.plot_results(id_best)
-                # automodeler.archive_images()
-                # automodeler.archive_models()
-                # automodeler.clean()
+        automodeler.run(stoppers)
+        best_model = automodeler.select_best(selectors, filters)
+        automodeler.plot_results(best_model=best_model,
+                                 stoppers_dict={"RChiSQ": rchsq_stopping})
+        # automodeler.archive_images()
+        # automodeler.archive_models()
+        # automodeler.clean()

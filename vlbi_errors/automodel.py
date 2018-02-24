@@ -675,8 +675,9 @@ class OverlappingComponentsModelFilter(ModelFilter):
 
 
 # TODO: Suggesting component by fitting residuals in uv-plane with difmap
-# TDOD: Determine image region with image convolved with some gaussian - to
+# TODO: Determine image region with image convolved with some gaussian - to
 # catch extended regions
+# TODO: Find core using Sasha's algorithm when core is not first
 class AutoModeler(object):
     def __init__(self, uv_fits_path, out_dir, path_to_script,
                  mapsize_clean=None, core_elliptic=False,
@@ -703,12 +704,7 @@ class AutoModeler(object):
             self.core_type = 'cg'
 
         if mapsize_clean is None:
-            if self.freq == 'u':
-                self.mapsize_clean = (512, 0.1)
-            elif self.freq == 'q':
-                self.mapsize_clean = (512, 0.03)
-            else:
-                raise Exception("Indicate mapsize_clean!")
+            raise Exception("Indicate mapsize_clean!")
         else:
             self.mapsize_clean = mapsize_clean
 
@@ -895,29 +891,6 @@ class AutoModeler(object):
                                 show_difmap_output=self.show_difmap_output_modelfit)
                 self.counter -= 1
 
-    # FIXME: Incorporate this into self.run
-    def check_small(self):
-        # Check if there any small gaussian component (not the last one!) that
-        # can be removed
-        if self.counter > 1:
-            print(Fore.GREEN + "Checking if there any small CG components!" + Style.RESET_ALL)
-            model_2check = os.path.join(self.out_dir,
-                                        '{}_{}.mdl'.format(self._mdl_prefix,
-                                                           self.counter))
-            joined = component_joiner_serial(model_2check, self.beam, self.freq_hz)
-            if joined:
-                print(Fore.RED + "Merged components" + Style.RESET_ALL)
-                modelfit_difmap(self.uv_fits_fname,
-                                '{}_{}.mdl'.format(self._mdl_prefix,
-                                                   self.counter),
-                                '{}_{}.mdl'.format(self._mdl_prefix,
-                                                   self.counter-1),
-                                path=self.uv_fits_dir, mdl_path=self.out_dir,
-                                out_path=self.out_dir,
-                                niter=self.niter_difmap, stokes=self.stokes,
-                                show_difmap_output=self.show_difmap_output_modelfit)
-                self.counter -= 1
-
     def do_iteration(self):
         self.counter += 1
         self.create_residuals(self.model)
@@ -1031,9 +1004,17 @@ class AutoModeler(object):
                             stoppers_or]
             decisions_while = [not stopper.do_stop(result) for stopper in
                                stoppers_while]
-            if np.any(decisions_while):
-                continue
+            # Thus go at least until e.g. model flux will be close to total flux
+            if decisions_while:
+                if np.any(~np.array(decisions_while)):
+                    continue
             # decision = decisions_and + decisions_or
+            # This fixes absence of decisions of one type (``np.alltrue([]) =
+            # True``).
+            if not decisions_and:
+                decisions_and = [False]
+            if not decisions_or:
+                decisions_or = [False]
             do_stop = np.alltrue(decisions_and) or np.any(decisions_or)
             print(Back.GREEN + "Stopping criteria (AND):" +
                   Style.RESET_ALL)
@@ -1281,7 +1262,7 @@ if __name__ == '__main__':
     for uv_fits_path in uv_fits_paths:
         # Create directory for current source
         source = os.path.split(uv_fits_path)[-1].split("_")[0]
-        out_dir = "/home/ilya/data/sashaplavin/results/eg/{}".format(source)
+        out_dir = "/home/ilya/data/sashaplavin/results_s_v2/eg/{}".format(source)
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
 
@@ -1290,21 +1271,20 @@ if __name__ == '__main__':
         automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
                                   n_comps_terminate=20,
                                   core_elliptic=True,
-                                  mapsize_clean=(1024, 0.5),
+                                  mapsize_clean=(1024, 0.75),
                                   ra_range_plot=None,
                                   dec_range_plot=None)
         # Stoppers define when to stop adding components to model
         rchsq_stopping = RChiSquaredStopping(mode="or")
-        stoppers = [TotalFluxStopping(),
-                    AddedComponentFluxLessRMSStopping(mode="or"),
-                    AddedComponentFluxLessRMSFluxStopping(mode="or"),
+        stoppers = [AddedComponentFluxLessRMSStopping(mode="or"),
+                    # AddedComponentFluxLessRMSFluxStopping(mode="or"),
                     AddedTooDistantComponentStopping(mode="or"),
                     # AddedTooSmallComponentStopping(mode="and"),
                     AddedNegativeFluxComponentStopping(mode="or"),
                     # for 0430 exclude it
                     # AddedOverlappingComponentStopping(),
-                    NLastDifferesFromLast(mode="and"),
-                    NLastDifferencesAreSmall(mode="and"),
+                    NLastDifferesFromLast(mode="or"),
+                    NLastDifferencesAreSmall(mode="or"),
                     rchsq_stopping]
                     # Keep iterating while this stopper fires
                     # TotalFluxStopping(rel_threshold=0.2, mode="while")]

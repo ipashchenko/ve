@@ -590,11 +590,13 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
         out_path = os.getcwd()
 
     # Remove old log-file if any
-    os.unlink(os.path.join(os.getcwd(), "difmap.log"))
+    try:
+        os.unlink(os.path.join(os.getcwd(), "difmap.log"))
+    except OSError:
+        pass
 
     stamp = datetime.datetime.now()
     command_file = os.path.join(out_path, "difmap_commands_{}".format(stamp.isoformat()))
-    # difmapout = open("difmap_commands", "w")
     difmapout = open(command_file, "w")
     difmapout.write("observe " + os.path.join(path, fname) + "\n")
     difmapout.write("select " + stokes + "\n")

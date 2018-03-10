@@ -35,37 +35,40 @@ def convert_to_single_number(file_path, data_dir='/home/ilya/Dropbox/silke'):
                     of.write("{} {} {}".format(param, orig_value, std))
                     of.write("\n")
 
-txt_file_dir = '/home/ilya/Dropbox/silke'
-out_files = glob.glob(os.path.join(txt_file_dir, 'errors_*.dml'))
 
-# Mass download uv-data for our epochs
-# original_dfm_models = glob.glob(os.path.join(data_dir, '*us'))
+txt_file_dir = '/home/ilya/Dropbox/silke'
+data_dir = '/home/ilya/silke/1413'
+out_files = glob.glob(os.path.join(txt_file_dir, 'errors_*.mod'))
+
+# # Mass download uv-data for our epochs
+# original_dfm_models = glob.glob(os.path.join(data_dir, '*.mod'))
 # for path in original_dfm_models:
 #     fname = os.path.split(path)[-1]
-#     epoch = fname[:-2]
-#     download_mojave_uv_fits('0851+202', epochs=[epoch], download_dir=data_dir)
+#     epoch = fname[:-4]
+#     download_mojave_uv_fits('1413+135', epochs=[epoch], download_dir=data_dir)
 
 
-data_dir = '/home/ilya/silke'
-boot_dir = '/home/ilya/silke/boot'
-txt_file_dir = '/home/ilya/Dropbox/silke'
-original_dfm_models = glob.glob(os.path.join(data_dir, '*us'))
-epochs_ready = glob.glob(os.path.join(txt_file_dir, 'errors_*.png'))
-epochs_ready_ = list()
-epochs_todo = ['1996_12_06']
-for epoch_ready in epochs_ready:
-    dir, fname = os.path.split(epoch_ready)
-    epochs_ready_.append(fname[7:-4])
+boot_dir = '/home/ilya/silke/1413/boot'
+txt_file_dir = '/home/ilya/Dropbox/silke/1413'
+original_dfm_models = glob.glob(os.path.join(data_dir, '*.mod'))
+# epochs_ready = glob.glob(os.path.join(txt_file_dir, 'errors_*.png'))
+# epochs_ready_ = list()
+# epochs_todo = []
+# for epoch_ready in epochs_ready:
+#     dir, fname = os.path.split(epoch_ready)
+#     epochs_ready_.append(fname[7:-4])
+epochs_ready = ['2001_04_01', '2001_01_04', '1998_10_30', '2007_08_09',
+                '1999_01_09', '2002_11_23']
 for path in original_dfm_models:
     fname = os.path.split(path)[-1]
-    epoch = fname[:-2]
+    epoch = fname[:-4]
     print "Processing epoch : {}".format(epoch)
-    if epoch not in epochs_todo:
+    if epoch in epochs_ready:
         print "Skipping epoch {}".format(epoch)
         continue
     original_model_fname = fname
     original_model_path = os.path.join(data_dir, original_model_fname)
-    uv_fits_fname = mojave_uv_fits_fname('0851+202', 'u', epoch)
+    uv_fits_fname = mojave_uv_fits_fname('1413+135', 'u', epoch)
     uv_fits_path = os.path.join(data_dir, uv_fits_fname)
 
     uvdata = UVData(uv_fits_path)
@@ -75,18 +78,19 @@ for path in original_dfm_models:
     except KeyError:
         pass
 
-    out_txt_file = os.path.join(txt_file_dir, 'errors_{}.dml'.format(epoch))
+    out_txt_file = os.path.join(txt_file_dir, 'errors_{}.mod'.format(epoch))
     out_png_file = os.path.join(txt_file_dir, 'errors_{}.png'.format(epoch))
     try:
         bootstrap_uvfits_with_difmap_model(uv_fits_path, original_model_path,
-                                           n_boot=300, boot_dir=boot_dir,
+                                           n_boot=100, boot_dir=boot_dir,
                                            out_txt_file=out_txt_file,
                                            out_plot_file=out_png_file,
-                                           clean_after=True, niter=200)
-    # except IOError:
-    #     with open(os.path.join(txt_file_dir, '{}_io_error.txt'.format(epoch)), 'w'):
-    #         print "IO Error"
-    #     continue
+                                           clean_after=True, niter=200,
+                                           out_rchisq_file=os.path.join(txt_file_dir, "{}_rchisq.dat".format(epoch)))
+    except IOError:
+        with open(os.path.join(txt_file_dir, '{}_io_error.txt'.format(epoch)), 'w'):
+            print "IO Error"
+        continue
     except VerifyError:
         with open(os.path.join(txt_file_dir, '{}_verify_error.txt'.format(epoch)), 'w'):
             print "Verify Error"

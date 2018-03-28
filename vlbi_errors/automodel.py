@@ -709,6 +709,7 @@ class AutoModeler(object):
             self.mapsize_clean = mapsize_clean
 
         self.uvdata = UVData(uv_fits_path)
+        self.uvdata_residuals = UVData(uv_fits_path)
 
         self.choose_stokes()
 
@@ -739,6 +740,15 @@ class AutoModeler(object):
         self.dec_range_plot = dec_range_plot
         self.ra_range_plot = ra_range_plot
         self.merge_close_components = merge_close_components
+        self._init_single_comp_cg = os.path.join(self.out_dir, 'init_single_cg.mdl')
+        cg = CGComponent(1, 0, 0, 0.1)
+        export_difmap_model([cg], self._init_single_comp_cg, self.freq_hz)
+        self._init_single_comp_eg = os.path.join(self.out_dir, 'init_single_eg.mdl')
+        eg = EGComponent(1, 0, 0, 0.1, 1.0, 0.0)
+        export_difmap_model([eg], self._init_single_comp_eg, self.freq_hz)
+
+        # RMS near core before suggesting components
+        self.rms_residuals = None
 
     # @property
     # def files(self):
@@ -781,10 +791,11 @@ class AutoModeler(object):
             uvdata_ = UVData(self.uv_fits_path)
             uvdata_.substitute([model])
             uvdata_residual = self.uvdata - uvdata_
+            self.uvdata_residuals = uvdata_residual
         else:
             print(Style.DIM + "Creating \"residuals\" from original data alone" +
                   Style.RESET_ALL)
-            uvdata_residual = self.uvdata
+            uvdata_residual = self.uvdata_residuals
         uvdata_residual.save(self._uv_residuals_fits_path, rewrite=True)
 
     def suggest_component(self, type='cg', bmaj_nan=0.1):
@@ -807,9 +818,15 @@ class AutoModeler(object):
                      path_to_script=self.path_to_script, outpath=self.out_dir)
 
         image = create_clean_image_from_fits_file(self._ccimage_residuals_path)
-        beam = np.sqrt(image.beam[0] * image.beam[1])
+
         imsize = image.imsize[0]
         mas_in_pix = abs(image.pixsize[0] / mas_to_rad)
+
+        # RMS in core region
+        beam = int(round(self.beam/mas_in_pix))
+        print("imsize = {}, beam={}".format(imsize, beam))
+        self.rms_residuals = np.std(image.image[imsize/2-3*beam: imsize/2+3*beam,
+                                                imsize/2-3*beam: imsize/2+3*beam])
         amp, y, x, bmaj = infer_gaussian(image.image)
         print("Suggested bmaj = {} pixels".format(bmaj))
         x = mas_in_pix * (x - imsize / 2) * np.sign(image.dx)
@@ -830,6 +847,64 @@ class AutoModeler(object):
             raise Exception
 
         print(Style.DIM + "Suggested: {}".format(comp) + Style.RESET_ALL)
+        return comp
+
+    def suggest_component_uv(self, type='cg'):
+        """
+        Suggest single circular gaussian component using self-calibrated uv-data
+        FITS file.
+
+        This fits residuals between UV-data and current model in uv-plane using
+        ``difmap`` with 1 component.
+
+        :param type: (optional)
+            Type of component to suggest. Circular ("cg") or Elliptical ("eg")
+             gaussian. (default: "cg")
+
+        :return:
+            Instance of ``CGComponent``.
+        """
+        print(Style.DIM + "Suggesting component by fitting in UV-plane..." +
+              Style.RESET_ALL)
+
+        # Make last component as new suggested
+        # If not first iteration
+        if self.fitted_model_paths:
+            last_comp = import_difmap_model(self.fitted_model_paths[-1])[-1]
+            print("Using last component as single component for residuals")
+            print("Parameters :", last_comp.p)
+            uvw = self.uvdata_residuals.uvw
+            uv_radius = np.sqrt(uvw[:, 0]**2+uvw[:, 1]**2)
+            amp = np.hypot(self.uvdata_residuals.uvdata.real,
+                           self.uvdata_residuals.uvdata.imag)
+            amp = np.mean(amp[:, :, 0], axis=1)
+            uv_dist = 0.2*np.max(uv_radius)
+            amp = np.median(amp[uv_radius < uv_dist])
+            last_comp.p[0] = amp
+            last_comp.p[1] = 0
+            last_comp.p[2] = 0
+            print("Using amplitude : ", amp)
+            export_difmap_model([last_comp], self._init_single_comp_cg,
+                                self.freq_hz)
+            init_model_file = self._init_single_comp_cg
+        # If first iteration
+        else:
+            if self.core_type == "cg":
+                init_model_file = self._init_single_comp_cg
+            elif self.core_type == "eg":
+                init_model_file = self._init_single_comp_eg
+            else:
+                raise Exception
+
+        modelfit_difmap(self._uv_residuals_fits_path, init_model_file,
+                        init_model_file,
+                        path=self.uv_fits_dir, mdl_path=self.out_dir,
+                        out_path=self.out_dir, niter=self.niter_difmap,
+                        stokes=self.stokes,
+                        show_difmap_output=self.show_difmap_output_modelfit)
+
+        comp = import_difmap_model(init_model_file)[0]
+
         return comp
 
     def check_first_elliptic(self):
@@ -900,6 +975,7 @@ class AutoModeler(object):
             core_type = 'cg'
             # core_type = self.core_type
         comp = self.suggest_component(core_type)
+        # comp = self.suggest_component_uv(core_type)
 
         if self.counter > 1:
             # If this is not first iteration then append component to existing
@@ -1101,12 +1177,13 @@ class AutoModeler(object):
             axes[1].plot(range(1, len(cores) + 1),
                          [comp.p[3] for comp in cores],
                          '.k')
-            for i, (name, stopper) in zip(range(n_additional),
-                                          stoppers_dict.items()):
-                axes[i+2].plot(range(2, len(cores)+1), stopper.values[1:])
-                axes[i+2].plot(range(2, len(cores)+1), stopper.values[1:], '.k')
-                axes[i+2].set_ylabel(name)
-                axes[i+2].axvline(id_best+1, color='r')
+            if stoppers_dict is not None:
+                for i, (name, stopper) in zip(range(n_additional),
+                                              stoppers_dict.items()):
+                    axes[i+2].plot(range(2, len(cores)+1), stopper.values[1:])
+                    axes[i+2].plot(range(2, len(cores)+1), stopper.values[1:], '.k')
+                    axes[i+2].set_ylabel(name)
+                    axes[i+2].axvline(id_best+1, color='r')
 
             # On the last axis
             axes[1+n_additional].set_xlabel("Number of components")
@@ -1134,12 +1211,13 @@ class AutoModeler(object):
                          [comp.p[4] for comp in cores], '.k')
             axes[2].set_ylabel("e")
 
-            for i, (name, stopper) in zip(range(n_additional),
-                                          stoppers_dict.items()):
-                axes[i+3].plot(range(2, len(cores)+1), stopper.values[1:])
-                axes[i+3].plot(range(2, len(cores)+1), stopper.values[1:], '.k')
-                axes[i+3].set_ylabel(name)
-                axes[i+3].axvline(id_best+1, color='r')
+            if stoppers_dict is not None:
+                for i, (name, stopper) in zip(range(n_additional),
+                                              stoppers_dict.items()):
+                    axes[i+3].plot(range(2, len(cores)+1), stopper.values[1:])
+                    axes[i+3].plot(range(2, len(cores)+1), stopper.values[1:], '.k')
+                    axes[i+3].set_ylabel(name)
+                    axes[i+3].axvline(id_best+1, color='r')
 
             axes[2+n_additional].set_xlabel("Number of components")
             axes[2+n_additional].xaxis.set_major_locator(MaxNLocator(integer=True))
@@ -1150,18 +1228,18 @@ class AutoModeler(object):
         fig.savefig(os.path.join(self.out_dir, '{}_core_parameters_vs_ncomps.png'.format(self._mdl_prefix)),
                     bbox_inches='tight', dpi=200)
 
-        fig, axes = plt.subplots(1, 1, sharex=True)
-        axes.plot(range(1, len(cores) + 1), [difmap_model_flux(fn) for
-                                             fn in self.fitted_model_paths])
-        axes.plot(range(1, len(cores) + 1), [difmap_model_flux(fn) for
-                                             fn in self.fitted_model_paths],
-                  '.k')
-        axes.set_ylabel("Total Flux, [Jy]")
-        axes.set_xlabel("Number of components")
-        axes.axvline(id_best+1, color='r')
-        axes.axhline(self.total_flux)
-        fig.savefig(os.path.join(self.out_dir, '{}_total_flux_vs_ncomps.png'.format(self._mdl_prefix)),
-                    bbox_inches='tight', dpi=200)
+        # fig, axes = plt.subplots(1, 1, sharex=True)
+        # axes.plot(range(1, len(cores) + 1), [difmap_model_flux(fn) for
+        #                                      fn in self.fitted_model_paths])
+        # axes.plot(range(1, len(cores) + 1), [difmap_model_flux(fn) for
+        #                                      fn in self.fitted_model_paths],
+        #           '.k')
+        # axes.set_ylabel("Total Flux, [Jy]")
+        # axes.set_xlabel("Number of components")
+        # axes.axvline(id_best+1, color='r')
+        # axes.axhline(self.total_flux)
+        # fig.savefig(os.path.join(self.out_dir, '{}_total_flux_vs_ncomps.png'.format(self._mdl_prefix)),
+        #             bbox_inches='tight', dpi=200)
 
     def archive_models(self):
         with tarfile.open(os.path.join(self.out_dir, "{}_models.tar.gz".format(self._mdl_prefix)),
@@ -1256,13 +1334,13 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
 if __name__ == '__main__':
     import glob
     data_dir = "/home/ilya/data/sashaplavin"
-    uv_fits_paths = glob.glob(os.path.join(data_dir, "*_S_*"))
-    # uv_fits_path = os.path.join(data_dir, "J0151+2744_S_2007_03_01_sok_vis.fits")
+    # uv_fits_paths = glob.glob(os.path.join(data_dir, "*_S_*"))
+    uv_fits_paths = [os.path.join(data_dir, "J0510+1800_S_2007_05_03_sok_vis.fits")]
 
     for uv_fits_path in uv_fits_paths:
         # Create directory for current source
         source = os.path.split(uv_fits_path)[-1].split("_")[0]
-        out_dir = "/home/ilya/data/sashaplavin/results_s_v2/eg/{}".format(source)
+        out_dir = "/home/ilya/data/sashaplavin/test_uv/{}".format(source)
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
 
@@ -1270,21 +1348,22 @@ if __name__ == '__main__':
 
         automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
                                   n_comps_terminate=20,
-                                  core_elliptic=True,
+                                  core_elliptic=False,
                                   mapsize_clean=(1024, 0.75),
                                   ra_range_plot=None,
-                                  dec_range_plot=None)
+                                  dec_range_plot=None,
+                                  show_difmap_output_modelfit=True)
         # Stoppers define when to stop adding components to model
         rchsq_stopping = RChiSquaredStopping(mode="or")
-        stoppers = [AddedComponentFluxLessRMSStopping(mode="or"),
+        stoppers = [# AddedComponentFluxLessRMSStopping(mode="or"),
                     # AddedComponentFluxLessRMSFluxStopping(mode="or"),
-                    AddedTooDistantComponentStopping(mode="or"),
+                    # AddedTooDistantComponentStopping(mode="or"),
                     # AddedTooSmallComponentStopping(mode="and"),
-                    AddedNegativeFluxComponentStopping(mode="or"),
+                    # AddedNegativeFluxComponentStopping(mode="or"),
                     # for 0430 exclude it
                     # AddedOverlappingComponentStopping(),
-                    NLastDifferesFromLast(mode="or"),
-                    NLastDifferencesAreSmall(mode="or"),
+                    # NLastDifferesFromLast(mode="or"),
+                    # NLastDifferencesAreSmall(mode="or"),
                     rchsq_stopping]
                     # Keep iterating while this stopper fires
                     # TotalFluxStopping(rel_threshold=0.2, mode="while")]
@@ -1295,12 +1374,12 @@ if __name__ == '__main__':
         # Filters additionally remove complex models with non-physical
         # components (e.g. too small faint component or component
         # located far away from source.)
-        filters = [SmallSizedComponentsModelFilter(),
-                   ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
-                   NegativeFluxComponentModelFilter()]
+        filters = [# SmallSizedComponentsModelFilter(),
+                   # ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
+                   # NegativeFluxComponentModelFilter()]
                    # ToElongatedCoreModelFilter()]
                    # OverlappingComponentsModelFilter()]
-
+]
         automodeler.run(stoppers)
         best_model = automodeler.select_best(selectors, filters)
         automodeler.plot_results(best_model=best_model,

@@ -3,6 +3,7 @@ import numpy as np
 import shutil
 
 from automodel import (AutoModeler, TotalFluxStopping,
+                       RChiSquaredStopping,
                        AddedComponentFluxLessRMSFluxStopping,
                        AddedComponentFluxLessRMSStopping,
                        AddedTooDistantComponentStopping,
@@ -21,26 +22,28 @@ from automodel import (AutoModeler, TotalFluxStopping,
 
 def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=False,
                  n_max_components=20, mapsize_clean=(512, 0.1), out_dir=None,
-                 path_to_script=None, source=None, freq=None, epoch=None):
-    # uv_fits_fname = "bk_{}_8.1.fits".format(str(i).zfill(2))
-    # simulated_uv_fits_path = os.path.join(data_dir, uv_fits_fname)
+                 path_to_script=None, start_model_fname=None, niter_difmap=100):
 
     automodeler = AutoModeler(simulated_uv_fits_path, out_dir, path_to_script,
                               n_comps_terminate=n_max_components,
                               core_elliptic=core_elliptic,
-                              mapsize_clean=mapsize_clean, source=source,
-                              freq=freq, epoch=epoch)
+                              mapsize_clean=mapsize_clean,
+                              show_difmap_output_clean=False,
+                              show_difmap_output_modelfit=False,
+                              niter_difmap=niter_difmap)
 
     # Stoppers define when to stop adding components to model
-    stoppers = [AddedComponentFluxLessRMSStopping(mode="or"),
-                AddedComponentFluxLessRMSFluxStopping(),
-                AddedTooDistantComponentStopping(n_rms=2, mode="or"),
+    # stoppers = [AddedComponentFluxLessRMSStopping(mode="or"),
+    #             AddedComponentFluxLessRMSFluxStopping(),
+    stoppers = [AddedTooDistantComponentStopping(n_rms=2, mode="or"),
                 AddedTooSmallComponentStopping(),
-                AddedNegativeFluxComponentStopping(),
+                # AddedNegativeFluxComponentStopping(),
                 # for 0430 exclude it
                 # AddedOverlappingComponentStopping(),
                 NLastDifferesFromLast(),
-                NLastDifferencesAreSmall()]
+                NLastDifferencesAreSmall(),
+                # TotalFluxStopping(rel_threshold=0.05, mode="or"),
+                RChiSquaredStopping(delta_min=0.1)]
     # Keep iterating while this stopper fires
     # TotalFluxStopping(rel_threshold=0.2, mode="while")]
     # Selectors choose best model using different heuristics
@@ -48,7 +51,7 @@ def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=Fals
                  SizeBasedModelSelector(delta_size=0.001)]
 
     # Run number of iterations that is defined by stoppers
-    automodeler.run(stoppers)
+    automodeler.run(stoppers, start_model_fname=start_model_fname)
 
     # Select best model using custom selectors
     files = automodeler.fitted_model_paths
@@ -76,7 +79,7 @@ def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=Fals
     best_model = files[id_best]
     first_model = files[0]
 
-    # automodeler.plot_results(id_best)
+    automodeler.plot_results(id_best)
 
     # Leaving only best model
     files_toremove.remove(best_model)
@@ -92,6 +95,8 @@ def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=Fals
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     shutil.move(best_model, best_dfm_model_path)
+
+    return automodeler
 
 
 if __name__ == "__main__":

@@ -12,12 +12,13 @@ from utils import (baselines_2_ants, index_of, get_uv_correlations,
                    check_issubset, convert_an_hdu, convert_fq_hdu,
                    mask_boolean_with_boolean)
 
+import matplotlib
+matplotlib.use('Agg')
+
 try:
     import pylab
 except ImportError:
     pylab = None
-
-import matplotlib
 
 vec_complex = np.vectorize(np.complex)
 vec_int = np.vectorize(np.int)
@@ -217,7 +218,7 @@ class UVData(object):
         if data is None:
             if downscale_by_freq:
                 self._downscale_uvw_by_frequency()
-            self.hdulist.writeto(fname)
+            self.hdulist.writeto(fname, output_verify='silentfix')
         else:
             # datas = np.array(sorted(data, key=lambda x: x['DATE']+x['_DATE']),
             #                 dtype=data.dtype)
@@ -240,7 +241,7 @@ class UVData(object):
             # FIXME: Sometimes i need this to be commented
             if downscale_by_freq:
                 self._downscale_uvw_by_frequency()
-            hdulist.writeto(fname, output_verify='ignore')
+            hdulist.writeto(fname, output_verify='silentfix')
 
     def save_fraction(self, fname, frac, random_state=0):
         """

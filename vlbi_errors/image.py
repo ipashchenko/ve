@@ -9,6 +9,7 @@ from model import Model
 from beam import CleanBeam
 from skimage.feature import register_translation
 import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Circle
 
@@ -48,7 +49,7 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
     for dr in np.arange(min_shift, max_shift, shift_step):
         print "Using dr = {}".format(dr)
         shift_dict[dr] = list()
-
+        print(shift_dict)
         # Iterating over mask sizes
         for r in range(0, max_mask_r, mask_step):
             print "Using r = {}".format(r)
@@ -89,7 +90,7 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
                                    region2=(image2.x_c, image2.y_c, idx[0] + dr_tgt,
                                             None),
                                    upsample_factor=upsample_factor)
-    return shift
+    return shift, shift_dict
 
 
 def find_bbox(array, level, delta=0.):
@@ -436,7 +437,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 if comp.p[0] < 0:
                     facecolor = "blue"
                 e = Ellipse((x_c, y_c), e_width, e_height,
-                            angle=-90.0+180*comp.p[5]/np.pi,
+                            angle=90.0-180*comp.p[5]/np.pi,
                             edgecolor=beam_edge_color, facecolor=facecolor,
                             alpha=beam_alpha)
             elif len(comp) == 4:

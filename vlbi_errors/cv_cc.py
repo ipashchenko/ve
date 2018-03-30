@@ -67,7 +67,7 @@ if __name__ == '__main__':
     cv_scores = dict()
     n_folds = 10
     for niter in cc_pars:
-        print "Using niter = {}".format(niter)
+        print("Using niter = {}".format(niter))
         kfold = KFoldCV(uv_fits, n_folds)
         cv = list()
         for j, (tr_fname, ts_fname) in enumerate(kfold):
@@ -77,18 +77,18 @@ if __name__ == '__main__':
             tr_model = create_model_from_fits_file('trained_model_{}.FITS'.format(niter))
             ts_uvdata = UVData(ts_fname)
             score = ts_uvdata.cv_score(tr_model)
-            print "{} of {} gives {}".format(j+1, n_folds, score)
+            print("{} of {} gives {}".format(j+1, n_folds, score))
             cv.append(score)
         cv_scores[niter] = (np.nanmean(cv), np.nanstd(cv))
-        print "CV gives {} +/- {}".format(np.nanmean(cv), np.nanstd(cv))
+        print("CV gives {} +/- {}".format(np.nanmean(cv), np.nanstd(cv)))
 
-    print cv_scores
+    print(cv_scores)
     n = cv_scores.keys()
     scores = [cv_scores[i][0] for i in n]
     errors = [cv_scores[i][1] for i in n]
 
     import matplotlib
-    label_size = 12
+    label_size = 16
     matplotlib.rcParams['xtick.labelsize'] = label_size
     matplotlib.rcParams['ytick.labelsize'] = label_size
     matplotlib.rcParams['axes.titlesize'] = label_size

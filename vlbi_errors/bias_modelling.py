@@ -134,24 +134,22 @@ for freq in ('x', 'j', 'u'):
     originals[freq] = np.array(originals[freq])
     corrected[freq] = np.array(corrected[freq])
 
+
 import matplotlib.pyplot as plt
-# # f1
-# fig, ax = plt.subplots(1, 1)
-# ax.hist(originals[:, 0], alpha=0.3, color='#1f77b4', label=r'estimates',
-#         range=[0.25, 2.5], bins=10)
-# ax.axvline(np.mean(originals[:, 0]), color='#1f77b4', label='mean of estimates', ls='solid')
-# ax.axvline(2., color='k', label='true value', ls='solid')
-# ax.hist(corrected[:, 0], alpha=0.3, label=r'BC estimates', color='#ff7f0e',
-#         range=[0.25, 2.5], bins=10)
-# ax.axvline(np.mean(corrected[:, 0]), color='#ff7f0e', label='mean of BC estimates',
-#            ls='dashed')
-# ax.legend()
-# ax.set_xlabel(r'$Flux_1$', fontsize=16)
-# ax.set_ylabel(r'$N$', fontsize=16)
-# fig.tight_layout()
-# # fig.savefig(os.path.join(data_dir, 'bias_flux1.pdf'), dpi=1200, format='pdf')
-# #
-# r1
+fig, ax = plt.subplots(1, 1)
+ax.hist(originals[:, 0], alpha=0.3, color='#1f77b4', label=r'estimates',
+        range=[0.25, 2.5], bins=10)
+ax.axvline(np.mean(originals[:, 0]), color='#1f77b4', label='mean of estimates', ls='solid')
+ax.axvline(2., color='k', label='true value', ls='solid')
+ax.hist(corrected[:, 0], alpha=0.3, label=r'BC estimates', color='#ff7f0e',
+        range=[0.25, 2.5], bins=10)
+ax.axvline(np.mean(corrected[:, 0]), color='#ff7f0e', label='mean of BC estimates',
+           ls='dashed')
+ax.legend()
+ax.set_xlabel(r'$Flux_1$', fontsize=16)
+ax.set_ylabel(r'$N$', fontsize=16)
+fig.tight_layout()
+# fig.savefig(os.path.join(data_dir, 'bias_flux1.pdf'), dpi=1200, format='pdf')
 
 
 biases_freqs = dict()

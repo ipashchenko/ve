@@ -15,7 +15,7 @@ tsv_table = os.path.join(data_dir, 'asu.tsv')
 source = '2230+114'
 epoch = '2005-02-05'
 uv_fits = mojave_uv_fits_fname(source, 'u', epoch.replace('-', '_'))
-path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
 mdl_fname = '{}_{}.mdl'.format(source, epoch)
 
 # Fetch uv-fits
@@ -44,5 +44,5 @@ cc_image_ = copy.deepcopy(cc_image)
 cc_image_._image = np.zeros(cc_image._image.shape, dtype=float)
 cc_image_.add_model(model)
 plt.figure()
-plt.matshow(cc_image_.cc_image);
+plt.matshow(cc_image_.cc_image-cc_image.cc_image)
 plt.colorbar()

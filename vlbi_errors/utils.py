@@ -18,6 +18,7 @@ from sklearn.covariance import EllipticEnvelope, MinCovDet
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 from skimage import transform
+from skimage.filters import gaussian_filter
 from scipy.ndimage import interpolation
 try:
     # Python 3 moved reduce to the functools module
@@ -1180,6 +1181,10 @@ def sector_mask(shape, centre, radius, angle_range):
     anglemask = theta <= (tmax-tmin)
 
     return circmask*anglemask
+
+
+def gaussian_filter(data, sigma):
+    return gaussian_filter(data, sigma)
 
 
 def circular_mean(data, radius):

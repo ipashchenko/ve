@@ -57,7 +57,7 @@ class KFoldCV(object):
                                                       np.count_nonzero(bl_indxs))
 
             try:
-                kfold = KFold(np.count_nonzero(bl_indxs), self.k, shuffle=True,
+                kfold = KFold(np.count_nonzero(bl_indxs), self.k, shuffle=False,
                               random_state=self.seed)
                 baseline_folds[bl] = list()
                 for train, test in kfold:
@@ -124,7 +124,8 @@ class KFoldCV(object):
                 modelfit_difmap(train_uv_fits_path, dfm_model_fname,
                                 out_mdl_fname, niter=niter,
                                 path=data_dir, mdl_path=dfm_model_dir,
-                                out_path=data_dir, stokes=self.stokes)
+                                out_path=data_dir, stokes=self.stokes,
+                                show_difmap_output=True)
                 cv_scores.append(score(test_uv_fits_path, os.path.join(data_dir, out_mdl_fname)))
                 train_scores.append(score(train_uv_fits_path, os.path.join(data_dir, out_mdl_fname)))
         else:

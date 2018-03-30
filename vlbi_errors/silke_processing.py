@@ -16,7 +16,7 @@ matplotlib.rcParams['font.size'] = label_size
 matplotlib.rcParams['legend.fontsize'] = label_size
 
 
-def convert_to_single_number(file_path, data_dir='/home/ilya/Dropbox/silke'):
+def convert_to_single_number(file_path, data_dir='/home/ilya/Dropbox/silke/1413'):
     file_dir, fname = os.path.split(file_path)
     year = fname[:-4].split('_')[1]
     month = fname[:-4].split('_')[2]

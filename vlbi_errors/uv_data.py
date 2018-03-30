@@ -751,8 +751,8 @@ class UVData(object):
             Numpy boolean array with size equal to number of bands and ``True``
             values corresponding to specified band numbers.
         """
-        assert set(bands).issubset(xrange(self.nif)), "Bands number must be "\
-                                                      "from 0 to {}".format(self.nif)
+        assert set(bands).issubset(range(self.nif)), "Bands number must be" \
+                                                     " from 0 to {}".format(self.nif)
         assert max(bands) <= self.nif
         return to_boolean_array(bands, self.nif)
 
@@ -786,7 +786,7 @@ class UVData(object):
                                                                   stop_time))
 
         if bands is None:
-            bands_indxs = self._conver_bands_to_indexes(xrange(self.nif))
+            bands_indxs = self._conver_bands_to_indexes(range(self.nif))
         else:
             bands_indxs = self._conver_bands_to_indexes(bands)
 
@@ -1417,7 +1417,7 @@ class UVData(object):
 
         # Combine ``q`` chunks to ``q`` pairs of training & testing datasets
         for i in range(q):
-            print i
+            print(i)
             # List of i-th chunk for testing dataset for each baseline
             testing_indxs = [baseline_chunks[i] for baseline_chunks in
                             baselines_chunks]

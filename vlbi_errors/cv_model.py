@@ -47,14 +47,14 @@ class KFoldCV(object):
 
         for bl in baselines:
             bl_indxs = self.uvdata._indxs_baselines[bl]
-            print "Baseline {} has {} samples".format(bl,
-                                                      np.count_nonzero(bl_indxs))
+            print("Baseline {} has {}"
+                  " samples".format(bl, np.count_nonzero(bl_indxs)))
             bl_indxs_pw = self.uvdata.pw_indxs_baseline(bl, average_bands=True,
                                                         stokes=stokes,
                                                         average_stokes=average_stokes)
             bl_indxs = mask_boolean_with_boolean(bl_indxs, bl_indxs_pw)
-            print "Baseline {} has {} samples with positive weight".format(bl,
-                                                      np.count_nonzero(bl_indxs))
+            print("Baseline {} has {} samples with"
+                  " positive weight".format(bl, np.count_nonzero(bl_indxs)))
 
             try:
                 kfold = KFold(np.count_nonzero(bl_indxs), self.k, shuffle=False,
@@ -88,7 +88,7 @@ class KFoldCV(object):
     def create_train_test_data(self, outdir=None):
         if outdir is None:
             outdir = os.getcwd()
-        for i in xrange(self.k):
+        for i in range(self.k):
             train_indxs = np.zeros(len(self.uvdata.hdu.data))
             test_indxs = np.zeros(len(self.uvdata.hdu.data))
             for bl, kfolds in self.baseline_folds.items():
@@ -116,9 +116,9 @@ class KFoldCV(object):
         if initial_dfm_model_path is not None:
             for i, (train_uv_fits_path, test_uv_fits_path) in enumerate(zip(train_uv_fits_paths,
                                                                             test_uv_fits_paths)):
-                print "Calculating CV-score for {} of {} splits".format(i+1, self.k)
-                print "Training FITS: {}".format(train_uv_fits_path)
-                print "Testing FITS: {}".format(test_uv_fits_path)
+                print("Calculating CV-score for {} of {} splits".format(i+1, self.k))
+                print("Training FITS: {}".format(train_uv_fits_path))
+                print("Testing FITS: {}".format(test_uv_fits_path))
                 out_mdl_fname = 'train_{}.mdl'.format(i)
                 dfm_model_dir, dfm_model_fname = os.path.split(initial_dfm_model_path)
                 modelfit_difmap(train_uv_fits_path, dfm_model_fname,
@@ -195,25 +195,25 @@ def cv_difmap_models(dfm_model_files, uv_fits, K=5, baselines=None, n_iter=50,
     if seed is None and n_rep == 1:
         seed = np.random.randint(0, 1000)
     for i in mdl_dict:
-        print "Calculating CV scores for model {}".format(i)
+        print("Calculating CV scores for model {}".format(i))
         cv_means[i] = list()
         cv_stds[i] = list()
         for j in range(n_rep):
-            print "Doing {} of {} repetitions".format(j+1, n_rep)
+            print("Doing {} of {} repetitions".format(j+1, n_rep))
             if seed is None:
                 seed_used = np.random.randint(0, 1000)
             else:
                 seed_used = seed
-            print "Using seed {}".format(seed_used)
+            print("Using seed {}".format(seed_used))
             kfold = KFoldCV(uv_fits, K, seed=seed_used, baselines=baselines,
                             stokes=stokes)
             kfold.create_train_test_data(outdir=out_dir)
             cv_scores, train_scores =\
                 kfold.cv_score(initial_dfm_model_path=mdl_dict[i],
                                data_dir=out_dir, niter=n_iter)
-            print "Calculated scores (CV, train) :"
-            print cv_scores
-            print train_scores
+            print("Calculated scores (CV, train) :")
+            print(cv_scores)
+            print(train_scores)
             cv_means[i].append(np.mean(cv_scores))
             cv_stds[i].append(np.std(cv_scores))
 

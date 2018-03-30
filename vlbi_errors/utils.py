@@ -147,7 +147,7 @@ def fit_2d_gmm(cdata, n_max=5):
         clf.fit(reim)
         clf_dict.update({n: clf})
     n_mixture = sorted(clf_dict, key=lambda x: clf_dict[x].bic(reim))[0]
-    print "Best n_mixture = {}".format(n_mixture)
+    print("Best n_mixture = {}".format(n_mixture))
     return clf_dict[n_mixture]
 
 
@@ -313,9 +313,9 @@ def make_ellipses(gmm, ax, colors="rgbyk"):
         u = w[0] / np.linalg.norm(w[0])
         angle = np.arctan2(u[1], u[0])
         angle = 180 * angle / np.pi  # convert to degrees
-        print "before sqrt - {}".format(v)
+        print("before sqrt - {}".format(v))
         v = np.sqrt(v)
-        print "after sqrt - {}".format(v)
+        print("after sqrt - {}".format(v))
         ell = mpl.patches.Ellipse(gmm.means_[n, :2], v[0], v[1],
                                   180 + angle, color=color)
         ell.set_clip_box(ax.bbox)
@@ -563,7 +563,7 @@ def add_field(a, descr):
     True
     """
     if a.dtype.fields is None:
-        raise ValueError, "`A' must be a structured numpy array"
+        raise ValueError("`A' must be a structured numpy array")
     b = np.empty(a.shape, dtype=a.dtype.descr + descr)
     for name in a.dtype.names:
         b[name] = a[name]
@@ -824,7 +824,7 @@ def build_dtype_for_bintable_data(header):
     try:
         maxis = int(header['MAXIS'])
     except KeyError:
-        print "non UV_DATA"
+        print("non UV_DATA")
         maxis = None
 
     # build np.dtype format
@@ -857,7 +857,7 @@ def build_dtype_for_bintable_data(header):
             formats.append(_format)
             shapes.append(_shape)
 
-    print names, formats, shapes, array_names
+    print(names, formats, shapes, array_names)
 
     dtype_builder = zip(names, formats, shapes)
     dtype = [(name, _format, shape) for (name, _format, shape) in dtype_builder]
@@ -1331,7 +1331,7 @@ def find_close_regions(data, std_decrease_factor=1.1):
         i += 1
     threshold = maxs[i-1]
     borders = np.where((data[1:] - data[:-1]) > maxs[i-1])[0]
-    print len(borders)
+    print(len(borders))
     regions_list = list()
     # Append first region
     regions_list.append([data[0], data[borders[0]]])
@@ -1593,7 +1593,7 @@ def nested_dict_itervalue(nested):
     [1, 2, 3, 4, 5, 6]
 
     """
-    for value in nested.itervalues():
+    for value in nested.values():
         if isinstance(value, collections.Mapping):
             for inner_value in nested_dict_itervalue(value):
                 yield inner_value
@@ -1611,7 +1611,7 @@ def flatten(iterable, ltypes=collections.Iterable):
     remainder = iter(iterable)
     while True:
         first = next(remainder)
-        if isinstance(first, ltypes) and not isinstance(first, basestring):
+        if isinstance(first, ltypes) and not isinstance(first, str):
             remainder = chain(first, remainder)
         else:
             yield first

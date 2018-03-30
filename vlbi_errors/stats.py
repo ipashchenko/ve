@@ -39,28 +39,29 @@ class CrossValidation(object):
 
         assert(not len(modelfiles) % float(len(testfiles)))
 
-        print "modelfiles : " + str(modelfiles)
-        print "testfiles : " + str(testfiles)
+        print("modelfiles : " + str(modelfiles))
+        print("testfiles : " + str(testfiles))
 
         result = list()
 
         for i in range(nmodels):
-            print "using models " + str(modelfiles[ntest * i: ntest * (i + 1)])\
-                   + " and testing sample " + str(testfiles)
+            print("Using models " +
+                  str(modelfiles[ntest * i: ntest * (i + 1)]) +
+                  " and testing sample " + str(testfiles))
             models = modelfiles[ntest * i: ntest * (i + 1)]
             cv_scores = list()
             for j, testfile in enumerate(testfiles):
                 model = Model()
                 model.add_from_txt(models[j], stoke=stokes)
-                print "using test file " + str(testfile)
+                print("Using test file " + str(testfile))
                 data = UVData(testfile)
                 cv_score = data.cv_score(model, stokes=stokes)
-                print "cv_score for one testing sample is " + str(cv_score)
+                print("cv_score for one testing sample is " + str(cv_score))
                 cv_scores.append(cv_score)
 
             mean_cv_score = np.mean(cv_scores)
             std_cv_score = np.std(cv_scores)
-            print mean_cv_score, std_cv_score
+            print(mean_cv_score, std_cv_score)
 
             result.append(["model#" + str(i + 1), mean_cv_score, std_cv_score])
 
@@ -164,7 +165,7 @@ class LnPrior(object):
             distances.append(np.sqrt(component.p[1] ** 2. +
                                      component.p[2] ** 2.))
         if not is_sorted(distances):
-            print "Components are not sorted:("
+            print("Components are not sorted:(")
             return -np.inf
         lnpr = list()
         for component in self.model._components:
@@ -187,7 +188,7 @@ class LnPost(object):
     def __call__(self, p):
         lnpr = self.lnpr(p[:])
         if not np.isfinite(lnpr):
-            print "inf prior"
+            print("inf prior")
             return -np.inf
         return self.lnlik(p[:]) + lnpr
 
@@ -224,6 +225,6 @@ if __name__ == '__main__':
                            (0., 2), (None, None), (None, None), (0., 5),
                            (0., 1), (None, None), (None, None), (0., 20)])
     if fit['success']:
-        print "Succesful fit!"
+        print("Succesful fit!")
         p_ml = fit['x']
-        print p_ml
+        print(p_ml)

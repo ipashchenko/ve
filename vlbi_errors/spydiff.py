@@ -169,8 +169,8 @@ def import_difmap_model(mdl_fname, mdl_dir=None):
                 try:
                     flux, radius, theta = line.split()
                 except ValueError:
-                    print "Problem parsing line :\n"
-                    print line
+                    print("Problem parsing line :\n")
+                    print(line)
                     raise ValueError
                 axial = 1.0
                 major = 0.0

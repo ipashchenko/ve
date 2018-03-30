@@ -47,12 +47,12 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
 
     # Iterating over difference of mask sizes
     for dr in np.arange(min_shift, max_shift, shift_step):
-        print "Using dr = {}".format(dr)
+        print("Using dr = {}".format(dr))
         shift_dict[dr] = list()
         print(shift_dict)
         # Iterating over mask sizes
         for r in range(0, max_mask_r, mask_step):
-            print "Using r = {}".format(r)
+            print("Using r = {}".format(r))
             r1 = r
             r2 = r + dr
             shift = image1.cross_correlate(image2,
@@ -61,7 +61,7 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
                                            region2=(image2.x_c, image2.y_c, r2,
                                                     None),
                                            upsample_factor=100)
-            print "Found shift = {}".format(shift)
+            print("Found shift = {}".format(shift))
             shift_dict[dr].append(shift)
 
     shift_value_dict = dict()

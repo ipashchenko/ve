@@ -837,8 +837,8 @@ def longest_path(edge_list, nodes, verbose=False,
         paths = nx.shortest_path_length(G, weight='weight')
         values = []
         node_extrema = []
-        for i in paths.iterkeys():
-            j = max(paths[i].iteritems(), key=operator.itemgetter(1))
+        for i in paths.keys():
+            j = max(paths[i].items(), key=operator.itemgetter(1))
             node_extrema.append((j[0], i))
             values.append(j[1])
         start, finish = node_extrema[values.index(max(values))]
@@ -858,7 +858,7 @@ def longest_path(edge_list, nodes, verbose=False,
                 assert isinstance(skeleton_arrays, list)
                 import matplotlib.pyplot as p
                 if verbose:
-                    print "Filament: %s / %s" % (n + 1, num)
+                    print("Filament: %s / %s" % (n + 1, num))
                 p.subplot(1, 2, 1)
                 p.imshow(skeleton_arrays[n], interpolation="nearest",
                          origin="lower")
@@ -1101,7 +1101,7 @@ def main_length(max_path, edge_list, labelisofil, interpts, branch_lengths,
                         " plots will be created.")
             import matplotlib.pyplot as p
             if verbose:
-                print "Filament: %s / %s" % (num + 1, len(labelisofil))
+                print("Filament: %s / %s" % (num + 1, len(labelisofil)))
 
             p.subplot(121)
             p.imshow(skeleton, origin='lower', interpolation="nearest")
@@ -1368,7 +1368,7 @@ def recombine_skeletons(skeletons, offsets, orig_size, pad_size,
             size_change_flag = True
 
         if verbose & size_change_flag:
-            print "REDUCED FILAMENT %s/%s TO FIT IN ORIGINAL ARRAY" % (n, num)
+            print("REDUCED FILAMENT %s/%s TO FIT IN ORIGINAL ARRAY" % (n, num))
 
         x, y = np.where(copy_skeleton >= 1)
         for i in range(len(x)):

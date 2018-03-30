@@ -586,9 +586,9 @@ def spix_map(freqs, flux_maps, s_flux_maps=None, mask=None, outfile=None,
 
         # Calculate how many pixels there should be
         npixels = len(np.where(mask.ravel() == 0)[0])
-        print "{} pixels with fit will be plotted".format(npixels)
+        print("{} pixels with fit will be plotted".format(npixels))
         nrows = int(np.sqrt(npixels) + 1)
-        print "Plot will have dims: {} by {}".format(nrows, nrows)
+        print("Plot will have dims: {} by {}".format(nrows, nrows))
 
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, sharex=True,
                                  sharey=True)
@@ -655,7 +655,7 @@ def spix_map(freqs, flux_maps, s_flux_maps=None, mask=None, outfile=None,
     # Save to file plotted figure
     if outfile:
         path = os.path.join(outdir, outfile)
-        print "Saving linear fits to {}.{}".format(path, ext)
+        print("Saving linear fits to {}.{}".format(path, ext))
         fig.show()
         fig.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=200)
 
@@ -710,13 +710,13 @@ def jet_ridge_line(image, r_max, beam=None, dr=1, n=1.):
     try:
         if beam[1] is None:
             mean_image = circular_mean(image, beam[0])
-            print "Using circular filter with r = {}".format(beam[0])
+            print("Using circular filter with r = {}".format(beam[0]))
         else:
             mean_image = elliptical_mean(image, beam[0] / n, beam[1] / n, beam[2])
-            print "Using elliptical filter with bmaj = {}, bmin = {}, bpa =" \
-                  " {}".format(beam[0]/n, beam[1]/n, beam[2])
+            print("Using elliptical filter with bmaj = {}, bmin = {}, bpa ="
+                  " {}".format(beam[0]/n, beam[1]/n, beam[2]))
     except TypeError:
-        print "No filter"
+        print("No filter")
         mean_image = image
     leny, lenx = np.shape(mean_image)
     y, x = np.mgrid[-leny/2: leny/2, -lenx/2: lenx/2]

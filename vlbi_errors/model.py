@@ -173,14 +173,16 @@ class Model(object):
         for component in components:
             self._components.remove(component)
 
-    def filter_components_by_r(self, r_max_mas=None):
+    def filter_components_by_r(self, r_min_mas):
         """
         Remove all components that are further away then ``r_max_mas``.
-        :param r_max_mas:
-            Maximum distance of component to phase center to keep it in model.
+
+        :param r_min_mas:
+            Maximum distance of component to phase center [mas] to keep it in
+            model.
         """
         for component in self._components:
-            if np.hypot(component.p[1], component.p[2]) < r_max_mas:
+            if np.hypot(component.p[1], component.p[2]) < r_min_mas:
                 self.remove_component(component)
 
     def clear_components(self):

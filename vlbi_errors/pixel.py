@@ -1,4 +1,7 @@
-import corner as triangle
+try:
+    import corner as triangle
+except ImportError:
+    triangle = None
 import numpy as np
 from scipy.optimize import leastsq
 from itertools import combinations
@@ -126,7 +129,7 @@ def resolver_chisq(lambda_sq, chi, s_chi=None, p0=None):
     chi_sq.update({'0': s_sq})
 
     chi_ = list(chi)[:]
-    best = min(chi_sq.iterkeys(), key=lambda k: chi_sq[k])
+    best = min(chi_sq.keys(), key=lambda k: chi_sq[k])
     if len(best) == 1:
         # print "No correction"
         result = chi_
@@ -230,7 +233,7 @@ def resolver_bayesian(lamba_sq, chi, s_chi=None, nsamples=10000, plot_fit=False)
             indxs[i] = np.count_nonzero(tr.get_values('j')[:, n] == i)
         move_indx = np.argmax(indxs)
         if move_indx != 1:
-            print "Moving point #{} on {} pi".format(n + 1, move_indx - 1)
+            print("Moving point #{} on {} pi".format(n + 1, move_indx - 1))
         points[n] += np.pi * (move_indx - 1)
 
     if plot_fit:

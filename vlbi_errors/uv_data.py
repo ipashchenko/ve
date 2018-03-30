@@ -192,9 +192,9 @@ class UVData(object):
         """
         slices_dict = self.slices_dict.copy()
         slices_dict.update({'COMPLEX': 0})
-        self.hdu.data.data[slices_dict.values()] = self.uvdata.real
+        self.hdu.data.data[list(slices_dict.values())] = self.uvdata.real
         slices_dict.update({'COMPLEX': 1})
-        self.hdu.data.data[slices_dict.values()] = self.uvdata.imag
+        self.hdu.data.data[list(slices_dict.values())] = self.uvdata.imag
 
     def save(self, fname=None, data=None, rewrite=False,
              downscale_by_freq=False):
@@ -351,7 +351,7 @@ class UVData(object):
         slices_dict = self.slices_dict.copy()
         for key, key_slice in new_slices_dict.items():
             slices_dict.update({key: key_slice})
-        return self.hdu.data.data[slices_dict.values()]
+        return self.hdu.data.data[list(slices_dict.values())]
 
     @property
     def stokes(self):
@@ -523,10 +523,10 @@ class UVData(object):
         """
         try:
             indx = self.hdulist.index_of('AIPS NX')
-            print "Found AIPS NX table!"
+            print("Found AIPS NX table!")
         except KeyError:
             indx = None
-            print "No AIPS NX table are found!"
+            print("No AIPS NX table are found!")
 
         if indx is not None:
             nx_hdu = self.hdulist[indx]
@@ -1591,7 +1591,7 @@ class UVData(object):
             try:
                 syms = self.__color_list[:n_if]
             except AttributeError:
-                print "Define self.__color_list to show in different colors!"
+                print("Define self.__color_list to show in different colors!")
                 syms = ['.k'] * n_if
 
             pylab.subplot(2, 1, 1)
@@ -1706,8 +1706,8 @@ class UVData(object):
                 syms = colors[:n_if]
                 syms = [".{}".format(color) for color in syms]
             else:
-                print "Provide ``colors`` argument to show in different" \
-                      " colors!"
+                print("Provide ``colors`` argument to show in different"
+                      " colors!")
                 syms = ['.'] * n_if
 
             if n_if > 1 or stokes not in self.stokes:

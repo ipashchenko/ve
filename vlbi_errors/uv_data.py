@@ -1,4 +1,3 @@
-import os
 import math
 import copy
 import numpy as np
@@ -233,7 +232,7 @@ class UVData(object):
                     try:
                         hdu = convert_an_hdu(hdu, new_hdu)
                     except IndexError:
-                        print "You should fix that issue!"
+                        print("You should fix that issue!")
                         pass
                 if hdu.header['EXTNAME'] == 'AIPS FQ':
                     hdu = convert_fq_hdu(hdu)
@@ -258,8 +257,8 @@ class UVData(object):
         indxs = list()
         for bl in self.baselines:
             bl_indxs = self._indxs_baselines[bl]
-            print "Baseline {} has {} samples".format(bl,
-                                                      np.count_nonzero(bl_indxs))
+            print("Baseline {} has {} samples".format(bl,
+                                                      np.count_nonzero(bl_indxs)))
             bl_indxs_pw = self.pw_indxs_baseline(bl, average_bands=True,
                                                  stokes=['RR', 'LL'],
                                                  average_stokes=True)
@@ -948,8 +947,8 @@ class UVData(object):
                 # #groups, #bands
                 data = np.ma.array(diffs, mask=mask)
                 mstd = np.zeros((self.nif, self.nstokes))
-                for if_ in xrange(self.nif):
-                    for stoke in xrange(self.nstokes):
+                for if_ in range(self.nif):
+                    for stoke in range(self.nstokes):
                         data_ = data[:, if_, stoke]
                         # mstd[if_, stoke] += biweight_midvariance(data_.real)
                         # mstd[if_, stoke] += biweight_midvariance(data_.imag)
@@ -1863,11 +1862,4 @@ class UVData(object):
         # where x, y - distances from pase center [rad]
         raise NotImplementedError
 
-
-if __name__ == '__main__':
-    import os
-    data_dir = '/home/ilya/data/sashaplavin'
-    uvdata = UVData(os.path.join(data_dir,
-                                 'J0345+1453_X_2007_06_01_sok_vis.fits'))
-    uvdata.uvplot()
 

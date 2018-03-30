@@ -1,6 +1,5 @@
 import math
 import numpy as np
-# import numexpr as ne
 from utils import _function_wrapper, mas_to_rad, vcomplex, gaussian
 from ft_routines import image_ft
 from utils import transform_image
@@ -164,7 +163,7 @@ class Component(object):
     @property
     def lnpr(self):
         if not self._lnprior.keys():
-            print "No priors specified"
+            print("No priors specified")
             return 0
         lnprior = list()
         for key, value in self._lnprior.items():
@@ -710,8 +709,7 @@ class ImageComponent(Component):
         self.image = image
         self.x = x
         self.y = y
-        self._parnames = [str(i) for i in xrange(self.imsize[0] *
-                                                 self.imsize[1])]
+        self._parnames = [str(i) for i in range(self.imsize[0]*self.imsize[1])]
         self._fixed = np.zeros(len(self._parnames), dtype=bool)
         self._p = image.flatten()
 
@@ -792,51 +790,3 @@ class ModelImageComponent(Component):
             add = beam.convolve(self.image)
         image.image -= np.rot90(add)[::-1, ::]
 
-    # def ft(self, uv):
-    #     return transform_image(self._image, self.p[0], self.p[1], self.p[2],
-    #                            self.p[3], self.p[4])
-
-#
-# if __name__ == '__main__':
-#     import os
-#     from uv_data import UVData
-#     from from_fits import (create_clean_image_from_fits_file,
-#                            create_model_from_fits_file)
-#     base_dir = '/home/ilya/code/vlbi_errors/examples/'
-#     uvdata = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
-#     uvdata_ = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
-#     uvdata__ = UVData(os.path.join(base_dir, '2230+114.x.2006_02_12.uvf'))
-#     fig = uvdata.uvplot(bands=[1])
-#     noise = uvdata.noise()
-#     noise = {key: 0.1 * value for key, value in noise.items()}
-#     # from spydiff import clean_difmap
-#     # clean_difmap('2230+114.x.2006_02_12.uvf', 'cc.fits', 'I', (512, 0.1),
-#     #              path_to_script='/home/ilya/code/vlbi_errors/difmap/final_clean_nw',
-#     #              show_difmap_output=True, outpath=base_dir,
-#     #              path=base_dir)
-#     image = create_clean_image_from_fits_file(os.path.join(base_dir, 'cc.fits'))
-#
-#     # Model fetched from CC-fits file
-#     ccmodel = create_model_from_fits_file(os.path.join(base_dir, 'cc.fits'))
-#
-#     icomponent = ImageComponent(image.cc.T, -image.x[::-1], -image.y[::-1])
-#     from model import Model
-#     model = Model(stokes='I')
-#     # Model created using ``ImageComponent``
-#     model.add_component(icomponent)
-#
-#     # Model created using ``from_2darray``
-#     model_2d = Model()
-#     model_2d.from_2darray(image.cc, (0.1, 0.1))
-#
-#     # uvdata.substitute([model])
-#     uvdata_.substitute([ccmodel])
-#     uvdata__.substitute([model_2d])
-#     # uvdata.noise_add(noise)
-#     # # ImageComponent
-#     # uvdata.uvplot(fig=fig, bands=[1], color='r')
-#     # from cc-fits
-#     uvdata_.uvplot(fig=fig, bands=[1], color='g')
-#     # from_2darray
-#     uvdata__.uvplot(fig=fig, bands=[1], color='y')
-#

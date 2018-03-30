@@ -3,13 +3,14 @@ from skimage.transform import rotate
 import numpy as np
 
 
-original_shift = -3.
+original_shift = -1.
 map_rotation = 40
 
 
 # First, create image at some high frequency
 from from_fits import create_clean_image_from_fits_file
-fits_file = '/home/ilya/code/vlbi_errors/data/account_spix/0055+300.u.2012_12_10.icn.fits'
+# fits_file = '/home/ilya/code/vlbi_errors/data/account_spix/0055+300.u.2012_12_10.icn.fits'
+fits_file = '/home/ilya/vlbi_errors/account_spix/0055+300.u.2012_12_10.icn.fits'
 image = create_clean_image_from_fits_file(fits_file)
 beam = image.beam_image
 beam = rotate(beam, map_rotation)
@@ -27,7 +28,7 @@ from simulations import alpha, alpha_linear
 imsize = image.imsize
 center = (imsize[0]/2, imsize[1]/2)
 # spix = alpha(imsize, center, 0, k=0.1)
-spix = alpha_linear(imsize, center, -0.05)
+spix = alpha_linear(imsize, center, -0.075)
 spix[mask] = 0
 fig, axes = plt.subplots(1, 1)
 axes.matshow(spix)
@@ -81,7 +82,6 @@ i8_test_ = i8_test.copy()
 i8_test_[mask_] = 0
 
 
-
 # Now shift one image
 from skimage.transform import warp, AffineTransform
 tform = AffineTransform(translation=(original_shift, 0))
@@ -96,15 +96,15 @@ i8_test_shifted_[mask_] = 0
 
 # Cross correlate original and images
 from skimage.feature import register_translation
-shift, error, diffphase = register_translation(i15_, i8_, 10)
+shift, error, diffphase = register_translation(i15_, i8_, 100)
 print("Shift with spix added but no real shift added: {}".format(shift))
 
 found_shift, error, diffphase = register_translation(i15_, i8_shifted_, 1000)
 print("Shift with spix added and real shift added: {}".format(found_shift))
 
-shift, error, diffphase = register_translation(i15_, i15_test_, 10)
+shift, error, diffphase = register_translation(i15_, i15_test_, 100)
 print("Shift with no spix and no real shift: {}".format(shift))
-shift, error, diffphase = register_translation(i15_, i15_test_shifted_, 10)
+shift, error, diffphase = register_translation(i15_, i15_test_shifted_, 100)
 print("Shift with no spix and real shift: {}".format(shift))
 
 print("True shift : {}".format([0., original_shift]))

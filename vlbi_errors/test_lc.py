@@ -14,7 +14,13 @@ def learning_curve(uv_fits_path, fracs, K, initial_dfm_model_path=None,
     uvdata = UVData(uv_fits_path)
     cv_means = dict()
     train_means = dict()
-    for frac in fracs:
+
+    try:
+        assert len(fracs)+1 == len(n_iter)
+    except TypeError:
+        n_iter = [n_iter]*len(fracs+1)
+
+    for n, frac in zip(n_iter[:-1], fracs):
         cv_means[frac] = list()
         train_means[frac] = list()
         for i in range(n_splits):
@@ -25,7 +31,7 @@ def learning_curve(uv_fits_path, fracs, K, initial_dfm_model_path=None,
             kfold.create_train_test_data(outdir=data_dir)
             cv_scores, train_scores = kfold.cv_score(initial_dfm_model_path=initial_dfm_model_path,
                                                      data_dir=data_dir,
-                                                     niter=n_iter,
+                                                     niter=n,
                                                      mapsize_clean=mapsize_clean,
                                                      path_to_script=path_to_script)
             cv_means[frac].append(np.mean(cv_scores))
@@ -39,7 +45,7 @@ def learning_curve(uv_fits_path, fracs, K, initial_dfm_model_path=None,
         kfold.create_train_test_data(outdir=data_dir)
         cv_scores, train_scores = kfold.cv_score(initial_dfm_model_path=initial_dfm_model_path,
                                                  data_dir=data_dir,
-                                                 niter=n_iter,
+                                                 niter=n_iter[-1],
                                                  mapsize_clean=mapsize_clean,
                                                  path_to_script=path_to_script)
         cv_means[1.0].append(np.mean(cv_scores))
@@ -90,48 +96,63 @@ if __name__ == '__main__':
     # source = '0716+714'
     # epoch = '2007_09_06'
     # epoch_ = '2007-09-06'
-    source = '1807+698'
-    epoch = '2007_07_03'
-    epoch_ = '2007-07-03'
-    data_dir = '/home/ilya/code/vlbi_errors/examples/LC'
+    # source = '1807+698'
+    # epoch = '2007_07_03'
+    # epoch_ = '2007-07-03'
+    source = '0336-019'
+    epoch = '2010_10_25'
+    epoch_ = '2010-10-25'
+    data_dir = '/home/ilya/github/vlbi_errors/examples/LC'
     data_dir = os.path.join(data_dir, source, epoch)
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
-    download_mojave_uv_fits(source, [epoch], download_dir=data_dir)
-    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    # download_mojave_uv_fits(source, [epoch], download_dir=data_dir)
+    path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
 
     uv_fits_fname = mojave_uv_fits_fname(source, 'u', epoch)
     uv_fits_path = os.path.join(data_dir, uv_fits_fname)
-    get_mojave_mdl_file('/home/ilya/Dropbox/papers/boot/new_pics/mojave_mod_first/asu.tsv',
-                        source, epoch_, outfile='initial.mdl', outdir=data_dir)
+    # get_mojave_mdl_file('/home/ilya/Dropbox/papers/boot/new_pics/mojave_mod_first/asu.tsv',
+    #                     source, epoch_, outfile='initial.mdl', outdir=data_dir)
     uvdata = UVData(uv_fits_path)
     # modelfit_difmap(uv_fits_fname, 'initial.mdl',
     #                 'initial.mdl', niter=300,
     #                 path=data_dir, mdl_path=data_dir,
     #                 out_path=data_dir)
     original_model_path = os.path.join(data_dir, 'initial.mdl')
+    from spydiff import import_difmap_model, clean_difmap
+    comps = import_difmap_model(original_model_path)
+    from automodel import plot_clean_image_and_components
+    path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
 
-    # LC for CLEAN model
-    cv_means_cc, train_means_cc =\
-        learning_curve(uv_fits_path, (0.25, 0.5, 0.75), K=5,
-                       mapsize_clean=(1024, 0.2), path_to_script=path_to_script,
-                       n_splits=20, data_dir=data_dir, ls_cv='-', ls_train='--')
+    # clean_difmap(uv_fits_path, os.path.join(data_dir, 'cc.fits'), 'I',
+    #              (1024, 0.1), path=data_dir, path_to_script=path_to_script,
+    #              outpath=data_dir)
+    from from_fits import create_clean_image_from_fits_file
+    ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
+                                                             'cc.fits'))
+    plot_clean_image_and_components(ccimage, comps,
+                                    outname=os.path.join(data_dir, "model_image.png"))
+    # # LC for CLEAN model
+    # cv_means_cc, train_means_cc =\
+    #     learning_curve(uv_fits_path, (0.25, 0.5, 0.75), K=5,
+    #                    mapsize_clean=(1024, 0.2), path_to_script=path_to_script,
+    #                    n_splits=20, data_dir=data_dir, ls_cv='-', ls_train='--')
     # LC for direct model
     cv_means_m, train_means_m = \
-        learning_curve(uv_fits_path, (0.25, 0.5, 0.75), K=5,
+        learning_curve(uv_fits_path, (0.125, 0.25, 0.5, 0.75), K=5,
                        initial_dfm_model_path=original_model_path,
-                       n_iter=100, n_splits=20,
+                       n_iter=[1000, 500, 250, 100, 100], n_splits=1,
                        data_dir=data_dir, ls_cv='-.', ls_train=':')
 
     fig, axes = plt.subplots()
-    axes.errorbar(sorted(cv_means_cc.keys()),
-                  y=[np.mean(cv_means_cc[frac]) for frac in sorted(cv_means_cc.keys())],
-                  yerr=[np.std(cv_means_cc[frac]) for frac in sorted(cv_means_cc.keys())],
-                  label='CV CLEAN', ls='--')
-    axes.errorbar(sorted(train_means_cc.keys()),
-                  y=[np.mean(train_means_cc[frac]) for frac in sorted(train_means_cc.keys())],
-                  yerr=[np.std(train_means_cc[frac]) for frac in sorted(train_means_cc.keys())],
-                  label='Train CLEAN', ls='-')
+    # axes.errorbar(sorted(cv_means_cc.keys()),
+    #               y=[np.mean(cv_means_cc[frac]) for frac in sorted(cv_means_cc.keys())],
+    #               yerr=[np.std(cv_means_cc[frac]) for frac in sorted(cv_means_cc.keys())],
+    #               label='CV CLEAN', ls='--')
+    # axes.errorbar(sorted(train_means_cc.keys()),
+    #               y=[np.mean(train_means_cc[frac]) for frac in sorted(train_means_cc.keys())],
+    #               yerr=[np.std(train_means_cc[frac]) for frac in sorted(train_means_cc.keys())],
+    #               label='Train CLEAN', ls='-')
     axes.errorbar(sorted(cv_means_m.keys()),
                   y=[np.mean(cv_means_m[frac]) for frac in sorted(cv_means_m.keys())],
                   yerr=[np.std(cv_means_m[frac]) for frac in sorted(cv_means_m.keys())],

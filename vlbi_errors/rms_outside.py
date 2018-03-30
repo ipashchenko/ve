@@ -9,7 +9,7 @@ from image_ops import rms_image
 # TODO: Add labels to colorbar()
 data_dir = '/home/ilya/Dropbox/papers/boot/new_pics/cv_cc/'
 niter = 1000
-path_to_script = '/home/ilya/code/vlbi_errors/difmap/clean_n'
+path_to_script = '/home/ilya/github/vlbi_errors/difmap/clean_n'
 uv_fits_fname = '0055+300.u.2006_02_12.uvf'
 uv_fits_path = os.path.join(data_dir, uv_fits_fname)
 out_fits_fname = 'cv_1000_cc_1000mas_shifter.fits'
@@ -28,11 +28,11 @@ _, _, _, C, A = variogram(patch)
 # Image already shifted so don't need rms_image_shifted here
 rms = rms_image(image)
 
-# from image import plot as iplot
-# ccimage = create_clean_image_from_fits_file(beam_fits_path)
-# fig = iplot(image.image, image.image, x=image.x, y=image.y, show_beam=True,
-#             min_abs_level=rms, cmap='viridis', beam=ccimage.beam,
-#             beam_face_color='black', blc=(250, 250), trc=(300, 300))
+from image import plot as iplot
+ccimage = create_clean_image_from_fits_file(beam_fits_path)
+fig = iplot(image.image, image.image, x=image.x, y=image.y, show_beam=True,
+            min_abs_level=rms, cmap='viridis', beam=ccimage.beam,
+            beam_face_color='black', blc=(250, 250), trc=(300, 300))
 # fig.savefig(os.path.join(data_dir, 'ngc315_niter1000_shifted1000_patch.pdf'),
 #             bbox_inches='tight', format='pdf', dpi=1200)
 
@@ -46,8 +46,8 @@ matplotlib.rcParams['font.size'] = 20
 matplotlib.rcParams['legend.fontsize'] = 20
 fig, axes = plt.subplots(1, 1)
 import numpy as np
-# ms = axes.matshow(np.sqrt(C[:50, :50])/rms)
-ms = axes.matshow(C[:250, :250]/C[0, 0])
+ms = axes.matshow(np.sqrt(C[:50, :50])/rms)
+# ms = axes.matshow(C[:250, :250]/C[0, 0])
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 divider = make_axes_locatable(axes)
 cax = divider.append_axes("right", size="10%", pad=0.00)
@@ -55,8 +55,8 @@ cb = fig.colorbar(ms, cax=cax)
 axes.set_xlabel(r'Pixels', fontsize=18)
 axes.set_ylabel(r'Pixels', fontsize=18)
 axes.xaxis.set_ticks_position('bottom')
-# cb.set_label(colorbar_label)
-fig.savefig(os.path.join(data_dir, 'ngc315_niter1000_corrmatrix.pdf'),
+cb.set_label("Correlation coefficient")
+fig.savefig(os.path.join(data_dir, 'ngc315_niter1000_corrmatrix_rev.pdf'),
             bbox_inches='tight', format='pdf', dpi=1200)
 
 

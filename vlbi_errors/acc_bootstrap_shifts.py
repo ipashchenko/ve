@@ -1,6 +1,7 @@
 import os
 import glob
 import math
+import numpy as np
 from uv_data import UVData
 from from_fits import (create_model_from_fits_file,
                        create_clean_image_from_fits_file,
@@ -14,7 +15,7 @@ matplotlib.rcParams['ytick.labelsize'] = 14
 matplotlib.rcParams['axes.labelsize'] = 14
 
 
-path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
 data_dir = '/home/ilya/Dropbox/ACC/3c120/boot'
 uvdata_dir = '/home/ilya/Dropbox/ACC/3c120/uvdata'
 uv_fits_u = '0430+052.u.2006_05_24.uvf'
@@ -78,8 +79,7 @@ for i in range(1, 101):
         sh_values.append(sh_value)
     boot_sh_values.append(sh_values)
 
-plt.figure()
 for i, sh_values in enumerate(boot_sh_values):
-    plt.plot(range(0, 80), sh_values, color="#4682b4", alpha=0.25)
-plt.xlabel("Mask Radius, pxl")
+    plt.plot(np.arange(0, 80)/17.12, sh_values, color="#4682b4", alpha=0.25)
+plt.xlabel("Mask Radius, beam")
 plt.ylabel("Shift Value, pxl")

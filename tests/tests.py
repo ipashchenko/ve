@@ -3,7 +3,7 @@
 
 import numpy as np
 import glob
-import pyfits as pf
+import astropy.io.fits as pf
 from unittest import TestCase, skip
 from vlbi_errors.utils import (aips_bintable_fortran_fields_to_dtype_conversion,
                                index_of)

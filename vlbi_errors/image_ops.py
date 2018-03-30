@@ -737,13 +737,15 @@ def jet_ridge_line(image, r_max, beam=None, dr=1, n=1.):
     return coords
 
 
-def jet_skeleton(image, data_dir=None):
+def jet_skeleton(image, data_dir=None, n_rms=3, hovatta_factor=False,
+                 do_filter_before_rms_cut=True, filter_width=5):
     if data_dir is None:
         data_dir = os.getcwd()
-    rms = rms_image(image)
+    rms = rms_image(image, hovatta_factor=hovatta_factor)
     data = image.image.copy()
-    data = gaussian_filter(data, 5)
-    mask = data < 3. * rms
+    if do_filter_before_rms_cut:
+        data = gaussian_filter(data, filter_width)
+    mask = data < n_rms * rms
     data[mask] = 0
     data[~mask] = 1
 
@@ -812,8 +814,6 @@ def jet_skeleton(image, data_dir=None):
     fig.tight_layout()
     plt.savefig(os.path.join(data_dir, 'skeleton.png'))
     plt.show()
-    plt.close()
-
 
 
 def image_ridge_line(image):

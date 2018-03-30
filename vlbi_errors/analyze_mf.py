@@ -213,14 +213,15 @@ class MFObservations(object):
 
     def run(self, sigma_evpa=None, sigma_d_term=None, colors_clim=None,
             n_sigma_mask=None, rotm_slices=None, pxls_plot=None,
-            plot_points=None, model_generator=None, slice_ylim=None):
+            plot_points=None, model_generator=None, slice_ylim=None,
+            freq_stokes_dict_native=None, freq_stokes_dict_common=None):
         self._t0 = Time.now()
         date, time = str(self._t0.utc.datetime).split()
         self._difmap_commands_file =\
             os.path.join(self.data_dir,
                          "difmap_commands_{}_{}".format(date, time))
-        self.clean_original_native(freq_stokes_dict=None)
-        self.clean_original_common(freq_stokes_dict=None)
+        self.clean_original_native(freq_stokes_dict=freq_stokes_dict_native)
+        self.clean_original_common(freq_stokes_dict=freq_stokes_dict_common)
         if self.find_shifts:
             self.get_shifts()
         self.bootstrap_uvdata()
@@ -788,11 +789,11 @@ if __name__ == '__main__':
     # epoch = '2006_07_07'
 
     # 2230+114
-    source = '2230+114'
-    rotm_slices = [((4, -5), (1, -7))]
-    colors_clim = [-600, 250]
-    epoch = '2006_02_12'
-    slice_ylim = [-200, 600]
+    # source = '2230+114'
+    # rotm_slices = [((4, -5), (1, -7))]
+    # colors_clim = [-600, 250]
+    # epoch = '2006_02_12'
+    # slice_ylim = [-200, 600]
 
     # 0945+408
     # source = '0945+408'
@@ -801,12 +802,13 @@ if __name__ == '__main__':
     # colors_clim = [-120, 440]
 
     # 1641+399
-    # source = '1641+399'
-    # epoch = '2006_06_15'
+    source = '1641+399'
+    epoch = '2006_06_15'
     # rotm_slices = [((-2, -3), (-2, 3))]
-    # colors_clim = [-550, 650]
+    rotm_slices = [((0, 0), (-2, 0))]
+    colors_clim = [-550, 650]
 
-    path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+    path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
     # epochs = get_epochs_for_source(source, use_db='multifreq')
     # print(epochs)
     # print("Found epochs for source {}:".format(source))
@@ -814,7 +816,8 @@ if __name__ == '__main__':
     #     print(epoch)
     # epoch = epochs[-1]
     # base_dir = '/home/ilya/vlbi_errors/article'
-    base_dir = '/home/ilya/Dropbox/papers/boot/new_pics/mf'
+    # base_dir = '/home/ilya/Dropbox/papers/boot/new_pics/mf'
+    base_dir = '/home/ilya/Dropbox/papers/boot/new_pics/revision_pics'
     data_dir = os.path.join(base_dir, source)
 
     # Download uv-data from MOJAVE web DB optionally
@@ -831,7 +834,7 @@ if __name__ == '__main__':
                          sigma_d_term=[0.002, 0.002, 0.002, 0.002],
                          sigma_evpa=[4., 4., 2., 3.])
     mfo.run(n_sigma_mask=3.0, colors_clim=colors_clim,
-            rotm_slices=rotm_slices, slice_ylim=slice_ylim)
+            rotm_slices=rotm_slices, slice_ylim=None)
             # pxls_plot=[(0, 0), (1, 0), (-3, 0), (-4, 0)],
             # plot_points=[(0, 0), (-2, 0), (-3, 0), (-4, 0)])
    #  label_size = 16

@@ -217,22 +217,25 @@ def process_flux_components(n):
     names = ['source', 'id', 'trash', 'epoch', 'flux', 'r', 'pa', 'bmaj', 'e',
              'bpa']
     # base_dir = '/home/ilya/vlbi_errors/mojave_mod/mojave_mod'
-    base_dir = '/home/ilya/Dropbox/papers/boot/new_pics/mojave_mod'
+    base_dir = '/home/ilya/Dropbox/papers/boot/new_pics/mojave_mod_first'
     import pandas as pd
     df = pd.read_table(os.path.join(base_dir, 'asu.tsv'), sep=';', header=None,
                        names=names, dtype={key: str for key in names},
                        index_col=False)
     fluxes = list()
     for source in df['source'].unique():
-        print "Checking {}".format(source)
+        print("Checking {}".format(source))
         epochs = df.loc[df['source'] == source]['epoch']
         last_epoch_ = list(epochs)[-1]
+        first_epoch_ = list(epochs)[0]
         last_epoch = last_epoch_.replace('-', '_')
+        first_epoch = first_epoch_.replace('-', '_')
         data_dir = os.path.join(base_dir, source, last_epoch)
+        data_dir_first = os.path.join(base_dir, source, first_epoch)
         import glob
-        files = sorted(glob.glob(os.path.join(data_dir, "68*comp*txt")))
+        files = sorted(glob.glob(os.path.join(data_dir_first, "68*comp*txt")))
         if not files:
-            print "No component files"
+            print("No component files")
             continue
         files = sort_comp_files(files)
         # Now files - list with core - first file, first component - second
@@ -254,18 +257,18 @@ def process_flux_components(n):
                     boot_sigma = float(flux_line[2]) - float(flux_line[1])
                     flux = float(flux_line[0])
                     if flux < 0:
-                        print "Negative flux"
+                        print("Negative flux")
                         continue
                     if flux > 10:
-                        print "Too big flux"
+                        print("Too big flux")
                         continue
                     if boot_sigma > 100.*flux:
-                        print "Too big boot_sigma for source {}".format(source)
+                        print("Too big boot_sigma for source {}".format(source))
                         continue
                     rms = float(file_.split('_')[-1][:-4])
                     fluxes.append([flux, boot_sigma, rms, r])
             except IOError:
-                print "Failed reading file {}".format(file_)
+                print("Failed reading file {}".format(file_))
                 continue
     fluxes = np.atleast_2d(fluxes)
     return fluxes
@@ -275,7 +278,7 @@ def process_position_components(n):
     names = ['source', 'id', 'trash', 'epoch', 'flux', 'r', 'pa', 'bmaj', 'e',
              'bpa']
     # base_dir = '/home/ilya/vlbi_errors/mojave_mod/mojave_mod'
-    base_dir = '/home/ilya/Dropbox/papers/boot/new_pics/mojave_mod_last'
+    base_dir = '/home/ilya/Dropbox/papers/boot/new_pics/mojave_mod_first'
     import pandas as pd
     df = pd.read_table(os.path.join(base_dir, 'asu.tsv'), sep=';', header=None,
                        names=names, dtype={key: str for key in names},
@@ -287,7 +290,7 @@ def process_position_components(n):
         params_dict[source] = dict()
         print "Checking {}".format(source)
         epochs = df.loc[df['source'] == source]['epoch']
-        last_epoch_ = list(epochs)[-1]
+        last_epoch_ = list(epochs)[0]
         last_epoch = last_epoch_.replace('-', '_')
         data_dir = os.path.join(base_dir, source, last_epoch)
         import glob
@@ -363,11 +366,11 @@ for n in (1, 2, 3, 4):
                        index_col=False)
     sources = params_dict.keys()
     for source in sources:
-        print "Source {}".format(source)
+        print("Source {}".format(source))
         comps = params_dict[source].keys()
         ratios_dict[source] = dict()
         for comp in comps:
-            print "Component {}".format(comp)
+            print("Component {}".format(comp))
             a = df.loc[(df['source'] == source) & (df['id'] == ' {}'.format(comp))]
             if a.empty:
                 continue
@@ -381,13 +384,23 @@ for n in (1, 2, 3, 4):
 
 
 # ratio_1 = list()
+# ratio_2 = list()
+# ratio_3 = list()
+# ratio_4 = list()
+#
 # for source in ratios_dict.keys():
 #     for comp in ratios_dict[source].keys():
 #         if comp=='1':
 #             ratio_1.append(ratios_dict[source][comp])
-#
+#         elif comp=='2':
+#             ratio_2.append(ratios_dict[source][comp])
+#         elif comp=='3':
+#             ratio_3.append(ratios_dict[source][comp])
+#         elif comp=='4':
+#             ratio_4.append(ratios_dict[source][comp])
+
 # from knuth_hist import histogram
-# hist_d, edges_d = histogram(ratio_1, normed=False)
+# hist_d, edges_d = histogram(ratios_n[1], normed=False)
 # lower_d = np.resize(edges_d, len(edges_d) - 1)
 # import matplotlib.pyplot as plt
 # fig, ax = plt.subplots(1, 1)
@@ -397,4 +410,30 @@ for n in (1, 2, 3, 4):
 # ax.set_ylabel(r"N")
 # fig.savefig("/home/ilya/Dropbox/article/evn2016/boot_chi2_position_sigma_histogram_3comp.png", bbox_inches='tight', dpi=200)
 # fig.close()
+
+
+label_size = 16
+import matplotlib
+import matplotlib.pyplot as plt
+matplotlib.rcParams['xtick.labelsize'] = label_size
+matplotlib.rcParams['ytick.labelsize'] = label_size
+matplotlib.rcParams['axes.titlesize'] = label_size
+matplotlib.rcParams['axes.labelsize'] = label_size
+matplotlib.rcParams['font.size'] = label_size
+matplotlib.rcParams['legend.fontsize'] = label_size
+# -2 for last component at 9
+fig, ax = plt.subplots(1, 1)
+for i, lab, ls in zip((1, 2, 3, 4), ('1',
+                    '2', '3', '4'), ('solid', 'dashed', 'dashdot', 'dotted')):
+    ax.hist([a for a in ratios_n[i]], bins=15, histtype='step', stacked=True,
+         fill=False, label=lab, lw=2, ls=ls, color='black', range=[0, 1])
+# hist(fluxes[:,1]/(0.1*fluxes[:,0]), bins=15, range=[0, 10])
+# hist(fluxes[:,1]/(0.1*fluxes[:,0]), bins=15, range=[0, 1.4])
+ax.set_ylabel(r'N')
+ax.set_xlabel(r"Bootstrap $\sigma_{position}$ to kinematic post-fit")
+#               r" $\sigma_{position}$")
+ax.legend(handlelength=2.225)
+plt.show()
+# plt.savefig('/home/ilya/Dropbox/papers/boot/new_pics/mod_new_pos_all_black.pdf',
+#             bbox_inches='tight', format='pdf', dpi=1200)
 

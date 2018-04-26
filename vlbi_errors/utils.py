@@ -879,8 +879,8 @@ def baselines_2_ants(baselines):
         baseline = abs(baseline)
         ant1 = int(baseline // 256)
         ant2 = int(baseline - ant1 * 256)
-        if ant1 * 256 + ant2 != baseline:
-            continue
+        # if ant1 * 256 + ant2 != baseline:
+        #     continue
         ants.append(ant1)
         ants.append(ant2)
     ants = list(set(ants))

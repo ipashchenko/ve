@@ -454,7 +454,7 @@ class UVData(object):
         Returns list of baselines numbers.
         """
         result = list(set(self.hdu.data['BASELINE']))
-        return vec_int(sorted(result))
+        return sorted(result)
 
     @property
     def antennas(self):

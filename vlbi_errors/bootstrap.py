@@ -231,7 +231,8 @@ def bootstrap_uvfits_with_difmap_model(uv_fits_path, dfm_model_path,
         rchisq = modelfit_difmap(bootstrapped_fits, dfm_model_fname,
                                  'mdl_booted_{}.mdl'.format(j),
                                  path=boot_dir, mdl_path=dfm_model_dir,
-                                 out_path=boot_dir, niter=niter)
+                                 out_path=boot_dir, niter=niter,
+                                 show_difmap_output=True)
         out_rchisq.append(rchisq)
         print("Finished modelfit of {}th bootstrapped data with with"
               " RChiSq = {}".format(j, rchisq))

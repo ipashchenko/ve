@@ -36,8 +36,8 @@ def convert_to_single_number(file_path, data_dir='/home/ilya/Dropbox/silke/1413'
                     of.write("\n")
 
 
-txt_file_dir = '/home/ilya/Dropbox/silke'
-data_dir = '/home/ilya/silke/1413'
+txt_file_dir = '/home/ilya/silke/3C84'
+data_dir = '/home/ilya/silke/3C84'
 out_files = glob.glob(os.path.join(txt_file_dir, 'errors_*.mod'))
 
 # # Mass download uv-data for our epochs
@@ -45,11 +45,11 @@ out_files = glob.glob(os.path.join(txt_file_dir, 'errors_*.mod'))
 # for path in original_dfm_models:
 #     fname = os.path.split(path)[-1]
 #     epoch = fname[:-4]
-#     download_mojave_uv_fits('1413+135', epochs=[epoch], download_dir=data_dir)
+#     download_mojave_uv_fits('0316+413', epochs=[epoch], download_dir=data_dir)
 
 
-boot_dir = '/home/ilya/silke/1413/boot'
-txt_file_dir = '/home/ilya/Dropbox/silke/1413'
+boot_dir = '/home/ilya/silke/3C84/boot'
+txt_file_dir = '/home/ilya/silke/3C84'
 original_dfm_models = glob.glob(os.path.join(data_dir, '*.mod'))
 # epochs_ready = glob.glob(os.path.join(txt_file_dir, 'errors_*.png'))
 # epochs_ready_ = list()
@@ -57,18 +57,19 @@ original_dfm_models = glob.glob(os.path.join(data_dir, '*.mod'))
 # for epoch_ready in epochs_ready:
 #     dir, fname = os.path.split(epoch_ready)
 #     epochs_ready_.append(fname[7:-4])
-epochs_ready = ['2001_04_01', '2001_01_04', '1998_10_30', '2007_08_09',
-                '1999_01_09', '2002_11_23']
+# epochs_ready = ['2001_04_01', '2001_01_04', '1998_10_30', '2007_08_09',
+#                 '1999_01_09', '2002_11_23']
+epochs_ready = []
 for path in original_dfm_models:
     fname = os.path.split(path)[-1]
     epoch = fname[:-4]
-    print "Processing epoch : {}".format(epoch)
+    print("Processing epoch : {}".format(epoch))
     if epoch in epochs_ready:
-        print "Skipping epoch {}".format(epoch)
+        print("Skipping epoch {}".format(epoch))
         continue
     original_model_fname = fname
     original_model_path = os.path.join(data_dir, original_model_fname)
-    uv_fits_fname = mojave_uv_fits_fname('1413+135', 'u', epoch)
+    uv_fits_fname = mojave_uv_fits_fname('0316+413', 'u', epoch)
     uv_fits_path = os.path.join(data_dir, uv_fits_fname)
 
     uvdata = UVData(uv_fits_path)
@@ -82,18 +83,18 @@ for path in original_dfm_models:
     out_png_file = os.path.join(txt_file_dir, 'errors_{}.png'.format(epoch))
     try:
         bootstrap_uvfits_with_difmap_model(uv_fits_path, original_model_path,
-                                           n_boot=100, boot_dir=boot_dir,
+                                           n_boot=200, boot_dir=boot_dir,
                                            out_txt_file=out_txt_file,
                                            out_plot_file=out_png_file,
                                            clean_after=True, niter=200,
                                            out_rchisq_file=os.path.join(txt_file_dir, "{}_rchisq.dat".format(epoch)))
     except IOError:
         with open(os.path.join(txt_file_dir, '{}_io_error.txt'.format(epoch)), 'w'):
-            print "IO Error"
+            print("IO Error")
         continue
     except VerifyError:
         with open(os.path.join(txt_file_dir, '{}_verify_error.txt'.format(epoch)), 'w'):
-            print "Verify Error"
+            print("Verify Error")
         bootstrapped_uv_fits = sorted(glob.glob(os.path.join(boot_dir,
                                                              'bootstrapped_data*.fits')))
         for file_ in bootstrapped_uv_fits:

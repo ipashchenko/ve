@@ -1709,7 +1709,7 @@ class UVData(object):
             else:
                 print("Provide ``colors`` argument to show in different"
                       " colors!")
-                syms = ['.'] * n_if
+                syms = [','] * n_if
 
             if n_if > 1 or stokes not in self.stokes:
 
@@ -1720,7 +1720,7 @@ class UVData(object):
                         axes[0].plot(uv_radius, a2[:, _if], syms[_if])
                     else:
                         axes[0].plot(uv_radius, a2[:, _if], syms[_if],
-                                     color=color, alpha=alpha)
+                                     color=color, alpha=alpha, ms=1)
                 for _if in range(n_if):
                     # Ignore default color if colors list is supplied
                     if colors is not None:

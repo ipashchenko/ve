@@ -22,7 +22,7 @@ except ImportError:
 # FIXME: This finds only dr that minimize std for shift - radius dependence
 # TODO: use iterables of shifts and sizes as arguments. UNIX-way:)
 def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
-               max_mask_r=100, mask_step=1, upsample_factor=100):
+               min_mask_r=0, max_mask_r=100, mask_step=1, upsample_factor=100):
     """
     Find shift between two images using our heuristic.
 
@@ -51,7 +51,7 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
         shift_dict[dr] = list()
         print(shift_dict)
         # Iterating over mask sizes
-        for r in range(0, max_mask_r, mask_step):
+        for r in range(min_mask_r, max_mask_r, mask_step):
             print("Using r = {}".format(r))
             r1 = r
             r2 = r + dr
@@ -90,7 +90,7 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
                                    region2=(image2.x_c, image2.y_c, idx[0] + dr_tgt,
                                             None),
                                    upsample_factor=upsample_factor)
-    return shift, shift_dict
+    return shift, shift_dict, shift_values_dict
 
 
 def find_bbox(array, level, delta=0.):

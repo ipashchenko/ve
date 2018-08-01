@@ -18,7 +18,10 @@ from sklearn.covariance import EllipticEnvelope, MinCovDet
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 from skimage import transform
-from skimage.filters import gaussian_filter
+try:
+    from skimage.filters import gaussian_filter
+except ImportError:
+    from skimage.filters import gaussian as gaussian_filter
 from scipy.ndimage import interpolation
 try:
     # Python 3 moved reduce to the functools module
@@ -929,49 +932,86 @@ def ants_2_baselines(ants):
     return baselines
 
 
-def get_triangles(antenna, antennas=None):
+def get_triangles(ref, antennas):
     """
     Find triangles of antennas.
-    :param antenna:
-    Number of antenna to build triangles with.
+
+    :param ref:
+        Number of antenna to build triangles with.
     :param antennas:
-    Iterable of antenna numbers to build triangles with.
+        Iterable of antenna numbers to build triangles with.
     :return:
-    Dictionary with keys - ijk of antenna numbers and values - lists of
-    3 baseline numbers.
+        Dictionary with keys - ijk of antenna numbers and values - lists of
+        3 baseline numbers.
     """
-    if antennas is None:
-        raise Exception("Provide some antenna num. for antennas!")
-    else:
-        baselines_list = list()
-        assert (len(antennas) >= 2), "Need > 2 antennas for triangle!"
-        # antennas must be iterable
-        baselines_list.extend(list(antennas))
+
+    baselines_list = list()
+    assert (len(antennas) >= 2), "Need > 2 antennas for triangle!"
+    # antennas must be iterable
+    baselines_list.extend(list(antennas))
 
     # Assert that we don't have the same antennas in ``antennas`` and
     # ``antennas`` keywords
     if len(baselines_list) == 2:
-        assert antenna not in baselines_list, "Need 3 diff. antennas!"
+        assert ref not in baselines_list, "Need 3 diff. antennas!"
     else:
-        if antenna in baselines_list:
-            baselines_list.remove(antenna)
+        if ref in baselines_list:
+            baselines_list.remove(ref)
 
     # Find triangles (combinations of 3 antenna numbers)
     triangles = list()
-    ant_numbers = [antenna] + baselines_list
-    for comb in combinations(ant_numbers, 3):
-        if comb[0] == antenna:
-            triangles.append(comb)
-
+    # This 3 triangles complement each triangle in `triangles`` so sum of their
+    # closure phase is equal to triangle in ``traingles``
+    complement_triangles = list()
+    for comb in combinations(baselines_list, 2):
+        triangles.append([ref] + list(comb))
+    n = 0
     # Convert to baseline numbers
     triangle_baselines = dict()
     for triangle in triangles:
         i, j, k = sorted(triangle)
-        triangle_baselines.update({str(i) + str(j) + str(k): [j + 256 * i,
-                                                              k + 256 * i,
-                                                              k + 256 * j]})
+        triangle_baselines.update({str(i) + '-' + str(j) + '-' + str(k): [j + 256 * i,
+                                                                          k + 256 * i,
+                                                                          k + 256 * j]})
+        n += 1
+    print(n)
 
     return triangle_baselines
+
+
+def get_quadrangles(ref, antennas):
+    baselines_list = list()
+    assert (len(antennas) >= 3), "Need > 3 antennas for quadrangle!"
+    # antennas must be iterable
+    baselines_list.extend(list(antennas))
+
+    # Assert that we don't have the same antennas in ``antennas`` and
+    # ``antennas`` keywords
+    if len(baselines_list) == 3:
+        assert ref not in baselines_list, "Need 4 diff. antennas!"
+    else:
+        if ref in baselines_list:
+            baselines_list.remove(ref)
+
+    # Find triangles (combinations of 3 antenna numbers)
+    quadrangles = list()
+    for comb in combinations(baselines_list, 3):
+        quadrangles.append([ref] + list(comb))
+
+    quadrangles_baselines = dict()
+    n = 0
+    for quadrangle in quadrangles:
+        i, j, k, l = sorted(quadrangle)
+        quadrangles_baselines.update({str(i) + str(j) + str(k) + str(l):
+                                          ([str(i)+str(j), str(k)+str(l), str(i)+str(k), str(j)+str(l)],
+                                           [str(i)+str(k), str(j)+str(l), str(i)+str(l), str(j)+str(k)])})
+        n += 2
+    print(n)
+        # quadrangles_baselines.update({str(i) + str(j) + str(k) + str(l):
+        #                                   ([i+j*256, k+l*256, i+256*k, j+256*l],
+        #                                    [i+k*256, j+256*l, i+256*l, j+256*k])})
+
+    return quadrangles_baselines
 
 
 def time_frac_to_dhms(fractime):

@@ -740,6 +740,15 @@ class Image(BasicImage):
         self.freq = None
         self.stokes = None
 
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        image = self._construct(self.pixsize, self.pixref, self.stokes,
+                                self.freq, self.pixrefval, imsize=self.imsize)
+        image.image = self.image
+        return image
+
     def _construct(self, pixsize, pixref, stokes, freq, pixrefval, **kwargs):
         super(Image, self)._construct(**kwargs)
         self.pixsize = pixsize
@@ -836,7 +845,7 @@ class Image(BasicImage):
         y1 = np.argmin(np.abs(ycoords - point2_mas[0]))
         x0 = np.argmin(np.abs(xcoords - point1_mas[1]))
         x1 = np.argmin(np.abs(xcoords - point2_mas[1]))
-        return (x0/mas_to_rad, y0/mas_to_rad), (x1/mas_to_rad, y1/mas_to_rad)
+        return (x0, y0), (x1, y1)
 
     def _inv_convert_coordinates(self, point1_pix, point2_pix):
         """

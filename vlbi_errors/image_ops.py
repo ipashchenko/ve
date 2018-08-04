@@ -525,7 +525,8 @@ def spix(freqs, fluxes, s_fluxes=None, p0=None):
 
 
 def spix_map(freqs, flux_maps, s_flux_maps=None, mask=None, outfile=None,
-             outdir=None, ext='png', mask_on_chisq=False):
+             outdir=None, ext='png', mask_on_chisq=False,
+             ampcal_uncertainties=None):
     """
     Function that calculates SPectral IndeX map.
 
@@ -542,6 +543,9 @@ def spix_map(freqs, flux_maps, s_flux_maps=None, mask=None, outfile=None,
     :param mask_on_chisq: (optional)
         Mask chi squared values that are larger then critical value? (default:
         ``False``)
+    :param ampcal_uncertainties: (optional)
+        Iterable of the fractional uncertainties due to absolute calibration to
+        add in quadrature.
 
     :return:
         Tuple of 2D numpy array with values of Spectral Index [], 2D numpy array
@@ -560,6 +564,15 @@ def spix_map(freqs, flux_maps, s_flux_maps=None, mask=None, outfile=None,
         assert len(freqs) == len(flux_maps) == len(s_flux_maps)
     else:
         assert len(freqs) == len(flux_maps)
+
+    if ampcal_uncertainties is not None:
+        if s_flux_maps is not None:
+            for i, (flux_map, s_flux_map, rel_error) in enumerate(zip(flux_maps, s_flux_maps, ampcal_uncertainties)):
+                s_flux_maps[i] = np.hypot(s_flux_map, rel_error*flux_map)
+        else:
+            s_flux_maps = list()
+            for flux_map, rel_error in zip(flux_maps, ampcal_uncertainties):
+                s_flux_maps.append(rel_error*flux_map)
 
     flux_cube = np.dstack(flux_maps)
     if s_flux_maps is not None:
@@ -898,14 +911,43 @@ def rms_image_shifted(uv_fits_path, hovatta_factor=True, shift=(1000, 1000),
     return rms_image(image, hovatta_factor=hovatta_factor)
 
 
+def spix_mask(freq_image_dict, rms_cs_dict=None, uv_fits_paths=None, n_sigma=2,
+              path_to_script=None):
+
+    bands = freq_image_dict.keys()
+
+    if path_to_script is None:
+        raise Exception("Provide location of difmap final CLEAN script!")
+
+    if rms_cs_dict is None:
+        # If no UV-data then calculate rms using outer parts of images
+        if uv_fits_paths is None:
+                rms_cs_dict = {band: rms_image(freq_image_dict[band]) for band
+                               in bands}
+        else:
+            print("Finding RMS using shifted images")
+            rms_cs_dict = {band: rms_image_shifted(uv_fits_paths[band], stokes='I',
+                                                   image=freq_image_dict[band],
+                                                   path_to_script=path_to_script)
+                           for band in bands}
+
+    masks = [freq_image_dict[band].image < n_sigma * rms_cs_dict[band] for band
+             in bands]
+    return np.logical_or.reduce(masks)
+
+
 # TODO: Add as method to ``images.Images``
-def pol_mask(stokes_image_dict, uv_fits_path=None, n_sigma=2.,
+def pol_mask(stokes_image_dict, rms_cs_dict=None, uv_fits_path=None, n_sigma=2.,
              path_to_script=None):
     """
     Find mask using stokes 'I' map and 'PPOL' map using specified number of
     sigma.
+
     :param stokes_image_dict:
         Dictionary with keys - stokes, values - instances of ``Image``.
+    :param rms_cs_dict: (optional)
+        Dictionary with rms for each Stokes. If ``None`` than calculate it.
+        (default: ``None``)
     :param uv_fits_path: (optional)
         Path to uv-fits files.
     :param n_sigma: (optional)
@@ -920,16 +962,18 @@ def pol_mask(stokes_image_dict, uv_fits_path=None, n_sigma=2.,
         raise Exception("Provide location of difmap final CLEAN script!")
 
     quantile_dict = {1: 0.6827, 2: 0.9545, 3: 0.9973, 4: 0.99994}
+
     # If no UV-data then calculate rms using outer parts of images
-    if uv_fits_path is None:
-        rms_cs_dict = {stokes: rms_image(stokes_image_dict[stokes]) for stokes
-                       in ('I', 'Q', 'U')}
-    else:
-        rms_cs_dict = {stokes:
-                           rms_image_shifted(uv_fits_path, stokes=stokes,
-                                             image=stokes_image_dict[stokes],
-                                             path_to_script=path_to_script)
-                       for stokes in ('I', 'Q', 'U')}
+    if rms_cs_dict is None:
+        if uv_fits_path is None:
+            rms_cs_dict = {stokes: rms_image(stokes_image_dict[stokes]) for stokes
+                           in ('I', 'Q', 'U')}
+        else:
+            rms_cs_dict = {stokes:
+                               rms_image_shifted(uv_fits_path, stokes=stokes,
+                                                 image=stokes_image_dict[stokes],
+                                                 path_to_script=path_to_script)
+                           for stokes in ('I', 'Q', 'U')}
 
     qu_rms = np.mean([rms_cs_dict[stoke] for stoke in ('Q', 'U')])
     ppol_quantile = qu_rms * np.sqrt(-np.log((1. -

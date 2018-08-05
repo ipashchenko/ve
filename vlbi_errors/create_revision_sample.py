@@ -27,14 +27,14 @@ def create_data(jm_dict, noise_scale=1.0, qu_fraction=0.2):
 
 if __name__ == "__main__":
 
-    n_sample = 3
+    n_sample = 100
     qu_fraction = 0.2
     bands = ("x", "y", "j", "u")
     freqs = np.array([8.104458750, 8.424458750, 12.111458750, 15.353458750])
     freqs *= 10**9
     path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
     # Directory with resulting data sets
-    data_dir = "/home/ilya/data/revision"
+    data_dir = "/home/ilya/data/revision/sample"
     # Directory with multifrequency data
     templates_dir = "/home/ilya/github/jetshow_utils/uvf_templates"
 

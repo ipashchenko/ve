@@ -27,6 +27,9 @@ data_dir = "/home/ilya/data/revision"
 
 def clean_original_data(uvdata_dict, data_dir, beam=None, plot=False,
                         mapsize_clean=(512, 0.1), outfname_postfix=None):
+    if not isinstance(mapsize_clean, dict):
+        assert len(mapsize_clean) == 2
+        mapsize_clean = {band: mapsize_clean for band in bands}
     for band in bands:
         print("Band - {}".format(band))
         for stokes in ('I', 'Q', 'U'):
@@ -38,14 +41,17 @@ def clean_original_data(uvdata_dict, data_dir, beam=None, plot=False,
             print("Cleaning {} to {}".format(uvdata_dict[band], outfname))
             clean_difmap(fname=uvdata_dict[band], outfname=outfname,
                          stokes=stokes.lower(), path=data_dir, outpath=data_dir,
-                         mapsize_clean=mapsize_clean,
+                         mapsize_clean=mapsize_clean[band],
                          path_to_script=path_to_script,
                          show_difmap_output=False, beam_restore=beam)
 
         # Rarely need this one
         if plot:
-            ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
-                                                                     "cc_{}_{}.fits".format(band, "I")))
+            if outfname_postfix is None:
+                outfname = "cc_{}_{}.fits".format(band, "I")
+            else:
+                outfname = "cc_{}_{}_{}.fits".format(band, "I", outfname_postfix)
+            ccimage = create_clean_image_from_fits_file(os.path.join(data_dir, outfname))
 
             beam = ccimage.beam
             rms = rms_image(ccimage)
@@ -62,10 +68,11 @@ def clean_original_data(uvdata_dict, data_dir, beam=None, plot=False,
 
 
 def process_mf(uvdata_dict, beam, data_dir, path_to_script, clean_after=True,
-               rms_cs_dict=None):
+               rms_cs_dict=None, mapsize_clean=(512, 0.1)):
     images_dict = dict()
     print(" === CLEANing each band and Stokes ===")
-    clean_original_data(uvdata_dict, data_dir, beam)
+    clean_original_data(uvdata_dict, data_dir, beam,
+                        mapsize_clean=mapsize_clean)
 
     for band in bands:
         images_dict[band] = dict()
@@ -156,10 +163,10 @@ def create_bootstrap_sample(uvdata_dict, ccfits_dict, data_dir, n_boot=10):
     print("Bootstrap uv-data with CLEAN-models...")
     for band, uv_fits in uvdata_dict.items():
         uvdata = UVData(os.path.join(data_dir, uv_fits))
-        print("Band = {}".format(band))
+        # print("Band = {}".format(band))
         models = list()
         for stokes, cc_fits in ccfits_dict[band].items():
-            print("Stokes = {}".format(stokes))
+            # print("Stokes = {}".format(stokes))
             ccmodel = create_model_from_fits_file(os.path.join(data_dir,
                                                                cc_fits))
             models.append(ccmodel)
@@ -177,14 +184,20 @@ if __name__ == "__main__":
     # ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
     #                                                          "bk_cc_x_I_wo_noise.fits"))
     # beam = ccimage.beam
+    # Common beam
     beam = (1.5074023139377921, 1.3342292885366427, 0.36637646630496357)
     beam_size = np.sqrt(beam[0]*beam[1])/0.1
+    # Common mapsize
+    mapsize_clean = (512, 0.1)
 
     data_dir = "/home/ilya/data/revision"
     path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
 
-    n_boot = 10
+    n_boot = 3
     n_sample = 3
+
+    rms_cs_dict = None
+
 
     # Loop over artificial sample
     for i_art in range(n_sample):
@@ -193,28 +206,42 @@ if __name__ == "__main__":
                         os.path.join(data_dir, "{}.uvf".format(band)))
 
 
-        # For current artificial source ``i_art`` create bootstrapped sample
+        print("=== Processing original data for sample #{} ===".format(i_art))
         uvdata_dict = {band: "{}.uvf".format(band) for band in bands}
-        clean_original_data(uvdata_dict, data_dir, beam=beam, plot=True)
-        for band in bands:
-            shutil.move(os.path.join(data_dir, "cc_{}.png".format(band)),
-                        os.path.join(data_dir, "cc_{}_{}.png".format(band, i_art)))
+        result = process_mf(uvdata_dict, beam, data_dir, path_to_script,
+                            rms_cs_dict=rms_cs_dict, clean_after=False,
+                            mapsize_clean=mapsize_clean)
+
+        rms_cs_dict = result["RMS"]
+
+        np.savez_compressed(os.path.join(data_dir, "ROTM_{}".format(i_art)),
+                            **{value: result["ROTM"][value] for value in
+                               ("value", "sigma", "chisq")})
+        np.savez_compressed(os.path.join(data_dir, "SPIX_{}".format(i_art)),
+                            **{value: result["SPIX"][value] for value in
+                               ("value", "sigma", "chisq")})
+        np.save(os.path.join(data_dir, "RMS_{}".format(i_art)), result["RMS"])
+
+
+        print("=== For current sample #{} create {} bootstrapped"
+              " samples ===".format(i_art, n_boot))
         ccfits_dict = {band: {stokes: "cc_{}_{}.fits".format(band, stokes)
                               for stokes in ("I", "Q", "U")}
                        for band in bands}
-        create_bootstrap_sample(uvdata_dict, ccfits_dict, data_dir, n_boot=n_boot)
+        create_bootstrap_sample(uvdata_dict, ccfits_dict, data_dir,
+                                n_boot=n_boot)
 
 
         # CLEANing all ``n_boot`` bootstrapped uv-data and collecting SPIX/ROTM
         # images in ``results`` list
-        rms_cs_dict = None
         results = list()
         for i in range(1, n_boot+1):
             print("=== Processing bootstrap sample #{} ===".format(i))
             uvdata_dict = {band: "boot_{}_{}.uvf".format(band, str(i).zfill(3))
                            for band in bands}
             result = process_mf(uvdata_dict, beam, data_dir, path_to_script,
-                                rms_cs_dict=rms_cs_dict)
+                                rms_cs_dict=rms_cs_dict,
+                                mapsize_clean=mapsize_clean)
             rms_cs_dict = result["RMS"]
             results.append(result)
 
@@ -229,25 +256,24 @@ if __name__ == "__main__":
 
 
         # Save resulting maps
-        np.savez_compressed(os.path.join(data_dir, "ROTM_{}".format(i_art)),
+        np.savez_compressed(os.path.join(data_dir, "ROTM_{}_boot".format(i_art)),
                             **{str(i): results[i]["ROTM"]["value"] for i in
                                range(n_boot)})
-        np.savez_compressed(os.path.join(data_dir, "ROTM_SIGMA_{}".format(i_art)),
+        np.savez_compressed(os.path.join(data_dir, "ROTM_SIGMA_{}_boot".format(i_art)),
                             **{str(i): results[i]["ROTM"]["sigma"] for i in
                                range(n_boot)})
-        np.savez_compressed(os.path.join(data_dir, "ROTM_CHISQ_{}".format(i_art)),
+        np.savez_compressed(os.path.join(data_dir, "ROTM_CHISQ_{}_boot".format(i_art)),
                             **{str(i): results[i]["ROTM"]["chisq"] for i in
                                range(n_boot)})
-        np.savez_compressed(os.path.join(data_dir, "SPIX_{}".format(i_art)),
+        np.savez_compressed(os.path.join(data_dir, "SPIX_{}_boot".format(i_art)),
                             **{str(i): results[i]["SPIX"]["value"] for i in
                                range(n_boot)})
-        np.savez_compressed(os.path.join(data_dir, "SPIX_SIGMA_{}".format(i_art)),
+        np.savez_compressed(os.path.join(data_dir, "SPIX_SIGMA_{}_boot".format(i_art)),
                             **{str(i): results[i]["SPIX"]["sigma"] for i in
                                range(n_boot)})
-        np.savez_compressed(os.path.join(data_dir, "SPIX_CHISQ_{}".format(i_art)),
+        np.savez_compressed(os.path.join(data_dir, "SPIX_CHISQ_{}_boot".format(i_art)),
                             **{str(i): results[i]["SPIX"]["chisq"] for i in
                                range(n_boot)})
-        np.save(os.path.join(data_dir, "RMS_{}".format(i_art)), results[0]["RMS"])
 
     # ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
     #                                                          "cc_x_I.fits"))

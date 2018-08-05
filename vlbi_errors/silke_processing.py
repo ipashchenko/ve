@@ -36,9 +36,9 @@ def convert_to_single_number(file_path, data_dir='/home/ilya/silke/3C84/result')
                     of.write("\n")
 
 
-# txt_file_dir = '/home/ilya/silke/TXS'
-# data_dir = '/home/ilya/silke/TXS'
-# out_files = glob.glob(os.path.join(txt_file_dir, 'errors_*.mod'))
+txt_file_dir = '/home/ilya/silke/TXS'
+data_dir = '/home/ilya/silke/TXS'
+out_files = glob.glob(os.path.join(txt_file_dir, 'errors_*.mod'))
 #
 # # Mass download uv-data for our epochs
 # original_dfm_models = glob.glob(os.path.join(data_dir, '*.mod'))
@@ -69,7 +69,7 @@ for path in original_dfm_models:
         continue
     original_model_fname = fname
     original_model_path = os.path.join(data_dir, original_model_fname)
-    uv_fits_fname = mojave_uv_fits_fname('0316+413', 'u', epoch)
+    uv_fits_fname = mojave_uv_fits_fname('0506+056', 'u', epoch)
     uv_fits_path = os.path.join(data_dir, uv_fits_fname)
 
     uvdata = UVData(uv_fits_path)
@@ -83,7 +83,7 @@ for path in original_dfm_models:
     out_png_file = os.path.join(txt_file_dir, 'errors_{}.png'.format(epoch))
     try:
         bootstrap_uvfits_with_difmap_model(uv_fits_path, original_model_path,
-                                           n_boot=200, boot_dir=boot_dir,
+                                           n_boot=20, boot_dir=boot_dir,
                                            out_txt_file=out_txt_file,
                                            out_plot_file=out_png_file,
                                            clean_after=True, niter=200,

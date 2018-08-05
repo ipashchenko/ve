@@ -206,13 +206,14 @@ if __name__ == "__main__":
 
     n_boot = 10
 
-    # # Suppose we created single artificial source
-    # uvdata_dict = {band: "bk_{}_0.uvf".format(band) for band in bands}
-    # clean_original_data(uvdata_dict, data_dir, beam=beam)
-    # ccfits_dict = {band: {stokes: "bk_cc_{}_{}.fits".format(band, stokes)
-    #                       for stokes in ("I", "Q", "U")}
-    #                for band in bands}
-    # create_bootstrap_sample(uvdata_dict, ccfits_dict, data_dir, n_boot=n_boot)
+
+    # Suppose we created single artificial source
+    uvdata_dict = {band: "{}_0.uvf".format(band) for band in bands}
+    clean_original_data(uvdata_dict, data_dir, beam=beam)
+    ccfits_dict = {band: {stokes: "cc_{}_{}.fits".format(band, stokes)
+                          for stokes in ("I", "Q", "U")}
+                   for band in bands}
+    create_bootstrap_sample(uvdata_dict, ccfits_dict, data_dir, n_boot=n_boot)
 
 
     # CLEANing all ``n_boot`` bootstrapped uv-data and collecting SPIX/ROTM
@@ -228,28 +229,46 @@ if __name__ == "__main__":
         rms_cs_dict = result["RMS"]
         results.append(result)
 
-    # ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
-    #                                                          "bk_cc_x_I.fits"))
-    #
-    # for i in range(3):
-    #     spix_im = Image()
-    #     spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
-    #                        pixref=ccimage.pixref, stokes='SPIX',
-    #                        freq=tuple(freqs), pixrefval=ccimage.pixrefval)
-    #     spix_im.image = results[i]["SPIX"]["value"]
-    #
-    #     rotm_im = Image()
-    #     rotm_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
-    #                        pixref=ccimage.pixref, stokes='SPIX',
-    #                        freq=tuple(freqs), pixrefval=ccimage.pixrefval)
-    #     rotm_im.image = results[i]["ROTM"]["value"]
-    #     rotm_im.stokes = "ROTM"
-    #
-    #     spix_slice = spix_im.slice(point1=(0, 1), point2=(0, -10))
-    #     rotm_slice = rotm_im.slice(point1=(2.5, -6), point2=(-2.5, -6))
-    #
-    #     x = np.arange(len(rotm_slice))/beam_size
-    #     plt.plot(x, rotm_slice)
+
+    # Save resulting maps
+    np.savez_compressed("ROTM", **{str(i): results[i]["ROTM"]["value"] for i in
+                                   range(n_boot)})
+    np.savez_compressed("ROTM_SIGMA", **{str(i): results[i]["ROTM"]["sigma"] for
+                                         i in range(n_boot)})
+    np.savez_compressed("ROTM_CHISQ", **{str(i): results[i]["ROTM"]["chisq"] for
+                                         i in range(n_boot)})
+    np.savez_compressed("SPIX", **{str(i): results[i]["SPIX"]["value"] for i in
+                                   range(n_boot)})
+    np.savez_compressed("SPIX_SIGMA", **{str(i): results[i]["SPIX"]["sigma"] for
+                                         i in range(n_boot)})
+    np.savez_compressed("SPIX_CHISQ", **{str(i): results[i]["SPIX"]["chisq"] for
+                                         i in range(n_boot)})
+    np.save("RMS.txt", results[0]["RMS"])
+
+    ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
+                                                             "cc_x_I.fits"))
+    loaded_spix = np.load("SPIX.npz")
+    loaded_rotm = np.load("ROTM.npz")
+
+    for i in range(n_boot):
+        spix_im = Image()
+        spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+                           pixref=ccimage.pixref, stokes='SPIX',
+                           freq=tuple(freqs), pixrefval=ccimage.pixrefval)
+        spix_im.image = loaded_spix[str(i)]
+
+        rotm_im = Image()
+        rotm_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+                           pixref=ccimage.pixref, stokes='SPIX',
+                           freq=tuple(freqs), pixrefval=ccimage.pixrefval)
+        rotm_im.image = loaded_rotm[str(i)]
+        rotm_im.stokes = "ROTM"
+
+        aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
+        # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
+
+        x = np.arange(len(aslice))/beam_size
+        plt.plot(x, aslice)
     #
     # # x = np.arange(len(observed_spix_slice))/beam_size
     # # plt.errorbar(x, observed_spix_slice, yerr=observed_sigma_spix_slice, fmt=".k")

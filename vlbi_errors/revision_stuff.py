@@ -60,21 +60,9 @@ def clean_original_data(uvdata_dict, data_dir, beam=None, plot=False,
 
 def process_mf(uvdata_dict, beam, data_dir, path_to_script, clean_after=True,
                rms_cs_dict=None):
-    # Create noiseless ROTM map
     images_dict = dict()
     print(" === CLEANing each band and Stokes ===")
     clean_original_data(uvdata_dict, data_dir, beam)
-    # for band in bands:
-    #     print("Band - {}".format(band))
-    #     images_dict[band] = dict()
-    #     for stokes in ("I", "Q", "U"):
-    #         print("Stokes - {}".format(stokes))
-    #         clean_difmap(fname=uvdata_dict[band],
-    #                      outfname="bk_cc_same_beam_{}_{}.fits".format(band, stokes),
-    #                      stokes=stokes.lower(), path=data_dir, outpath=data_dir,
-    #                      mapsize_clean=(512, 0.1), path_to_script=path_to_script,
-    #                      show_difmap_output=False,
-    #                      beam_restore=beam)
 
     for band in bands:
         images_dict[band] = dict()
@@ -111,9 +99,9 @@ def process_mf(uvdata_dict, beam, data_dir, path_to_script, clean_after=True,
                                          n_sigma=2, path_to_script=path_to_script)
     ppol_mask_image = np.logical_or.reduce([ppol_mask_image[band] for band in bands])
 
-    spix_image, sigma_spix_image, chisq_spix_image = spix_map(freqs,
-                                                           [images_dict[band]["I"].image for band in bands],
-                                                           mask=spix_mask_image)
+    spix_image, sigma_spix_image, chisq_spix_image =\
+        spix_map(freqs, [images_dict[band]["I"].image for band in bands],
+                 mask=spix_mask_image)
 
     print("Calculating PANG and it's error for each band")
     pang_images = dict()
@@ -132,18 +120,6 @@ def process_mf(uvdata_dict, beam, data_dir, path_to_script, clean_after=True,
                                                               [pang_images[band] for band in bands],
                                                               [sigma_pang_images[band] for band in bands],
                                                               mask=ppol_mask_image)
-
-    # spix_im = Image()
-    # spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
-    #                    pixref=ccimage.pixref, stokes='SPIX',
-    #                    freq=tuple(freqs), pixrefval=ccimage.pixrefval)
-    # spix_im.image = spix_image
-    #
-    # rotm_im = copy.deepcopy(spix_im)
-    # rotm_im.image = rotm_image
-    # rotm_im.stokes = "ROTM"
-    #
-    # spix_slice = spix_image.slice(point1=(0, 0), point2=(1, -15))
 
     if clean_after:
         print("Removing maps")
@@ -205,70 +181,92 @@ if __name__ == "__main__":
     path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
 
     n_boot = 10
+    n_sample = 3
+
+    # Loop over artificial sample
+    for i_art in range(n_sample):
+        for band in bands:
+            shutil.copy(os.path.join(data_dir, "{}_{}.uvf".format(band, i_art)),
+                        os.path.join(data_dir, "{}.uvf".format(band)))
 
 
-    # Suppose we created single artificial source
-    uvdata_dict = {band: "{}_0.uvf".format(band) for band in bands}
-    clean_original_data(uvdata_dict, data_dir, beam=beam)
-    ccfits_dict = {band: {stokes: "cc_{}_{}.fits".format(band, stokes)
-                          for stokes in ("I", "Q", "U")}
-                   for band in bands}
-    create_bootstrap_sample(uvdata_dict, ccfits_dict, data_dir, n_boot=n_boot)
-
-
-    # CLEANing all ``n_boot`` bootstrapped uv-data and collecting SPIX/ROTM
-    # images in ``results`` list
-    rms_cs_dict = None
-    results = list()
-    for i in range(1, n_boot+1):
-        print("=== Processing bootstrap sample #{} ===".format(i))
-        uvdata_dict = {band: "boot_{}_{}.uvf".format(band, str(i).zfill(3))
+        # For current artificial source ``i_art`` create bootstrapped sample
+        uvdata_dict = {band: "{}.uvf".format(band) for band in bands}
+        clean_original_data(uvdata_dict, data_dir, beam=beam)
+        ccfits_dict = {band: {stokes: "cc_{}_{}.fits".format(band, stokes)
+                              for stokes in ("I", "Q", "U")}
                        for band in bands}
-        result = process_mf(uvdata_dict, beam, data_dir, path_to_script,
-                            rms_cs_dict=rms_cs_dict)
-        rms_cs_dict = result["RMS"]
-        results.append(result)
+        create_bootstrap_sample(uvdata_dict, ccfits_dict, data_dir, n_boot=n_boot)
 
 
-    # Save resulting maps
-    np.savez_compressed("ROTM", **{str(i): results[i]["ROTM"]["value"] for i in
-                                   range(n_boot)})
-    np.savez_compressed("ROTM_SIGMA", **{str(i): results[i]["ROTM"]["sigma"] for
-                                         i in range(n_boot)})
-    np.savez_compressed("ROTM_CHISQ", **{str(i): results[i]["ROTM"]["chisq"] for
-                                         i in range(n_boot)})
-    np.savez_compressed("SPIX", **{str(i): results[i]["SPIX"]["value"] for i in
-                                   range(n_boot)})
-    np.savez_compressed("SPIX_SIGMA", **{str(i): results[i]["SPIX"]["sigma"] for
-                                         i in range(n_boot)})
-    np.savez_compressed("SPIX_CHISQ", **{str(i): results[i]["SPIX"]["chisq"] for
-                                         i in range(n_boot)})
-    np.save("RMS.txt", results[0]["RMS"])
+        # CLEANing all ``n_boot`` bootstrapped uv-data and collecting SPIX/ROTM
+        # images in ``results`` list
+        rms_cs_dict = None
+        results = list()
+        for i in range(1, n_boot+1):
+            print("=== Processing bootstrap sample #{} ===".format(i))
+            uvdata_dict = {band: "boot_{}_{}.uvf".format(band, str(i).zfill(3))
+                           for band in bands}
+            result = process_mf(uvdata_dict, beam, data_dir, path_to_script,
+                                rms_cs_dict=rms_cs_dict)
+            rms_cs_dict = result["RMS"]
+            results.append(result)
 
-    ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
-                                                             "cc_x_I.fits"))
-    loaded_spix = np.load("SPIX.npz")
-    loaded_rotm = np.load("ROTM.npz")
 
-    for i in range(n_boot):
-        spix_im = Image()
-        spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
-                           pixref=ccimage.pixref, stokes='SPIX',
-                           freq=tuple(freqs), pixrefval=ccimage.pixrefval)
-        spix_im.image = loaded_spix[str(i)]
+        # Removing bootstrapped uv-data
+        print("Removing bootstrapped uv-data")
+        for band in bands:
+            for i in range(1, n_boot+1):
+                os.unlink(os.path.join(data_dir,
+                                       "boot_{}_{}.uvf".format(band,
+                                                               str(i).zfill(3))))
 
-        rotm_im = Image()
-        rotm_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
-                           pixref=ccimage.pixref, stokes='SPIX',
-                           freq=tuple(freqs), pixrefval=ccimage.pixrefval)
-        rotm_im.image = loaded_rotm[str(i)]
-        rotm_im.stokes = "ROTM"
 
-        aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
-        # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
+        # Save resulting maps
+        np.savez_compressed("ROTM_{}".format(i_art),
+                            **{str(i): results[i]["ROTM"]["value"] for i in
+                               range(n_boot)})
+        np.savez_compressed("ROTM_SIGMA_{}".format(i_art),
+                            **{str(i): results[i]["ROTM"]["sigma"] for i in
+                               range(n_boot)})
+        np.savez_compressed("ROTM_CHISQ_{}".format(i_art),
+                            **{str(i): results[i]["ROTM"]["chisq"] for i in
+                               range(n_boot)})
+        np.savez_compressed("SPIX_{}".format(i_art),
+                            **{str(i): results[i]["SPIX"]["value"] for i in
+                               range(n_boot)})
+        np.savez_compressed("SPIX_SIGMA_{}".format(i_art),
+                            **{str(i): results[i]["SPIX"]["sigma"] for i in
+                               range(n_boot)})
+        np.savez_compressed("SPIX_CHISQ_{}".format(i_art),
+                            **{str(i): results[i]["SPIX"]["chisq"] for i in
+                               range(n_boot)})
+        np.save("RMS_{}.txt".format(i_art), results[0]["RMS"])
 
-        x = np.arange(len(aslice))/beam_size
-        plt.plot(x, aslice)
+    # ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
+    #                                                          "cc_x_I.fits"))
+    # loaded_spix = np.load("SPIX.npz")
+    # loaded_rotm = np.load("ROTM.npz")
+    #
+    # for i in range(n_boot):
+    #     spix_im = Image()
+    #     spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+    #                        pixref=ccimage.pixref, stokes='SPIX',
+    #                        freq=tuple(freqs), pixrefval=ccimage.pixrefval)
+    #     spix_im.image = loaded_spix[str(i)]
+    #
+    #     rotm_im = Image()
+    #     rotm_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+    #                        pixref=ccimage.pixref, stokes='SPIX',
+    #                        freq=tuple(freqs), pixrefval=ccimage.pixrefval)
+    #     rotm_im.image = loaded_rotm[str(i)]
+    #     rotm_im.stokes = "ROTM"
+    #
+    #     aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
+    #     # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
+    #
+    #     x = np.arange(len(aslice))/beam_size
+    #     plt.plot(x, aslice)
     #
     # # x = np.arange(len(observed_spix_slice))/beam_size
     # # plt.errorbar(x, observed_spix_slice, yerr=observed_sigma_spix_slice, fmt=".k")

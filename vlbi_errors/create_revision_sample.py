@@ -21,13 +21,13 @@ def create_data(jm_dict, noise_scale=1.0, qu_fraction=0.2):
                                      jm_dict[band]["Q"],
                                      jm_dict[band]["U"]])
         data.add_original_noise(scale=noise_scale)
-        outname = "bk_{}.uvf".format(band)
+        outname = "{}.uvf".format(band)
         data.save(os.path.join(data_dir, outname))
 
 
 if __name__ == "__main__":
 
-    n_sample = 10
+    n_sample = 3
     qu_fraction = 0.2
     bands = ("x", "y", "j", "u")
     freqs = np.array([8.104458750, 8.424458750, 12.111458750, 15.353458750])
@@ -85,9 +85,9 @@ if __name__ == "__main__":
         jm_U.fraction = qu_fraction
         jm_dict[band] = {"I": jm, "Q": jm_Q, "U": jm_U}
 
-    for i in range(1):
+    for i in range(n_sample):
         print("=== Creating artificial source #{} ===".format(i+1))
         create_data(jm_dict)
         for band in bands:
-            shutil.move(os.path.join(data_dir, "bk_{}.uvf".format(band)),
-                        os.path.join(data_dir, "bk_{}_{}.uvf".format(band, i)))
+            shutil.move(os.path.join(data_dir, "{}.uvf".format(band)),
+                        os.path.join(data_dir, "{}_{}.uvf".format(band, i)))

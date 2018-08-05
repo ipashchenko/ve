@@ -54,8 +54,11 @@ def clean_original_data(uvdata_dict, data_dir, beam=None, plot=False,
                         min_abs_level=2.0*rms,
                         beam=beam, show_beam=True, blc=blc, trc=trc,
                         close=False, colorbar_label="Jy/beam", show=True)
-            fig.show()
-            fig.savefig(os.path.join(data_dir, "cc_{}.png".format(band)))
+            if outfname_postfix is None:
+                outfname = "cc_{}.png".format(band)
+            else:
+                outfname = "cc_{}_{}.png".format(band, outfname_postfix)
+            fig.savefig(os.path.join(data_dir, outfname))
 
 
 def process_mf(uvdata_dict, beam, data_dir, path_to_script, clean_after=True,
@@ -192,7 +195,10 @@ if __name__ == "__main__":
 
         # For current artificial source ``i_art`` create bootstrapped sample
         uvdata_dict = {band: "{}.uvf".format(band) for band in bands}
-        clean_original_data(uvdata_dict, data_dir, beam=beam)
+        clean_original_data(uvdata_dict, data_dir, beam=beam, plot=True)
+        for band in bands:
+            shutil.move(os.path.join(data_dir, "cc_{}.png".format(band)),
+                        os.path.join(data_dir, "cc_{}_{}.png".format(band, i_art)))
         ccfits_dict = {band: {stokes: "cc_{}_{}.fits".format(band, stokes)
                               for stokes in ("I", "Q", "U")}
                        for band in bands}
@@ -223,25 +229,25 @@ if __name__ == "__main__":
 
 
         # Save resulting maps
-        np.savez_compressed("ROTM_{}".format(i_art),
+        np.savez_compressed(os.path.join(data_dir, "ROTM_{}".format(i_art)),
                             **{str(i): results[i]["ROTM"]["value"] for i in
                                range(n_boot)})
-        np.savez_compressed("ROTM_SIGMA_{}".format(i_art),
+        np.savez_compressed(os.path.join(data_dir, "ROTM_SIGMA_{}".format(i_art)),
                             **{str(i): results[i]["ROTM"]["sigma"] for i in
                                range(n_boot)})
-        np.savez_compressed("ROTM_CHISQ_{}".format(i_art),
+        np.savez_compressed(os.path.join(data_dir, "ROTM_CHISQ_{}".format(i_art)),
                             **{str(i): results[i]["ROTM"]["chisq"] for i in
                                range(n_boot)})
-        np.savez_compressed("SPIX_{}".format(i_art),
+        np.savez_compressed(os.path.join(data_dir, "SPIX_{}".format(i_art)),
                             **{str(i): results[i]["SPIX"]["value"] for i in
                                range(n_boot)})
-        np.savez_compressed("SPIX_SIGMA_{}".format(i_art),
+        np.savez_compressed(os.path.join(data_dir, "SPIX_SIGMA_{}".format(i_art)),
                             **{str(i): results[i]["SPIX"]["sigma"] for i in
                                range(n_boot)})
-        np.savez_compressed("SPIX_CHISQ_{}".format(i_art),
+        np.savez_compressed(os.path.join(data_dir, "SPIX_CHISQ_{}".format(i_art)),
                             **{str(i): results[i]["SPIX"]["chisq"] for i in
                                range(n_boot)})
-        np.save("RMS_{}.txt".format(i_art), results[0]["RMS"])
+        np.save(os.path.join(data_dir, "RMS_{}".format(i_art)), results[0]["RMS"])
 
     # ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
     #                                                          "cc_x_I.fits"))

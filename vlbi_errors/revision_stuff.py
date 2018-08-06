@@ -275,30 +275,57 @@ if __name__ == "__main__":
                             **{str(i): results[i]["SPIX"]["chisq"] for i in
                                range(n_boot)})
 
-    # ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
-    #                                                          "cc_x_I.fits"))
+    ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
+                                                             "cc_x_I.fits"))
     # loaded_spix = np.load("SPIX.npz")
     # loaded_rotm = np.load("ROTM.npz")
-    #
-    # for i in range(n_boot):
-    #     spix_im = Image()
-    #     spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
-    #                        pixref=ccimage.pixref, stokes='SPIX',
-    #                        freq=tuple(freqs), pixrefval=ccimage.pixrefval)
-    #     spix_im.image = loaded_spix[str(i)]
-    #
-    #     rotm_im = Image()
-    #     rotm_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
-    #                        pixref=ccimage.pixref, stokes='SPIX',
-    #                        freq=tuple(freqs), pixrefval=ccimage.pixrefval)
-    #     rotm_im.image = loaded_rotm[str(i)]
-    #     rotm_im.stokes = "ROTM"
-    #
-    #     aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
-    #     # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
-    #
-    #     x = np.arange(len(aslice))/beam_size
-    #     plt.plot(x, aslice)
+
+    loaded_spix = np.load(os.path.join(data_dir, "SPIX_{}.npz".format(i_art)))
+    loaded_rotm = np.load(os.path.join(data_dir, "ROTM_{}.npz".format(i_art)))
+    loaded_spix_boot = np.load(os.path.join(data_dir, "SPIX_{}_boot.npz".format(i_art)))
+    loaded_rotm_boot = np.load(os.path.join(data_dir, "ROTM_{}_boot.npz".format(i_art)))
+
+    conv_rotm_value = loaded_rotm["value"]
+    conv_rotm_sigma = loaded_rotm["sigma"]
+
+    conv_spix_value = loaded_spix["value"]
+    conv_spix_sigma = loaded_spix["sigma"]
+
+    spix_im = Image()
+    spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+                       pixref=ccimage.pixref, stokes='SPIX', freq=tuple(freqs),
+                       pixrefval=ccimage.pixrefval)
+    spix_im.image = conv_spix_value
+    spix_sigma_im = copy.deepcopy(spix_im)
+    spix_sigma_im.image = conv_spix_sigma
+
+    rotm_im = copy.deepcopy(spix_im)
+    rotm_im.image = conv_rotm_value
+    rotm_sigma_im = copy.deepcopy(spix_im)
+    rotm_sigma_im.image = conv_rotm_sigma
+
+    aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
+    aslice_sigma = spix_sigma_im.slice(point1=(0, 1), point2=(0, -10))
+
+    x = np.arange(len(aslice))/beam_size
+    plt.errorbar(x, aslice, yerr=aslice_sigma, fmt=".k")
+    # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
+
+    for i in range(n_boot):
+        spix_im = Image()
+        spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+                           pixref=ccimage.pixref, stokes='SPIX',
+                           freq=tuple(freqs), pixrefval=ccimage.pixrefval)
+        spix_im.image = loaded_spix_boot[str(i)]
+
+        rotm_im = copy.deepcopy(spix_im)
+        rotm_im.image = conv_rotm_value
+
+        aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
+        # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
+
+        x = np.arange(len(aslice))/beam_size
+        plt.plot(x, aslice, alpha=0.2)
     #
     # # x = np.arange(len(observed_spix_slice))/beam_size
     # # plt.errorbar(x, observed_spix_slice, yerr=observed_sigma_spix_slice, fmt=".k")

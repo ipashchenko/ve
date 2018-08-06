@@ -744,8 +744,9 @@ class Image(BasicImage):
         return self
 
     def __deepcopy__(self, memo):
-        image = self._construct(self.pixsize, self.pixref, self.stokes,
-                                self.freq, self.pixrefval, imsize=self.imsize)
+        image = Image()
+        image._construct(self.pixsize, self.pixref, self.stokes, self.freq,
+                         self.pixrefval, imsize=self.imsize)
         image.image = self.image
         return image
 

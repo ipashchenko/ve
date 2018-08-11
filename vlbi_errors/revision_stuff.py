@@ -433,6 +433,46 @@ def find_coverage_conv(original_npzs, true_image, data_dir):
     return cov_array/len(loaded_values)
 
 
+def plot_coverage_maps(cov_array, cc_fits, colorbar_label="coverage", cmap="hsv"):
+    ccimage = create_clean_image_from_fits_file(cc_fits)
+
+    beam = ccimage.beam
+    rms = rms_image(ccimage)
+    print(rms)
+    cov_array[cov_array == 0] = np.nan
+    blc, trc = find_bbox(ccimage.image, 1.0*rms, 10)
+    fig = iplot(ccimage.image, colors=cov_array, x=ccimage.x, y=ccimage.y,
+                min_abs_level=3.0*rms, beam=beam, show_beam=True, blc=blc,
+                trc=trc, close=False, colorbar_label=colorbar_label,
+                show=True, cmap=cmap)
+    return fig
+
+
+def plot_coverage_hist(cov_array, cov_array_conv):
+    import matplotlib
+    label_size = 14
+    matplotlib.rcParams['xtick.labelsize'] = label_size
+    matplotlib.rcParams['ytick.labelsize'] = label_size
+    matplotlib.rcParams['axes.titlesize'] = label_size
+    matplotlib.rcParams['axes.labelsize'] = label_size
+    matplotlib.rcParams['font.size'] = label_size
+    matplotlib.rcParams['legend.fontsize'] = label_size
+    cov_array[cov_array == 0] = np.nan
+    cov_array_conv[cov_array_conv == 0] = np.nan
+    conv = list(cov_array_conv.flatten())
+    conv = [i for i in conv if not np.isnan(i)]
+    boot = list(cov_array.flatten())
+    boot = [i for i in boot if not np.isnan(i)]
+    fig, axes = plt.subplots(1, 1)
+    axes.hist(conv, bins=20, alpha=0.5, label="CONV")
+    axes.hist(boot, bins=20, alpha=0.5, label="BOOT")
+    axes.axvline(0.68, color="red")
+    axes.set_xlabel("Coverage")
+    axes.set_ylabel("N")
+    axes.legend()
+    return fig
+
+
 if __name__ == "__main__":
     # Find beam
     # ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
@@ -454,6 +494,8 @@ if __name__ == "__main__":
     np.savetxt("cov_SPIX.txt", cov_array)
     np.savetxt("cov_SPIX_conv.txt", cov_array_conv)
 
+    ccfits = os.path.join(data_dir, "cc_x_I.fits")
+    fig = plot_coverage_maps(cov_array_conv, ccfits)
 
     # fig = plot_slices("ROTM_99.npz", "ROTM_99_boot.npz", data_dir,
     #                   point1=(2.5, -2), point2=(-2.5, -2),

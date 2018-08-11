@@ -27,14 +27,14 @@ def create_data(jm_dict, noise_scale=1.0, qu_fraction=0.2):
 
 if __name__ == "__main__":
 
-    n_sample = 100
+    n_sample = 1
     qu_fraction = 0.2
     bands = ("x", "y", "j", "u")
     freqs = np.array([8.104458750, 8.424458750, 12.111458750, 15.353458750])
     freqs *= 10**9
     path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
     # Directory with resulting data sets
-    data_dir = "/home/ilya/data/revision/sample"
+    data_dir = "/home/ilya/data/revision_results"
     # Directory with multifrequency data
     templates_dir = "/home/ilya/github/jetshow_utils/uvf_templates"
 
@@ -87,7 +87,7 @@ if __name__ == "__main__":
 
     for i in range(n_sample):
         print("=== Creating artificial source #{} ===".format(i+1))
-        create_data(jm_dict)
+        create_data(jm_dict, noise_scale=0.01)
         for band in bands:
             shutil.move(os.path.join(data_dir, "{}.uvf".format(band)),
                         os.path.join(data_dir, "{}_{}.uvf".format(band, i)))

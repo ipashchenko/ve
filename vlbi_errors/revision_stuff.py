@@ -367,6 +367,7 @@ def find_cross_coverage(boot_npzs, original_npzs, data_dir, n_boot=100):
         # Find CB for given sample
         loaded_boot = np.load(os.path.join(data_dir, boot_npz))
         boot_images = [loaded_boot[str(i)] for i in range(n_boot)]
+        original_image = np.load(os.path.join(data_dir, original_npz))["value"]
         low_ci, high_ci = boot_ci(boot_images, original_image)
         # Count number of times when this CB contains other's sample values
         cov_array = np.zeros(boot_images[0].shape, dtype=float)
@@ -387,24 +388,49 @@ def find_cross_coverage(boot_npzs, original_npzs, data_dir, n_boot=100):
     return np.mean(cov_arrays, axis=0)
 
 
-def find_coverage(boot_npzs, true_image, data_dir, n_boot=100):
+def find_coverage(boot_npzs, original_npzs, true_image, data_dir, n_boot=100):
     """
     For each sample for each pixel find fraction of times when CB contains true
     value.
     """
     loaded_boot_all = list()
-    for boot_npz in boot_npzs:
+    loaded_all = list()
+    for boot_npz, original_npz in zip(boot_npzs, original_npzs):
+        print(boot_npz, original_npz)
         loaded_boot_all.append(np.load(os.path.join(data_dir, boot_npz)))
+        loaded_all.append(np.load(os.path.join(data_dir, original_npz))["value"])
 
     cov_array = np.zeros(true_image.shape, dtype=float)
-    for loaded_boot in loaded_boot_all:
+    for loaded_boot, original_image in zip(loaded_boot_all, loaded_all):
         boot_images = [loaded_boot[str(i)] for i in range(n_boot)]
         low_ci, high_ci = boot_ci(boot_images, original_image)
         for (x, y), value in np.ndenumerate(cov_array):
             cov_array[x, y] += float(np.logical_and(low_ci[x, y] < true_image[x, y],
                                                     true_image[x, y] < high_ci[x, y]))
 
-        return cov_array/len(loaded_boot_all)
+    return cov_array/len(loaded_boot_all)
+
+
+def find_coverage_conv(original_npzs, true_image, data_dir):
+    """
+    For each sample for each pixel find fraction of times when CB contains true
+    value.
+    """
+    loaded_values = list()
+    loaded_sigmas = list()
+    for original_npz in original_npzs:
+        loaded_sigmas.append(np.load(os.path.join(data_dir, original_npz))["sigma"])
+        loaded_values.append(np.load(os.path.join(data_dir, original_npz))["value"])
+
+    cov_array = np.zeros(true_image.shape, dtype=float)
+    for sigma_image, original_image in zip(loaded_sigmas, loaded_values):
+        low_ci = original_image - sigma_image
+        high_ci = original_image + sigma_image
+        for (x, y), value in np.ndenumerate(cov_array):
+            cov_array[x, y] += float(np.logical_and(low_ci[x, y] < true_image[x, y],
+                                                    true_image[x, y] < high_ci[x, y]))
+
+    return cov_array/len(loaded_values)
 
 
 if __name__ == "__main__":
@@ -415,211 +441,228 @@ if __name__ == "__main__":
     # Common beam
     beam = (1.5074023139377921, 1.3342292885366427, 0.36637646630496357)
     beam_size = np.sqrt(beam[0]*beam[1])/0.1
-    # Common mapsize
-    mapsize_clean = (512, 0.1)
 
-    data_dir = "/home/ilya/data/revision"
-    uvdata_dir = "/home/ilya/data/revision/sample"
-    path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
+    data_dir = "/home/ilya/data/revision_results"
+    import glob
+    boot_npzs = glob.glob(os.path.join(data_dir, "SPIX_[0-9]*_boot.npz"))
+    boot_npzs = [os.path.split(path)[-1] for path in boot_npzs]
+    original_npzs = ["SPIX_{}.npz".format(fn.split("_")[1]) for fn in boot_npzs]
 
-    n_boot = 100
-    n_sample = 100
-
-    rms_cs_dict = None
-
-    # Loop over artificial sample
-    for i_art in range(n_sample)[::-1]:
-        for band in bands:
-            shutil.copy(os.path.join(uvdata_dir, "{}_{}.uvf".format(band, i_art)),
-                        os.path.join(data_dir, "{}.uvf".format(band)))
+    true_image = np.load(os.path.join(data_dir, "SPIX_true.npz"))["value"]
+    cov_array = find_coverage(boot_npzs, original_npzs, true_image, data_dir)
+    cov_array_conv = find_coverage_conv(original_npzs, true_image, data_dir)
+    np.savetxt("cov_SPIX.txt", cov_array)
+    np.savetxt("cov_SPIX_conv.txt", cov_array_conv)
 
 
-        print("=== Processing original data for sample #{} ===".format(i_art))
-        uvdata_dict = {band: "{}.uvf".format(band) for band in bands}
-        result = process_mf(uvdata_dict, beam, data_dir, path_to_script,
-                            rms_cs_dict=rms_cs_dict, clean_after=False,
-                            mapsize_clean=mapsize_clean)
-
-        rms_cs_dict = result["RMS"]
-
-        np.savez_compressed(os.path.join(data_dir, "ROTM_{}".format(i_art)),
-                            **{value: result["ROTM"][value] for value in
-                               ("value", "sigma", "chisq")})
-        np.savez_compressed(os.path.join(data_dir, "SPIX_{}".format(i_art)),
-                            **{value: result["SPIX"][value] for value in
-                               ("value", "sigma", "chisq")})
-        np.save(os.path.join(data_dir, "RMS_{}".format(i_art)), result["RMS"])
-
-
-        print("=== For current sample #{} create {} bootstrapped"
-              " samples ===".format(i_art, n_boot))
-        ccfits_dict = {band: {stokes: "cc_{}_{}.fits".format(band, stokes)
-                              for stokes in ("I", "Q", "U")}
-                       for band in bands}
-        create_bootstrap_sample(uvdata_dict, ccfits_dict, data_dir,
-                                n_boot=n_boot)
-
-
-        # CLEANing all ``n_boot`` bootstrapped uv-data and collecting SPIX/ROTM
-        # images in ``results`` list
-        results = list()
-        for i in range(1, n_boot+1):
-            print("=== Processing bootstrap sample #{} ===".format(i))
-            uvdata_dict = {band: "boot_{}_{}.uvf".format(band, str(i).zfill(3))
-                           for band in bands}
-            result = process_mf(uvdata_dict, beam, data_dir, path_to_script,
-                                rms_cs_dict=rms_cs_dict,
-                                mapsize_clean=mapsize_clean)
-            rms_cs_dict = result["RMS"]
-            results.append(result)
-
-
-        # Removing bootstrapped uv-data
-        print("Removing bootstrapped uv-data")
-        for band in bands:
-            for i in range(1, n_boot+1):
-                os.unlink(os.path.join(data_dir,
-                                       "boot_{}_{}.uvf".format(band,
-                                                               str(i).zfill(3))))
-
-
-        # Save resulting maps
-        np.savez_compressed(os.path.join(data_dir, "ROTM_{}_boot".format(i_art)),
-                            **{str(i): results[i]["ROTM"]["value"] for i in
-                               range(n_boot)})
-        np.savez_compressed(os.path.join(data_dir, "ROTM_SIGMA_{}_boot".format(i_art)),
-                            **{str(i): results[i]["ROTM"]["sigma"] for i in
-                               range(n_boot)})
-        np.savez_compressed(os.path.join(data_dir, "ROTM_CHISQ_{}_boot".format(i_art)),
-                            **{str(i): results[i]["ROTM"]["chisq"] for i in
-                               range(n_boot)})
-        np.savez_compressed(os.path.join(data_dir, "SPIX_{}_boot".format(i_art)),
-                            **{str(i): results[i]["SPIX"]["value"] for i in
-                               range(n_boot)})
-        np.savez_compressed(os.path.join(data_dir, "SPIX_SIGMA_{}_boot".format(i_art)),
-                            **{str(i): results[i]["SPIX"]["sigma"] for i in
-                               range(n_boot)})
-        np.savez_compressed(os.path.join(data_dir, "SPIX_CHISQ_{}_boot".format(i_art)),
-                            **{str(i): results[i]["SPIX"]["chisq"] for i in
-                               range(n_boot)})
+    # fig = plot_slices("ROTM_99.npz", "ROTM_99_boot.npz", data_dir,
+    #                   point1=(2.5, -2), point2=(-2.5, -2),
+    #                   ylabel=r"RM, $[rad/m^2]$", beam_size_pxl=beam_size)
 
 
 
-    fig = plot_slices("ROTM_99.npz", "ROTM_99_boot.npz", data_dir,
-                      point1=(2.5, -2), point2=(-2.5, -2),
-                      ylabel=r"RM, $[rad/m^2]$", beam_size_pxl=beam_size)
 
 
 
-    ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
-                                                             "cc_x_I.fits"))
-    # # loaded_spix = np.load("SPIX.npz")
-    # # loaded_rotm = np.load("ROTM.npz")
+
+    # # Common mapsize
+    # mapsize_clean = (512, 0.1)
     #
-    loaded_spix = np.load(os.path.join(data_dir, "SPIX_{}.npz".format(i_art)))
-    loaded_rotm = np.load(os.path.join(data_dir, "ROTM_{}.npz".format(i_art)))
-    loaded_spix_boot = np.load(os.path.join(data_dir, "SPIX_{}_boot.npz".format(i_art)))
-    loaded_rotm_boot = np.load(os.path.join(data_dir, "ROTM_{}_boot.npz".format(i_art)))
-
-    conv_rotm_value = loaded_rotm["value"]
-    conv_rotm_sigma = loaded_rotm["sigma"]
-
-    conv_spix_value = loaded_spix["value"]
-    conv_spix_sigma = loaded_spix["sigma"]
-
-    spix_im = Image()
-    spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
-                       pixref=ccimage.pixref, stokes='SPIX', freq=tuple(freqs),
-                       pixrefval=ccimage.pixrefval)
-    spix_im.image = conv_spix_value
-    spix_sigma_im = copy.deepcopy(spix_im)
-    spix_sigma_im.image = conv_spix_sigma
-
-    rotm_im = copy.deepcopy(spix_im)
-    rotm_im.image = conv_rotm_value
-    rotm_sigma_im = copy.deepcopy(spix_im)
-    rotm_sigma_im.image = conv_rotm_sigma
-
-    # Values from conventional methods
-    # aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
-    # aslice_sigma = spix_sigma_im.slice(point1=(0, 1), point2=(0, -10))
-    original_slice = rotm_im.slice(point1=(0, 1), point2=(0, -10))
-    original_slice_sigma = rotm_sigma_im.slice(point1=(0, 1), point2=(0, -10))
-
-
-    import matplotlib
-    label_size = 14
-    matplotlib.rcParams['xtick.labelsize'] = label_size
-    matplotlib.rcParams['ytick.labelsize'] = label_size
-    matplotlib.rcParams['axes.titlesize'] = label_size
-    matplotlib.rcParams['axes.labelsize'] = label_size
-    matplotlib.rcParams['font.size'] = label_size
-    matplotlib.rcParams['legend.fontsize'] = label_size
-
-    x = np.arange(len(original_slice))/beam_size
-    plt.errorbar(x[::2], original_slice[::2], yerr=original_slice_sigma[::2],
-                 fmt=".k")
-    plt.axhline(0)
-    plt.ylabel(r"RM, $[rad/m^2]$")
-    # plt.ylabel(r"$\alpha$")
-    plt.xlabel("Distance along jet, [beam]")
-
-    # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
-
-    original_image = conv_rotm_value
-    boot_images = [loaded_rotm_boot[str(i)] for i in range(n_boot)]
-    low_ci, high_ci = boot_ci(boot_images, original_image)
-    # low_ci_as, high_ci_as = boot_ci_asymm(boot_images, original_image)
-    # low_ci_bc, high_ci_bc = boot_ci_bc(boot_images, original_image)
-
-    ci_low_im = copy.deepcopy(spix_im)
-    ci_low_im.image = low_ci
-    ci_high_im = copy.deepcopy(spix_im)
-    ci_high_im.image = high_ci
-
-    # ci_low_as_im = copy.deepcopy(spix_im)
-    # ci_low_as_im.image = low_ci_as
-    # ci_high_as_im = copy.deepcopy(spix_im)
-    # ci_high_as_im.image = high_ci_as
-
-    # ci_low_bc_im = copy.deepcopy(spix_im)
-    # ci_low_bc_im.image = low_ci_bc
-    # ci_high_bc_im = copy.deepcopy(spix_im)
-    # ci_high_bc_im.image = high_ci_bc
-
-    ci_low_slice = ci_low_im.slice(point1=(0, 1), point2=(0, -10))
-    ci_high_slice = ci_high_im.slice(point1=(0, 1), point2=(0, -10))
-
-    # ci_as_low_slice = ci_low_as_im.slice(point1=(0, 1), point2=(0, -10))
-    # ci_as_high_slice = ci_high_as_im.slice(point1=(0, 1), point2=(0, -10))
+    # data_dir = "/home/ilya/data/revision"
+    # uvdata_dir = "/home/ilya/data/revision_results"
+    # path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
     #
-    # ci_bc_low_slice = ci_low_bc_im.slice(point1=(0, 1), point2=(0, -10))
-    # ci_bc_high_slice = ci_high_bc_im.slice(point1=(0, 1), point2=(0, -10))
+    # n_boot = 100
+    # n_sample = 100
+    #
+    # rms_cs_dict = None
+    #
+    # # Loop over artificial sample
+    # for i_art in range(n_sample)[::-1]:
+    #     for band in bands:
+    #         shutil.copy(os.path.join(uvdata_dir, "{}_{}.uvf".format(band, i_art)),
+    #                     os.path.join(data_dir, "{}.uvf".format(band)))
+    #
+    #
+    #     print("=== Processing original data for sample #{} ===".format(i_art))
+    #     uvdata_dict = {band: "{}.uvf".format(band) for band in bands}
+    #     result = process_mf(uvdata_dict, beam, data_dir, path_to_script,
+    #                         rms_cs_dict=rms_cs_dict, clean_after=False,
+    #                         mapsize_clean=mapsize_clean)
+    #
+    #     rms_cs_dict = result["RMS"]
+    #
+    #     np.savez_compressed(os.path.join(data_dir, "ROTM_{}".format(i_art)),
+    #                         **{value: result["ROTM"][value] for value in
+    #                            ("value", "sigma", "chisq")})
+    #     np.savez_compressed(os.path.join(data_dir, "SPIX_{}".format(i_art)),
+    #                         **{value: result["SPIX"][value] for value in
+    #                            ("value", "sigma", "chisq")})
+    #     np.save(os.path.join(data_dir, "RMS_{}".format(i_art)), result["RMS"])
+    #
+    #
+    #     print("=== For current sample #{} create {} bootstrapped"
+    #           " samples ===".format(i_art, n_boot))
+    #     ccfits_dict = {band: {stokes: "cc_{}_{}.fits".format(band, stokes)
+    #                           for stokes in ("I", "Q", "U")}
+    #                    for band in bands}
+    #     create_bootstrap_sample(uvdata_dict, ccfits_dict, data_dir,
+    #                             n_boot=n_boot)
+    #
+    #
+    #     # CLEANing all ``n_boot`` bootstrapped uv-data and collecting SPIX/ROTM
+    #     # images in ``results`` list
+    #     results = list()
+    #     for i in range(1, n_boot+1):
+    #         print("=== Processing bootstrap sample #{} ===".format(i))
+    #         uvdata_dict = {band: "boot_{}_{}.uvf".format(band, str(i).zfill(3))
+    #                        for band in bands}
+    #         result = process_mf(uvdata_dict, beam, data_dir, path_to_script,
+    #                             rms_cs_dict=rms_cs_dict,
+    #                             mapsize_clean=mapsize_clean)
+    #         rms_cs_dict = result["RMS"]
+    #         results.append(result)
+    #
+    #
+    #     # Removing bootstrapped uv-data
+    #     print("Removing bootstrapped uv-data")
+    #     for band in bands:
+    #         for i in range(1, n_boot+1):
+    #             os.unlink(os.path.join(data_dir,
+    #                                    "boot_{}_{}.uvf".format(band,
+    #                                                            str(i).zfill(3))))
+    #
+    #
+    #     # Save resulting maps
+    #     np.savez_compressed(os.path.join(data_dir, "ROTM_{}_boot".format(i_art)),
+    #                         **{str(i): results[i]["ROTM"]["value"] for i in
+    #                            range(n_boot)})
+    #     np.savez_compressed(os.path.join(data_dir, "ROTM_SIGMA_{}_boot".format(i_art)),
+    #                         **{str(i): results[i]["ROTM"]["sigma"] for i in
+    #                            range(n_boot)})
+    #     np.savez_compressed(os.path.join(data_dir, "ROTM_CHISQ_{}_boot".format(i_art)),
+    #                         **{str(i): results[i]["ROTM"]["chisq"] for i in
+    #                            range(n_boot)})
+    #     np.savez_compressed(os.path.join(data_dir, "SPIX_{}_boot".format(i_art)),
+    #                         **{str(i): results[i]["SPIX"]["value"] for i in
+    #                            range(n_boot)})
+    #     np.savez_compressed(os.path.join(data_dir, "SPIX_SIGMA_{}_boot".format(i_art)),
+    #                         **{str(i): results[i]["SPIX"]["sigma"] for i in
+    #                            range(n_boot)})
+    #     np.savez_compressed(os.path.join(data_dir, "SPIX_CHISQ_{}_boot".format(i_art)),
+    #                         **{str(i): results[i]["SPIX"]["chisq"] for i in
+    #                            range(n_boot)})
 
-    # plt.fill_between(x, ci_as_low_slice, ci_as_high_slice, alpha=0.25, label="CI AS")
-    # plt.fill_between(x, ci_bc_low_slice, ci_bc_high_slice, alpha=0.25, label="CI BC")
-    # plt.legend()
 
-    boot_slices = list()
-    for i in range(n_boot):
-        spix_im = Image()
-        spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
-                           pixref=ccimage.pixref, stokes='SPIX',
-                           freq=tuple(freqs), pixrefval=ccimage.pixrefval)
-        spix_im.image = loaded_spix_boot[str(i)]
-
-        rotm_im = copy.deepcopy(spix_im)
-        rotm_im.image = loaded_rotm_boot[str(i)]
-
-        # aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
-        aslice = rotm_im.slice(point1=(0, 1), point2=(0, -10))
-        boot_slices.append(aslice)
-        # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
-
-        # x = np.arange(len(aslice))/beam_size
-        # plt.plot(x, aslice, alpha=0.2, color='r')
-
-    low_scb, up_scb = create_scb(boot_slices, original_slice)
-    plt.fill_between(x, low_scb, up_scb, alpha=0.35, label="SCB")
-    plt.fill_between(x, ci_low_slice, ci_high_slice, alpha=0.5, label="CB")
-    plt.legend(loc="upper left")
+    # ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
+    #                                                          "cc_x_I.fits"))
+    # # # loaded_spix = np.load("SPIX.npz")
+    # # # loaded_rotm = np.load("ROTM.npz")
+    # #
+    # loaded_spix = np.load(os.path.join(data_dir, "SPIX_{}.npz".format(i_art)))
+    # loaded_rotm = np.load(os.path.join(data_dir, "ROTM_{}.npz".format(i_art)))
+    # loaded_spix_boot = np.load(os.path.join(data_dir, "SPIX_{}_boot.npz".format(i_art)))
+    # loaded_rotm_boot = np.load(os.path.join(data_dir, "ROTM_{}_boot.npz".format(i_art)))
+    #
+    # conv_rotm_value = loaded_rotm["value"]
+    # conv_rotm_sigma = loaded_rotm["sigma"]
+    #
+    # conv_spix_value = loaded_spix["value"]
+    # conv_spix_sigma = loaded_spix["sigma"]
+    #
+    # spix_im = Image()
+    # spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+    #                    pixref=ccimage.pixref, stokes='SPIX', freq=tuple(freqs),
+    #                    pixrefval=ccimage.pixrefval)
+    # spix_im.image = conv_spix_value
+    # spix_sigma_im = copy.deepcopy(spix_im)
+    # spix_sigma_im.image = conv_spix_sigma
+    #
+    # rotm_im = copy.deepcopy(spix_im)
+    # rotm_im.image = conv_rotm_value
+    # rotm_sigma_im = copy.deepcopy(spix_im)
+    # rotm_sigma_im.image = conv_rotm_sigma
+    #
+    # # Values from conventional methods
+    # # aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
+    # # aslice_sigma = spix_sigma_im.slice(point1=(0, 1), point2=(0, -10))
+    # original_slice = rotm_im.slice(point1=(0, 1), point2=(0, -10))
+    # original_slice_sigma = rotm_sigma_im.slice(point1=(0, 1), point2=(0, -10))
+    #
+    #
+    # import matplotlib
+    # label_size = 14
+    # matplotlib.rcParams['xtick.labelsize'] = label_size
+    # matplotlib.rcParams['ytick.labelsize'] = label_size
+    # matplotlib.rcParams['axes.titlesize'] = label_size
+    # matplotlib.rcParams['axes.labelsize'] = label_size
+    # matplotlib.rcParams['font.size'] = label_size
+    # matplotlib.rcParams['legend.fontsize'] = label_size
+    #
+    # x = np.arange(len(original_slice))/beam_size
+    # plt.errorbar(x[::2], original_slice[::2], yerr=original_slice_sigma[::2],
+    #              fmt=".k")
+    # plt.axhline(0)
+    # plt.ylabel(r"RM, $[rad/m^2]$")
+    # # plt.ylabel(r"$\alpha$")
+    # plt.xlabel("Distance along jet, [beam]")
+    #
+    # # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
+    #
+    # original_image = conv_rotm_value
+    # boot_images = [loaded_rotm_boot[str(i)] for i in range(n_boot)]
+    # low_ci, high_ci = boot_ci(boot_images, original_image)
+    # # low_ci_as, high_ci_as = boot_ci_asymm(boot_images, original_image)
+    # # low_ci_bc, high_ci_bc = boot_ci_bc(boot_images, original_image)
+    #
+    # ci_low_im = copy.deepcopy(spix_im)
+    # ci_low_im.image = low_ci
+    # ci_high_im = copy.deepcopy(spix_im)
+    # ci_high_im.image = high_ci
+    #
+    # # ci_low_as_im = copy.deepcopy(spix_im)
+    # # ci_low_as_im.image = low_ci_as
+    # # ci_high_as_im = copy.deepcopy(spix_im)
+    # # ci_high_as_im.image = high_ci_as
+    #
+    # # ci_low_bc_im = copy.deepcopy(spix_im)
+    # # ci_low_bc_im.image = low_ci_bc
+    # # ci_high_bc_im = copy.deepcopy(spix_im)
+    # # ci_high_bc_im.image = high_ci_bc
+    #
+    # ci_low_slice = ci_low_im.slice(point1=(0, 1), point2=(0, -10))
+    # ci_high_slice = ci_high_im.slice(point1=(0, 1), point2=(0, -10))
+    #
+    # # ci_as_low_slice = ci_low_as_im.slice(point1=(0, 1), point2=(0, -10))
+    # # ci_as_high_slice = ci_high_as_im.slice(point1=(0, 1), point2=(0, -10))
+    # #
+    # # ci_bc_low_slice = ci_low_bc_im.slice(point1=(0, 1), point2=(0, -10))
+    # # ci_bc_high_slice = ci_high_bc_im.slice(point1=(0, 1), point2=(0, -10))
+    #
+    # # plt.fill_between(x, ci_as_low_slice, ci_as_high_slice, alpha=0.25, label="CI AS")
+    # # plt.fill_between(x, ci_bc_low_slice, ci_bc_high_slice, alpha=0.25, label="CI BC")
+    # # plt.legend()
+    #
+    # boot_slices = list()
+    # for i in range(n_boot):
+    #     spix_im = Image()
+    #     spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+    #                        pixref=ccimage.pixref, stokes='SPIX',
+    #                        freq=tuple(freqs), pixrefval=ccimage.pixrefval)
+    #     spix_im.image = loaded_spix_boot[str(i)]
+    #
+    #     rotm_im = copy.deepcopy(spix_im)
+    #     rotm_im.image = loaded_rotm_boot[str(i)]
+    #
+    #     # aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
+    #     aslice = rotm_im.slice(point1=(0, 1), point2=(0, -10))
+    #     boot_slices.append(aslice)
+    #     # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
+    #
+    #     # x = np.arange(len(aslice))/beam_size
+    #     # plt.plot(x, aslice, alpha=0.2, color='r')
+    #
+    # low_scb, up_scb = create_scb(boot_slices, original_slice)
+    # plt.fill_between(x, low_scb, up_scb, alpha=0.35, label="SCB")
+    # plt.fill_between(x, ci_low_slice, ci_high_slice, alpha=0.5, label="CB")
+    # plt.legend(loc="upper left")

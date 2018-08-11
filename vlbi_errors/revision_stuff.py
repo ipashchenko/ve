@@ -357,20 +357,54 @@ def plot_slices(original_npz, boot_npz, data_dir, point1=(0, 1),
     return fig
 
 
-def find_cross_coverage(boot_npz_dict, original_npz_dict, data_dir):
+def find_cross_coverage(boot_npzs, original_npzs, data_dir, n_boot=100):
     """
     For each sample for each pixel find fraction of times when CB contains other
     sample's values. Averaged.
     """
-    pass
+    cov_arrays = list()
+    for i, (boot_npz, original_npz) in enumerate(zip(boot_npzs, original_npzs)):
+        # Find CB for given sample
+        loaded_boot = np.load(os.path.join(data_dir, boot_npz))
+        boot_images = [loaded_boot[str(i)] for i in range(n_boot)]
+        low_ci, high_ci = boot_ci(boot_images, original_image)
+        # Count number of times when this CB contains other's sample values
+        cov_array = np.zeros(boot_images[0].shape, dtype=float)
+
+        original_npzs_ex = [original_npzs[j] for j in range(len(original_npzs))
+                            if j != i]
+        true_images = [np.load(os.path.join(data_dir, original_npz))["value"]
+                       for original_npz in original_npzs_ex]
+
+        for true_image in true_images:
+            for (x, y), value in np.ndenumerate(cov_array):
+                cov_array[x, y] += float(np.logical_and(low_ci[x, y] < true_image[x, y],
+                                                        true_image[x, y] < high_ci[x, y]))
+
+        cov_array = cov_array/len(true_images)
+        cov_arrays.append(cov_array)
+
+    return np.mean(cov_arrays, axis=0)
 
 
-def find_coverage(boot_npz_dict, true_image, data_dir):
+def find_coverage(boot_npzs, true_image, data_dir, n_boot=100):
     """
     For each sample for each pixel find fraction of times when CB contains true
     value.
     """
+    loaded_boot_all = list()
+    for boot_npz in boot_npzs:
+        loaded_boot_all.append(np.load(os.path.join(data_dir, boot_npz)))
 
+    cov_array = np.zeros(true_image.shape, dtype=float)
+    for loaded_boot in loaded_boot_all:
+        boot_images = [loaded_boot[str(i)] for i in range(n_boot)]
+        low_ci, high_ci = boot_ci(boot_images, original_image)
+        for (x, y), value in np.ndenumerate(cov_array):
+            cov_array[x, y] += float(np.logical_and(low_ci[x, y] < true_image[x, y],
+                                                    true_image[x, y] < high_ci[x, y]))
+
+        return cov_array/len(loaded_boot_all)
 
 
 if __name__ == "__main__":

@@ -1491,12 +1491,16 @@ def get_uv_correlations(uv, models):
 
 
 # FIXME: Seems it doesn't work for multimodal densities.
-def hdi_of_mcmc(sample_vec, cred_mass=0.95, return_mean_median=False):
+def hdi_of_mcmc(sample, cred_mass=0.95, return_mean_median=False, mask_nan=True):
     """
     Highest density interval of sample.
     """
-
-    assert len(sample_vec), 'need points to find HDI'
+    assert len(sample), 'need points to find HDI'
+    if mask_nan:
+        sample_vec = sample[:]
+        sample_vec = np.ma.array(sample_vec, mask=np.isnan(sample_vec))
+    else:
+        sample_vec = sample
     sorted_pts = np.sort(sample_vec)
 
     ci_idx_inc = int(np.floor(cred_mass * len(sorted_pts)))

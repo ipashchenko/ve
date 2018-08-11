@@ -4,6 +4,10 @@ import copy
 import numpy as np
 import shutil
 import matplotlib.pyplot as plt
+
+from utils import hdi_of_mcmc, bc_endpoint, hdi_of_arrays
+from conf_bands import create_sim_conf_band
+
 sys.path.insert(0, '/home/ilya/github/ve')
 from uv_data import UVData
 from spydiff import clean_difmap
@@ -179,6 +183,196 @@ def create_bootstrap_sample(uvdata_dict, ccfits_dict, data_dir, n_boot=10):
         os.chdir(curdir)
 
 
+def boot_ci(boot_images, original_image, alpha=0.68):
+    """
+    Calculate bootstrap CI for images.
+
+    :param boot_images:
+        Iterable of 2D numpy arrays of the bootstrapped images.
+    :param original_image:
+        2D numpy array of the original image.
+    :return:
+        Two numpy arrays with low and high CI borders for each pixel.
+
+    """
+    images_cube = np.dstack(boot_images)
+    boot_ci = np.zeros(np.shape(images_cube[:, :, 0]))
+    print("calculating CI intervals")
+    for (x, y), value in np.ndenumerate(boot_ci):
+        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=alpha)
+        boot_ci[x, y] = hdi[1] - hdi[0]
+
+    hdi_low = original_image - boot_ci / 2.
+    hdi_high = original_image + boot_ci / 2.
+
+    return hdi_low, hdi_high
+
+
+def boot_ci_asymm(boot_images, original_image, alpha=0.68):
+    """
+    Calculate bootstrap CI for images.
+
+    :param boot_images:
+        Iterable of 2D numpy arrays of the bootstrapped images
+    :param original_image:
+        2D numpy array of the original image..
+    :return:
+        Two numpy arrays with low and high CI borders for each pixel.
+
+    """
+    images_cube = np.dstack(boot_images)
+    boot_ci = np.zeros(np.shape(images_cube[:, :, 0]))
+    hdi_low = np.zeros(np.shape(images_cube[:, :, 0]))
+    hdi_high = np.zeros(np.shape(images_cube[:, :, 0]))
+    print("calculating CI intervals")
+    for (x, y), value in np.ndenumerate(boot_ci):
+        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=alpha)
+        mean_boot = np.nanmean(images_cube[x, y, :])
+
+        hdi_low[x, y] = original_image[x, y] - (mean_boot - hdi[0])
+        hdi_high[x, y] = original_image[x, y] + hdi[1] - mean_boot
+
+    return hdi_low, hdi_high
+
+
+def boot_ci_bc(boot_images, original_image, alpha=0.68):
+    """
+    Calculate bootstrap CI for images.
+
+    :param boot_images:
+        Iterable of 2D numpy arrays of the bootstrapped images.
+    :param original_image:
+        2D numpy array of the original image.
+    :return:
+        Two numpy arrays with low and high CI borders for each pixel.
+
+    """
+    alpha = 0.5 * (1. - alpha)
+
+    images_cube = np.dstack(boot_images)
+    boot_ci_0 = np.zeros(np.shape(images_cube[:, :, 0]))
+    boot_ci_1 = np.zeros(np.shape(images_cube[:, :, 0]))
+    print("calculating CI intervals")
+    for (x, y), value in np.ndenumerate(boot_ci_0):
+        # if np.alltrue(~np.isnan(images_cube[x, y, :])):
+        if True:
+            boot_ci_0[x, y] = bc_endpoint(images_cube[x, y, :],
+                                          original_image[x, y], alpha)
+            boot_ci_1[x, y] = bc_endpoint(images_cube[x, y, :],
+                                          original_image[x, y], 1. - alpha)
+        else:
+            boot_ci_0[x, y] = np.nan
+            boot_ci_1[x, y] = np.nan
+
+    return boot_ci_0, boot_ci_1
+
+
+def create_scb(boot_slices, obs_slice, conf_band_alpha=0.68):
+    slices_ = [arr.reshape((1, len(obs_slice))) for arr in boot_slices]
+    sigmas = hdi_of_arrays(slices_).squeeze()
+    means = np.mean(np.vstack(boot_slices), axis=0)
+    # diff = obs_slice_notna - means
+    diff = obs_slice-means
+    # Move bootstrap curves to original simulated centers
+    slices_ = [slice_+diff for slice_ in boot_slices]
+    low, up = create_sim_conf_band(slices_, obs_slice, sigmas,
+                                   alpha=conf_band_alpha)
+    return low, up
+
+
+def plot_slices(original_npz, boot_npz, data_dir, point1=(0, 1),
+                point2=(0, -10), ylabel=r"RM, $[rad/m^2]$", beam_size_pxl=None):
+
+    import matplotlib
+    label_size = 14
+    matplotlib.rcParams['xtick.labelsize'] = label_size
+    matplotlib.rcParams['ytick.labelsize'] = label_size
+    matplotlib.rcParams['axes.titlesize'] = label_size
+    matplotlib.rcParams['axes.labelsize'] = label_size
+    matplotlib.rcParams['font.size'] = label_size
+    matplotlib.rcParams['legend.fontsize'] = label_size
+
+    ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
+                                                             "cc_x_I.fits"))
+    if beam_size_pxl is None:
+        beam = ccimage.beam
+        beam_size_pxl = np.sqrt(beam[0]*beam[1])/0.1
+
+    loaded = np.load(os.path.join(data_dir, original_npz))
+    loaded_boot = np.load(os.path.join(data_dir, boot_npz))
+
+    conv_value = loaded["value"]
+    conv_sigma = loaded["sigma"]
+
+    im = Image()
+    im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+                  pixref=ccimage.pixref, stokes='MF', freq=tuple(freqs),
+                  pixrefval=ccimage.pixrefval)
+
+    im.image = conv_value
+    sigma_im = copy.deepcopy(im)
+    sigma_im.image = conv_sigma
+
+    # Values from conventional methods
+    original_slice = im.slice(point1=point1, point2=point2)
+    original_slice_sigma = sigma_im.slice(point1=point1, point2=point2)
+
+
+    # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
+
+    original_image = conv_value
+    boot_images = [loaded_boot[str(i)] for i in range(n_boot)]
+    low_ci, high_ci = boot_ci(boot_images, original_image)
+
+    ci_low_im = copy.deepcopy(im)
+    ci_low_im.image = low_ci
+    ci_high_im = copy.deepcopy(im)
+    ci_high_im.image = high_ci
+
+    ci_low_slice = ci_low_im.slice(point1=point1, point2=point2)
+    ci_high_slice = ci_high_im.slice(point1=point1, point2=point2)
+
+    boot_slices = list()
+    for i in range(n_boot):
+        im = Image()
+        im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+                      pixref=ccimage.pixref, stokes='MF',
+                      freq=tuple(freqs), pixrefval=ccimage.pixrefval)
+        im.image = loaded_boot[str(i)]
+
+        aslice = im.slice(point1=point1, point2=point2)
+        boot_slices.append(aslice)
+
+    x = np.arange(len(original_slice))/beam_size_pxl
+    fig, axes = plt.subplots(1, 1)
+    axes.errorbar(x[::2], original_slice[::2], yerr=original_slice_sigma[::2],
+                 fmt=".k")
+    axes.set_ylabel(ylabel)
+    axes.set_xlabel("Distance along jet, [beam]")
+    low_scb, up_scb = create_scb(boot_slices, original_slice)
+    axes.fill_between(x, low_scb, up_scb, alpha=0.35, label="SCB")
+    axes.fill_between(x, ci_low_slice, ci_high_slice, alpha=0.5, label="CB")
+    axes.legend(loc="upper left")
+
+    return fig
+
+
+def find_cross_coverage(boot_npz_dict, original_npz_dict, data_dir):
+    """
+    For each sample for each pixel find fraction of times when CB contains other
+    sample's values. Averaged.
+    """
+    pass
+
+
+def find_coverage(boot_npz_dict, true_image, data_dir):
+    """
+    For each sample for each pixel find fraction of times when CB contains true
+    value.
+    """
+
+
+
 if __name__ == "__main__":
     # Find beam
     # ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
@@ -191,18 +385,18 @@ if __name__ == "__main__":
     mapsize_clean = (512, 0.1)
 
     data_dir = "/home/ilya/data/revision"
+    uvdata_dir = "/home/ilya/data/revision/sample"
     path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
 
-    n_boot = 3
-    n_sample = 3
+    n_boot = 100
+    n_sample = 100
 
     rms_cs_dict = None
 
-
     # Loop over artificial sample
-    for i_art in range(n_sample):
+    for i_art in range(n_sample)[::-1]:
         for band in bands:
-            shutil.copy(os.path.join(data_dir, "{}_{}.uvf".format(band, i_art)),
+            shutil.copy(os.path.join(uvdata_dir, "{}_{}.uvf".format(band, i_art)),
                         os.path.join(data_dir, "{}.uvf".format(band)))
 
 
@@ -275,11 +469,19 @@ if __name__ == "__main__":
                             **{str(i): results[i]["SPIX"]["chisq"] for i in
                                range(n_boot)})
 
+
+
+    fig = plot_slices("ROTM_99.npz", "ROTM_99_boot.npz", data_dir,
+                      point1=(2.5, -2), point2=(-2.5, -2),
+                      ylabel=r"RM, $[rad/m^2]$", beam_size_pxl=beam_size)
+
+
+
     ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
                                                              "cc_x_I.fits"))
-    # loaded_spix = np.load("SPIX.npz")
-    # loaded_rotm = np.load("ROTM.npz")
-
+    # # loaded_spix = np.load("SPIX.npz")
+    # # loaded_rotm = np.load("ROTM.npz")
+    #
     loaded_spix = np.load(os.path.join(data_dir, "SPIX_{}.npz".format(i_art)))
     loaded_rotm = np.load(os.path.join(data_dir, "ROTM_{}.npz".format(i_art)))
     loaded_spix_boot = np.load(os.path.join(data_dir, "SPIX_{}_boot.npz".format(i_art)))
@@ -304,13 +506,67 @@ if __name__ == "__main__":
     rotm_sigma_im = copy.deepcopy(spix_im)
     rotm_sigma_im.image = conv_rotm_sigma
 
-    aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
-    aslice_sigma = spix_sigma_im.slice(point1=(0, 1), point2=(0, -10))
+    # Values from conventional methods
+    # aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
+    # aslice_sigma = spix_sigma_im.slice(point1=(0, 1), point2=(0, -10))
+    original_slice = rotm_im.slice(point1=(0, 1), point2=(0, -10))
+    original_slice_sigma = rotm_sigma_im.slice(point1=(0, 1), point2=(0, -10))
 
-    x = np.arange(len(aslice))/beam_size
-    plt.errorbar(x, aslice, yerr=aslice_sigma, fmt=".k")
+
+    import matplotlib
+    label_size = 14
+    matplotlib.rcParams['xtick.labelsize'] = label_size
+    matplotlib.rcParams['ytick.labelsize'] = label_size
+    matplotlib.rcParams['axes.titlesize'] = label_size
+    matplotlib.rcParams['axes.labelsize'] = label_size
+    matplotlib.rcParams['font.size'] = label_size
+    matplotlib.rcParams['legend.fontsize'] = label_size
+
+    x = np.arange(len(original_slice))/beam_size
+    plt.errorbar(x[::2], original_slice[::2], yerr=original_slice_sigma[::2],
+                 fmt=".k")
+    plt.axhline(0)
+    plt.ylabel(r"RM, $[rad/m^2]$")
+    # plt.ylabel(r"$\alpha$")
+    plt.xlabel("Distance along jet, [beam]")
+
     # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
 
+    original_image = conv_rotm_value
+    boot_images = [loaded_rotm_boot[str(i)] for i in range(n_boot)]
+    low_ci, high_ci = boot_ci(boot_images, original_image)
+    # low_ci_as, high_ci_as = boot_ci_asymm(boot_images, original_image)
+    # low_ci_bc, high_ci_bc = boot_ci_bc(boot_images, original_image)
+
+    ci_low_im = copy.deepcopy(spix_im)
+    ci_low_im.image = low_ci
+    ci_high_im = copy.deepcopy(spix_im)
+    ci_high_im.image = high_ci
+
+    # ci_low_as_im = copy.deepcopy(spix_im)
+    # ci_low_as_im.image = low_ci_as
+    # ci_high_as_im = copy.deepcopy(spix_im)
+    # ci_high_as_im.image = high_ci_as
+
+    # ci_low_bc_im = copy.deepcopy(spix_im)
+    # ci_low_bc_im.image = low_ci_bc
+    # ci_high_bc_im = copy.deepcopy(spix_im)
+    # ci_high_bc_im.image = high_ci_bc
+
+    ci_low_slice = ci_low_im.slice(point1=(0, 1), point2=(0, -10))
+    ci_high_slice = ci_high_im.slice(point1=(0, 1), point2=(0, -10))
+
+    # ci_as_low_slice = ci_low_as_im.slice(point1=(0, 1), point2=(0, -10))
+    # ci_as_high_slice = ci_high_as_im.slice(point1=(0, 1), point2=(0, -10))
+    #
+    # ci_bc_low_slice = ci_low_bc_im.slice(point1=(0, 1), point2=(0, -10))
+    # ci_bc_high_slice = ci_high_bc_im.slice(point1=(0, 1), point2=(0, -10))
+
+    # plt.fill_between(x, ci_as_low_slice, ci_as_high_slice, alpha=0.25, label="CI AS")
+    # plt.fill_between(x, ci_bc_low_slice, ci_bc_high_slice, alpha=0.25, label="CI BC")
+    # plt.legend()
+
+    boot_slices = list()
     for i in range(n_boot):
         spix_im = Image()
         spix_im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
@@ -319,18 +575,17 @@ if __name__ == "__main__":
         spix_im.image = loaded_spix_boot[str(i)]
 
         rotm_im = copy.deepcopy(spix_im)
-        rotm_im.image = conv_rotm_value
+        rotm_im.image = loaded_rotm_boot[str(i)]
 
-        aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
+        # aslice = spix_im.slice(point1=(0, 1), point2=(0, -10))
+        aslice = rotm_im.slice(point1=(0, 1), point2=(0, -10))
+        boot_slices.append(aslice)
         # aslice = rotm_im.slice(point1=(2.5, -2), point2=(-2.5, -2))
 
-        x = np.arange(len(aslice))/beam_size
-        plt.plot(x, aslice, alpha=0.2)
-    #
-    # # x = np.arange(len(observed_spix_slice))/beam_size
-    # # plt.errorbar(x, observed_spix_slice, yerr=observed_sigma_spix_slice, fmt=".k")
-    # # plt.plot(x, true_spix_slice)
-    # # plt.xlabel("distance, Beam size")
-    # # plt.ylabel(r"$\alpha$")
-    # # plt.show()
-    # # plt.savefig("alpha_slice.png")
+        # x = np.arange(len(aslice))/beam_size
+        # plt.plot(x, aslice, alpha=0.2, color='r')
+
+    low_scb, up_scb = create_scb(boot_slices, original_slice)
+    plt.fill_between(x, low_scb, up_scb, alpha=0.35, label="SCB")
+    plt.fill_between(x, ci_low_slice, ci_high_slice, alpha=0.5, label="CB")
+    plt.legend(loc="upper left")

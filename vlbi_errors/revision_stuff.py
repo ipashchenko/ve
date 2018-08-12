@@ -280,8 +280,9 @@ def create_scb(boot_slices, obs_slice, conf_band_alpha=0.68):
     return low, up
 
 
-def plot_slices(original_npz, boot_npz, data_dir, point1=(0, 1),
-                point2=(0, -10), ylabel=r"RM, $[rad/m^2]$", beam_size_pxl=None):
+def plot_slice(original_npz, boot_npz, data_dir, point1=(0, 1),
+               point2=(0, -10), ylabel=r"RM, $[rad/m^2]$", beam_size_pxl=None,
+               n_boot=100):
 
     import matplotlib
     label_size = 14
@@ -350,9 +351,94 @@ def plot_slices(original_npz, boot_npz, data_dir, point1=(0, 1),
     axes.set_ylabel(ylabel)
     axes.set_xlabel("Distance along jet, [beam]")
     low_scb, up_scb = create_scb(boot_slices, original_slice)
-    axes.fill_between(x, low_scb, up_scb, alpha=0.35, label="SCB")
-    axes.fill_between(x, ci_low_slice, ci_high_slice, alpha=0.5, label="CB")
+    axes.fill_between(x, low_scb, up_scb, alpha=0.35)
+    axes.fill_between(x, ci_low_slice, ci_high_slice, alpha=0.5)
     axes.legend(loc="upper left")
+
+    return fig
+
+
+def plot_slices(original_npz, boot_npz, data_dir, points1,
+                points2, ylabel=r"RM, $[rad/m^2]$", beam_size_pxl=None,
+                n_boot=100):
+
+    import matplotlib
+    label_size = 10
+    matplotlib.rcParams['xtick.labelsize'] = label_size
+    matplotlib.rcParams['ytick.labelsize'] = label_size
+    matplotlib.rcParams['axes.titlesize'] = label_size
+    matplotlib.rcParams['axes.labelsize'] = label_size
+    matplotlib.rcParams['font.size'] = label_size
+    matplotlib.rcParams['legend.fontsize'] = label_size
+
+    ccimage = create_clean_image_from_fits_file(os.path.join(data_dir,
+                                                             "cc_x_I.fits"))
+    if beam_size_pxl is None:
+        beam = ccimage.beam
+        beam_size_pxl = np.sqrt(beam[0]*beam[1])/0.1
+
+    loaded = np.load(os.path.join(data_dir, original_npz))
+    loaded_boot = np.load(os.path.join(data_dir, boot_npz))
+
+    conv_value = loaded["value"]
+    conv_sigma = loaded["sigma"]
+
+    im = Image()
+    im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+                  pixref=ccimage.pixref, stokes='MF', freq=tuple(freqs),
+                  pixrefval=ccimage.pixrefval)
+
+    im.image = conv_value
+    sigma_im = copy.deepcopy(im)
+    sigma_im.image = conv_sigma
+
+    fig, axes = plt.subplots(3, 3, sharex=True, sharey=True)
+
+    ii = 0
+    jj = 0
+
+    original_image = conv_value
+    boot_images = [loaded_boot[str(i)] for i in range(n_boot)]
+    # low_ci, high_ci = boot_ci(boot_images, original_image, alpha=0.95)
+
+    for point1, point2 in zip(points1, points2):
+        # Values from conventional methods
+        original_slice = im.slice(point1=point1, point2=point2)
+        original_slice_sigma = sigma_im.slice(point1=point1, point2=point2)
+
+        # ci_low_im = copy.deepcopy(im)
+        # ci_low_im.image = low_ci
+        # ci_high_im = copy.deepcopy(im)
+        # ci_high_im.image = high_ci
+
+        boot_slices = list()
+        for i in range(n_boot):
+            im = Image()
+            im._construct(imsize=ccimage.imsize, pixsize=ccimage.pixsize,
+                          pixref=ccimage.pixref, stokes='MF',
+                          freq=tuple(freqs), pixrefval=ccimage.pixrefval)
+            im.image = loaded_boot[str(i)]
+
+            aslice = im.slice(point1=point1, point2=point2)
+            boot_slices.append(aslice)
+
+        x = np.arange(len(original_slice))/beam_size_pxl
+        axes[ii, jj].errorbar(x[::2], original_slice[::2], yerr=original_slice_sigma[::2],
+                     fmt=".k")
+        if jj == 0:
+            axes[ii, jj].set_ylabel(ylabel)
+        if ii == 2:
+            axes[ii, jj].set_xlabel("Distance, [beam]")
+        low_scb, up_scb = create_scb(boot_slices, original_slice, conf_band_alpha=0.95)
+        axes[ii, jj].fill_between(x, low_scb, up_scb, alpha=0.35)
+        axes[ii, jj].axhline(0, color="r")
+        # axes[ii, jj].fill_between(x, ci_low_slice, ci_high_slice, alpha=0.5)
+        # axes.legend(loc="upper left")
+
+        jj += 1
+        if jj == 3:
+            ii += 1
+            jj = 0
 
     return fig
 
@@ -483,29 +569,30 @@ if __name__ == "__main__":
     beam_size = np.sqrt(beam[0]*beam[1])/0.1
 
     data_dir = "/home/ilya/data/revision_results"
-    import glob
-    boot_npzs = glob.glob(os.path.join(data_dir, "SPIX_[0-9]*_boot.npz"))
-    boot_npzs = [os.path.split(path)[-1] for path in boot_npzs]
-    original_npzs = ["SPIX_{}.npz".format(fn.split("_")[1]) for fn in boot_npzs]
+    # import glob
+    # boot_npzs = glob.glob(os.path.join(data_dir, "SPIX_[0-9]*_boot.npz"))
+    # boot_npzs = [os.path.split(path)[-1] for path in boot_npzs]
+    # original_npzs = ["SPIX_{}.npz".format(fn.split("_")[1]) for fn in boot_npzs]
+    #
+    # true_image = np.load(os.path.join(data_dir, "SPIX_true.npz"))["value"]
+    # cov_array = find_coverage(boot_npzs, original_npzs, true_image, data_dir)
+    # cov_array_conv = find_coverage_conv(original_npzs, true_image, data_dir)
+    # np.savetxt("cov_SPIX.txt", cov_array)
+    # np.savetxt("cov_SPIX_conv.txt", cov_array_conv)
+    #
+    # ccfits = os.path.join(data_dir, "cc_x_I.fits")
+    # fig = plot_coverage_maps(cov_array_conv, ccfits)
 
-    true_image = np.load(os.path.join(data_dir, "SPIX_true.npz"))["value"]
-    cov_array = find_coverage(boot_npzs, original_npzs, true_image, data_dir)
-    cov_array_conv = find_coverage_conv(original_npzs, true_image, data_dir)
-    np.savetxt("cov_SPIX.txt", cov_array)
-    np.savetxt("cov_SPIX_conv.txt", cov_array_conv)
+    points1 = [(2.5, 0), (2.5, -1), (2.5, -2),
+               (2.5, -3), (2.5, -4), (2.5, -5),
+               (2.5, -6), (2.5, -7), (2.5, -8)]
+    points2 = [(-2.5, 0), (-2.5, -1), (-2.5, -2),
+               (-2.5, -3), (-2.5, -4), (-2.5, -5),
+               (-2.5, -6), (-2.5, -7), (-2.5, -8)]
 
-    ccfits = os.path.join(data_dir, "cc_x_I.fits")
-    fig = plot_coverage_maps(cov_array_conv, ccfits)
-
-    # fig = plot_slices("ROTM_99.npz", "ROTM_99_boot.npz", data_dir,
-    #                   point1=(2.5, -2), point2=(-2.5, -2),
-    #                   ylabel=r"RM, $[rad/m^2]$", beam_size_pxl=beam_size)
-
-
-
-
-
-
+    fig1 = plot_slices("ROTM_99.npz", "ROTM_99_boot.npz", data_dir,
+                      points1, points2,
+                      ylabel=r"RM, $[rad/m^2]$", beam_size_pxl=beam_size)
 
     # # Common mapsize
     # mapsize_clean = (512, 0.1)

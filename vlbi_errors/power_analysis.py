@@ -654,10 +654,10 @@ if __name__ == '__main__':
         n_boot = 50
         n_cov = 100
         imsize = (512, 0.1)
-        base_dir = '/home/ilya/vlbi_errors/examples/coverage/new'
+        base_dir = '/home/ilya/data/coverage'
 
         # Not supposed to change anything below
-        path_to_script = '/home/ilya/code/vlbi_errors/difmap/final_clean_nw'
+        path_to_script = '/home/ilya/code/ve/difmap/final_clean_nw'
 
         if ci_type == 'boot':
             perc = int(alpha * 100)
@@ -680,14 +680,14 @@ if __name__ == '__main__':
         # Classic coverage analysis
         fname = mojave_uv_fits_fname(source, bands[0], epochs[0])
         original_uv_fits_path = os.path.join(data_dir, fname)
-        # sample_uv_fits_paths, sample_cc_fits_paths =\
-        #     create_sample(original_uv_fits_path, imsize=imsize, outdir=data_dir,
-        #                   path_to_script=path_to_script)
-        sample_cc_fits_paths = sorted(glob.glob(os.path.join(data_dir,
-                                                             'sample_cc_*.fits')))
+        sample_uv_fits_paths, sample_cc_fits_paths =\
+            create_sample(original_uv_fits_path, imsize=imsize, outdir=data_dir,
+                          path_to_script=path_to_script)
+        # sample_cc_fits_paths = sorted(glob.glob(os.path.join(data_dir,
+        #                                                      'sample_cc_*.fits')))
         # sample_cc_fits_paths = None
-        sample_uv_fits_paths = sorted(glob.glob(os.path.join(data_dir,
-                                                             'sample_uv_*.uvf')))
+        # sample_uv_fits_paths = sorted(glob.glob(os.path.join(data_dir,
+        #                                                      'sample_uv_*.uvf')))
         # sample_uv_fits_paths = None
         original_cc_fits_path = os.path.join(data_dir, 'original_cc.fits')
         # original_cc_fits_path = None
@@ -716,11 +716,11 @@ if __name__ == '__main__':
         fig = iplot(i_image.image, coverage_map-0.68, x=i_image.x, y=i_image.y,
                     min_abs_level=2. * rms, outfile=outfile, outdir=data_dir,
                     beam=i_image_cc.beam, show=True, beam_corner='lr',
-                    show_beam=True, cmap='hsv_r', blc=blc, trc=trc,
+                    show_beam=True, cmap='viridis', blc=blc, trc=trc,
                     color_clim=[-0.3, 0.3], colors_mask=i_image.image < 2*rms)
-        fig.savefig('/home/ilya/Dropbox/papers/boot/new_pics/1514_x_2006_04_28_cov68boot.eps',
+        fig.savefig(os.path.join(base_dir, '{}_x_{}_cov_{}_{}.eps'.format(source, epoch, alpha, ci_type)),
                     bbox_inches='tight', format='eps', dpi=1200)
-        fig.savefig('/home/ilya/Dropbox/papers/boot/new_pics/1514_x_2006_04_28_cov68boot.svg',
+        fig.savefig(os.path.join(base_dir, '{}_x_{}_cov_{}_{}.svg'.format(source, epoch, alpha, ci_type)),
                     bbox_inches='tight', format='svg', dpi=1200)
-        fig.savefig('/home/ilya/Dropbox/papers/boot/new_pics/1514_x_2006_04_28_cov68boot.pdf',
+        fig.savefig(os.path.join(base_dir, '{}_x_{}_cov_{}_{}.pdf'.format(source, epoch, alpha, ci_type)),
                     bbox_inches='tight', format='pdf', dpi=1200)

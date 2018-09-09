@@ -1023,7 +1023,7 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
         Iterable of \sigma for additional errorbar in bootstrap replications
         slices plot.
     """
-    label_size = 14
+    label_size = 18
     matplotlib.rcParams['xtick.labelsize'] = label_size
     matplotlib.rcParams['ytick.labelsize'] = label_size
     matplotlib.rcParams['axes.titlesize'] = label_size
@@ -1064,8 +1064,8 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
         ax.set_xlim([0, len(obs_slice)])
         if ylim is not None:
             ax.set_ylim(ylim)
-        ax.set_xlabel(r'Distance along slice, (pixels)')
-        ax.set_ylabel(r'RM, (rad $\cdot$ m$^{-2}$)')
+        ax.set_xlabel(r'Distance along slice (pixels)')
+        ax.set_ylabel(r'RM (rad $\cdot$ m$^{-2}$)')
         if beam_width:
             # min_point = np.min(obs_slice_notna - sigma_slice_notna)
             min_point = np.nanmin(obs_slice - sigma_slice) - 25.
@@ -1118,7 +1118,7 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
             ax.set_ylim(ylim)
         ax.plot(x, low[::], 'k', lw=2)
         ax.plot(x, up[::], 'k', lw=2)
-        [ax.plot(x, slice_[::], lw=0.1, color="#4682b4") for slice_ in slices_]
+        [ax.plot(x, slice_[::], lw=1, alpha=0.2, color="#4682b4") for slice_ in slices_]
         # ax.plot(x, obs_slice_notna[::-1], '.k')
         if show_dots_boot:
             ax.plot(x, obs_slice[::], '.k')

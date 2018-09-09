@@ -286,7 +286,9 @@ class MFObservations(object):
               " ...")
         cs_mask = pol_mask({stokes: self.cc_cs_image_dict[self.freqs[-1]][stokes] for
                             stokes in self.stokes},
-                           self.uvfits_dict[self.freqs[-1]], n_sigma=n_sigma,
+                           rms_cs_dict=None,
+                           uv_fits_path=self.uvfits_dict[self.freqs[-1]],
+                           n_sigma=n_sigma,
                            path_to_script=self.path_to_script)
         self._cs_mask = cs_mask
         self._cs_mask_n_sigma = n_sigma
@@ -613,20 +615,20 @@ class MFObservations(object):
                     color_clim=colors_clim, blc=blc, trc=trc,
                     beam=self.common_beam, slice_points=rotm_slices,
                     show_beam=True, show=False, show_points=plot_points,
-                    cmap='hsv')
+                    cmap='viridis')
         self.figures['rotm_image_conv'] = fig
         fig = iplot(i_image.image, sigma_rotm_image.image, x=i_image.x,
                     y=i_image.y, min_abs_level=3. * rms,
                     colors_mask=self._cs_mask, color_clim=[0, 200], blc=blc,
                     trc=trc, beam=self.common_beam, slice_points=rotm_slices,
-                    show_beam=True, show=False, cmap='hsv')
+                    show_beam=True, show=False, cmap='viridis')
         self.figures['rotm_image_conv_sigma'] = fig
         fig = iplot(i_image.image, chisq_image.image, x=i_image.x, y=i_image.y,
                     min_abs_level=3. * rms, colors_mask=self._cs_mask,
                     outfile='rotm_chisq_image_conv', outdir=self.data_dir,
                     color_clim=None, blc=blc, trc=trc, beam=self.common_beam,
                     colorbar_label='Chi-squared', slice_points=rotm_slices,
-                    show_beam=True, show=False, cmap='hsv')
+                    show_beam=True, show=False, cmap='viridis')
         self.figures['rotm_chisq_conv'] = fig
 
         if rotm_slices is not None:
@@ -697,7 +699,7 @@ class MFObservations(object):
                         min_abs_level=3. * rms, colors_mask=self._cs_mask,
                         color_clim=[0, 1], blc=blc, trc=trc, beam=self.common_beam,
                         colorbar_label='sigma EVPA, [rad]', slice_points=None,
-                        show_beam=True, show=False, cmap='hsv')
+                        show_beam=True, show=False, cmap='viridis')
             self.figures['EVPA_sigma_boot_{}'.format(freq)] = fig
         self.evpa_sigma_boot_dict = result
         return result
@@ -732,14 +734,14 @@ class MFObservations(object):
         fig = iplot(i_image.image, rotm_image.image, x=i_image.x, y=i_image.y,
                     min_abs_level=3. * rms, colors_mask=self._cs_mask,
                     color_clim=colors_clim, blc=blc, trc=trc, beam=self.common_beam,
-                    slice_points=rotm_slices, cmap='hsv',
+                    slice_points=rotm_slices, cmap='viridis',
                     show_beam=True, show=False)
         self.figures['rotm_image_boot'] = fig
         fig = iplot(i_image.image, chisq_image.image, x=i_image.x, y=i_image.y,
                     min_abs_level=3. * rms, colors_mask=self._cs_mask,
                     color_clim=[0., self._chisq_crit], blc=blc, trc=trc, beam=self.common_beam,
                     colorbar_label='Chi-squared', slice_points=rotm_slices,
-                    show_beam=True, show=False)
+                    show_beam=True, show=False, cmap='viridis')
         self.figures['rotm_chisq_image_boot'] = fig
 
         self._boot_rotm_images =\
@@ -755,7 +757,7 @@ class MFObservations(object):
                     min_abs_level=3. * rms, colors_mask=self._cs_mask,
                     outfile='rotm_image_boot_sigma', outdir=self.data_dir,
                     color_clim=[0, 200], blc=blc, trc=trc, beam=self.common_beam,
-                    slice_points=rotm_slices, cmap='hsv',
+                    slice_points=rotm_slices, cmap='viridis',
                     show_beam=True, show=False, beam_face_color='black')
         self.figures['rotm_image_boot_sigma'] = fig
 
@@ -773,8 +775,9 @@ class MFObservations(object):
                                          outdir=self.data_dir,
                                          beam_width=int(i_image._beam.beam[0]),
                                          outfname="ROTM_{}_slice_boot".format(rotm_slice),
-                                         ylim=slice_ylim, show_dots_boot=False,
-                                         fig=self.figures['slices_conv'][str(rotm_slice)])
+                                         ylim=slice_ylim, show_dots_boot=True,
+                                         # fig=self.figures['slices_conv'][str(rotm_slice)],
+                                         fig=None)
                 self.figures['slices_boot'][str(rotm_slice)] = fig
 
         return rotm_image, sigma_rotm_image
@@ -804,11 +807,11 @@ if __name__ == '__main__':
     # 1641+399
     source = '1641+399'
     epoch = '2006_06_15'
-    # rotm_slices = [((-2, -3), (-2, 3))]
+    rotm_slices = [((-2, -3), (-2, 3))]
     rotm_slices = [((0, 0), (-2, 0))]
     colors_clim = [-550, 650]
 
-    path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
+    path_to_script = '/home/ilya/github/ve/difmap/final_clean_nw'
     # epochs = get_epochs_for_source(source, use_db='multifreq')
     # print(epochs)
     # print("Found epochs for source {}:".format(source))
@@ -817,7 +820,8 @@ if __name__ == '__main__':
     # epoch = epochs[-1]
     # base_dir = '/home/ilya/vlbi_errors/article'
     # base_dir = '/home/ilya/Dropbox/papers/boot/new_pics/mf'
-    base_dir = '/home/ilya/Dropbox/papers/boot/new_pics/revision_pics'
+    # base_dir = '/home/ilya/Dropbox/papers/boot/new_pics/revision_pics'
+    base_dir = '/home/ilya/data/boot'
     data_dir = os.path.join(base_dir, source)
 
     # Download uv-data from MOJAVE web DB optionally

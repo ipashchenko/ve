@@ -144,13 +144,13 @@ def find_bbox(array, level, delta=0.):
 def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          y=None, blc=None, trc=None, cmap='hsv', abs_levels=None,
          rel_levels=None, min_abs_level=None, min_rel_level=None, k=2, vinc=2,
-         show_beam=False, beam_corner='ll', beam=None, contours_mask=None,
+         show_beam=False, beam_place='ll', beam=None, contours_mask=None,
          colors_mask=None, vectors_mask=None, plot_title=None, color_clim=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
-         beam_place='ll', colorbar_label=None, show=True, contour_color='k',
+         colorbar_label=None, show=True, contour_color='k',
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
          show_points=None, components=None, slice_color='black',
-         plot_colorbar=True, label_size=16, ra_range=None, dec_range=None):
+         plot_colorbar=True, label_size=12, ra_range=None, dec_range=None):
     """
     Plot image(s).
 
@@ -293,6 +293,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
 
     # Actually plotting
     fig = plt.figure()
+    fig.set_size_inches(4.5, 3.5)
     ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
     ax.set_xlabel(u'Relative R.A. (mas)')
     ax.set_ylabel(u'Relative Decl. (mas)')
@@ -392,23 +393,41 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         e_width = beam[1]
         r_min = e_height / 2
         if beam_place == 'lr':
-            y_c = y[0] + r_min
-            x_c = x[-1] - r_min
+            if y[0]-y[1] > 0:
+                y_c = y[-1] + r_min
+            else:
+                y_c = y[-1] - r_min
+            if x[0]-x[1] > 0:
+                x_c = x[0] - r_min
+            else:
+                x_c = x[0] + r_min
         elif beam_place == 'll':
-            if y[0] > 0:
+            if y[0]-y[1] > 0:
                 y_c = y[0] - r_min
             else:
                 y_c = y[0] + r_min
-            if x[0] > 0:
+            if x[0]-x[1] > 0:
                 x_c = x[0] - r_min
             else:
                 x_c = x[0] + r_min
         elif beam_place == 'ul':
-            y_c = y[-1] - r_min
-            x_c = x[0] + r_min
+            if y[0]-y[1] > 0:
+                y_c = y[0] - r_min
+            else:
+                y_c = y[0] + r_min
+            if x[0]-x[1] > 0:
+                x_c = x[-1] + r_min
+            else:
+                x_c = x[-1] - r_min
         elif beam_place == 'ur':
-            y_c = y[-1] - r_min
-            x_c = x[-1] - r_min
+            if y[0]-y[1] > 0:
+                y_c = y[-1] + r_min
+            else:
+                y_c = y[-1] - r_min
+            if x[0]-x[1] > 0:
+                x_c = x[-1] + r_min
+            else:
+                x_c = x[-1] - r_min
         else:
             raise Exception
 

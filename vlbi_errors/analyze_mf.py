@@ -597,7 +597,7 @@ class MFObservations(object):
                                                       return_chisq=True,
                                                       plot_pxls=pxls_plot,
                                                       outdir=self.data_dir,
-                                                      mask_on_chisq=True)
+                                                      mask_on_chisq=False)
         self._rotm_image_conv = rotm_image
         self._rotm_image_sigma_conv = sigma_rotm_image
         self._rotm_chisq_image_conv = chisq_image
@@ -621,7 +621,7 @@ class MFObservations(object):
                     y=i_image.y, min_abs_level=3. * rms,
                     colors_mask=self._cs_mask, color_clim=[0, 200], blc=blc,
                     trc=trc, beam=self.common_beam, slice_points=rotm_slices,
-                    show_beam=True, show=False, cmap='viridis')
+                    show_beam=True, show=False, cmap='viridis', beam_place='ul')
         self.figures['rotm_image_conv_sigma'] = fig
         fig = iplot(i_image.image, chisq_image.image, x=i_image.x, y=i_image.y,
                     min_abs_level=3. * rms, colors_mask=self._cs_mask,
@@ -730,12 +730,12 @@ class MFObservations(object):
         i_image = self.cc_cs_image_dict[self.freqs[-1]]['I']
         rms = rms_image(i_image)
         blc, trc = find_bbox(i_image.image, 2.*rms,
-                             delta=int(i_image._beam.beam[0]))
+                             delta=int(i_image._beam.beam[0]/2))
         fig = iplot(i_image.image, rotm_image.image, x=i_image.x, y=i_image.y,
                     min_abs_level=3. * rms, colors_mask=self._cs_mask,
                     color_clim=colors_clim, blc=blc, trc=trc, beam=self.common_beam,
                     slice_points=rotm_slices, cmap='viridis',
-                    show_beam=True, show=False)
+                    show_beam=True, show=False, beam_place="ul")
         self.figures['rotm_image_boot'] = fig
         fig = iplot(i_image.image, chisq_image.image, x=i_image.x, y=i_image.y,
                     min_abs_level=3. * rms, colors_mask=self._cs_mask,
@@ -757,7 +757,7 @@ class MFObservations(object):
                     min_abs_level=3. * rms, colors_mask=self._cs_mask,
                     outfile='rotm_image_boot_sigma', outdir=self.data_dir,
                     color_clim=[0, 200], blc=blc, trc=trc, beam=self.common_beam,
-                    slice_points=rotm_slices, cmap='viridis',
+                    slice_points=rotm_slices, cmap='viridis', beam_place='ul',
                     show_beam=True, show=False, beam_face_color='black')
         self.figures['rotm_image_boot_sigma'] = fig
 
@@ -792,11 +792,11 @@ if __name__ == '__main__':
     # epoch = '2006_07_07'
 
     # 2230+114
-    # source = '2230+114'
-    # rotm_slices = [((4, -5), (1, -7))]
-    # colors_clim = [-600, 250]
-    # epoch = '2006_02_12'
-    # slice_ylim = [-200, 600]
+    source = '2230+114'
+    rotm_slices = [((4, -5), (1, -7))]
+    colors_clim = [-600, 250]
+    epoch = '2006_02_12'
+    slice_ylim = [-200, 600]
 
     # 0945+408
     # source = '0945+408'
@@ -805,11 +805,10 @@ if __name__ == '__main__':
     # colors_clim = [-120, 440]
 
     # 1641+399
-    source = '1641+399'
-    epoch = '2006_06_15'
-    rotm_slices = [((-2, -3), (-2, 3))]
-    rotm_slices = [((0, 0), (-2, 0))]
-    colors_clim = [-550, 650]
+    # source = '1641+399'
+    # epoch = '2006_06_15'
+    # rotm_slices = [((-2, -3), (-2, 3))]
+    # colors_clim = [-550, 650]
 
     path_to_script = '/home/ilya/github/ve/difmap/final_clean_nw'
     # epochs = get_epochs_for_source(source, use_db='multifreq')
@@ -841,25 +840,33 @@ if __name__ == '__main__':
             rotm_slices=rotm_slices, slice_ylim=None)
             # pxls_plot=[(0, 0), (1, 0), (-3, 0), (-4, 0)],
             # plot_points=[(0, 0), (-2, 0), (-3, 0), (-4, 0)])
-   #  label_size = 16
-   #  matplotlib.rcParams['pdf.fonttype'] = 42
-   #  matplotlib.rcParams['ps.fonttype'] = 42
-   #  matplotlib.rcParams['xtick.labelsize'] = label_size
-   #  matplotlib.rcParams['ytick.labelsize'] = label_size
-   #  matplotlib.rcParams['axes.titlesize'] = label_size
-   #  matplotlib.rcParams['axes.labelsize'] = label_size
-   #  matplotlib.rcParams['font.size'] = label_size
-   #  matplotlib.rcParams['legend.fontsize'] = label_size
-   #  matplotlib.rcParams['text.usetex'] = True
-   #  # matplotlib.rcParams['text.latex.unicode'] = True
-   #  # matplotlib.rcParams['text.latex.preview'] = True
-   #  matplotlib.rcParams['font.family'] = 'serif'
-   #  matplotlib.rcParams['font.serif'] = 'cm'
 
-   #  fig = mfo.figures['slices_boot']['((4, -5), (1, -7))']
-   #  fig.show()
-   #  ax = fig.gca()
-   #  ax.set_xlabel(r'Distance along slice, (pixels)')
-   #  ax.set_ylabel(r'RM, (rad $\cdot$ m$^{-2}$)')
-   #  fig.show()
+    # Plot RM
+    fig = mfo.figures['rotm_image_boot']
+    fig.set_size_inches(4.5, 3.5, forward=True)
+    ax = fig.gca()
+    ax.xaxis.label.set_fontsize(14)
+    ax.yaxis.label.set_fontsize(14)
+    # Set the tick labels font
+    for label in (ax.get_xticklabels()+ax.get_yticklabels()):
+        label.set_fontsize(14)
+    fig.savefig(os.path.join(data_dir, "{}_rotm_image_boot.pdf".format(source)),
+                dpi=600, bbox_inches="tight")
+    fig.show()
+    plt.close()
+
+    # Plot slices
+    for slice_ in mfo.figures['slices_boot']:
+        fig = mfo.figures['slices_boot'][slice_]
+        fig.set_size_inches(4.5, 3.5, forward=True)
+        ax = fig.gca()
+        ax.xaxis.label.set_fontsize(14)
+        ax.yaxis.label.set_fontsize(14)
+        # Set the tick labels font
+        for label in (ax.get_xticklabels()+ax.get_yticklabels()):
+            label.set_fontsize(14)
+        fig.savefig(os.path.join(data_dir, "{}_slice_{}.pdf".format(source, slice_)),
+                    dpi=600, bbox_inches="tight")
+        fig.show()
+        plt.close()
 

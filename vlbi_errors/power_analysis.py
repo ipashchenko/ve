@@ -4,11 +4,14 @@ import glob
 import numpy as np
 from spydiff import clean_difmap
 from uv_data import UVData
-from from_fits import (create_model_from_fits_file, create_image_from_fits_file)
+from from_fits import (create_model_from_fits_file,
+                       create_clean_image_from_fits_file,
+                       create_image_from_fits_file)
 from bootstrap import CleanBootstrap
 from utils import (hdi_of_mcmc, get_fits_image_info, mas_to_rad, bc_endpoint)
 from image_ops import rms_image, rms_image_shifted
 from image import find_bbox
+from image import plot as iplot
 
 
 def bootstrap_uv_fits(uv_fits_path, cc_fits_paths, n, outpath=None,
@@ -620,107 +623,115 @@ def create_coverage_map_classic(original_uv_fits_path, ci_type,
     return cov_array / n_cov
 
 
+def plot_coverage_maps(coverage_map, original_uv_fits_path, original_cc_fits_path,
+                       data_dir, outname, path_to_script):
+    i_image_cc = create_clean_image_from_fits_file(original_cc_fits_path)
+    i_image = create_image_from_fits_file(original_cc_fits_path)
+    rms = rms_image_shifted(original_uv_fits_path, tmp_dir=data_dir,
+                            image_fits=original_cc_fits_path,
+                            path_to_script=path_to_script)
+    blc, trc = find_bbox(i_image.image, 2*rms,
+                         delta=int(i_image_cc._beam.bmaj/2))
+    fig = iplot(i_image.image, coverage_map-0.68, x=i_image.x, y=i_image.y,
+                min_abs_level=2.*rms, outdir=data_dir,
+                beam=i_image_cc.beam, show=True, beam_place='lr',
+                show_beam=True, cmap='viridis', blc=blc, trc=trc,
+                color_clim=[-0.3, 0.3], colors_mask=i_image.image < 2*rms)
+    fig.savefig(os.path.join(data_dir, '{}.pdf'.format(outname)),
+                bbox_inches='tight', format='pdf', dpi=600)
+
+
 if __name__ == '__main__':
-    from mojave import (download_mojave_uv_fits, mojave_uv_fits_fname,
-                        get_epochs_for_source)
-    from image import plot as iplot
-    from from_fits import create_clean_image_from_fits_file
-    from image_ops import rms_image
+    # from mojave import (download_mojave_uv_fits, mojave_uv_fits_fname,
+    #                     get_epochs_for_source)
+    # from image import plot as iplot
+    # from from_fits import create_clean_image_from_fits_file
+    # from image_ops import rms_image
+    #
+    # # Parameters to choose
+    # # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
+    # #            '1749+701', '0454+844']
+    # # sources = ['1749+701']
+    # sources = ['1514-241']
+    # from collections import OrderedDict
+    # source_epoch_dict = OrderedDict()
+    # for source in sources[::-1]:
+    #     epochs = get_epochs_for_source(source, use_db='multifreq')
+    #     print "Found epochs for source {}".format(source)
+    #     print epochs
+    #     source_epoch_dict.update({source: epochs[-1]})
+    # # source = '1226+023'
+    # # epochs = ['2006_06_15']
+    # for source, epoch in source_epoch_dict.items():
+    #     print "Working with source {}, epoch {}".format(source, epoch)
+    #     stokes = 'I'
+    #     epochs = [epoch]
+    #     bands = ['x']
+    #     ci_type = 'boot'
+    #     n_rms = 1
+    #     if n_rms not in [1, 2, 3]:
+    #         raise Exception("n_rms must be 1, 2 or 3")
+    #     alpha = 0.68
+    #     n_boot = 50
+    #     n_cov = 100
+    #     imsize = (512, 0.1)
+    #     base_dir = '/home/ilya/data/coverage'
+    #
+    #     # Not supposed to change anything below
+    #     path_to_script = '/home/ilya/code/ve/difmap/final_clean_nw'
+    #
+    #     if ci_type == 'boot':
+    #         perc = int(alpha * 100)
+    #         outfile = 'cov_{}_boot{}_cov{}_{}'.format(perc, n_boot, n_cov, stokes)
+    #     elif ci_type == 'rms':
+    #         perc = {1: 68, 2: 95, 3: 99}[n_rms]
+    #         outfile = 'cov_{}_cov{}_{}'.format(perc, n_cov, stokes)
+    #     else:
+    #         raise Exception("ci_type must be rms or boot!")
+    #
+    #     data_dir = os.path.join(base_dir, source, stokes, ci_type, str(perc))
+    #     print "Calculating {} CI with nominal coverage {}".format(ci_type, perc)
+    #     print "Using directory {}".format(data_dir)
+    #
+    #     if not os.path.exists(data_dir):
+    #         os.makedirs(data_dir)
+    #     download_mojave_uv_fits(source, epochs=epochs, bands=bands,
+    #                             download_dir=data_dir)
+    #
+    #     # Classic coverage analysis
+    #     fname = mojave_uv_fits_fname(source, bands[0], epochs[0])
+    #     original_uv_fits_path = os.path.join(data_dir, fname)
+    #     sample_uv_fits_paths, sample_cc_fits_paths =\
+    #         create_sample(original_uv_fits_path, imsize=imsize, outdir=data_dir,
+    #                       path_to_script=path_to_script)
+    #     # sample_cc_fits_paths = sorted(glob.glob(os.path.join(data_dir,
+    #     #                                                      'sample_cc_*.fits')))
+    #     # sample_cc_fits_paths = None
+    #     # sample_uv_fits_paths = sorted(glob.glob(os.path.join(data_dir,
+    #     #                                                      'sample_uv_*.uvf')))
+    #     # sample_uv_fits_paths = None
+    #     original_cc_fits_path = os.path.join(data_dir, 'original_cc.fits')
+    #     # original_cc_fits_path = None
+    #     coverage_map =\
+    #         create_coverage_map_classic(original_uv_fits_path, ci_type=ci_type,
+    #                                     original_cc_fits_path=original_cc_fits_path,
+    #                                     imsize=imsize, outdir=data_dir,
+    #                                     path_to_script=path_to_script,
+    #                                     sample_cc_fits_paths=sample_cc_fits_paths,
+    #                                     sample_uv_fits_paths=sample_uv_fits_paths,
+    #                                     n_rms=n_rms, alpha=alpha, n_boot=n_boot,
+    #                                     n_cov=n_cov, stokes=stokes)
+    #     np.savetxt(os.path.join(data_dir, "{}.txt".format(outfile)), coverage_map)
 
-    # Parameters to choose
-    # sources = ['1514-241', '1302-102', '0754+100', '0055+300', '0804+499',
-    #            '1749+701', '0454+844']
-    # sources = ['1749+701']
-    sources = ['1514-241']
-    from collections import OrderedDict
-    source_epoch_dict = OrderedDict()
-    for source in sources[::-1]:
-        epochs = get_epochs_for_source(source, use_db='multifreq')
-        print "Found epochs for source {}".format(source)
-        print epochs
-        source_epoch_dict.update({source: epochs[-1]})
-    # source = '1226+023'
-    # epochs = ['2006_06_15']
-    for source, epoch in source_epoch_dict.items():
-        print "Working with source {}, epoch {}".format(source, epoch)
-        stokes = 'I'
-        epochs = [epoch]
-        bands = ['x']
-        ci_type = 'boot'
-        n_rms = 1
-        if n_rms not in [1, 2, 3]:
-            raise Exception("n_rms must be 1, 2 or 3")
-        alpha = 0.68
-        n_boot = 50
-        n_cov = 100
-        imsize = (512, 0.1)
-        base_dir = '/home/ilya/data/coverage'
 
-        # Not supposed to change anything below
-        path_to_script = '/home/ilya/code/ve/difmap/final_clean_nw'
 
-        if ci_type == 'boot':
-            perc = int(alpha * 100)
-            outfile = 'cov_{}_boot{}_cov{}_{}'.format(perc, n_boot, n_cov, stokes)
-        elif ci_type == 'rms':
-            perc = {1: 68, 2: 95, 3: 99}[n_rms]
-            outfile = 'cov_{}_cov{}_{}'.format(perc, n_cov, stokes)
-        else:
-            raise Exception("ci_type must be rms or boot!")
-
-        data_dir = os.path.join(base_dir, source, stokes, ci_type, str(perc))
-        print "Calculating {} CI with nominal coverage {}".format(ci_type, perc)
-        print "Using directory {}".format(data_dir)
-
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir)
-        download_mojave_uv_fits(source, epochs=epochs, bands=bands,
-                                download_dir=data_dir)
-
-        # Classic coverage analysis
-        fname = mojave_uv_fits_fname(source, bands[0], epochs[0])
-        original_uv_fits_path = os.path.join(data_dir, fname)
-        sample_uv_fits_paths, sample_cc_fits_paths =\
-            create_sample(original_uv_fits_path, imsize=imsize, outdir=data_dir,
-                          path_to_script=path_to_script)
-        # sample_cc_fits_paths = sorted(glob.glob(os.path.join(data_dir,
-        #                                                      'sample_cc_*.fits')))
-        # sample_cc_fits_paths = None
-        # sample_uv_fits_paths = sorted(glob.glob(os.path.join(data_dir,
-        #                                                      'sample_uv_*.uvf')))
-        # sample_uv_fits_paths = None
-        original_cc_fits_path = os.path.join(data_dir, 'original_cc.fits')
-        # original_cc_fits_path = None
-        coverage_map =\
-            create_coverage_map_classic(original_uv_fits_path, ci_type=ci_type,
-                                        original_cc_fits_path=original_cc_fits_path,
-                                        imsize=imsize, outdir=data_dir,
-                                        path_to_script=path_to_script,
-                                        sample_cc_fits_paths=sample_cc_fits_paths,
-                                        sample_uv_fits_paths=sample_uv_fits_paths,
-                                        n_rms=n_rms, alpha=alpha, n_boot=n_boot,
-                                        n_cov=n_cov, stokes=stokes)
-        np.savetxt(os.path.join(data_dir, "{}.txt".format(outfile)), coverage_map)
-
-        original_cc_fits_path = os.path.join(data_dir, 'original_cc.fits')
-        i_image_cc = create_clean_image_from_fits_file(original_cc_fits_path)
-        i_image = create_image_from_fits_file(original_cc_fits_path)
-        rms = rms_image_shifted(original_uv_fits_path, tmp_dir=data_dir,
-                                image_fits=original_cc_fits_path,
-                                path_to_script=path_to_script)
-        blc, trc = find_bbox(i_image.image, 2 * rms, delta=int(i_image_cc._beam.bmaj/2))
-        # iplot(i_image.image, coverage_map, x=i_image.x, y=i_image.y,
-        #       min_abs_level=2. * rms, outfile=outfile, outdir=data_dir,
-        #       beam=i_image_cc.beam, show=True, beam_corner='lr',
-        #       show_beam=True, cmap='viridis', blc=blc, trc=trc)
-        fig = iplot(i_image.image, coverage_map-0.68, x=i_image.x, y=i_image.y,
-                    min_abs_level=2. * rms, outfile=outfile, outdir=data_dir,
-                    beam=i_image_cc.beam, show=True, beam_corner='lr',
-                    show_beam=True, cmap='viridis', blc=blc, trc=trc,
-                    color_clim=[-0.3, 0.3], colors_mask=i_image.image < 2*rms)
-        fig.savefig(os.path.join(base_dir, '{}_x_{}_cov_{}_{}.eps'.format(source, epoch, alpha, ci_type)),
-                    bbox_inches='tight', format='eps', dpi=1200)
-        fig.savefig(os.path.join(base_dir, '{}_x_{}_cov_{}_{}.svg'.format(source, epoch, alpha, ci_type)),
-                    bbox_inches='tight', format='svg', dpi=1200)
-        fig.savefig(os.path.join(base_dir, '{}_x_{}_cov_{}_{}.pdf'.format(source, epoch, alpha, ci_type)),
-                    bbox_inches='tight', format='pdf', dpi=1200)
+        # base_dir = "/home/ilya/data/coverage/1514-241"
+        base_dir = "/home/ilya/data/coverage/1749+701"
+        original_uv_fits_path = os.path.join(base_dir, "1749+701.x.2006_04_05.uvf")
+        original_cc_fits_path = os.path.join(base_dir, 'original_cc.fits')
+        coverage_map = np.loadtxt(os.path.join(base_dir, "cov_68_cov100_I.txt"))
+        # coverage_map = np.loadtxt(os.path.join(base_dir, "cov_68_rms_cov100_I.txt"))
+        path_to_script = '/home/ilya/github/ve/difmap/final_clean_nw'
+        plot_coverage_maps(coverage_map, original_uv_fits_path, original_cc_fits_path,
+                           base_dir, "1749_rms_cov68_nsample100",
+                           path_to_script)

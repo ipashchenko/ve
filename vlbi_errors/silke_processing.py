@@ -36,16 +36,16 @@ def convert_to_single_number(file_path, data_dir='/home/ilya/silke/3C84/result')
                     of.write("\n")
 
 
-txt_file_dir = '/home/ilya/silke/TXS'
-data_dir = '/home/ilya/silke/TXS'
+txt_file_dir = '/home/ilya/silke/3C84ver2'
+data_dir = '/home/ilya/silke/3C84ver2'
 out_files = glob.glob(os.path.join(txt_file_dir, 'errors_*.mod'))
 #
-# # Mass download uv-data for our epochs
-# original_dfm_models = glob.glob(os.path.join(data_dir, '*.mod'))
-# for path in original_dfm_models:
-#     fname = os.path.split(path)[-1]
-#     epoch = fname[:-4]
-#     download_mojave_uv_fits('0506+056', epochs=[epoch], download_dir=data_dir)
+# Mass download uv-data for our epochs
+original_dfm_models = glob.glob(os.path.join(data_dir, '*.mod'))
+for path in original_dfm_models:
+    fname = os.path.split(path)[-1]
+    epoch = fname[:-4]
+    download_mojave_uv_fits('0316+413', epochs=[epoch], download_dir=data_dir)
 
 
 boot_dir = '/home/ilya/silke/TXS/boot'

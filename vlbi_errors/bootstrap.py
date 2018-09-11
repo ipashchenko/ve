@@ -15,6 +15,7 @@ from utils import (fit_2d_gmm, vcomplex, nested_ddict, make_ellipses,
                    fit_2d_kde, hdi_of_mcmc)
 import matplotlib
 from uv_data import UVData
+from from_fits import create_model_from_fits_file
 from model import Model
 from spydiff import import_difmap_model, modelfit_difmap
 from spydiff import modelfit_difmap
@@ -250,6 +251,73 @@ def bootstrap_uvfits_with_difmap_model(uv_fits_path, dfm_model_path,
             os.unlink(file_)
 
     return fig
+
+
+def add_Dterm_noise(uv_fits, cc_fits, sigma_D, outname):
+    """
+    Add D-term contribution to the correlations in linear approximation, i.e.
+    only in RL and LR.
+
+    :param uv_fits:
+        FITS-file with UV-data to add D-terms contribution.
+    :param cc_fits:
+        FITS-file with CLEAN model of Stokes I.
+    :param sigma_D:
+        D-terms residual error. Common for all telescopes, IFs, polarizations
+        (R/L).
+    :param outname:
+        Name of the output UV-FITS file with visibilities with added D-terms.
+    """
+    uvdata = UVData(uv_fits)
+    copy_of_uvdata = copy.deepcopy(uvdata)
+    # Zero all correlations
+    copy_of_uvdata.zero_hands("RL")
+    copy_of_uvdata.zero_hands("LR")
+    model = create_model_from_fits_file(cc_fits)
+    # uvdata.substitute([model])
+    # Here we only change the Stokes I (i.e. RR & LL hands).
+    copy_of_uvdata.substitute([model])
+
+    for baseline in uvdata.baselines:
+        print("Baseline = {}".format(baseline))
+        scan_indxs = uvdata._indxs_baselines_scans[baseline]
+        if not scan_indxs:
+            continue
+        for i, scan_indx in enumerate(scan_indxs):
+            print("Scan = {}".format(i))
+            for if_ in range(uvdata.nif):
+                print("IF = {}".format(if_))
+                for hands in ["RL", "LR"]:
+                    print("Hands = {}".format(hands))
+                    stokes = uvdata.stokes_dict_inv[hands]
+
+                    # Generating random complex number near (0, 0)
+                    phases = np.random.uniform(0, 2*np.pi, size=2)
+                    amps = np.random.rayleigh(sigma_D, size=2)
+
+                    # D_{1,R} or D^*_{2,L} for RL and D_{1,L} or D^*_{2,R} for LR
+                    d1 = amps[0]*(np.cos(phases[0])+1j*np.sin(phases[0]))
+                    d2 = amps[1]*(np.cos(phases[1])+1j*np.sin(phases[1]))
+
+                    print("UVdata = ")
+                    print(uvdata.uvdata[scan_indx, if_, stokes])
+
+                    # D_{1,R} * I_{1,2} for RL or D_{1,L} * I_{1,2} for LR,
+                    # where I_{1,2} - FT of the Stokes I model on current
+                    # baseline
+                    add1 = copy_of_uvdata.multiply(d1)
+                    # D^*_{2,L} * I_{1,2} for RL or D^*_{2,R} * I_{1,2} for LR
+                    add2 = copy_of_uvdata.multiply(d2)
+                    add = add1 + add2
+                    # Add to residuals.substitute(model)
+                    print("Adding: ")
+                    print(add.uvdata[scan_indx, if_, stokes])
+                    uvdata.uvdata[scan_indx, if_, stokes] = \
+                        uvdata.uvdata[scan_indx, if_, stokes] + \
+                        add.uvdata[scan_indx, if_, stokes]
+                    uvdata.sync()
+
+    uvdata.save(fname=outname, data=uvdata.hdu.data, rewrite=False)
 
 
 # TODO: Add 0.632-estimate of extra-sample error.

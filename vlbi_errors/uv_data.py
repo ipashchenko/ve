@@ -1305,17 +1305,21 @@ class UVData(object):
 
         return self_copy
 
-    def multiply(self, x):
+    def multiply(self, x, inplace=False):
         """
-        Multiply visibilities on number.
+        Multiply visibilities on a scalar.
         :param x:
         :return:
         """
-        self_copy = copy.deepcopy(self)
-        self_copy.uvdata = x * self.uvdata
-        self_copy.sync()
-
-        return self_copy
+        if inplace:
+            self.uvdata = x * self.uvdata
+            self.sync()
+            return self
+        else:
+            self_copy = copy.deepcopy(self)
+            self_copy.uvdata = x * self.uvdata
+            self_copy.sync()
+            return self_copy
 
     # TODO: TEST ME!!!
     # TODO: Do i need the possibility of multiplying on any complex number?
@@ -1378,6 +1382,19 @@ class UVData(object):
         Method that zeros all visibilities.
         """
         self.uvdata = np.zeros(np.shape(self.uvdata), dtype=self.uvdata.dtype)
+
+    def zero_hands(self, hands):
+        """
+        Method that zeros hands (RR, LL, RL or LR) visibilities.
+
+        :param hands:
+            String of correlation. Must be among existing ones in current data.
+        """
+        self._check_stokes_present(hands)
+        hand_idx = self.stokes_dict_inv[hands]
+        self.uvdata[:, :, hand_idx] = np.zeros(np.shape(self.uvdata[:, :, 0]),
+                                               dtype=self.uvdata.dtype)
+        self.sync()
 
     def cv(self, q, fname):
         """
@@ -1520,6 +1537,7 @@ class UVData(object):
         if baselines is None:
             baselines = self.baselines
         # Indexes of hdu.data with chosen baselines
+        # FIXME: Possibly use ``_get_uvdata_slice`` here and everywhere
         indxs = np.hstack(index_of(baselines, self.hdu.columns[self.par_dict['BASELINE']].array))
         n = len(indxs)
         uv = self.uvw[indxs, :2]
@@ -1709,7 +1727,7 @@ class UVData(object):
             else:
                 print("Provide ``colors`` argument to show in different"
                       " colors!")
-                syms = [','] * n_if
+                syms = ['.'] * n_if
 
             if n_if > 1 or stokes not in self.stokes:
 
@@ -1720,7 +1738,7 @@ class UVData(object):
                         axes[0].plot(uv_radius, a2[:, _if], syms[_if])
                     else:
                         axes[0].plot(uv_radius, a2[:, _if], syms[_if],
-                                     color=color, alpha=alpha, ms=1)
+                                     color=color, alpha=alpha)
                 for _if in range(n_if):
                     # Ignore default color if colors list is supplied
                     if colors is not None:

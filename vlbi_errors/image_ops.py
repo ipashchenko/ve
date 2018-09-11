@@ -1023,7 +1023,7 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
         Iterable of \sigma for additional errorbar in bootstrap replications
         slices plot.
     """
-    label_size = 18
+    label_size = 12
     matplotlib.rcParams['xtick.labelsize'] = label_size
     matplotlib.rcParams['ytick.labelsize'] = label_size
     matplotlib.rcParams['axes.titlesize'] = label_size

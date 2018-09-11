@@ -549,12 +549,12 @@ def plot_coverage_hist(cov_array, cov_array_conv):
     conv = [i for i in conv if not np.isnan(i)]
     boot = list(cov_array.flatten())
     boot = [i for i in boot if not np.isnan(i)]
-    fig, axes = plt.subplots(1, 1)
-    axes.hist(conv, bins=20, alpha=0.5, label="CONV")
-    axes.hist(boot, bins=20, alpha=0.5, label="BOOT")
+    fig, axes = plt.subplots(figsize=(4.5, 3.5))
+    axes.hist(conv, bins=20, alpha=0.5, range=[0, 1], label="Conv")
+    axes.hist(boot, bins=20, alpha=0.5, range=[0, 1], label="Boot")
     axes.axvline(0.68, color="red")
     axes.set_xlabel("Coverage")
-    axes.set_ylabel("N")
+    axes.set_ylabel(r"$\rm N_{\rm pixels}$")
     axes.legend()
     return fig
 

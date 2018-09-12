@@ -1,77 +1,62 @@
-#!/usr/bin/env python
-#-*- coding: utf-8 -*-
-import math
+import numpy as np
 
 
-def JD_to_LST(JDs, llong):
-    """Returns LST [frac. of day] using:
-        JD - [iterable] - values of Julian data
-        llong - local longitude [+/-degrees].
+def JD_to_LST(JDs, longitude):
+    """
+    :param JDs:
+        Iterable of Julian Dates.
+    :param longitude:
+        lValue of local longitude [+/-degrees where sign "-" for West to
+        Greenwitch sites].
+    :return:
+        Numpy array with Local Siderial Time values.
+    """
+    JDs = np.array(JDs)
+    longitude_h = longitude/15.
+
+    D = JDs - 2451545.0
+    GMST = 18.697374558 + 24.06570982441908 * D
+    GMST = GMST % 24
+
+    GMST[GMST < 0] += 24.0
+    GMST[GMST >= 24.0] -= 24.0
+    LST = GMST + longitude_h
+    LST = LST / 24.
+    return LST
+
+
+def LST_to_HA(LST, ra):
+    """
+    :param LST:
+        Iterable of Local Siderial Time values [frac. of the day].
+    :param ra:
+        Right Assention [deg].
+    :return:
+        Numpy array of hour angles [rad].
     """
 
-    LSTs = list()
-
-    llong_h = llong / 15.
-
-    for JD in list(JDs):
-
-        D = JD - 2451545.0
-        GMST = 18.697374558 + 24.06570982441908 * D
-        GMST = GMST % 24
-
-        if GMST < 0:
-            GMST += 24.
-        elif GMST >= 24.0:
-            GMST -= 24.0
-
-        LST = GMST + llong_h
-        #convert to fraction of day
-        LST = LST / 24.
-
-        LSTs.append(LST)
-
-    return LSTs
+    ra_rad = ra*np.pi/180.
+    LST = np.array(LST)
+    return 2.*np.pi*LST-ra_rad
 
 
-def LST_to_HA(LSTs, RA):
+def PA(JD, ra, dec, latitude, longitude):
     """
-    RA [degrees] - right ascenction
-    LST [fr. of days] - local sidireal time
-    Returns Hour Angle [rads]
+    :param JD:
+        Iterable of Julian Dates of observation.
+    :param ra:
+        Right Assention [deg] of the source.
+    :param dec:
+        Declination [deg] of the source.
+    :param latitude:
+        Geographical latitude [deg] of the site of observation.
+    :param longitude:
+        Geographical longitude [deg] of the site of observation. 'East' or
+        'West' of Greenwich => +/- sign for longitude.
+
     """
-
-    HAs = list()
-
-    RA_rad = RA * math.pi / 180.
-
-    for LST in list(LSTs):
-        HA = 2. * math.pi * LST - RA_rad
-        HAs.append(HA)
-
-    return HAs
-
-
-def PA(JDs, ra, dec, latitude, longitude):
-    """Function returns parallactic angles of source (ra, dec) observed at
-    moments of Julian Date jds at geographic position (lat, llong) that is
-    'east' or 'west' of Greenwitch.
-    Parameters:
-        jds - [iterable] - set of Julian Dates,
-        ra, dec - [float] - right assention & declination of source,
-        llong, lat - [float] - geographical longitude and latitude of
-        the observer.
-    """
-
-    PAs = list()
-
-    LSTs = JD_to_LST(JDs, longitude)
-
-    HAs = LST_to_HA(LSTs, ra)
-
-    for HA in list(HAs):
-
-        PA = math.atan2(math.sin(HA), (math.tan(latitude) * math.cos(dec) -\
-            math.sin(dec) * math.cos(HA)))
-        PAs.append(PA)
-
-    return PAs
+    LSTs = JD_to_LST(JD, longitude)
+    HA = LST_to_HA(LSTs, ra)
+    return np.arctan2(np.sin(HA),
+                      (np.tan(latitude) * np.cos(dec) -
+                       np.sin(dec) * np.cos(HA)))

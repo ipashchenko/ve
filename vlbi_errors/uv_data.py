@@ -541,7 +541,7 @@ class UVData(object):
                                format='jd')
         return self._times
 
-    def add_D(self, d_dict):
+    def add_D(self, d_dict, imodel=None):
         """
         Add D-terms contribution (in linear approximation) to data.
         See http://adsabs.harvard.edu/abs/1994ApJ...427..718R equations (A1) &
@@ -549,10 +549,21 @@ class UVData(object):
 
         :param d_dict:
             Dictionary with keys [antenna name][integer of IF]["R"/"L"]
+        :param imodel: (optional)
+            Instance of ``Model`` class for Stokes I. If not ``None`` then use
+            FT of this model as Stokes I visibilities that are subject to
+            D-terms. (default: ``None``)
         """
 
         from PA import PA
         from utils import GRT_coordinates
+
+        if imodel is not None:
+            uvdata_copy = copy.deepcopy(self)
+            uvdata_copy.substitute([imodel])
+        else:
+            uvdata_copy = uvdata
+
         for baseline in self.baselines:
             bl_indx = uvdata._get_baseline_indexes(baseline)
             JD = self.times.jd[bl_indx]
@@ -566,8 +577,8 @@ class UVData(object):
                 d1L = d_dict[antname1][band]["L"]
                 d2R = d_dict[antname2][band]["R"]
                 d2L = d_dict[antname2][band]["L"]
-                I = 0.5*(uvdata.uvdata[bl_indx, band, uvdata.stokes_dict_inv["RR"]] +
-                         uvdata.uvdata[bl_indx, band, uvdata.stokes_dict_inv["LL"]])
+                I = 0.5*(uvdata_copy.uvdata[bl_indx, band, uvdata.stokes_dict_inv["RR"]] +
+                         uvdata_copy.uvdata[bl_indx, band, uvdata.stokes_dict_inv["LL"]])
 
                 pa1 = PA(JD, self.ra, self.dec, latitude1, longitude1)
                 pa2 = PA(JD, self.ra, self.dec, latitude2, longitude2)

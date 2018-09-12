@@ -2009,35 +2009,63 @@ if __name__ == "__main__":
 
 
     # Test adding residual D-term noise
-    from bootstrap import add_Dterm_noise
-    cc_fits = os.path.join(data_dir, "cc_u_I.fits")
+    data_dir = "/home/ilya/Downloads"
+    # Template for UV data
+    uv_fits = os.path.join(data_dir, "1641+399.u.2001_06_19.uvf")
     outname = os.path.join(data_dir, "u_D.uvf")
-    sigma_D = 0.01
 
-    # Zero polarization and write to new file
+    # # Create a model with point source of 10 Jy
+    from model import CGComponent, Model
+    cg = CGComponent(10, 0, 0, 0.001)
+    model = Model(stokes="I")
+    model.add_component(cg)
     uvdata = UVData(uv_fits)
+    noise = uvdata.noise(average_freq=False)
+    for key in noise:
+        noise[key] *= 0.1
+    uvdata.substitute([model])
+    uvdata.noise_add(noise)
     uvdata.zero_hands("RL")
     uvdata.zero_hands("LR")
-    uvdata.save(outname)
+    print(uvdata.uvdata[..., 2])
+
     # Add D-terms to new file
-    add_Dterm_noise(outname, cc_fits, sigma_D, outname)
+    from bootstrap import (create_random_D_dict, create_const_amp_D_dict,
+                           create_const_D_dict)
+    d_dict = create_random_D_dict(uvdata, sigma_D=0.005)
+    # d_dict = create_const_amp_D_dict(uvdata, amp_D=0.05)
+    # d_dict = create_const_D_dict(uvdata, amp_D=0.05, phase_D=0.0)
+
+    uvdata.add_D(d_dict)
+    uvdata.save(outname, rewrite=True)
+
     from spydiff import clean_difmap
     path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
-    for stokes in ("q", "u"):
+    for stokes in ("i", "q", "u"):
         clean_difmap(fname="u_D.uvf",
-                     outfname="cc_u_{}_D.fits".format(stokes.upper()),
+                     outfname="cc_{}_D.fits".format(stokes.upper()),
                      stokes=stokes, path=data_dir, outpath=data_dir,
                      mapsize_clean=(512, 0.1),
                      path_to_script=path_to_script)
-    from from_fits import create_image_from_fits_file
-    q_D = create_image_from_fits_file(os.path.join(data_dir, "cc_u_Q_D.fits"))
-    u_D = create_image_from_fits_file(os.path.join(data_dir, "cc_u_U_D.fits"))
+    from from_fits import create_clean_image_from_fits_file
+    q_D = create_clean_image_from_fits_file(os.path.join(data_dir, "cc_Q_D.fits"))
+    u_D = create_clean_image_from_fits_file(os.path.join(data_dir, "cc_U_D.fits"))
+    i_D = create_clean_image_from_fits_file(os.path.join(data_dir, "cc_I_D.fits"))
     from image_ops import pol_map, pang_map
     ppol = pol_map(q_D.image, u_D.image)
     pang = pang_map(q_D.image, u_D.image)
-    import matplotlib.pyplot as plt
-    plt.matshow(ppol)
-    plt.colorbar()
-    import matplotlib.pyplot as plt
-    plt.matshow(pang)
-    plt.colorbar()
+
+    from image import find_bbox, Image
+    from image import plot as iplot
+    from image_ops import rms_image
+
+    rms = rms_image(i_D)
+    blc, trc = find_bbox(i_D.image, 2.*rms,
+                         delta=int(i_D._beam.beam[0]*3))
+    fig = iplot(ppol, x=i_D.x, y=i_D.y,
+                # min_abs_level=3.*rms,
+                rel_levels=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                # blc=blc, trc=trc,
+                beam=i_D.beam,
+                cmap='viridis', show_beam=True,
+                beam_place="ul", contour_color="k")

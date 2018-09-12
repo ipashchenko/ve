@@ -184,7 +184,6 @@ class UVData(object):
         else:
             raise Exception("stokes must be from I, Q, U, V, RR, LL, RL or LR!")
 
-
     def sync(self):
         """
         Sync internal representation with complex representation and update
@@ -1517,6 +1516,24 @@ class UVData(object):
 
         return sum(baselines_cv_scores)
 
+    # TODO: Add method for inserting D-terms into data. Using different
+    # amp/phase for each antenna/IF. Then wrap this method to add residual
+    # D-terms errors to data in ``bootstrap``. Possibly use class for D-terms.
+    def rotate_evpa(self, angle):
+        """
+        Rotate EVPA of linear polarization on ``angle`` [rad].
+        """
+        self._check_stokes_present("RL")
+        self._check_stokes_present("LR")
+        q = self._choose_uvdata(stokes="Q")
+        u = self._choose_uvdata(stokes="U")
+        q_ = q*np.cos(2.*angle)+u*np.sin(2.*angle)
+        u_ = -q*np.sin(2.*angle)+u*np.cos(2.*angle)
+        # FIXME: Use self._get_uvdata_slice to get indexes of RL and LR?
+        self.uvdata[:, :, self.stokes_dict_inv["RL"]] = (q_+1j*u_)[..., 0]
+        self.uvdata[:, :, self.stokes_dict_inv["LR"]] = (q_-1j*u_)[..., 0]
+        self.sync()
+
     # TODO: Use for-cycle on baseline indexes
     def substitute(self, models, baselines=None):
         """
@@ -1882,3 +1899,69 @@ class UVData(object):
         raise NotImplementedError
 
 
+if __name__ == "__main__":
+    data_dir = "/home/ilya/data/revision/results"
+    uv_fits = os.path.join(data_dir, "u_true.uvf")
+
+
+    # # Test rotating EVPA
+    # uvdata = UVData(uv_fits)
+    # uvdata.rotate_evpa(np.pi/6)
+    # uvdata.save(os.path.join(data_dir, "u_rotated.uvf"))
+    # from from_fits import create_image_from_fits_file
+    # q_image = create_image_from_fits_file(os.path.join(data_dir, "cc_u_Q.fits"))
+    # u_image = create_image_from_fits_file(os.path.join(data_dir, "cc_u_U.fits"))
+    # from spydiff import clean_difmap
+    # path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
+    # for stokes in ("q", "u"):
+    #     clean_difmap(fname="u_rotated.uvf",
+    #                  outfname="cc_u_{}_rotated.fits".format(stokes.upper()),
+    #                  stokes=stokes, path=data_dir, outpath=data_dir,
+    #                  mapsize_clean=(512, 0.1),
+    #                  path_to_script=path_to_script)
+    # q_rot = create_image_from_fits_file(os.path.join(data_dir, "cc_u_Q_rotated.fits"))
+    # u_rot = create_image_from_fits_file(os.path.join(data_dir, "cc_u_U_rotated.fits"))
+    # from image_ops import pang_map
+    # pang = pang_map(q_image.image, u_image.image)
+    # pang_rot = pang_map(q_rot.image, u_rot.image)
+    # import matplotlib.pyplot as plt
+    # plt.matshow(pang)
+    # plt.colorbar()
+    # plt.matshow(pang_rot)
+    # plt.colorbar()
+    # plt.show()
+
+
+    # Test adding residual D-term noise
+    from bootstrap import add_Dterm_noise
+    cc_fits = os.path.join(data_dir, "cc_u_I.fits")
+    outname = os.path.join(data_dir, "u_D.uvf")
+    sigma_D = 0.01
+
+    # Zero polarization and write to new file
+    uvdata = UVData(uv_fits)
+    uvdata.zero_hands("RL")
+    uvdata.zero_hands("LR")
+    uvdata.save(outname)
+    # Add D-terms to new file
+    add_Dterm_noise(outname, cc_fits, sigma_D, outname)
+    from spydiff import clean_difmap
+    path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
+    for stokes in ("q", "u"):
+        clean_difmap(fname="u_D.uvf",
+                     outfname="cc_u_{}_D.fits".format(stokes.upper()),
+                     stokes=stokes, path=data_dir, outpath=data_dir,
+                     mapsize_clean=(512, 0.1),
+                     path_to_script=path_to_script)
+    from from_fits import create_image_from_fits_file
+    q_D = create_image_from_fits_file(os.path.join(data_dir, "cc_u_Q_D.fits"))
+    u_D = create_image_from_fits_file(os.path.join(data_dir, "cc_u_U_D.fits"))
+    from image_ops import pol_map, pang_map
+    ppol = pol_map(q_D.image, u_D.image)
+    pang = pang_map(q_D.image, u_D.image)
+    import matplotlib.pyplot as plt
+    plt.matshow(ppol)
+    plt.colorbar()
+    import matplotlib.pyplot as plt
+    plt.matshow(pang)
+    plt.colorbar()

@@ -68,6 +68,10 @@ class UVData(object):
         self._noise_diffs = None
         self._noise_v = None
 
+        rec = pf.getdata(self.fname, extname='AIPS AN')
+        self._antenna_mapping = {number: rec['ANNAME'][i] for i, number in
+                                 enumerate(self.antennas)}
+
     def _get_baselines_info(self):
         """
         Count indexes of visibilities on each single baseline (for single IF &
@@ -461,6 +465,14 @@ class UVData(object):
         Returns list of antennas numbers.
         """
         return baselines_2_ants(self.baselines)
+
+    @property
+    def antenna_mapping(self):
+        """
+        :return:
+            Dictionary with keys - antenna numbers and values - antenna names.
+        """
+        return self._antenna_mapping
 
     @property
     def frequency(self):

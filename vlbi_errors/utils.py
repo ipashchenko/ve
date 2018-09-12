@@ -44,7 +44,7 @@ stokes_dict = {-4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR', 1: 'I', 2: 'Q', 3: 'U',
                4: 'V'}
 
 
-# Dictionary of GRT latitudes and longitudes (sign "-" mean West of Greenwitch.
+# Dictionary of GRT latitudes and longitudes (sign "-" mean West of Greenwich.
 GRT_coordinates = {'AR': (18.344167, -66.752778),
                    'GBT': (38.433056, -79.839722),
                    'EFF': (50.524722, 6.882778),

@@ -40,6 +40,7 @@ def rotm_residuals(p, freqs, chis):
     return chis - rotm_model(p, freqs)
 
 
+# FIXME: Its possibly wrong, as D-terms added coherently to images
 def add_dterm_evpa(q, u, i, evpa, d_term, n_ant, n_if, n_scans):
     """
     Function that adds D-term contribution to Q & U images.

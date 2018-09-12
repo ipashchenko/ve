@@ -541,6 +541,52 @@ class UVData(object):
                                format='jd')
         return self._times
 
+    def add_D(self, d_dict):
+        """
+        Add D-terms contribution (in linear approximation) to data.
+        See http://adsabs.harvard.edu/abs/1994ApJ...427..718R equations (A1) &
+        (A2)
+
+        :param d_dict:
+            Dictionary with keys [antenna name][integer of IF]["R"/"L"]
+        """
+
+        from PA import PA
+        from utils import GRT_coordinates
+        for baseline in self.baselines:
+            bl_indx = uvdata._get_baseline_indexes(baseline)
+            JD = self.times.jd[bl_indx]
+            ant1, ant2 = baselines_2_ants([baseline])
+            antname1 = self.antenna_mapping[ant1]
+            antname2 = self.antenna_mapping[ant2]
+            latitude1, longitude1 = GRT_coordinates[antname1]
+            latitude2, longitude2 = GRT_coordinates[antname2]
+            for band in range(self.nif):
+                d1R = d_dict[antname1][band]["R"]
+                d1L = d_dict[antname1][band]["L"]
+                d2R = d_dict[antname2][band]["R"]
+                d2L = d_dict[antname2][band]["L"]
+                I = 0.5*(uvdata.uvdata[bl_indx, band, uvdata.stokes_dict_inv["RR"]] +
+                         uvdata.uvdata[bl_indx, band, uvdata.stokes_dict_inv["LL"]])
+
+                pa1 = PA(JD, self.ra, self.dec, latitude1, longitude1)
+                pa2 = PA(JD, self.ra, self.dec, latitude2, longitude2)
+
+                # D_{1,R}*exp(+2i*fi_1)*I_{1,2} + D^*_{2,L}*exp(+2i*fi_2)*I_{1,2} --- for RL
+                # D_{1,L}*exp(-2i*fi_1)*I_{1,2} + D^*_{2,R}*exp(-2i*fi_2)*I_{1,2} --- for LR
+                # add_RL = I*(d1R*np.exp(2j*pa1) + d2L.conj()*np.exp(2j*pa2))
+                # add_LR = I*(d1L*np.exp(-2j*pa1) + d2R.conj()*np.exp(-2j*pa2))
+
+                add_RL = I*(d1R*np.exp(1j*(pa1-pa2)) + d2L.conj()*np.exp(1j*(-pa1+pa2)))
+                add_LR = I*(d1L*np.exp(1j*(pa1+pa2)) + d2R.conj()*np.exp(1j*(pa1-pa2)))
+
+                self.uvdata[bl_indx, band, self.stokes_dict_inv["RL"]] =\
+                    self.uvdata[bl_indx, band, self.stokes_dict_inv["RL"]] + add_RL
+                self.uvdata[bl_indx, band, self.stokes_dict_inv["LR"]] =\
+                    self.uvdata[bl_indx, band, self.stokes_dict_inv["LR"]] + add_LR
+                self.sync()
+
+
     @property
     def scans(self):
         """

@@ -1265,6 +1265,8 @@ class CleanBootstrap(Bootstrap):
         if sigma_dterms is not None and 'I' not in self.model_stokes:
             raise Exception("To account for D-terms error we need Stokes I to be"
                             " present in ``models``!")
+        else:
+            self._d_dict = create_random_D_dict(self.data, sigma_dterms)
         self.sigma_dterms = sigma_dterms
 
     def get_residuals(self):
@@ -1523,8 +1525,7 @@ class CleanBootstrap(Bootstrap):
             for imodel in self.models:
                 if imodel.stokes == "I":
                     break
-            copy_of_model_data = _add_Dterm_noise(copy_of_model_data, imodel,
-                                                  self.sigma_dterms)
+            copy_of_model_data.add_D(self._d_dict, imodel)
 
         self.model_data.save(data=copy_of_model_data.hdu.data, fname=outname)
 

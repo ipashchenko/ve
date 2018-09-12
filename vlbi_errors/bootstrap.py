@@ -12,7 +12,7 @@ except ImportError:
 from utils import (fit_2d_gmm, vcomplex, nested_ddict, make_ellipses,
                    baselines_2_ants, find_outliers_2d_mincov,
                    find_outliers_2d_dbscan, find_outliers_dbscan, fit_kde,
-                   fit_2d_kde, hdi_of_mcmc)
+                   fit_2d_kde, hdi_of_mcmc, ants_2_baselines)
 import matplotlib
 from uv_data import UVData
 from from_fits import create_model_from_fits_file
@@ -253,99 +253,94 @@ def bootstrap_uvfits_with_difmap_model(uv_fits_path, dfm_model_path,
     return fig
 
 
-def add_Dterm_noise(uv_fits, cc_fits, sigma_D, outname, rewrite=False):
+def create_random_D_dict(uvdata, sigma_D):
     """
-    Add D-term contribution to the correlations in linear approximation, i.e.
-    only in RL and LR.
-
-    :param uv_fits:
-        FITS-file with UV-data to add D-terms contribution.
-    :param cc_fits:
-        FITS-file with CLEAN model of Stokes I.
-    :param sigma_D:
-        D-terms residual error. Common for all telescopes, IFs, polarizations
-        (R/L).
-    :param rewrite: (optional)
-        Boolean. Re-write FITS while saving? (default: ``False``)
-    :param outname:
-        Name of the output UV-FITS file with visibilities with added D-terms.
-    """
-    uvdata = UVData(uv_fits)
-    model = create_model_from_fits_file(cc_fits)
-    uvdata = _add_Dterm_noise(uvdata, model, sigma_D)
-    uvdata.save(fname=outname, data=uvdata.hdu.data, rewrite=rewrite)
-
-
-# TODO: This must be a method of ``UVData`` for adding D-terms, specified for
-# each antenna/polarization/IF. Wrap this method to add random D-terms (residual
-# from D-term estimation procedure).
-def _add_Dterm_noise(uvdata, imodel, sigma_D):
-    """
-    Add D-term contribution to the correlations in linear approximation, i.e.
-    only in RL and LR.
+    Create dictionary with random D-terms for each antenna/IF/polarization.
 
     :param uvdata:
-        Instance of ``UVData`` to add D-terms contribution.
-    :param imodel:
-        Instance of ``Model`` with Stokes I.
+        Instance of ``UVData`` to generate D-terms.
     :param sigma_D:
-        D-terms residual error. Common for all telescopes, IFs, polarizations
-        (R/L).
+        D-terms residual noise.
     :return:
-        ``uv_data`` with D-terms error contribution added.
+        Dictionary with keys [antenna name][integer of IF]["R"/"L"]
     """
-    copy_of_uvdata = copy.deepcopy(uvdata)
-    # Zero all correlations
-    copy_of_uvdata.zero_hands("RL")
-    copy_of_uvdata.zero_hands("LR")
-    # Here we only change the Stokes I (i.e. RR & LL hands).
-    copy_of_uvdata.substitute([imodel])
-
+    d_dict = dict()
     for baseline in uvdata.baselines:
-        print("Baseline = {}".format(baseline))
-        scan_indxs = uvdata._indxs_baselines_scans[baseline]
-        if not scan_indxs:
-            continue
-        for i, scan_indx in enumerate(scan_indxs):
-            print("Scan = {}".format(i))
-            for if_ in range(uvdata.nif):
-                print("IF = {}".format(if_))
-                for hands in ["RL", "LR"]:
-                    print("Hands = {}".format(hands))
-                    stokes = uvdata.stokes_dict_inv[hands]
+        print(baseline)
+        ant1, ant2 = baselines_2_ants([baseline])
+        antname1 = uvdata.antenna_mapping[ant1]
+        antname2 = uvdata.antenna_mapping[ant2]
+        d_dict[antname1] = dict()
+        d_dict[antname2] = dict()
+        for band in range(uvdata.nif):
+            d_dict[antname1][band] = dict()
+            d_dict[antname2][band] = dict()
+            for pol in ("R", "L"):
+                # Generating random complex number near (0, 0)
+                phases = np.random.uniform(-np.pi, np.pi, size=2)
+                amps = np.random.rayleigh(sigma_D, size=2)
+                d_dict[antname1][band][pol] = amps[0]*(np.cos(phases[0])+1j*np.sin(phases[0]))
+                d_dict[antname2][band][pol] = amps[1]*(np.cos(phases[1])+1j*np.sin(phases[1]))
+    return d_dict
 
-                    # Generating random complex number near (0, 0)
-                    phases = np.random.uniform(0, 2*np.pi, size=2)
-                    amps = np.random.rayleigh(sigma_D, size=2)
 
-                    # D_{1,R} or D^*_{2,L} for RL and D_{1,L} or D^*_{2,R} for LR
-                    d1 = amps[0]*(np.cos(phases[0])+1j*np.sin(phases[0]))
-                    d2 = amps[1]*(np.cos(phases[1])+1j*np.sin(phases[1]))
+def create_const_amp_D_dict(uvdata, amp_D):
+    """
+    Create dictionary with random D-terms for each antenna/IF/polarization.
 
-                    print("UVdata = ")
-                    print(uvdata.uvdata[scan_indx, if_, stokes])
+    :param uvdata:
+        Instance of ``UVData`` to generate D-terms.
+    :param amp_D:
+        D-terms amplitude.
+    :return:
+        Dictionary with keys [antenna name][integer of IF]["R"/"L"]
+    """
+    d_dict = dict()
+    for baseline in uvdata.baselines:
+        print(baseline)
+        ant1, ant2 = baselines_2_ants([baseline])
+        antname1 = uvdata.antenna_mapping[ant1]
+        antname2 = uvdata.antenna_mapping[ant2]
+        d_dict[antname1] = dict()
+        d_dict[antname2] = dict()
+        for band in range(uvdata.nif):
+            d_dict[antname1][band] = dict()
+            d_dict[antname2][band] = dict()
+            for pol in ("R", "L"):
+                # Generating random complex number near (0, 0)
+                phases = np.random.uniform(-np.pi, np.pi, size=2)
+                d_dict[antname1][band][pol] = amp_D*(np.cos(phases[0])+1j*np.sin(phases[0]))
+                d_dict[antname2][band][pol] = amp_D*(np.cos(phases[1])+1j*np.sin(phases[1]))
+    return d_dict
 
-                    # D_{1,R} * I_{1,2} for RL or D_{1,L} * I_{1,2} for LR,
-                    # where I_{1,2} - FT of the Stokes I model on current
-                    # baseline
-                    add1 = copy_of_uvdata.multiply(d1)
-                    # D^*_{2,L} * I_{1,2} for RL or D^*_{2,R} * I_{1,2} for LR
-                    add2 = copy_of_uvdata.multiply(d2)
-                    add = add1 + add2
-                    # Add to residuals.substitute(model)
-                    print("Adding: ")
-                    print(0.5*(add.uvdata[scan_indx, if_, uvdata.stokes_dict_inv["RR"]] +
-                               add.uvdata[scan_indx, if_, uvdata.stokes_dict_inv["LL"]]))
-                    uvdata.uvdata[scan_indx, if_, stokes] = \
-                        uvdata.uvdata[scan_indx, if_, stokes] + \
-                        0.5*(add.uvdata[scan_indx, if_, uvdata.stokes_dict_inv["RR"]] +
-                             add.uvdata[scan_indx, if_, uvdata.stokes_dict_inv["LL"]])
-                    uvdata.sync()
 
-                    print("UVdata after adding = ")
-                    print(uvdata.uvdata[scan_indx, if_, stokes])
+def create_const_D_dict(uvdata, amp_D, phase_D):
+    """
+    Create dictionary with random D-terms for each antenna/IF/polarization.
 
-    return uvdata
+    :param uvdata:
+        Instance of ``UVData`` to generate D-terms.
+    :param amp_D:
+        D-terms amplitude.
+    :return:
+        Dictionary with keys [antenna name][integer of IF]["R"/"L"]
+    """
+    d_dict = dict()
+    for baseline in uvdata.baselines:
+        print(baseline)
+        ant1, ant2 = baselines_2_ants([baseline])
+        antname1 = uvdata.antenna_mapping[ant1]
+        antname2 = uvdata.antenna_mapping[ant2]
+        d_dict[antname1] = dict()
+        d_dict[antname2] = dict()
+        for band in range(uvdata.nif):
+            d_dict[antname1][band] = dict()
+            d_dict[antname2][band] = dict()
+            for pol in ("R", "L"):
+                # Generating random complex number near (0, 0)
+                d_dict[antname1][band][pol] = amp_D*(np.cos(phase_D)+1j*np.sin(phase_D))
+                d_dict[antname2][band][pol] = amp_D*(np.cos(phase_D)+1j*np.sin(phase_D))
+    return d_dict
 
 
 # TODO: Add 0.632-estimate of extra-sample error.

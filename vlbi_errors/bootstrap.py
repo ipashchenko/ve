@@ -1258,7 +1258,18 @@ class CleanBootstrap(Bootstrap):
     """
 
     def __init__(self, models, uvdata, sigma_ampl_scale=None,
-                 additional_noise=None, sigma_dterms=None):
+                 additional_noise=None, sigma_dterms=None, sigma_evpa=None):
+        """
+        :param sigma_ampl_scale:
+            Uncertainty of the overall flux calibration.
+        :param additional_noise:
+            Sigma of the additional noise added to all baselines/IFs/Stokes.
+            I don't remember why i did that.
+        :param sigma_dterms:
+            RMS of the residual D-terms.
+        :param sigma_evpa:
+            RMS of the EVPA calibration.
+        """
         super(CleanBootstrap, self).__init__(models, uvdata)
         self.sigma_ampl_scale = sigma_ampl_scale
         self.additional_noise = additional_noise
@@ -1268,6 +1279,7 @@ class CleanBootstrap(Bootstrap):
         else:
             self._d_dict = create_random_D_dict(self.data, sigma_dterms)
         self.sigma_dterms = sigma_dterms
+        self.sigma_evpa = sigma_evpa
 
     def get_residuals(self):
         return self.data - self.model_data
@@ -1528,6 +1540,10 @@ class CleanBootstrap(Bootstrap):
             copy_of_model_data.add_D(self._d_dict, imodel)
 
         self.model_data.save(data=copy_of_model_data.hdu.data, fname=outname)
+
+        if self.sigma_evpa is not None:
+            copy_of_model_data.rotate_evpa(np.random.normal(0, self.sigma_evpa,
+                                                            size=1)[0])
 
     def run(self, n, nonparametric, split_scans=False, recenter=True,
             use_kde=True, use_v=True, combine_scans=False,

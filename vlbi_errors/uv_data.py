@@ -372,6 +372,24 @@ class UVData(object):
         return self._stokes
 
     @property
+    def ra(self):
+        """
+        :return:
+            Right Ascension of the observed source [deg]
+
+        """
+        return get_key(self.hdu.header, 'RA', 'CRVAL')
+
+    @property
+    def dec(self):
+        """
+        :return:
+            Declination of the observed source [deg]
+
+        """
+        return get_key(self.hdu.header, 'DEC', 'CRVAL')
+
+    @property
     def stokes_dict(self):
         return {i: stokes for i, stokes in enumerate(self.stokes)}
 

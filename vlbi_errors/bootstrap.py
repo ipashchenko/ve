@@ -253,7 +253,7 @@ def bootstrap_uvfits_with_difmap_model(uv_fits_path, dfm_model_path,
     return fig
 
 
-def add_Dterm_noise(uv_fits, cc_fits, sigma_D, outname):
+def add_Dterm_noise(uv_fits, cc_fits, sigma_D, outname, rewrite=False):
     """
     Add D-term contribution to the correlations in linear approximation, i.e.
     only in RL and LR.
@@ -265,18 +265,41 @@ def add_Dterm_noise(uv_fits, cc_fits, sigma_D, outname):
     :param sigma_D:
         D-terms residual error. Common for all telescopes, IFs, polarizations
         (R/L).
+    :param rewrite: (optional)
+        Boolean. Re-write FITS while saving? (default: ``False``)
     :param outname:
         Name of the output UV-FITS file with visibilities with added D-terms.
     """
     uvdata = UVData(uv_fits)
+    model = create_model_from_fits_file(cc_fits)
+    uvdata = _add_Dterm_noise(uvdata, model, sigma_D)
+    uvdata.save(fname=outname, data=uvdata.hdu.data, rewrite=rewrite)
+
+
+# TODO: This must be a method of ``UVData`` for adding D-terms, specified for
+# each antenna/polarization/IF. Wrap this method to add random D-terms (residual
+# from D-term estimation procedure).
+def _add_Dterm_noise(uvdata, imodel, sigma_D):
+    """
+    Add D-term contribution to the correlations in linear approximation, i.e.
+    only in RL and LR.
+
+    :param uvdata:
+        Instance of ``UVData`` to add D-terms contribution.
+    :param imodel:
+        Instance of ``Model`` with Stokes I.
+    :param sigma_D:
+        D-terms residual error. Common for all telescopes, IFs, polarizations
+        (R/L).
+    :return:
+        ``uv_data`` with D-terms error contribution added.
+    """
     copy_of_uvdata = copy.deepcopy(uvdata)
     # Zero all correlations
     copy_of_uvdata.zero_hands("RL")
     copy_of_uvdata.zero_hands("LR")
-    model = create_model_from_fits_file(cc_fits)
-    # uvdata.substitute([model])
     # Here we only change the Stokes I (i.e. RR & LL hands).
-    copy_of_uvdata.substitute([model])
+    copy_of_uvdata.substitute([imodel])
 
     for baseline in uvdata.baselines:
         print("Baseline = {}".format(baseline))
@@ -311,13 +334,18 @@ def add_Dterm_noise(uv_fits, cc_fits, sigma_D, outname):
                     add = add1 + add2
                     # Add to residuals.substitute(model)
                     print("Adding: ")
-                    print(add.uvdata[scan_indx, if_, stokes])
+                    print(0.5*(add.uvdata[scan_indx, if_, uvdata.stokes_dict_inv["RR"]] +
+                               add.uvdata[scan_indx, if_, uvdata.stokes_dict_inv["LL"]]))
                     uvdata.uvdata[scan_indx, if_, stokes] = \
                         uvdata.uvdata[scan_indx, if_, stokes] + \
-                        add.uvdata[scan_indx, if_, stokes]
+                        0.5*(add.uvdata[scan_indx, if_, uvdata.stokes_dict_inv["RR"]] +
+                             add.uvdata[scan_indx, if_, uvdata.stokes_dict_inv["LL"]])
                     uvdata.sync()
 
-    uvdata.save(fname=outname, data=uvdata.hdu.data, rewrite=False)
+                    print("UVdata after adding = ")
+                    print(uvdata.uvdata[scan_indx, if_, stokes])
+
+    return uvdata
 
 
 # TODO: Add 0.632-estimate of extra-sample error.
@@ -335,6 +363,7 @@ class Bootstrap(object):
     """
     def __init__(self, models, uvdata):
         self.models = models
+        self.model_stokes = [model.stokes for model in models]
         self.data = uvdata
         self.model_data = copy.deepcopy(uvdata)
         self.model_data.substitute(models)
@@ -1226,7 +1255,7 @@ class CleanBootstrap(Bootstrap):
 
     :param models:
         Iterable of ``Model`` subclass instances that represent model used for
-        bootstrapping.. There should be only one (or zero) model for each stokes
+        bootstrapping. There should be only one (or zero) model for each stokes
         parameter. If there are two, say I-stokes models, then sum them firstly
         using ``Model.__add__``.
     :param data:
@@ -1234,10 +1263,14 @@ class CleanBootstrap(Bootstrap):
     """
 
     def __init__(self, models, uvdata, sigma_ampl_scale=None,
-                 additional_noise=None):
+                 additional_noise=None, sigma_dterms=None):
         super(CleanBootstrap, self).__init__(models, uvdata)
         self.sigma_ampl_scale = sigma_ampl_scale
         self.additional_noise = additional_noise
+        if sigma_dterms is not None and 'I' not in self.model_stokes:
+            raise Exception("To account for D-terms error we need Stokes I to be"
+                            " present in ``models``!")
+        self.sigma_dterms = sigma_dterms
 
     def get_residuals(self):
         return self.data - self.model_data
@@ -1489,6 +1522,14 @@ class CleanBootstrap(Bootstrap):
             nif = copy_of_model_data.nif
             copy_of_model_data.noise_add({baseline: nif*[self.additional_noise]
                                           for baseline in copy_of_model_data.baselines})
+
+        if self.sigma_dterms is not None:
+            # It is guaranteed to exists in ``__init__``
+            for imodel in self.models:
+                if imodel.stokes == "I":
+                    break
+            copy_of_model_data = _add_Dterm_noise(copy_of_model_data, imodel,
+                                                  self.sigma_dterms)
 
         self.model_data.save(data=copy_of_model_data.hdu.data, fname=outname)
 

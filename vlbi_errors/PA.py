@@ -6,10 +6,10 @@ def JD_to_LST(JDs, longitude):
     :param JDs:
         Iterable of Julian Dates.
     :param longitude:
-        lValue of local longitude [+/-degrees where sign "-" for West to
+        Value of local longitude [+/-degrees where sign "-" for West to
         Greenwitch sites].
     :return:
-        Numpy array with Local Siderial Time values.
+        Numpy array with Local Sidereal Time values.
     """
     JDs = np.array(JDs)
     longitude_h = longitude/15.
@@ -28,9 +28,9 @@ def JD_to_LST(JDs, longitude):
 def LST_to_HA(LST, ra):
     """
     :param LST:
-        Iterable of Local Siderial Time values [frac. of the day].
+        Iterable of Local Sidereal Time values [frac. of the day].
     :param ra:
-        Right Assention [deg].
+        Right Ascension [deg].
     :return:
         Numpy array of hour angles [rad].
     """
@@ -45,7 +45,7 @@ def PA(JD, ra, dec, latitude, longitude):
     :param JD:
         Iterable of Julian Dates of observation.
     :param ra:
-        Right Assention [deg] of the source.
+        Right Ascension [deg] of the source.
     :param dec:
         Declination [deg] of the source.
     :param latitude:

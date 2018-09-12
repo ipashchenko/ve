@@ -44,6 +44,23 @@ stokes_dict = {-4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR', 1: 'I', 2: 'Q', 3: 'U',
                4: 'V'}
 
 
+# Dictionary of GRT latitudes and longitudes (sign "-" mean West of Greenwitch.
+GRT_coordinates = {'AR': (18.344167, -66.752778),
+                   'GBT': (38.433056, -79.839722),
+                   'EFF': (50.524722, 6.882778),
+                   'WSRT': (52.914722, 6.603333),
+                   'SC': (17.75652, -64.58376),
+                   'HN': (42.93362, -71.98681),
+                   'NL': (41.77165, -91.574133),
+                   'FD': (30.635214, -103.944826),
+                   'LA': (35.7752887, -106.2455897),
+                   'PT': (34.30107, -108.11912),
+                   'KP': (31.956253, -111.612361),
+                   'OV': (37.23176, -118.27714),
+                   'BR': (48.13117, -119.68325),
+                   'MK': (19.80159, -155.45581)}
+
+
 class SyncArray(np.ndarray):
     def __new__(cls, input_array):
         # Input array is an already formed ndarray instance

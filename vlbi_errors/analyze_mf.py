@@ -442,7 +442,8 @@ class MFObservations(object):
                     ccmodel = create_model_from_fits_file(cc_fits_path)
                     models.append(ccmodel)
 
-                boot = CleanBootstrap(models, uvdata)
+                boot = CleanBootstrap(models, uvdata,
+                                      sigma_dterms=self.sigma_d_term)
                 curdir = os.getcwd()
                 os.chdir(self.data_dir)
                 boot.run(n=self.n_boot, nonparametric=False, use_v=False,
@@ -579,6 +580,9 @@ class MFObservations(object):
             q = self.cc_cs_image_dict[freq]['Q']
             u = self.cc_cs_image_dict[freq]['U']
             i = self.cc_cs_image_dict[freq]['I']
+
+            # We need ``s_evpa = 0`` for testing RM gradient significance but
+            # ``s_evpa != 0`` for calculating RM errors
             pang_std, ppol_std = hovatta_find_sigma_pang(q, u, i, s_evpa,
                                                          d_term, n_ant, n_if,
                                                          n_scans)
@@ -591,8 +595,18 @@ class MFObservations(object):
             self.figures['EVPA_sigma_{}'.format(freq)] = fig
 
         sigma_pang_arrays = [self.evpa_sigma_dict[freq] for freq in self.freqs]
+        sigma_pang_arrays_grad = [np.sqrt(self.evpa_sigma_dict[freq]**2 -
+                                          np.deg2rad(self.sigma_evpa[i])**2) for
+                                  i, freq in enumerate(self.freqs)]
         rotm_image, sigma_rotm_image, chisq_image =\
             self.original_cs_images.create_rotm_image(sigma_pang_arrays,
+                                                      mask=self._cs_mask,
+                                                      return_chisq=True,
+                                                      plot_pxls=pxls_plot,
+                                                      outdir=self.data_dir,
+                                                      mask_on_chisq=False)
+        rotm_image_grad, sigma_rotm_image_grad, _ =\
+            self.original_cs_images.create_rotm_image(sigma_pang_arrays_grad,
                                                       mask=self._cs_mask,
                                                       return_chisq=True,
                                                       plot_pxls=pxls_plot,
@@ -636,8 +650,10 @@ class MFObservations(object):
             for rotm_slice in rotm_slices:
                 rotm_slice_ = i_image._convert_coordinates(rotm_slice[0],
                                                            rotm_slice[1])
+                # Here we use RM image error calculated using PANG errors
+                # without contribution of the EVPA calibration errors.
                 fig = analyze_rotm_slice(rotm_slice_, rotm_image,
-                                         sigma_rotm_image=sigma_rotm_image,
+                                         sigma_rotm_image=sigma_rotm_image_grad,
                                          outdir=self.data_dir,
                                          beam_width=int(i_image._beam.beam[0]),
                                          outfname="ROTM_{}_slice".format(rotm_slice),

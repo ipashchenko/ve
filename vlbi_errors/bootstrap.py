@@ -276,11 +276,10 @@ def create_random_D_dict(uvdata, sigma_D):
             d_dict[antname1][band] = dict()
             d_dict[antname2][band] = dict()
             for pol in ("R", "L"):
-                # Generating random complex number near (0, 0)
-                phases = np.random.uniform(-np.pi, np.pi, size=2)
-                amps = np.random.rayleigh(sigma_D, size=2)
-                d_dict[antname1][band][pol] = amps[0]*(np.cos(phases[0])+1j*np.sin(phases[0]))
-                d_dict[antname2][band][pol] = amps[1]*(np.cos(phases[1])+1j*np.sin(phases[1]))
+                # Generating two random complex numbers near (0, 0)
+                rands = np.random.normal(loc=0, scale=sigma_D, size=4)
+                d_dict[antname1][band][pol] = rands[0]+1j*rands[1]
+                d_dict[antname2][band][pol] = rands[2]+1j*rands[3]
     return d_dict
 
 

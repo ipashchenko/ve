@@ -562,10 +562,10 @@ class UVData(object):
             uvdata_copy = copy.deepcopy(self)
             uvdata_copy.substitute([imodel])
         else:
-            uvdata_copy = uvdata
+            uvdata_copy = self
 
         for baseline in self.baselines:
-            bl_indx = uvdata._get_baseline_indexes(baseline)
+            bl_indx = self._get_baseline_indexes(baseline)
             JD = self.times.jd[bl_indx]
             ant1, ant2 = baselines_2_ants([baseline])
             antname1 = self.antenna_mapping[ant1]
@@ -577,8 +577,8 @@ class UVData(object):
                 d1L = d_dict[antname1][band]["L"]
                 d2R = d_dict[antname2][band]["R"]
                 d2L = d_dict[antname2][band]["L"]
-                I = 0.5*(uvdata_copy.uvdata[bl_indx, band, uvdata.stokes_dict_inv["RR"]] +
-                         uvdata_copy.uvdata[bl_indx, band, uvdata.stokes_dict_inv["LL"]])
+                I = 0.5*(uvdata_copy.uvdata[bl_indx, band, self.stokes_dict_inv["RR"]] +
+                         uvdata_copy.uvdata[bl_indx, band, self.stokes_dict_inv["LL"]])
 
                 pa1 = PA(JD, self.ra, self.dec, latitude1, longitude1)
                 pa2 = PA(JD, self.ra, self.dec, latitude2, longitude2)

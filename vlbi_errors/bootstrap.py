@@ -1265,7 +1265,9 @@ class CleanBootstrap(Bootstrap):
             Sigma of the additional noise added to all baselines/IFs/Stokes.
             I don't remember why i did that.
         :param sigma_dterms:
-            RMS of the residual D-terms.
+            RMS of the residual D-terms. This is not the way how D-terms must
+            be accounted for in bootstrap. It's just MC-estimate of the
+            corresponding error.
         :param sigma_evpa:
             RMS of the EVPA calibration.
         """
@@ -1531,6 +1533,8 @@ class CleanBootstrap(Bootstrap):
             copy_of_model_data.noise_add({baseline: nif*[self.additional_noise]
                                           for baseline in copy_of_model_data.baselines})
 
+        # FIXME: This is not how D-terms should be bootstrapped. Actually,
+        # it is not the approximation of DGP, but MC-estimated of error.
         if self.sigma_dterms is not None:
             # It is guaranteed to exists in ``__init__``
             for imodel in self.models:

@@ -125,18 +125,20 @@ def mask_boolean_with_boolean(bool_array, bool_mask):
 
 def check_issubset(to_check, original):
     """
-    Check that contain of iterable ``to_check`` is among iterable ``original``.
+    Check that ``to_check`` is among iterable ``original``.
+
     :param to_check:
-        Iterable with elements to check.
+        This must be among ``original`` elements.
     :param original:
-        Iterable with elements to check to.
+        Iterable with elements to check .
     :return:
         Boolean.
     """
-    s = set()
-    # Need this because ``set`` remove double letters like ``RR``
-    for item in to_check:
-        s.add(item)
+    try:
+        s = set((to_check,))
+    # If to_check is a list (unhashable)
+    except TypeError:
+        s = set(to_check)
     return s.issubset(original)
 
 

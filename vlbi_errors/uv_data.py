@@ -541,6 +541,24 @@ class UVData(object):
                                format='jd')
         return self._times
 
+    def n_usable_visibilities_difmap(self, stokes="I"):
+        """
+        Returns number of visibilities usable for fitting ``stokes``. To get
+        #DOF on has to double it (Re & Im parts) and subtract number of model
+        parameters.
+
+        :param stokes:
+            String of Stokes parameter or correlation.
+        :note:
+            For nonlinear models #DOF is actually a more complicated thing.
+        """
+        self._check_stokes_present(stokes)
+        # (#, n_IF, 1)
+        stokes_vis = self._choose_uvdata(stokes=stokes)
+        n_bad = np.count_nonzero(stokes_vis.mask)
+        shape = stokes_vis.shape
+        return shape[0]*shape[1] - n_bad
+
     def add_D(self, d_dict, imodel=None):
         """
         Add D-terms contribution (in linear approximation) to data.
@@ -863,6 +881,10 @@ class UVData(object):
         """
         Return tuple of index arrays that represent portion of ``UVData.uvdata``
         array with given values of baselines, times, bands, stokes.
+
+        :param stokes: (optional)
+            Iterable of correlations or Stokes parameters that are present in
+            self.
         """
         if baselines is None:
             baselines = self.baselines
@@ -896,7 +918,6 @@ class UVData(object):
         boolean[sl] = True
         return boolean
 
-    # FIXME: Choose only one stokes parameter
     def _choose_uvdata(self, start_time=None, stop_time=None, baselines=None,
                        bands=None, stokes=None, freq_average=False):
         """
@@ -920,8 +941,7 @@ class UVData(object):
         :param stokes: (optional)
             Any string of: ``I``, ``Q``, ``U``, ``V``, ``RR``, ``LL``, ``RL``,
             ``LR`` or ``None``. If ``None`` then use all available correlations.
-            If ``I``, ``Q``, ``U``, ``V`` then must be iterable with only one
-            item (any single Stokes parameter). (default: ``None``)
+            (default: ``None``)
 
         :return:
             Numpy.ndarray that is part of (copy) ``UVData.uvdata`` array with
@@ -935,10 +955,12 @@ class UVData(object):
         if stop_time is None:
             stop_time = self.times[-1]
 
-        # FIXME: Choose only one stokes parameter
-        if stokes is None:
-            stokes = self.stokes
         if check_issubset(stokes, self.stokes):
+            # FIXME: Choose only one stokes parameter
+            if stokes is None:
+                stokes = self.stokes
+            else:
+                stokes = [stokes]
             sl = self._get_uvdata_slice(baselines, start_time, stop_time, bands,
                                         stokes)
             result = uvdata[sl]

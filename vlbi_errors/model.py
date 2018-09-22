@@ -299,7 +299,10 @@ class Model(object):
         """
         from stats import LnLikelihood
         lnlik = LnLikelihood(uvdata, self, average_freq=average_freq)
-        return -2. * lnlik(self.p) + self.size * uvdata.sample_size
+        sample_size = 2*uvdata.n_usable_visibilities_difmap(stokes=self.stokes)
+        if average_freq:
+            sample_size /= uvdata.nif
+        return -2. * lnlik(self.p) + self.size * sample_size
 
     def aic(self, uvdata, average_freq=True):
         """

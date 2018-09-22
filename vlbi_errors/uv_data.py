@@ -555,9 +555,25 @@ class UVData(object):
         self._check_stokes_present(stokes)
         # (#, n_IF, 1)
         stokes_vis = self._choose_uvdata(stokes=stokes)
+        # Number of masked visibilities
         n_bad = np.count_nonzero(stokes_vis.mask)
         shape = stokes_vis.shape
         return shape[0]*shape[1] - n_bad
+
+    def dof(self, model):
+        """
+        Number of the Degrees Of Freedom given model.
+
+        :param model:
+            Instance of ``Model`` class. Should have ``stokes`` and ``size``
+            attributes.
+        :return:
+            Value of DOF.
+
+        :note:
+            For nonlinear models DOF != number of parameters in a model.
+        """
+        return 2*self.n_usable_visibilities_difmap(stokes=model.stokes) - model.size
 
     def add_D(self, d_dict, imodel=None):
         """

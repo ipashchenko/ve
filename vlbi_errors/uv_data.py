@@ -154,18 +154,6 @@ class UVData(object):
                                        stokes=stokes,
                                        average_stokes=average_stokes)
 
-    # FIXME: Finish it!
-    def sample_size(self, stokes='I', average_freq=True):
-        assert self._check_stokes_present(stokes)
-        if average_freq:
-            size = self.uvdata_freq_averaged.mask[0]
-        else:
-            size = self.uvdata_weight_masked.shape[0] * self.uvdata_weight_masked[1]
-
-        stokes_multiplyer = 1
-        if stokes == 'I':
-            stokes_multiplyer = 2
-
     def _check_stokes_present(self, stokes):
         """
         Check if ``stokes`` is present in data (could be calculated from data).

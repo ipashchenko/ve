@@ -959,18 +959,19 @@ class UVData(object):
         if stop_time is None:
             stop_time = self.times[-1]
 
-        if check_issubset(stokes, self.stokes):
-            # FIXME: Choose only one stokes parameter
-            if stokes is None:
-                stokes = self.stokes
-            else:
-                stokes = [stokes]
+        if stokes is None:
+            stokes = self.stokes
+            sl = self._get_uvdata_slice(baselines, start_time, stop_time, bands,
+                                        stokes)
+            result = uvdata[sl]
+
+        elif check_issubset(stokes, self.stokes):
+            stokes = [stokes]
             sl = self._get_uvdata_slice(baselines, start_time, stop_time, bands,
                                         stokes)
             result = uvdata[sl]
 
         elif check_issubset(stokes, ('I', 'Q', 'U', 'V')):
-            assert len(stokes) == 1, "Only one Stokes parameter allowed!"
 
             if stokes in ('I', 'V'):
                 sl_rr = self._get_uvdata_slice(baselines, start_time, stop_time,
@@ -1217,11 +1218,11 @@ class UVData(object):
                     j = self.stokes_dict_inv[stokes]
                     baseline_uvdata =\
                         self._choose_uvdata(baselines=[baseline], bands=[i],
-                                            stokes=[stokes])
+                                            stokes=stokes)
                     # (#, #IF, #CH, #stokes)
                     n = len(baseline_uvdata)
                     sl = self._get_uvdata_slice(baselines=[baseline], bands=[i],
-                                                stokes=[stokes])
+                                                stokes=stokes)
                     noise_to_add = vec_complex(np.random.normal(scale=std,
                                                                 size=n),
                                                np.random.normal(scale=std,
@@ -1859,7 +1860,7 @@ class UVData(object):
                       " colors!")
                 syms = ['.'] * n_if
 
-            if n_if > 1 or stokes not in self.stokes:
+            if n_if > 1 or stokes not in self.stokes or not freq_average:
 
                 for _if in range(n_if):
                     # TODO: plot in different colors and make a legend

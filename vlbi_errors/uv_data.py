@@ -876,7 +876,8 @@ class UVData(object):
             Numpy boolean array with size equal to number of correlations and
             ``True`` values corresponding to specified correlations.
         """
-        assert check_issubset(stokes, self.stokes), "Must be RR, LL, RL or LR!"
+        for single_stokes in stokes:
+            assert check_issubset(single_stokes, self.stokes), "Must be RR, LL, RL or LR!"
         stokes_num = [self.stokes_dict_inv[stokes_] for stokes_ in stokes]
         return to_boolean_array(stokes_num, self.nstokes)
 
@@ -1222,7 +1223,7 @@ class UVData(object):
                     # (#, #IF, #CH, #stokes)
                     n = len(baseline_uvdata)
                     sl = self._get_uvdata_slice(baselines=[baseline], bands=[i],
-                                                stokes=stokes)
+                                                stokes=(stokes,))
                     noise_to_add = vec_complex(np.random.normal(scale=std,
                                                                 size=n),
                                                np.random.normal(scale=std,

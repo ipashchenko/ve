@@ -72,7 +72,12 @@ class CrossValidation(object):
 class LnLikelihood(object):
     def __init__(self, uvdata, model, average_freq=True, amp_only=False,
                  use_V=False, use_weights=False):
-        error = uvdata.error(average_freq=average_freq, use_V=use_V)
+        if use_weights and average_freq:
+            error = uvdata.errors_from_weights_masked_freq_averaged
+        elif use_weights and not average_freq:
+            error = uvdata.errors_from_weights
+        else:
+            error = uvdata.error(average_freq=average_freq, use_V=use_V)
         self.amp_only = amp_only
         self.model = model
         self.data = uvdata
@@ -81,14 +86,11 @@ class LnLikelihood(object):
         self.average_freq = average_freq
         if average_freq:
             if stokes == 'I':
+                # UVData.uvdata_freq_averaged is masked
                 self.uvdata = 0.5 * (uvdata.uvdata_freq_averaged[:, 0] +
                                      uvdata.uvdata_freq_averaged[:, 1])
-                # self.error = 0.5 * np.sqrt(error[:, 0] ** 2. +
-                #                            error[:, 1] ** 2.)
-                self.error = 0.5 * (error[:, 0] +
-                                    error[:, 1])
-                if use_weights:
-                    self.error = uvdata.errors_from_weights_masked_freq_averaged
+                self.error = np.hypot(error[:, 0], error[:, 1])/2
+
             elif stokes == 'RR':
                 self.uvdata = uvdata.uvdata_freq_averaged[:, 0]
                 self.error = error[:, 0]
@@ -99,18 +101,14 @@ class LnLikelihood(object):
                 raise Exception("Working with only I, RR or LL!")
         else:
             if stokes == 'I':
-                # (#, #IF)
-                self.uvdata = 0.5 * (uvdata.uvdata[..., 0] + uvdata.uvdata[..., 1])
-                # (#, #IF)
-                # self.error = 0.5 * np.sqrt(error[..., 0] ** 2. +
-                #                            error[..., 1] ** 2.)
-                self.error = 0.5 * (error[..., 0] +
-                                    error[..., 1])
+                self.uvdata = 0.5 * (uvdata.uvdata_weight_masked[..., 0] +
+                                     uvdata.uvdata_weight_masked[..., 1])
+                self.error = 0.5*np.hypot(error[..., 0], error[..., 1])
             elif stokes == 'RR':
-                self.uvdata = uvdata.uvdata[..., 0]
+                self.uvdata = uvdata.uvdata_weight_masked[..., 0]
                 self.error = error[..., 0]
             elif stokes == 'LL':
-                self.uvdata = uvdata.uvdata[..., 1]
+                self.uvdata = uvdata.uvdata_weight_masked[..., 1]
                 self.error = error[..., 1]
             else:
                 raise Exception("Working with only I, RR or LL!")
@@ -121,15 +119,13 @@ class LnLikelihood(object):
         :param p:
         :return:
         """
-        # print "calculating lnlik for ", p
-        # Data visibilities and noise
         data = self.uvdata
         error = self.error
-        # Model visibilities at uv-points of data
         assert(self.model.size == len(p))
         self.model.p = p[:]
         model_data = self.model.ft(self.data.uv)
-        # ln of data likelihood
+        if not self.average_freq:
+            model_data = model_data[:, np.newaxis]
         if self.amp_only:
             model_amp = np.absolute(model_data)
             data_amp = np.absolute(data)
@@ -139,19 +135,17 @@ class LnLikelihood(object):
                     (model_amp ** 2. + data_amp ** 2.) / (2. * error ** 2.) +\
                     np.log(sp.special.iv(0.,
                                          (model_amp * data_amp / error ** 2.)))
+            result = lnlik.sum()
         else:
-            # Use complex normal distribution
-            k = 1.
-            if self.stokes == 'I':
-                k = 2.
-            # lnlik = k * (-0.5 * np.log(2. * math.pi * error ** 2.) - \
-            #         (data - model_data) * (data - model_data).conj() / \
-            #         (2. * error ** 2.))
-            lnlik = k * (-np.log(2. * math.pi * error ** 2.) - \
-                         (data - model_data) * (data - model_data).conj() / \
-                         (2. * error ** 2.))
-            lnlik = lnlik.real
-        return lnlik.sum()
+            # Complex difference
+            diff = data - model_data
+            # Real
+            lnlik_real = -np.log(2.*np.pi*error**2.)-diff.real**2/(2.*error**2.)
+            # Imaginary
+            lnlik_imag = -np.log(2.*np.pi*error**2.)-diff.imag**2/(2.*error**2.)
+            result = np.ma.sum(lnlik_real)+np.ma.sum(lnlik_imag)
+
+        return result
 
 
 class LnPrior(object):

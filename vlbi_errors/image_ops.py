@@ -1131,8 +1131,8 @@ def analyze_rotm_slice(slice_coords, rotm_image, sigma_rotm_image=None,
             model_slice = model_rotm_image.slice(pix1=slice_coords[0],
                                                  pix2=slice_coords[1])
             ax.plot(x, model_slice[::], 'k', ls='dashed')
-        ax.set_xlabel("Position along slice, (pixels)")
-        ax.set_ylabel(r'RM, (rad $\cdot$ m$^{-2}$)')
+        ax.set_xlabel("Position along slice (pixels)")
+        ax.set_ylabel(r'RM (rad $\cdot$ m$^{-2}$)')
         if beam_width:
             # min_point = np.min(obs_slice_notna) -\
             #             sigmas[np.argmin(obs_slice_notna)]

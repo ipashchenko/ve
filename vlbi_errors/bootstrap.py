@@ -137,7 +137,7 @@ def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                     fig, axes = matplotlib.pyplot.subplots(nrows=n, ncols=n)
                     fig.set_size_inches(16.5, 16.5)
                 corner.corner(boot_data, labels=labels, plot_contours=True,
-                              plt_datapoints=False, color='gray',
+                              plot_datapoints=False, color='gray',
                               levels=[0.68,0.95],
                               # smooth=0.5,
                               # bins=20,
@@ -1277,7 +1277,7 @@ class CleanBootstrap(Bootstrap):
         if sigma_dterms is not None and 'I' not in self.model_stokes:
             raise Exception("To account for D-terms error we need Stokes I to be"
                             " present in ``models``!")
-        else:
+        if sigma_dterms is not None:
             self._d_dict = create_random_D_dict(self.data, sigma_dterms)
         self.sigma_dterms = sigma_dterms
         self.sigma_evpa = sigma_evpa

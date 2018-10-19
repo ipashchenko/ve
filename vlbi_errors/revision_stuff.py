@@ -795,3 +795,21 @@ if __name__ == "__main__":
     # plt.fill_between(x, low_scb, up_scb, alpha=0.35, label="SCB")
     # plt.fill_between(x, ci_low_slice, ci_high_slice, alpha=0.5, label="CB")
     # plt.legend(loc="upper left")
+
+    # Plot coverage maps
+    data_dir = "/home/ilya/data/revision_results"
+    cov_ROTM = os.path.join(data_dir, "cov_ROTM.txt")
+    cov_SPIX = os.path.join(data_dir, "cov_SPIX.txt")
+    cov_ROTM_conv = os.path.join(data_dir, "cov_ROTM_conv.txt")
+    cov_SPIX_conv = os.path.join(data_dir, "cov_SPIX_conv.txt")
+    mask_cov_spix = cov_SPIX == 0
+    mask_cov_spix_conv = cov_SPIX_conv == 0
+    mask_cov_rotm = cov_ROTM == 0
+    mask_cov_rotm_conv = cov_ROTM_conv == 0
+
+    # Load original I and QU images
+    i_image = create_clean_image_from_fits_file("/home/ilya/data/revision/results/cc_u_I.fits")
+    q_image = create_clean_image_from_fits_file("/home/ilya/data/revision/results/cc_u_Q.fits")
+    u_image = create_clean_image_from_fits_file("/home/ilya/data/revision/results/cc_u_U.fits")
+    from image_ops import pol_map
+    ppol = pol_map(q_image.image, u_image.imsize, mask=mask_cov_rotm)

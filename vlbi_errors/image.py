@@ -326,7 +326,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                     n_max = int(math.ceil(math.log(max_level / min_abs_level, k)))
                 abs_levels = [-min_abs_level] + [min_abs_level * k ** i for i in
                                                  range(n_max)]
-            # print("Constructed absolute levels are: {}".format(abs_levels))
+            print("Constructed absolute levels are: {}".format(abs_levels))
 
         co = ax.contour(y, x, contours[x_slice, y_slice], abs_levels,
                         colors=contour_color, extent=[y[0], y[-1], x[0], x[-1]],
@@ -432,7 +432,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             raise Exception
 
         # FIXME: check how ``bpa`` should be plotted
-        e = Ellipse((y_c, x_c), e_width, e_height, angle=beam[2],
+        e = Ellipse((y_c, x_c), e_width, e_height, angle=-beam[2],
                     edgecolor=beam_edge_color, facecolor=beam_face_color,
                     alpha=beam_alpha)
         ax.add_patch(e)

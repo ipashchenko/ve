@@ -344,9 +344,9 @@ def get_stacked_map(source, mojave_dir=None, out_dir=None, imsize=(512, 0.1),
                                                                  im_fits_fname))
         beam = ccimage.beam
         print "Beam for epoch {} : {} [mas, mas, deg]".format(epoch, beam)
-        beams_dict.update({epoch: (beam[0], beam[0], 0)})
+        beams_dict.update({epoch: ccimage.beam})
 
-    circ_beam = np.mean([beam[0] for beam in beams_dict.values()])
+    circ_beam = np.mean([np.sqrt(beam[0]*beam[1]) for beam in beams_dict.values()])
 
     # Now clean and restore with circular beam
     images = list()

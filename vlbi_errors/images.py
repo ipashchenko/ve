@@ -355,7 +355,7 @@ class Images(object):
     def create_rotm_image(self, s_pang_arrays=None, freqs=None, mask=None, n=0,
                           outfile=None, outdir=None, ext='png',
                           mask_on_chisq=True, return_chisq=False,
-                          plot_pxls=None, outfile_pxls=None):
+                          plot_pxls=None, sigma_evpa=None, outfile_pxls=None):
         """
         Method that creates image of Rotation Measure for current collection of
         instances.
@@ -382,6 +382,10 @@ class Images(object):
         :param plot_pxls: (optional)
             Iterable of pixel coordinates to plot fit. If ``None`` then don't
             plot single pixel fits. (default: ``None``)
+        :param sigma_evpa: (optional)
+            Dictionary with EVPA calibration errors for each frequency. Lowest
+            frequency goes first. If ``None`` than do not account for EVPA
+            calibration uncertainty.
         :param outfile_pxls: (optional)
             Optional outfile postfix if ploting single pixel fits. If ``None``
             then don't use any postfix. (default: ``None``)
@@ -426,8 +430,16 @@ class Images(object):
             if len(q_images) != len(u_images):
                 raise Exception("Different # of Q & U images for " + str(freq) +
                                 " MHz!")
-            pang_arrays.append(pang_map(q_images[n].image, u_images[n].image,
-                                        mask=mask))
+            single_pang_map = pang_map(q_images[n].image, u_images[n].image,
+                                       mask=mask)
+            # Optionally add noise to account for EVPA calibration uncertainty
+            if sigma_evpa is not None:
+                # Index of current frequency (``0`` is the lowest frequency)
+                i = freqs.index(freq)
+                single_pang_map += np.random.normal(loc=0,
+                                                    scale=np.deg2rad(sigma_evpa[i]),
+                                                    size=1)[0]
+            pang_arrays.append(single_pang_map)
 
         # Calculate Rotation Measure array and write it to ``BasicImage``
         # isntance
@@ -463,13 +475,17 @@ class Images(object):
         return rotm_image, s_rotm_image
 
     def create_rotm_images(self, s_pang_arrays=None, freqs=None, mask=None,
-                           mask_on_chisq=True):
+                           mask_on_chisq=True, sigma_evpa=None):
         """
         Method that creates ROTM images from series of bootstrapped data.
 
         :param s_pang_arrays:
         :param freqs:
         :param mask:
+        :param sigma_evpa: (optional)
+            Dictionary with EVPA calibration errors for each frequency. Lowest
+            frequency goes first. If ``None`` than do not account for EVPA
+            calibration uncertainty.
         :return:
             Instance of ``Images`` class with calculated ROTM images.
         """
@@ -514,7 +530,8 @@ class Images(object):
                                                                 n_replications)
             rotm_image, s_rotm_image = self.create_rotm_image(s_pang_arrays,
                                                               freqs, mask, i,
-                                                              mask_on_chisq=mask_on_chisq)
+                                                              mask_on_chisq=mask_on_chisq,
+                                                              sigma_evpa=sigma_evpa)
             images.add_image(rotm_image)
 
         return images

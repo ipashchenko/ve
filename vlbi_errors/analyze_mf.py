@@ -194,21 +194,41 @@ class MFObservations(object):
         # Instance of ``Images`` class with ROTM maps
         self._boot_rotm_images = None
 
-        # Uncertainties found using bootstrapped data. Values - instances of
-        # ``Image`` class.
+        # Uncertainties found using bootstrapped data (accounting for D- and
+        # EVPA-error). Values - instances of ``Image`` class.
         self.evpa_sigma_boot_dict = dict()
 
-        # ROTM image made by conventional method
+        # ROTM image made by conventional method (accounting for D- and
+        # EVPA-error in PANG)
         self._rotm_image_conv = None
-        # ROTM error map made by conventional method
+        # ROTM image made by conventional method (accounting for D-error in
+        # PANG only)
+        self._rotm_image_conv_grad = None
+
+        # ROTM error map made by conventional method (accounting for D- and
+        # EVPA-error in PANG)
         self._rotm_image_sigma_conv = None
-        # Chi-squared image made by conventional method
+        # ROTM error map made by conventional method (accounting for only
+        # D-error in PANG)
+        self._rotm_image_sigma_conv = None
+
+        # Chi-squared image made by conventional method (must account for both
+        # D- and EVPA-error in PANG)
         self._rotm_chisq_image_conv = None
-        # ROTM image made by bootstrapping
+
+        # ROTM image made using PANG errors obtained by bootstrapping PANG maps
+        # with D-terms and EVPA calibrations error accounted for.
         self._rotm_image_boot = None
-        # ROTM error map made by bootstrapping
+
+        # ROTM error map made by bootstrapping with D-terms and EVPA
+        # calibration errors accounted for.
         self._rotm_image_sigma_boot = None
-        # Chi-squared image made by bootstrapped data
+        # ROTM error map made by bootstrapping with only D-terms error accounted
+        # for.
+        self._rotm_image_sigma_boot_grad = None
+
+        # Chi-squared image made by bootstrapped data with D-terms and EVPA
+        # calibration errors accounted for.
         self._rotm_chisq_image_boot = None
 
     def run(self, sigma_evpa=None, sigma_d_term=None, colors_clim=None,
@@ -442,8 +462,11 @@ class MFObservations(object):
                     ccmodel = create_model_from_fits_file(cc_fits_path)
                     models.append(ccmodel)
 
+                # Position of current ``freq``: ``0`` means the lowest
+                # frequency.
+                i = self.freqs.index(freq)
                 boot = CleanBootstrap(models, uvdata,
-                                      sigma_dterms=self.sigma_d_term)
+                                      sigma_dterms=self.sigma_d_term[i])
                 curdir = os.getcwd()
                 os.chdir(self.data_dir)
                 boot.run(n=self.n_boot, nonparametric=False, use_v=False,
@@ -613,7 +636,9 @@ class MFObservations(object):
                                                       outdir=self.data_dir,
                                                       mask_on_chisq=False)
         self._rotm_image_conv = rotm_image
+        self._rotm_image_conv_grad = rotm_image_grad
         self._rotm_image_sigma_conv = sigma_rotm_image
+        self._rotm_image_sigma_conv_grad = sigma_rotm_image_grad
         self._rotm_chisq_image_conv = chisq_image
 
         i_image = self.cc_cs_image_dict[self.freqs[-1]]['I']
@@ -637,13 +662,20 @@ class MFObservations(object):
                     trc=trc, beam=self.common_beam, slice_points=rotm_slices,
                     show_beam=True, show=False, cmap='viridis', beam_place='ul')
         self.figures['rotm_image_conv_sigma'] = fig
+        fig = iplot(i_image.image, sigma_rotm_image_grad.image, x=i_image.x,
+                    y=i_image.y, min_abs_level=3. * rms,
+                    colors_mask=self._cs_mask, color_clim=[0, 200], blc=blc,
+                    trc=trc, beam=self.common_beam, slice_points=rotm_slices,
+                    show_beam=True, show=False, cmap='viridis', beam_place='ul')
+        self.figures['rotm_image_conv_sigma_grad'] = fig
         fig = iplot(i_image.image, chisq_image.image, x=i_image.x, y=i_image.y,
                     min_abs_level=3. * rms, colors_mask=self._cs_mask,
                     outfile='rotm_chisq_image_conv', outdir=self.data_dir,
-                    color_clim=None, blc=blc, trc=trc, beam=self.common_beam,
+                    color_clim=[0., self._chisq_crit], blc=blc, trc=trc,
+                    beam=self.common_beam,
                     colorbar_label='Chi-squared', slice_points=rotm_slices,
                     show_beam=True, show=False, cmap='viridis')
-        self.figures['rotm_chisq_conv'] = fig
+        self.figures['rotm_chisq_image_conv'] = fig
 
         if rotm_slices is not None:
             self.figures['slices_conv'] = dict()
@@ -732,9 +764,12 @@ class MFObservations(object):
             rotm_slices = self.rotm_slices
         if n_sigma is not None:
             self.set_common_mask(n_sigma)
+        # This accounts for D-terms and EVPA calibration errors.
         sigma_pangs_dict = self.create_boot_pang_errors()
         sigma_pang_arrays = [sigma_pangs_dict[freq].image for freq in
                              self.freqs]
+        # This is RM image made using bootstrap-based PANG errors that
+        # originally account for D-terms and EVPA calibration errors.
         rotm_image, _, chisq_image = \
             self.original_cs_images.create_rotm_image(sigma_pang_arrays,
                                                       mask=self._cs_mask,
@@ -762,23 +797,44 @@ class MFObservations(object):
 
         self._boot_rotm_images =\
             self.boot_images.create_rotm_images(mask=self._cs_mask,
-                                                mask_on_chisq=False)
+                                                mask_on_chisq=False,
+                                                sigma_evpa=self.sigma_evpa)
         sigma_rotm_image =\
             self._boot_rotm_images.create_error_image(cred_mass=cred_mass)
         self._rotm_image_sigma_boot = sigma_rotm_image
 
-        # This sigma doesn't take absolute EVPA calibration uncertainty into
+        # Now ``self._boot_rotm_images`` doesn't contain contribution from
+        # EVPA calibration error
+        self._boot_rotm_images =\
+            self.boot_images.create_rotm_images(mask=self._cs_mask,
+                                                mask_on_chisq=False,
+                                                sigma_evpa=None)
+        sigma_rotm_image_grad =\
+            self._boot_rotm_images.create_error_image(cred_mass=cred_mass)
+        self._rotm_image_sigma_boot_grad = sigma_rotm_image_grad
+
+
+        # This sigma take absolute EVPA calibration uncertainty into
         # account
         fig = iplot(i_image.image, sigma_rotm_image.image, x=i_image.x, y=i_image.y,
                     min_abs_level=3. * rms, colors_mask=self._cs_mask,
                     outfile='rotm_image_boot_sigma', outdir=self.data_dir,
                     color_clim=[0, 200], blc=blc, trc=trc, beam=self.common_beam,
                     slice_points=rotm_slices, cmap='viridis', beam_place='ul',
-                    show_beam=True, show=False, beam_face_color='black')
+                    show_beam=True, show=False)
         self.figures['rotm_image_boot_sigma'] = fig
+        # This sigma RM doesn't include EVPA
+        fig = iplot(i_image.image, sigma_rotm_image_grad.image, x=i_image.x, y=i_image.y,
+                    min_abs_level=3. * rms, colors_mask=self._cs_mask,
+                    outfile='rotm_image_boot_sigma', outdir=self.data_dir,
+                    color_clim=[0, 200], blc=blc, trc=trc, beam=self.common_beam,
+                    slice_points=rotm_slices, cmap='viridis', beam_place='ul',
+                    show_beam=True, show=False)
+        self.figures['rotm_image_boot_sigma_grad'] = fig
 
         if rotm_slices is not None:
             self.figures['slices_boot'] = dict()
+            self.figures['slices_boot_conv'] = dict()
             for rotm_slice in rotm_slices:
                 rotm_slice_ = i_image._convert_coordinates(rotm_slice[0],
                                                            rotm_slice[1])
@@ -786,6 +842,9 @@ class MFObservations(object):
                     rotm_image_ = self._rotm_image_conv
                 else:
                     rotm_image_ = rotm_image
+                # ``self._boot_rotm_images`` doesn't contain contribution from
+                # EVPA calibration error - so used for RM gradient searches
+
                 fig = analyze_rotm_slice(rotm_slice_, rotm_image_,
                                          rotm_images=self._boot_rotm_images,
                                          outdir=self.data_dir,
@@ -796,23 +855,34 @@ class MFObservations(object):
                                          fig=None)
                 self.figures['slices_boot'][str(rotm_slice)] = fig
 
+                fig = analyze_rotm_slice(rotm_slice_, rotm_image_,
+                                         rotm_images=self._boot_rotm_images,
+                                         outdir=self.data_dir,
+                                         beam_width=int(i_image._beam.beam[0]),
+                                         outfname="ROTM_{}_slice_boot".format(rotm_slice),
+                                         ylim=slice_ylim, show_dots_boot=True,
+                                         fig=self.figures['slices_conv'][str(rotm_slice)],
+                                         # fig=None,
+                                         )
+                self.figures['slices_boot_conv'][str(rotm_slice)] = fig
+
         return rotm_image, sigma_rotm_image
 
 
 if __name__ == '__main__':
     import glob
     # 0923+392
-    # source = '0923+392'
-    # rotm_slices = [((0.3, 2.6), (-0.6, -2.75))]
-    # colors_clim = [-800, 1500]
-    # epoch = '2006_07_07'
+    source = '0923+392'
+    rotm_slices = [((0.3, 2.6), (-0.6, -2.75))]
+    colors_clim = [-800, 1500]
+    epoch = '2006_07_07'
 
     # 2230+114
-    source = '2230+114'
-    rotm_slices = [((4, -5), (1, -7))]
-    colors_clim = [-600, 250]
-    epoch = '2006_02_12'
-    slice_ylim = [-200, 600]
+    # source = '2230+114'
+    # rotm_slices = [((4, -5), (1, -7))]
+    # colors_clim = [-600, 250]
+    # epoch = '2006_02_12'
+    # slice_ylim = [-200, 600]
 
     # 0945+408
     # source = '0945+408'
@@ -886,3 +956,30 @@ if __name__ == '__main__':
         fig.show()
         plt.close()
 
+    # # For 2230 only
+    # # Plot RM
+    # fig = mfo.figures['rotm_image_conv_sigma_grad']
+    # fig.set_size_inches(4.5, 3.5, forward=True)
+    # ax = fig.gca()
+    # ax.xaxis.label.set_fontsize(14)
+    # ax.yaxis.label.set_fontsize(14)
+    # # Set the tick labels font
+    # for label in (ax.get_xticklabels()+ax.get_yticklabels()):
+    #     label.set_fontsize(14)
+    # fig.savefig(os.path.join(data_dir, "{}_rotm_image_conv_sigma_grad.pdf".format(source)),
+    #             dpi=600, bbox_inches="tight")
+    # fig.show()
+    # plt.close()
+    #
+    # fig = mfo.figures['rotm_image_boot_sigma_grad']
+    # fig.set_size_inches(4.5, 3.5, forward=True)
+    # ax = fig.gca()
+    # ax.xaxis.label.set_fontsize(14)
+    # ax.yaxis.label.set_fontsize(14)
+    # # Set the tick labels font
+    # for label in (ax.get_xticklabels()+ax.get_yticklabels()):
+    #     label.set_fontsize(14)
+    # fig.savefig(os.path.join(data_dir, "{}_rotm_image_boot_sigma.pdf".format(source)),
+    #             dpi=600, bbox_inches="tight")
+    # fig.show()
+    # plt.close()

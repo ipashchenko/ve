@@ -1776,7 +1776,8 @@ class UVData(object):
     def uvplot(self, baselines=None, bands=None, stokes=None, style='a&p',
                freq_average=False, sym=None, phase_range=None, amp_range=None,
                re_range=None, im_range=None, colors=None, color='#4682b4',
-               fig=None, start_time=None, stop_time=None, alpha=1.0):
+               fig=None, start_time=None, stop_time=None, alpha=1.0,
+               uv_radius_lims=None, ms=None, mew=None):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
 
@@ -1920,29 +1921,41 @@ class UVData(object):
             fig.show()
         else:
             if not sym:
-                sym = '.'
-            # axes[0].plot(uv_radius, a2, sym, color=color)
-            # axes[1].plot(uv_radius, a1, sym, color=color)
-            # FIXME: Doesn't work for stokes='I' (stokes_dict_inv)
-            sc_0 = axes[0].scatter(uv_radius, a2, cmap='gray_r',
-                                   norm=matplotlib.colors.LogNorm(),
-                                   c=np.mean(weights[:, :, self.stokes_dict_inv[stokes]], axis=1))
-            from mpl_toolkits.axes_grid1 import make_axes_locatable
-            divider_0 = make_axes_locatable(axes[0])
-            cax_0 = divider_0.append_axes("right", size="2%", pad=0.00)
-            cb_0 = fig.colorbar(sc_0, cax=cax_0)
-            sc_1 = axes[1].scatter(uv_radius, a1, cmap='gray_r',
-                                   norm=matplotlib.colors.LogNorm(),
-                                   c=np.mean(weights[:, :, self.stokes_dict_inv[stokes]], axis=1))
-            cb_0.set_label('Weights')
-            divider_1 = make_axes_locatable(axes[1])
-            cax_1 = divider_1.append_axes("right", size="2%", pad=0.00)
-            cb_1 = fig.colorbar(sc_1, cax=cax_1)
-            cb_1.set_label('Weights')
+                sym = '_'
+            if ms is not None:
+                ms = ms
+            else:
+                ms = 5
+            if mew is not None:
+                mew = mew
+            else:
+                mew = 0.2
+            axes[0].plot(uv_radius, a2, sym, color=color, alpha=alpha, ms=ms, mew=mew)
+            axes[1].plot(uv_radius, a1, sym, color=color, alpha=alpha, ms=ms, mew=mew)
+            if uv_radius_lims is not None:
+                axes[0].set_xlim(left=uv_radius_lims)
+                axes[1].set_xlim(left=uv_radius_lims)
+            # # FIXME: Doesn't work for stokes='I' (stokes_dict_inv)
+            # sc_0 = axes[0].scatter(uv_radius, a2, cmap='gray_r',
+            #                        norm=matplotlib.colors.LogNorm(),
+            #                        c=np.mean(weights[:, :, self.stokes_dict_inv[stokes]], axis=1))
+            # from mpl_toolkits.axes_grid1 import make_axes_locatable
+            # divider_0 = make_axes_locatable(axes[0])
+            # cax_0 = divider_0.append_axes("right", size="2%", pad=0.00)
+            # cb_0 = fig.colorbar(sc_0, cax=cax_0)
+            # sc_1 = axes[1].scatter(uv_radius, a1, cmap='gray_r',
+            #                        norm=matplotlib.colors.LogNorm(),
+            #                        c=np.mean(weights[:, :, self.stokes_dict_inv[stokes]], axis=1))
+            # cb_0.set_label('Weights')
+            # divider_1 = make_axes_locatable(axes[1])
+            # cax_1 = divider_1.append_axes("right", size="2%", pad=0.00)
+            # cb_1 = fig.colorbar(sc_1, cax=cax_1)
+            # cb_1.set_label('Weights')
             axes[1].set_xlabel('UV-radius, wavelengths')
             if style == 'a&p':
                 axes[1].set_ylim([-math.pi, math.pi])
-                axes[1].set_xlim(left=0)
+                if uv_radius_lims is None:
+                    axes[1].set_xlim(left=0)
                 axes[0].set_ylabel('Amplitude, [Jy]')
                 axes[1].set_ylabel('Phase, [rad]')
                 if amp_range is not None:

@@ -433,7 +433,7 @@ class NLastJustStop(NLast):
     """
     def __init__(self, n, mode="or"):
         super(NLastJustStop, self).__init__(n, mode=mode)
-        self.n_stop = n
+        self.n_stop = n+1
         print("NLastJustStop.init - n_stop = {}".format(n))
 
     def check_criterion(self):
@@ -825,8 +825,8 @@ class AutoModeler(object):
         # RMS in core region
         beam = int(round(self.beam/mas_in_pix))
         print("imsize = {}, beam={}".format(imsize, beam))
-        self.rms_residuals = np.std(image.image[imsize/2-3*beam: imsize/2+3*beam,
-                                                imsize/2-3*beam: imsize/2+3*beam])
+        self.rms_residuals = np.std(image.image[int(imsize/2)-3*beam: int(imsize/2)+3*beam,
+                                                int(imsize/2)-3*beam: int(imsize/2)+3*beam])
         amp, y, x, bmaj = infer_gaussian(image.image)
         print("Suggested bmaj = {} pixels".format(bmaj))
         x = mas_in_pix * (x - imsize / 2) * np.sign(image.dx)

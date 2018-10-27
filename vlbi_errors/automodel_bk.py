@@ -12,6 +12,7 @@ from automodel import (AutoModeler, TotalFluxStopping,
                        AddedOverlappingComponentStopping,
                        NLastDifferencesAreSmall,
                        NLastDifferesFromLast,
+                       NLastJustStop,
                        FluxBasedModelSelector,
                        SizeBasedModelSelector,
                        SmallSizedComponentsModelFilter,
@@ -22,7 +23,8 @@ from automodel import (AutoModeler, TotalFluxStopping,
 
 def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=False,
                  n_max_components=20, mapsize_clean=(512, 0.1), out_dir=None,
-                 path_to_script=None, start_model_fname=None, niter_difmap=100):
+                 path_to_script=None, start_model_fname=None, niter_difmap=100,
+                 n_just_stop=None, remove_nonbest_models=True):
 
     automodeler = AutoModeler(simulated_uv_fits_path, out_dir, path_to_script,
                               n_comps_terminate=n_max_components,
@@ -44,6 +46,8 @@ def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=Fals
                 NLastDifferencesAreSmall(),
                 # TotalFluxStopping(rel_threshold=0.05, mode="or"),
                 RChiSquaredStopping(delta_min=0.1)]
+    if n_just_stop is not None:
+        stoppers.insert(2, NLastJustStop(int(n_just_stop)))
     # Keep iterating while this stopper fires
     # TotalFluxStopping(rel_threshold=0.2, mode="while")]
     # Selectors choose best model using different heuristics
@@ -82,14 +86,15 @@ def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=Fals
     automodeler.plot_results(id_best)
 
     # Leaving only best model
-    files_toremove.remove(best_model)
-    try:
-        files_toremove.remove(first_model)
-    except ValueError:
-        pass
-    if files_toremove:
-        for fn in files_toremove:
-            os.unlink(fn)
+    if remove_nonbest_models:
+        files_toremove.remove(best_model)
+        try:
+            files_toremove.remove(first_model)
+        except ValueError:
+            pass
+        if files_toremove:
+            for fn in files_toremove:
+                os.unlink(fn)
     # Move best model to the specified location
     save_dir, _ = os.path.split(best_dfm_model_path)
     if not os.path.exists(save_dir):

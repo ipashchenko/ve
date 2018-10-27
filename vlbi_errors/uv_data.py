@@ -529,7 +529,7 @@ class UVData(object):
                                format='jd')
         return self._times
 
-    def n_usable_visibilities_difmap(self, stokes="I"):
+    def n_usable_visibilities_difmap(self, stokes="I", freq_average=False):
         """
         Returns number of visibilities usable for fitting ``stokes``. To get
         #DOF on has to double it (Re & Im parts) and subtract number of model
@@ -541,12 +541,17 @@ class UVData(object):
             For nonlinear models #DOF is actually a more complicated thing.
         """
         self._check_stokes_present(stokes)
-        # (#, n_IF, 1)
-        stokes_vis = self._choose_uvdata(stokes=stokes)
+        # (#, n_IF, 1) if not freq_average
+        stokes_vis = self._choose_uvdata(stokes=stokes,
+                                         freq_average=freq_average)
         # Number of masked visibilities
         n_bad = np.count_nonzero(stokes_vis.mask)
         shape = stokes_vis.shape
-        return shape[0]*shape[1] - n_bad
+        if freq_average:
+            factor = 1.0
+        else:
+            factor = shape[1]
+        return shape[0]*factor - n_bad
 
     def dof(self, model):
         """

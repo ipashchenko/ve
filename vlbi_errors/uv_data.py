@@ -1118,11 +1118,14 @@ class UVData(object):
                     baseline_uvdata = self._choose_uvdata(baselines=[baseline])
                     if average_freq:
                         baseline_uvdata = np.mean(baseline_uvdata, axis=1)
-                    v = (baseline_uvdata[..., 0] - baseline_uvdata[..., 1]).real
+                    # V = 0.5*(RR-LL)
+                    v = 0.5*(baseline_uvdata[..., 0] - baseline_uvdata[..., 1]).real
                     mask = ~np.isnan(v)
+                    # sigma_V = 0.5*sqrt(sigma_RR^2 + sigma_LL^2)=0.5*sqrt(2)*sigma_RR,LL
+                    # => sigmaRR,LL,RL,LR = sqrt(2)*sigma_V
                     baselines_noises[baseline] =\
-                        np.asarray(mad_std(np.ma.array(v, mask=np.invert(mask)).data,
-                                           axis=0))
+                        np.sqrt(2.0)*np.asarray(mad_std(np.ma.array(v, mask=np.invert(mask)).data,
+                                                axis=0))
                         # np.asarray(np.std(np.ma.array(v, mask=np.invert(mask)).data,
                         #                   axis=0))
             else:
@@ -1137,12 +1140,10 @@ class UVData(object):
                                 # (#obs in scan, #nstokes,)
                                 scan_baseline_uvdata = np.mean(scan_baseline_uvdata,
                                                                axis=1)
-                            v = (scan_baseline_uvdata[..., 0] -
-                                 scan_baseline_uvdata[..., 1]).real
+                            v = 0.5*(scan_baseline_uvdata[..., 0] -
+                                     scan_baseline_uvdata[..., 1]).real
                             mask = ~np.isnan(v)
-                            scan_noise = np.asarray(np.std(np.ma.array(v,
-                                                                       mask=np.invert(mask)).data,
-                                                           axis=0))
+                            scan_noise = np.sqrt(2.0)*np.asarray(np.std(np.ma.array(v, mask=np.invert(mask)).data, axis=0))
                             baseline_noise.append(scan_noise)
                         baselines_noises[baseline] = np.asarray(baseline_noise)
                     except TypeError:
@@ -1157,7 +1158,7 @@ class UVData(object):
                         baseline_uvdata = np.mean(baseline_uvdata, axis=1)
                     # (#, #IF, #Stokes)
                     differences = (baseline_uvdata[:-1, ...] -
-                                   baseline_uvdata[1:, ...])
+                                   baseline_uvdata[1:, ...])/np.sqrt(2.0)
                     mask = np.isnan(differences)
                     # (#IF, #Stokes)
                     baselines_noises[baseline] = \
@@ -1178,7 +1179,7 @@ class UVData(object):
                                                                axis=1)
                             # (#obs in scan, #nif, #nstokes,)
                             differences = (scan_baseline_uvdata[:-1, ...] -
-                                           scan_baseline_uvdata[1:, ...])
+                                           scan_baseline_uvdata[1:, ...])/np.sqrt(2.0)
                             mask = ~np.isnan(differences)
                             # (nif, nstokes,)
                             scan_noise = np.asarray([mad_std(np.ma.array(differences,

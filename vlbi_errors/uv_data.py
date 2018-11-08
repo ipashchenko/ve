@@ -1295,33 +1295,22 @@ class UVData(object):
         """
         self.uvdata *= scale
 
-    # FIXME: This is shitty method - make it more comfortable (AIPS style args
-    # is shit)
-    def uv_coverage(self, antennas=None, baselines=None, sym='.k',
-                    start_time=None, stop_time=None):
+    # FIXME: Fix logic of arguments. How one can plot one antennas with others,
+    # several baselines, all baselines etc.
+    def uv_coverage(self, antennas=None, baselines=None, sym='.k', fig=None):
         """
         Make plots of uv-coverage for selected baselines/antennas.
 
-        If ``antenna`` is not None, then plot tracs for all baselines of
-        selected antenna with antennas specified in ``baselines``. It is like
-        AIPS task UVPLOT with bparm=6,7,0.
-
         :param antennas: (optional)
-            AIPS-like ``uvplt`` parameter.
         :param baselines: (optional)
-            AIPS-like ``uvplt`` parameter.
         :param sym: (optional)
             Matplotlib symbols to plot. (default: ``.k``)
-        :param start_time: (optional)
-            Instance of ``astropy.time.Time`` class. (default: ``None``)
-        :param stop_time: (optional)
-            Instance of ``astropy.time.Time`` class. (default: ``None``)
         """
-        if antennas is None:
+        if antennas is None and baselines is None:
             antennas = self.antennas
 
         if baselines is None:
-            raise Exception("Provide some antenna num. for baselines!")
+            baselines = set(self.baselines)
         else:
             baselines_list = list()
             # If ``baselines`` is iterable
@@ -1333,10 +1322,7 @@ class UVData(object):
             baselines = set(baselines_list)
 
         # Check that given baseline numbers are among existing ones
-        assert(baselines.issubset(self.antennas))
-        # Assert that we don't have one and the same antenna and baseline
-        if len(baselines) == len(antennas) == 1:
-            assert not baselines.issubset(antennas), "Zero spacing baseline!"
+        assert(baselines.issubset(self.baselines))
 
         # Find what baselines to display
         baselines_to_display = list()
@@ -1347,39 +1333,44 @@ class UVData(object):
         # If ``antennas`` is not iterable (int)
         except TypeError:
             antennas_list.append(antennas)
-        for ant1 in antennas_list:
-            for ant2 in baselines:
-                if ant2 > ant1:
-                    baselines_to_display.append(ant2 + 256 * ant1)
-                elif ant2 < ant1:
-                    baselines_to_display.append(ant1 + 256 * ant2)
 
-        baselines_to_display = list(set(baselines_to_display))
+        # If more than one antennas are selected
+        if len(antennas_list) > 1:
+            from itertools import combinations
+            for ant1, ant2 in combinations(antennas_list, 2):
+                bl = ant2 + 256 * ant1
+                baselines_to_display.append(float(bl))
+        else:
+            for bl in self.baselines:
+                ant1, ant2 = baselines_2_ants([bl])
+                if antennas_list[0] in (ant1, ant2):
+                    baselines_to_display.append(bl)
 
-        uvdata, indxs = self._choose_uvdata(baselines=baselines_to_display,
-                                            start_time=start_time,
-                                            stop_time=stop_time,
-                                            freq_average=True)
+        indxs = self._get_baselines_indexes(baselines=baselines_to_display)
 
-        # FIXME: Use properties for u, v
-        u = self.hdu.columns[self.par_dict['UU--']].array[indxs]
-        v = self.hdu.columns[self.par_dict['VV--']].array[indxs]
-        uv = np.vstack((u, v)).T
-        matplotlib.pyplot.subplot(1, 1, 1)
-        matplotlib.pyplot.plot(uv[:, 0], uv[:, 1], sym)
+        uv = self.uv[indxs]
+
+        if fig is None:
+            fig, axes = matplotlib.pyplot.subplots(1, 1)
+        else:
+            axes = fig.get_axes()[0]
+
+        axes.plot(uv[:, 0], uv[:, 1], sym)
         # FIXME: This is right only for RR/LL!
-        matplotlib.pyplot.plot(-uv[:, 0], -uv[:, 1], sym)
+        axes.plot(-uv[:, 0], -uv[:, 1], sym)
         # Find max(u & v)
-        umax = max(abs(u))
-        vmax = max(abs(v))
+        umax = max(abs(uv[:, 0]))
+        vmax = max(abs(uv[:, 1]))
         uvmax = max(umax, vmax)
         uv_range = [-1.1 * uvmax, 1.1 * uvmax]
-        matplotlib.pyplot.xlim(uv_range)
-        matplotlib.pyplot.ylim(uv_range)
-        matplotlib.pyplot.axes().set_aspect('equal')
-        matplotlib.pyplot.xlabel('U, wavelengths')
-        matplotlib.pyplot.ylabel('V, wavelengths')
-        matplotlib.pyplot.show()
+
+        axes.set_xlim(uv_range)
+        axes.set_ylim(uv_range)
+        axes.set_aspect('equal')
+        axes.set_xlabel('U, wavelengths')
+        axes.set_ylabel('V, wavelengths')
+        fig.show()
+        return fig
 
     def __copy__(self):
         return self
@@ -2042,96 +2033,8 @@ class UVData(object):
 
 
 if __name__ == "__main__":
-    data_dir = "/home/ilya/data/revision/results"
-    uv_fits = os.path.join(data_dir, "u_true.uvf")
-
-
-    # # Test rotating EVPA
-    # uvdata = UVData(uv_fits)
-    # uvdata.rotate_evpa(np.pi/6)
-    # uvdata.save(os.path.join(data_dir, "u_rotated.uvf"))
-    # from from_fits import create_image_from_fits_file
-    # q_image = create_image_from_fits_file(os.path.join(data_dir, "cc_u_Q.fits"))
-    # u_image = create_image_from_fits_file(os.path.join(data_dir, "cc_u_U.fits"))
-    # from spydiff import clean_difmap
-    # path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
-    # for stokes in ("q", "u"):
-    #     clean_difmap(fname="u_rotated.uvf",
-    #                  outfname="cc_u_{}_rotated.fits".format(stokes.upper()),
-    #                  stokes=stokes, path=data_dir, outpath=data_dir,
-    #                  mapsize_clean=(512, 0.1),
-    #                  path_to_script=path_to_script)
-    # q_rot = create_image_from_fits_file(os.path.join(data_dir, "cc_u_Q_rotated.fits"))
-    # u_rot = create_image_from_fits_file(os.path.join(data_dir, "cc_u_U_rotated.fits"))
-    # from image_ops import pang_map
-    # pang = pang_map(q_image.image, u_image.image)
-    # pang_rot = pang_map(q_rot.image, u_rot.image)
-    # import matplotlib.pyplot as plt
-    # plt.matshow(pang)
-    # plt.colorbar()
-    # plt.matshow(pang_rot)
-    # plt.colorbar()
-    # plt.show()
-
-
-    # Test adding residual D-term noise
-    data_dir = "/home/ilya/Downloads"
-    # Template for UV data
-    uv_fits = os.path.join(data_dir, "1641+399.u.2001_06_19.uvf")
-    outname = os.path.join(data_dir, "u_D.uvf")
-
-    # # Create a model with point source of 10 Jy
-    from model import CGComponent, Model
-    cg = CGComponent(10, 0, 0, 0.001)
-    model = Model(stokes="I")
-    model.add_component(cg)
-    uvdata = UVData(uv_fits)
-    noise = uvdata.noise(average_freq=False)
-    for key in noise:
-        noise[key] *= 0.1
-    uvdata.substitute([model])
-    uvdata.noise_add(noise)
-    uvdata.zero_hands("RL")
-    uvdata.zero_hands("LR")
-    print(uvdata.uvdata[..., 2])
-
-    # Add D-terms to new file
-    from bootstrap import (create_random_D_dict, create_const_amp_D_dict,
-                           create_const_D_dict)
-    d_dict = create_random_D_dict(uvdata, sigma_D=0.005)
-    # d_dict = create_const_amp_D_dict(uvdata, amp_D=0.05)
-    # d_dict = create_const_D_dict(uvdata, amp_D=0.05, phase_D=0.0)
-
-    uvdata.add_D(d_dict)
-    uvdata.save(outname, rewrite=True)
-
-    from spydiff import clean_difmap
-    path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
-    for stokes in ("i", "q", "u"):
-        clean_difmap(fname="u_D.uvf",
-                     outfname="cc_{}_D.fits".format(stokes.upper()),
-                     stokes=stokes, path=data_dir, outpath=data_dir,
-                     mapsize_clean=(512, 0.1),
-                     path_to_script=path_to_script)
-    from from_fits import create_clean_image_from_fits_file
-    q_D = create_clean_image_from_fits_file(os.path.join(data_dir, "cc_Q_D.fits"))
-    u_D = create_clean_image_from_fits_file(os.path.join(data_dir, "cc_U_D.fits"))
-    i_D = create_clean_image_from_fits_file(os.path.join(data_dir, "cc_I_D.fits"))
-    from image_ops import pol_map, pang_map
-    ppol = pol_map(q_D.image, u_D.image)
-    pang = pang_map(q_D.image, u_D.image)
-
-    from image import find_bbox, Image
-    from image import plot as iplot
-    from image_ops import rms_image
-
-    rms = rms_image(i_D)
-    blc, trc = find_bbox(i_D.image, 2.*rms,
-                         delta=int(i_D._beam.beam[0]*3))
-    fig = iplot(ppol, x=i_D.x, y=i_D.y,
-                # min_abs_level=3.*rms,
-                rel_levels=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-                # blc=blc, trc=trc,
-                beam=i_D.beam,
-                cmap='viridis', show_beam=True,
-                beam_place="ul", contour_color="k")
+    import os; os.chdir("/home/ilya/data/ngc315/")
+    uvdatax = UVData("0055+300.x.2006_02_12.uvf")
+    fig = uvdatax.uv_coverage(antennas=1, sym='.r')
+    fig = uvdatax.uv_coverage(antennas=2, sym='.g', fig=fig)
+    fig = uvdatax.uv_coverage(antennas=10, sym='.y', fig=fig)

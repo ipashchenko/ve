@@ -1235,12 +1235,12 @@ class UVData(object):
                     sl = self._get_uvdata_slice(baselines=[baseline], bands=[i],
                                                 stokes=(stokes,))
                     try:
-                        std_IF = std[j]
+                        std_stokes = std[j]
                     except IndexError:
-                        std_IF = std
-                    noise_to_add = vec_complex(np.random.normal(scale=std_IF,
+                        std_stokes = std
+                    noise_to_add = vec_complex(np.random.normal(scale=std_stokes,
                                                                 size=n),
-                                               np.random.normal(scale=std_IF,
+                                               np.random.normal(scale=std_stokes,
                                                                 size=n))
                     noise_to_add = np.reshape(noise_to_add,
                                               baseline_uvdata.shape)

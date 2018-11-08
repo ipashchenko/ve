@@ -1202,8 +1202,12 @@ class UVData(object):
             Mapping from baseline number to:
 
             1) std of noise. Will use one value of std for all stokes and IFs.
-            2) iterable of stds. Will use different values of std for different
-            IFs.
+            2) 1D array with shape (#IF). Will use different values of std for
+            different IFs. This is an option if stokes V was used to calculate
+            the noise.
+            3) 2D array with shape (#IF, #Stokes). This is an option if
+            differences between neighbor visibilities were used to calculate
+            the noise.
 
         :param df: (optional)
             Number of d.o.f. for standard Student t-distribution used as noise
@@ -1230,9 +1234,13 @@ class UVData(object):
                     n = len(baseline_uvdata)
                     sl = self._get_uvdata_slice(baselines=[baseline], bands=[i],
                                                 stokes=(stokes,))
-                    noise_to_add = vec_complex(np.random.normal(scale=std,
+                    try:
+                        std_IF = std[j]
+                    except IndexError:
+                        std_IF = std
+                    noise_to_add = vec_complex(np.random.normal(scale=std_IF,
                                                                 size=n),
-                                               np.random.normal(scale=std,
+                                               np.random.normal(scale=std_IF,
                                                                 size=n))
                     noise_to_add = np.reshape(noise_to_add,
                                               baseline_uvdata.shape)

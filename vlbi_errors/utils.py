@@ -40,8 +40,9 @@ degree_to_rad = 0.01745329
 degree_to_mas = 36. * 10 ** 5
 
 
-stokes_dict = {-4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR', 1: 'I', 2: 'Q', 3: 'U',
-               4: 'V'}
+stokes_dict = {-8: 'YX', -7: 'XY', -6: 'YY', -5: 'XX',
+               -4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR',
+               1: 'I', 2: 'Q', 3: 'U', 4: 'V'}
 
 
 # Dictionary of GRT latitudes and longitudes (sign "-" mean West of Greenwich.
@@ -1437,7 +1438,8 @@ def ln_uniform(x, a, b):
 def is_sorted(lst):
     return sorted(lst) == lst
 
-
+# TODO: Implement ``stokes`` argument - iterable of correlations for which to
+# calculate FT.
 def get_uv_correlations(uv, models):
     """
     Function that accepts models of stokes parameters in image plane and returns
@@ -1456,8 +1458,7 @@ def get_uv_correlations(uv, models):
         number of (u,v)-points specified in argument (that is ``len(uv)``).
     """
     # Create dictionary of type {stokes/hands: model}
-    model_dict = {'I': None, 'Q': None, 'U': None, 'V': None, 'RR': None,
-                  'RL': None, 'LL': None, 'LR': None}
+    model_dict = {'I': None, 'Q': None, 'U': None, 'V': None}
     model_dict.update({model.stokes: model for model in models})
     # Dictionary with keys - 'RR', 'LL', ... and values - correlations
     uv_correlations = dict()

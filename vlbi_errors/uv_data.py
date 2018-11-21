@@ -1679,8 +1679,7 @@ class UVData(object):
         n = len(indxs)
         uv = self.uvw[indxs, :2]
 
-        # TODO: Implement ``stokes``
-        uv_correlations = get_uv_correlations(uv, models, self.stokes)
+        uv_correlations = get_uv_correlations(uv, models)
         for i, hand in self.stokes_dict.items():
             try:
                 self.uvdata[indxs, :, i] = \

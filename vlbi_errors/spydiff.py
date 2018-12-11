@@ -690,8 +690,10 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         # Find brightest pixel
         if use_brightest_pixel_as_initial_guess:
             im = np.unravel_index(np.argmax(ccimage.image), ccimage.image.shape)
-            # Test this using bright component far away from (0, 0)
-            r_c = (-(im[0]-mapsize_clean[0]/2)*mapsize_clean[1], -(im[1]-mapsize_clean[0]/2)*mapsize_clean[1])
+            print("indexes of max intensity ", im)
+            # - to RA cause dx_RA < 0
+            r_c = (-(im[1]-mapsize_clean[0]/2)*mapsize_clean[1],
+                   (im[0]-mapsize_clean[0]/2)*mapsize_clean[1])
         else:
             r_c = (0, 0)
 
@@ -792,7 +794,7 @@ if __name__ == "__main__":
 
     # Create artificial data set
     test_dir = "/home/ilya/data/test"
-    cg1 = CGComponent(1.0, 0.1, 0.1, 0.1)
+    cg1 = CGComponent(1.0, -2, 1, 0.1)
     cg2 = CGComponent(0.5, -1, -1, 0.25)
     cg3 = CGComponent(0.25, -3, -3, 0.5)
     model = Model(stokes="I")
@@ -809,4 +811,4 @@ if __name__ == "__main__":
                                          mapsize_clean=(512, 0.1),
                                          path_to_script="/home/ilya/github/ve/difmap/final_clean_nw",
                                          niter=100, out_path=test_dir,
-                                         use_brightest_pixel_as_initial_guess=False)
+                                         use_brightest_pixel_as_initial_guess=True)

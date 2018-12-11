@@ -621,6 +621,140 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
     return rchisq
 
 
+def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
+                               mapsize_clean=None, path_to_script=None,
+                               niter=50, stokes='i', path=None, out_path=None,
+                               use_brightest_pixel_as_initial_guess=True,
+                               flux_0=None, size_0=None,
+                               show_difmap_output=False):
+    """
+    Modelfit core after excluding extended emission around.
+
+    :param fname:
+        Filename of uv-data to modelfit.
+    :param out_fname:
+        Filename with output file with model.
+    :param beam_fractions:
+        Iterable of beam size fractions to consider while excluding extended
+        emission.
+    :param r_c: (optional)
+        RA and DEC of the center of the circualr area. If ``None`` than
+        use brightest pixel of phase center of the map depending on the
+        ``use_brightest_pixel_as_initial_guess``. (default: ``None``)
+    :param mapsize_clean:
+        Parameters of map for cleaning (map size, pixel size).
+    :param path_to_script:
+        Path to ``clean`` difmap script.
+    :param stokes: (optional)
+        Stokes parameter 'i', 'q', 'u' or 'v'. (default: ``i``)
+    :param path: (optional)
+        Path to uv-data to modelfit. If ``None`` then use current directory.
+        (default: ``None``)
+    :param mdl_path: (optional)
+        Path file with model. If ``None`` then use current directory.
+        (default: ``None``)
+    :param out_path: (optional)
+        Path to file with CCs. If ``None`` then use ``path``.
+        (default: ``None``)
+    :param use_brightest_pixel_as_initial_guess: (optional)
+        Boolean. Should use brightness pixel as initial guess for center of the
+        core area? If ``False`` that use phase center. (default: ``True``)
+    :param flux_0: (optional)
+        Initial guess for core flux [Jy]. If ``None`` than use 1 Jy. (default:
+        ``None``)
+    :param size_0: (optional)
+        Initial guess for core size [mas]. If ``None`` than use 1/10-th of the
+        beam. (default: ``None``)
+    :param show_difmap_output: (optional)
+        Boolean. Show the output of difmap CLEAN and modelfit? (default:
+        ``False``)
+
+    :return:
+        Dictionary with keys - beam fractions used to exclude extended emission
+        and values - dictionaries with core parameters obtained using this
+        fractions.
+    """
+    from uv_data import UVData
+    from components import CGComponent
+    uvdata = UVData(os.path.join(path, fname))
+    freq_hz = uvdata.frequency
+    noise = uvdata.noise(use_V=False)
+    # First CLEAN to obtain clean components
+    clean_difmap(fname, os.path.join(out_path, "cc.fits"), stokes,
+                 mapsize_clean, path=path, path_to_script=path_to_script,
+                 show_difmap_output=show_difmap_output)
+    from from_fits import create_clean_image_from_fits_file
+    ccimage = create_clean_image_from_fits_file(os.path.join(out_path,
+                                                             "cc.fits"))
+    if r_c is None:
+        # Find brightest pixel
+        if use_brightest_pixel_as_initial_guess:
+            im = np.unravel_index(np.argmax(ccimage.image), ccimage.image.shape)
+            # Test this using bright component far away from (0, 0)
+            r_c = (-(im[0]-mapsize_clean[0]/2)*mapsize_clean[1], -(im[1]-mapsize_clean[0]/2)*mapsize_clean[1])
+        else:
+            r_c = (0, 0)
+
+    if flux_0 is None:
+        flux_0 = 1.0
+    if size_0 is None:
+        size_0 = 0.1
+
+    beam = ccimage.beam
+    beam = np.sqrt(beam[0]*beam[1])
+    print("Using beam size = {}".format(beam))
+    from from_fits import create_model_from_fits_file
+    model = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
+
+    result = dict()
+
+    for beam_fraction in sorted(beam_fractions, reverse=True):
+        print("Estimating core using beam_fraction = {}".format(beam_fraction))
+        print("1st iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
+        # Need in RA, DEC
+        model.filter_components_by_r(beam_fraction*beam, r_c=r_c)
+        uvdata.substitute([model])
+        uvdata.noise_add(noise)
+        uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
+        # Modelfit this uvdata with single component
+        comp0 = CGComponent(flux_0, -r_c[0], -r_c[1], size_0)
+        export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
+                            freq_hz)
+        modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
+                        mdl_fname=os.path.join(out_path, "init.mdl"),
+                        out_fname=os.path.join(out_path, "it1.mdl"),
+                        niter=niter, stokes='i', path=out_path,
+                        mdl_path=out_path, out_path=out_path,
+                        show_difmap_output=show_difmap_output)
+
+        # Now use found component position to make circular filter around it
+        comp = import_difmap_model("it1.mdl", out_path)[0]
+        model_local = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
+        # Need in RA, DEC
+        r_c = (-comp.p[1], -comp.p[2])
+        print("2nd iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
+        model_local.filter_components_by_r(beam_fraction*beam, r_c=r_c)
+        uvdata.substitute([model_local])
+        uvdata.noise_add(noise)
+        uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
+        # Modelfit this uvdata with single component
+        print("Using 1st iteration component {} as initial guess".format(comp.p))
+        comp0 = CGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3])
+        export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
+                            freq_hz)
+        modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
+                        mdl_fname=os.path.join(out_path, "init.mdl"),
+                        out_fname=os.path.join(out_path, "it2.mdl"),
+                        niter=niter, stokes=stokes, path=out_path,
+                        mdl_path=out_path, out_path=out_path,
+                        show_difmap_output=show_difmap_output)
+        comp = import_difmap_model("it1.mdl", out_path)[0]
+        result.update({beam_fraction: {"Flux": comp.p[0], "RA": -comp.p[1],
+                                       "DEC": -comp.p[2], "size": comp.p[3]}})
+
+    return result
+
+
 def make_map_with_core_at_zero(mdl_file, uv_fits_fname, mapsize_clean,
                                path_to_script, outfname="shifted_cc.fits",
                                stokes="I"):
@@ -649,3 +783,30 @@ def make_map_with_core_at_zero(mdl_file, uv_fits_fname, mapsize_clean,
     shift = (-ra_mas, -dec_mas)
     clean_difmap(uv_fn, outfname, stokes, mapsize_clean, uv_dir, path_to_script,
                  shift=shift)
+
+
+if __name__ == "__main__":
+    import numpy as np
+    from model import Model
+    from uv_data import UVData
+
+    # Create artificial data set
+    test_dir = "/home/ilya/data/test"
+    cg1 = CGComponent(1.0, 0.1, 0.1, 0.1)
+    cg2 = CGComponent(0.5, -1, -1, 0.25)
+    cg3 = CGComponent(0.25, -3, -3, 0.5)
+    model = Model(stokes="I")
+    model.add_components(cg1, cg2, cg3)
+    uvdata = UVData("/home/ilya/data/ngc315/0055+300.u.2006_02_12.uvf")
+    noise = uvdata.noise()
+    uvdata.substitute([model])
+    uvdata.noise_add(noise)
+    uvdata.save(os.path.join(test_dir, "test.uvf"), rewrite=True)
+
+    beam_fractions = np.linspace(0.25, 2.5, 21)
+    results = modelfit_core_wo_extending("test.uvf", beam_fractions,
+                                         path=test_dir,
+                                         mapsize_clean=(512, 0.1),
+                                         path_to_script="/home/ilya/github/ve/difmap/final_clean_nw",
+                                         niter=100, out_path=test_dir,
+                                         use_brightest_pixel_as_initial_guess=False)

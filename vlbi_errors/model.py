@@ -173,7 +173,7 @@ class Model(object):
         for component in components:
             self._components.remove(component)
 
-    def filter_components_by_r(self, r_min_mas):
+    def filter_components_by_r(self, r_min_mas, r_c=(0, 0)):
         """
         Remove all components that are further away then ``r_max_mas``.
 
@@ -182,7 +182,8 @@ class Model(object):
             model.
         """
         for component in self._components:
-            if np.hypot(component.p[1], component.p[2]) < r_min_mas:
+            # Components have coordinates (-RA, -DEC)
+            if np.hypot(component.p[1]+r_c[0], component.p[2]+r_c[1]) > r_min_mas:
                 self.remove_component(component)
 
     def clear_components(self):

@@ -677,6 +677,7 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
     from uv_data import UVData
     from components import CGComponent
     uvdata = UVData(os.path.join(path, fname))
+    uvdata_tmp = UVData(os.path.join(path, fname))
     freq_hz = uvdata.frequency
     noise = uvdata.noise(use_V=False)
     # First CLEAN to obtain clean components
@@ -706,17 +707,17 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
     beam = np.sqrt(beam[0]*beam[1])
     print("Using beam size = {}".format(beam))
     from from_fits import create_model_from_fits_file
-    model = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
 
     result = dict()
 
-    for beam_fraction in sorted(beam_fractions, reverse=True):
+    for beam_fraction in sorted(beam_fractions):
         print("Estimating core using beam_fraction = {}".format(beam_fraction))
         print("1st iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
         # Need in RA, DEC
-        model.filter_components_by_r(beam_fraction*beam, r_c=r_c)
+        model = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
+        model.filter_components_by_r(beam_fraction*beam/2., r_c=r_c)
         uvdata.substitute([model])
-        uvdata.noise_add(noise)
+        uvdata = uvdata_tmp - uvdata
         uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
         # Modelfit this uvdata with single component
         comp0 = CGComponent(flux_0, -r_c[0], -r_c[1], size_0)
@@ -735,7 +736,7 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         # Need in RA, DEC
         r_c = (-comp.p[1], -comp.p[2])
         print("2nd iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
-        model_local.filter_components_by_r(beam_fraction*beam, r_c=r_c)
+        model_local.filter_components_by_r(beam_fraction*beam/2., r_c=r_c)
         uvdata.substitute([model_local])
         uvdata.noise_add(noise)
         uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
@@ -751,8 +752,8 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
                         mdl_path=out_path, out_path=out_path,
                         show_difmap_output=show_difmap_output)
         comp = import_difmap_model("it1.mdl", out_path)[0]
-        result.update({beam_fraction: {"Flux": comp.p[0], "RA": -comp.p[1],
-                                       "DEC": -comp.p[2], "size": comp.p[3]}})
+        result.update({beam_fraction: {"flux": comp.p[0], "ra": -comp.p[1],
+                                       "dec": -comp.p[2], "size": comp.p[3]}})
 
     return result
 
@@ -791,12 +792,16 @@ if __name__ == "__main__":
     import numpy as np
     from model import Model
     from uv_data import UVData
+    from image import find_bbox
+    from image import plot as iplot
+    from image_ops import rms_image
+    from from_fits import create_clean_image_from_fits_file
 
     # Create artificial data set
     test_dir = "/home/ilya/data/test"
-    cg1 = CGComponent(1.0, -2, 1, 0.1)
-    cg2 = CGComponent(0.5, -1, -1, 0.25)
-    cg3 = CGComponent(0.25, -3, -3, 0.5)
+    cg1 = CGComponent(10.0, -2, 1, 0.1)
+    cg2 = CGComponent(0.1, -1, -1, 0.25)
+    cg3 = CGComponent(0.2, -3, -3, 0.5)
     model = Model(stokes="I")
     model.add_components(cg1, cg2, cg3)
     uvdata = UVData("/home/ilya/data/ngc315/0055+300.u.2006_02_12.uvf")
@@ -805,7 +810,25 @@ if __name__ == "__main__":
     uvdata.noise_add(noise)
     uvdata.save(os.path.join(test_dir, "test.uvf"), rewrite=True)
 
-    beam_fractions = np.linspace(0.25, 2.5, 21)
+    clean_difmap(fname="test.uvf",
+                 outfname="test_cc.fits",
+                 stokes="i", path=test_dir,
+                 outpath=test_dir,
+                 mapsize_clean=(512, 0.1),
+                 path_to_script="/home/ilya/github/ve/difmap/final_clean_nw",
+                 show_difmap_output=True)
+    ccimage = create_clean_image_from_fits_file(os.path.join(test_dir, "test_cc.fits"))
+    rms = rms_image(ccimage)
+    beam = ccimage.beam
+    blc, trc = find_bbox(ccimage.image, 2.0*rms, 50)
+    fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=2.0*rms,
+                beam=beam, show_beam=True, beam_place="ul", blc=blc, trc=trc,
+                close=False, colorbar_label="Jy/beam", show=True)
+    fig.savefig(os.path.join(test_dir, "test_cc.pdf"), dpi=300,
+                bbox_inches="tight")
+    fig.show()
+
+    beam_fractions = np.linspace(0.5, 1.5, 11)
     results = modelfit_core_wo_extending("test.uvf", beam_fractions,
                                          path=test_dir,
                                          mapsize_clean=(512, 0.1),

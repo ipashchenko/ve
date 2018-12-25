@@ -175,15 +175,18 @@ class Model(object):
 
     def filter_components_by_r(self, r_min_mas, r_c=(0, 0)):
         """
-        Remove all components that are further away then ``r_max_mas``.
+        Remove all components that are closer then ``r_max_mas``.
 
         :param r_min_mas:
-            Maximum distance of component to phase center [mas] to keep it in
+            Minimal distance of component to phase center [mas] to keep it in
             model.
+        :param r_c: (optional)
+            RA and DEC of the center of the circular area. If ``None`` that
+            phase center of the map. (default: ``None``)
         """
         for component in self._components:
             # Components have coordinates (-RA, -DEC)
-            if np.hypot(component.p[1]+r_c[0], component.p[2]+r_c[1]) > r_min_mas:
+            if np.hypot(component.p[1]+r_c[0], component.p[2]+r_c[1]) < r_min_mas:
                 self.remove_component(component)
 
     def clear_components(self):

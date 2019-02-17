@@ -10,18 +10,23 @@ import string
 from math import floor
 from scipy import optimize
 from scipy.stats import scoreatpercentile
-from sklearn.mixture import GMM
-from sklearn.grid_search import GridSearchCV
+from sklearn.mixture import GaussianMixture as GMM
+from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KernelDensity
 from sklearn import svm
 from sklearn.covariance import EllipticEnvelope, MinCovDet
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
-from skimage import transform
 try:
-    from skimage.filters import gaussian_filter
+    from skimage import transform
+    have_skimage = True
 except ImportError:
-    from skimage.filters import gaussian as gaussian_filter
+    have_skimage = False
+if have_skimage:
+    try:
+        from skimage.filters import gaussian_filter
+    except ImportError:
+        from skimage.filters import gaussian as gaussian_filter
 from scipy.ndimage import interpolation
 try:
     # Python 3 moved reduce to the functools module
@@ -1707,6 +1712,8 @@ def slice_2darray(array, pix1, pix2):
 
 def transform_image(image, amplitude, shift_x, shift_y, scale_factor, rotation,
                     cleaning_threshold=10**(-5)):
+    if not have_skimage:
+        print("Install skimage for using ``transform_image")
     imsize = image.shape[0]
     new_size = int(np.round(imsize*scale_factor))
     if new_size % 2:

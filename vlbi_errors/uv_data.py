@@ -1318,7 +1318,8 @@ class UVData(object):
 
     # FIXME: Fix logic of arguments. How one can plot one antennas with others,
     # several baselines, all baselines etc.
-    def uv_coverage(self, antennas=None, baselines=None, sym='.k', fig=None):
+    def uv_coverage(self, antennas=None, baselines=None, sym='.k', fig=None,
+                    model_uvdata=None):
         """
         Make plots of uv-coverage for selected baselines/antennas.
 
@@ -1368,6 +1369,11 @@ class UVData(object):
                     baselines_to_display.append(bl)
 
         indxs = self._get_baselines_indexes(baselines=baselines_to_display)
+        observed = self._choose_uvdata(baselines=baselines_to_display,
+                                       stokes='I', freq_average=True)
+        model = model_uvdata._choose_uvdata(baselines=baselines_to_display,
+                                            stokes='I', freq_average=True)
+        diff = np.angle(observed) - np.angle(model)
 
         uv = self.uv[indxs]
 
@@ -1376,9 +1382,21 @@ class UVData(object):
         else:
             axes = fig.get_axes()[0]
 
-        axes.plot(uv[:, 0], uv[:, 1], sym)
-        # FIXME: This is right only for RR/LL!
-        axes.plot(-uv[:, 0], -uv[:, 1], sym)
+        if model_uvdata is None:
+            axes.plot(uv[:, 0], uv[:, 1], sym, ms=0.5)
+            # FIXME: This is right only for RR/LL!
+            axes.plot(-uv[:, 0], -uv[:, 1], sym, ms=0.5)
+        else:
+            axes.scatter(uv[:, 0], uv[:, 1], c=diff, alpha=1, s=4,
+                              cmap='jet', vmin=-0.75, vmax=0.75)
+            # FIXME: This is right only for RR/LL!
+            im = axes.scatter(-uv[:, 0], -uv[:, 1], c=-diff, alpha=1, s=4,
+                              cmap='jet', vmin=-0.75, vmax=0.75)
+            from mpl_toolkits.axes_grid1 import make_axes_locatable
+            divider = make_axes_locatable(axes)
+            cax = divider.append_axes("right", size="10%", pad=0.00)
+            cb = fig.colorbar(im, cax=cax)
+            cb.set_label(r"$\phi_{\rm obs} - \phi_{\rm model}$, rad")
         # Find max(u & v)
         umax = max(abs(uv[:, 0]))
         vmax = max(abs(uv[:, 1]))
@@ -2055,7 +2073,7 @@ class UVData(object):
 
 if __name__ == "__main__":
     import os; os.chdir("/home/ilya/data/ngc315/")
-    uvdatax = UVData("0055+300.x.2006_02_12.uvf")
-    fig = uvdatax.uv_coverage(antennas=1, sym='.r')
-    fig = uvdatax.uv_coverage(antennas=2, sym='.g', fig=fig)
-    fig = uvdatax.uv_coverage(antennas=10, sym='.y', fig=fig)
+    uvdatau = UVData("0055+300.u.2006_02_12.uvf")
+    uvdata_modelu = UVData("/home/ilya/data/ngc315/best_model_u.fits")
+    fig = uvdatau.uv_coverage(model_uvdata=uvdata_modelu)
+    fig.savefig("/home/ilya/data/ngc315/uvcoverage_diff_v2.pdf")

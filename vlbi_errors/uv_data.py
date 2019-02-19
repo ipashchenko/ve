@@ -188,6 +188,27 @@ class UVData(object):
         slices_dict.update({'COMPLEX': 1})
         self.hdu.data.data[list(slices_dict.values())] = self.uvdata.imag
 
+    def scale_uvw(self, scale):
+        suffix = '--'
+        try:
+            self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array /= scale
+            self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array /= scale
+            self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array /= scale
+            print("Dividing uvw on {}".format(scale))
+        except KeyError:
+            try:
+                suffix = '---SIN'
+                self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array /= scale
+                self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array /= scale
+                self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array /= scale
+                print("Dividing uvw on {}".format(scale))
+            except KeyError:
+                suffix = ''
+                self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array /= scale
+                self.hdu.columns[self.par_dict['VV{}'.format(suffix)]].array /= scale
+                self.hdu.columns[self.par_dict['WW{}'.format(suffix)]].array /= scale
+                print("Dividing uvw on {}".format(scale))
+
     def save(self, fname=None, data=None, rewrite=False,
              downscale_by_freq=False):
         """

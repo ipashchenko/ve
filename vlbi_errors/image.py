@@ -9,7 +9,7 @@ from model import Model
 from beam import CleanBeam
 from skimage.feature import register_translation
 import matplotlib
-matplotlib.use('Agg')
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Circle
 
@@ -150,7 +150,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          colorbar_label=None, show=True, contour_color='k',
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
          show_points=None, components=None, slice_color='black',
-         plot_colorbar=True, label_size=12, ra_range=None, dec_range=None):
+         plot_colorbar=True, label_size=12, ra_range=None, dec_range=None,
+         fig=None, axes=None, contour_linewidth=0.5):
     """
     Plot image(s).
 
@@ -292,11 +293,17 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         vectors = np.ma.array(vectors, mask=vectors_mask)
 
     # Actually plotting
-    fig = plt.figure()
-    fig.set_size_inches(4.5, 3.5)
-    ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
-    ax.set_xlabel(u'Relative R.A. (mas)')
-    ax.set_ylabel(u'Relative Decl. (mas)')
+    if fig is None and axes is None:
+        fig = plt.figure()
+        fig.set_size_inches(4.5, 3.5)
+        ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
+        ax.set_xlabel(r'Relative R.A. (mas)')
+        ax.set_ylabel(r'Relative Decl. (mas)')
+    if axes is not None:
+        ax = axes
+    else:
+        ax = fig.get_axes()[0]
+
     if ra_range:
         ax.set_xlim(ra_range)
     if dec_range:
@@ -328,9 +335,14 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                                                  range(n_max)]
             print("Constructed absolute levels are: {}".format(abs_levels))
 
+        if fig is None and axes is None:
+            extent = [y[0], y[-1], x[-1], x[0]]
+        else:
+            extent = [y[0], y[-1], x[0], x[-1]]
         co = ax.contour(y, x, contours[x_slice, y_slice], abs_levels,
-                        colors=contour_color, extent=[y[0], y[-1], x[0], x[-1]],
-                        linewidths=0.25)
+                        colors=contour_color, extent=extent,
+                        linewidths=contour_linewidth)
+        # if fig is None:
         ax.invert_xaxis()
         # Make colorbar for contours if no colors is supplied
         if colors is None:
@@ -493,12 +505,13 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         print("Saving to {}.{}".format(path, ext))
         plt.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=200)
 
-    if show:
+    if show and fig is not None:
         fig.show()
     if close:
         plt.close()
 
-    return fig
+    if fig is not None:
+        return fig
 
 
 class BasicImage(object):
@@ -961,6 +974,7 @@ class Image(BasicImage):
 # TODO: ``cc`` attribute should be collection of ``Model`` instances!
 # TODO: Add method ``shift`` that shifts image (CCs and residulas). Is it better
 # to shift in uv-domain?
+# FIXME: Why this bitch does not inherit __div__ from ``BasicImage``?
 class CleanImage(Image):
     """
     Class that represents image made using CLEAN algorithm.

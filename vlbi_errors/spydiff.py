@@ -4,6 +4,7 @@ import numpy as np
 import copy
 from utils import degree_to_rad
 from components import DeltaComponent, CGComponent, EGComponent
+from astropy.stats import mad_std
 
 
 def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
@@ -560,7 +561,9 @@ def transform_component(difmap_model_file, new_type, freq_hz, comp_id=0,
 # iterations
 def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
                     path=None, mdl_path=None, out_path=None,
-                    show_difmap_output=False):
+                    show_difmap_output=False,
+                    save_dirty_residuals_map=False,
+                    dmap_name=None, dmap_size=(1024, 0.1)):
     """
     Modelfit self-calibrated uv-data in difmap.
 
@@ -581,6 +584,13 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
     :param out_path: (optional)
         Path to file with CCs. If ``None`` then use ``path``.
         (default: ``None``)
+    :param save_dirty_residuals_map: (optional)
+        Boolean. Whever to save dirty residuals map? (default: ``False``)
+    :param dmap_name: (optional)
+        Name of the FITS file (in ``out_path``) where to save dirty residual
+        map. If ``None`` then dirty_residuals_map.fits``. (default: ``None``)
+    :param dmap_size: (optional)
+        Size of the dirty residuals map. (default: ``(1024, 0.1)``
     """
     if path is None:
         path = os.getcwd()
@@ -603,6 +613,14 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
     difmapout.write("rmodel " + os.path.join(mdl_path, mdl_fname) + "\n")
     difmapout.write("modelfit " + str(niter) + "\n")
     difmapout.write("wmodel " + os.path.join(out_path, out_fname) + "\n")
+
+    if save_dirty_residuals_map:
+        difmapout.write("mapsize "+ str(2*dmap_size[0]) + "," + str(dmap_size[1])
+                        + "\n")
+        if dmap_name is None:
+            dmap_name = "dirty_residuals_map.fits"
+        difmapout.write("wdmap "+ os.path.join(out_path, dmap_name)+"\n")
+
     difmapout.write("exit\n")
     difmapout.close()
 
@@ -626,7 +644,8 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
                                niter=50, stokes='i', path=None, out_path=None,
                                use_brightest_pixel_as_initial_guess=True,
                                flux_0=None, size_0=None,
-                               show_difmap_output=False):
+                               show_difmap_output=False,
+                               estimate_rms=False):
     """
     Modelfit core after excluding extended emission around.
 
@@ -705,8 +724,9 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
 
     beam = ccimage.beam
     beam = np.sqrt(beam[0]*beam[1])
-    print("Using beam size = {}".format(beam))
-    from from_fits import create_model_from_fits_file
+    print("Using beam size = {} mas".format(beam))
+    from from_fits import (create_model_from_fits_file,
+                           create_image_from_fits_file)
 
     result = dict()
 
@@ -737,9 +757,18 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         r_c = (-comp.p[1], -comp.p[2])
         print("2nd iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
         model_local.filter_components_by_r(beam_fraction*beam/2., r_c=r_c)
+
         uvdata.substitute([model_local])
-        uvdata.noise_add(noise)
+        uvdata = uvdata_tmp - uvdata
         uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
+
+
+
+        # uvdata.substitute([model_local])
+        # uvdata.noise_add(noise)
+        # uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
+
+
         # Modelfit this uvdata with single component
         print("Using 1st iteration component {} as initial guess".format(comp.p))
         comp0 = CGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3])
@@ -750,10 +779,29 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
                         out_fname=os.path.join(out_path, "it2.mdl"),
                         niter=niter, stokes=stokes, path=out_path,
                         mdl_path=out_path, out_path=out_path,
-                        show_difmap_output=show_difmap_output)
-        comp = import_difmap_model("it1.mdl", out_path)[0]
+                        show_difmap_output=show_difmap_output,
+                        save_dirty_residuals_map=estimate_rms,
+                        dmap_size=mapsize_clean)
+        comp = import_difmap_model("it2.mdl", out_path)[0]
+
+        if estimate_rms:
+            dimage = create_image_from_fits_file(os.path.join(out_path, "dirty_residuals_map.fits"))
+            beam_pxl = int(beam/mapsize_clean[1])
+            print("Beam = ", beam)
+            # RA, DEC of component center
+            r_center = (-int(comp.p[1]/mapsize_clean[1]),
+                        -int(comp.p[2]/mapsize_clean[1]))
+            # Need to add to map center (512, 512) add DEC in pixels (with sign)
+            rms = mad_std(dimage.image[int(mapsize_clean[0]/2+r_center[1]-3*beam_pxl): int(mapsize_clean[0]/2+r_center[1]+3*beam_pxl),
+                                       int(mapsize_clean[0]/2-3*beam_pxl): int(mapsize_clean[0]/2+3*beam_pxl)])
+            # os.unlink(os.path.join(out_path, "dirty_residuals_map.fits"))
+
+        else:
+            rms = None
+
         result.update({beam_fraction: {"flux": comp.p[0], "ra": -comp.p[1],
-                                       "dec": -comp.p[2], "size": comp.p[3]}})
+                                       "dec": -comp.p[2], "size": comp.p[3],
+                                       "rms": rms}})
 
     return result
 

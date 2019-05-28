@@ -6,7 +6,7 @@ import shutil
 from scipy import ndimage
 from uv_data import UVData
 from model import Model
-from cv_model import cv_difmap_models
+# from cv_model import cv_difmap_models
 from spydiff import (export_difmap_model, modelfit_difmap, import_difmap_model,
                      clean_difmap, append_component_to_difmap_model,
                      clean_n, difmap_model_flux,
@@ -750,6 +750,9 @@ class AutoModeler(object):
         # RMS near core before suggesting components
         self.rms_residuals = None
 
+        # ID of the best model
+        self.best_id = None
+
     # @property
     # def files(self):
     #     return list(set(self.fitted_model_paths))
@@ -1113,6 +1116,7 @@ class AutoModeler(object):
             if do_stop:
                 break
 
+        # FIXME: Finish this part
         # best_model_file = self.select_best()
         # self.archive_images()
         # self.archive_models()
@@ -1121,7 +1125,11 @@ class AutoModeler(object):
     def select_best(self, selectors, filters):
         # Select best model using custom selectors
         files = self.fitted_model_paths
-        id_best = max(selector.select(files) for selector in selectors)
+        files_toremove = self.files[:]
+        if selectors:
+            id_best = max(selector.select(files) for selector in selectors)
+        else:
+            id_best = len(files)-1
         files = files[:id_best+1]
 
         # Additionally filter
@@ -1132,6 +1140,9 @@ class AutoModeler(object):
                 break
         print("Best model is {}".format(files[id_best]))
         best_model = files[id_best]
+
+        self.best_id = id_best
+
         return best_model
 
     def plot_results(self, id_best=None, best_model=None, stoppers_dict=None):

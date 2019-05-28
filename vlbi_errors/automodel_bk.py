@@ -24,22 +24,25 @@ from automodel import (AutoModeler, TotalFluxStopping,
 def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=False,
                  n_max_components=20, mapsize_clean=(512, 0.1), out_dir=None,
                  path_to_script=None, start_model_fname=None, niter_difmap=100,
-                 n_just_stop=None, remove_nonbest_models=True):
+                 n_just_stop=None, remove_nonbest_models=True,
+                 ra_range=None, dec_range=None):
 
     automodeler = AutoModeler(simulated_uv_fits_path, out_dir, path_to_script,
                               n_comps_terminate=n_max_components,
                               core_elliptic=core_elliptic,
                               mapsize_clean=mapsize_clean,
                               show_difmap_output_clean=False,
-                              show_difmap_output_modelfit=False,
-                              niter_difmap=niter_difmap)
+                              show_difmap_output_modelfit=True,
+                              niter_difmap=niter_difmap,
+                              ra_range_plot=ra_range,
+                              dec_range_plot=dec_range)
 
     # Stoppers define when to stop adding components to model
     # stoppers = [AddedComponentFluxLessRMSStopping(mode="or"),
     #             AddedComponentFluxLessRMSFluxStopping(),
     stoppers = [AddedTooDistantComponentStopping(n_rms=2, mode="or"),
                 AddedTooSmallComponentStopping(),
-                # AddedNegativeFluxComponentStopping(),
+                AddedNegativeFluxComponentStopping(),
                 # for 0430 exclude it
                 # AddedOverlappingComponentStopping(),
                 NLastDifferesFromLast(),
@@ -60,7 +63,10 @@ def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=Fals
     # Select best model using custom selectors
     files = automodeler.fitted_model_paths
     files_toremove = files[:]
-    id_best = max(selector.select(files) for selector in selectors)
+    if selectors:
+        id_best = max(selector.select(files) for selector in selectors)
+    else:
+        id_best = len(files)-1
     files = files[:id_best + 1]
 
     # Filters additionally remove complex models with non-physical
@@ -70,7 +76,8 @@ def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=Fals
                ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
                NegativeFluxComponentModelFilter(),
                # ToElongatedCoreModelFilter()]
-               OverlappingComponentsModelFilter()]
+               #OverlappingComponentsModelFilter(),
+               ]
 
     # Additionally filter too small, too distant components
     for fn in files[::-1]:
@@ -78,6 +85,7 @@ def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=Fals
             id_best -= 1
         else:
             break
+    automodeler.best_id = id_best
     print("Best model is {}".format(files[id_best]))
 
     best_model = files[id_best]

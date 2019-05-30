@@ -643,9 +643,9 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
                                mapsize_clean=None, path_to_script=None,
                                niter=50, stokes='i', path=None, out_path=None,
                                use_brightest_pixel_as_initial_guess=True,
-                               flux_0=None, size_0=None,
+                               flux_0=None, size_0=None, e_0=None, bpa_0=None,
                                show_difmap_output=False,
-                               estimate_rms=False):
+                               estimate_rms=False, use_ell=False):
     """
     Modelfit core after excluding extended emission around.
 
@@ -684,9 +684,20 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
     :param size_0: (optional)
         Initial guess for core size [mas]. If ``None`` than use 1/10-th of the
         beam. (default: ``None``)
+    :param e_0: (optional)
+        Initial guess for eccentricity in case of the elliptic component. If
+        ``None`` then use ``1``. (default: ``None``)
+    :param bpa_0: (optional)
+        Initial guess for BPA in case of the elliptic component. If
+        ``None`` then use ``0``. (default: ``None``)
     :param show_difmap_output: (optional)
         Boolean. Show the output of difmap CLEAN and modelfit? (default:
         ``False``)
+    :param estimate_rms: (optional)
+        Boolean. Use dirty residual image after fitting the substracted data
+        with a component to estimate rms? (default: ``False``)
+    :param use_ell: (optional)
+        Boolean. Use elliptic component? (default: ``False``)
 
     :return:
         Dictionary with keys - beam fractions used to exclude extended emission
@@ -694,7 +705,7 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         fractions.
     """
     from uv_data import UVData
-    from components import CGComponent
+    from components import (CGComponent, EGComponent)
     uvdata = UVData(os.path.join(path, fname))
     uvdata_tmp = UVData(os.path.join(path, fname))
     freq_hz = uvdata.frequency
@@ -719,11 +730,15 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
 
     if flux_0 is None:
         flux_0 = 1.0
-    if size_0 is None:
-        size_0 = 0.1
+    if e_0 is None:
+        e_0 = 1.0
+    if bpa_0 is None:
+        bpa_0 = 0.0
 
     beam = ccimage.beam
     beam = np.sqrt(beam[0]*beam[1])
+    if size_0 is None:
+        size_0 = 0.1*beam
     print("Using beam size = {} mas".format(beam))
     from from_fits import (create_model_from_fits_file,
                            create_image_from_fits_file)
@@ -739,8 +754,13 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         uvdata.substitute([model])
         uvdata = uvdata_tmp - uvdata
         uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
+
         # Modelfit this uvdata with single component
-        comp0 = CGComponent(flux_0, -r_c[0], -r_c[1], size_0)
+        if not use_ell:
+            comp0 = CGComponent(flux_0, -r_c[0], -r_c[1], size_0)
+        else:
+            comp0 = EGComponent(flux_0, -r_c[0], -r_c[1], size_0, e_0, bpa_0)
+
         export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
                             freq_hz)
         modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
@@ -762,16 +782,14 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         uvdata = uvdata_tmp - uvdata
         uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
 
-
-
-        # uvdata.substitute([model_local])
-        # uvdata.noise_add(noise)
-        # uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
-
-
         # Modelfit this uvdata with single component
         print("Using 1st iteration component {} as initial guess".format(comp.p))
-        comp0 = CGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3])
+        if not use_ell:
+            comp0 = CGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3])
+        else:
+            comp0 = EGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3],
+                                comp.p[4], comp.p[5])
+
         export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
                             freq_hz)
         modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
@@ -799,9 +817,15 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         else:
             rms = None
 
-        result.update({beam_fraction: {"flux": comp.p[0], "ra": -comp.p[1],
-                                       "dec": -comp.p[2], "size": comp.p[3],
-                                       "rms": rms}})
+        if not use_ell:
+            result.update({beam_fraction: {"flux": comp.p[0], "ra": -comp.p[1],
+                                           "dec": -comp.p[2], "size": comp.p[3],
+                                           "rms": rms}})
+        else:
+            result.update({beam_fraction: {"flux": comp.p[0], "ra": -comp.p[1],
+                                           "dec": -comp.p[2], "size": comp.p[3],
+                                           "e": comp.p[4], "bpa": comp.p[5],
+                                           "rms": rms}})
 
     return result
 

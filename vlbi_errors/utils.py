@@ -1491,12 +1491,12 @@ def get_uv_correlations(uv, models):
             try:
                 RR = model_dict['RR'].ft(uv)
                 uv_correlations.update({'RR': RR})
-            except AttributeError:
+            except KeyError:
                 pass
             try:
                 LL = model_dict['LL'].ft(uv)
                 uv_correlations.update({'LL': LL})
-            except AttributeError:
+            except KeyError:
                 pass
 
     if model_dict['Q'] or model_dict['U']:

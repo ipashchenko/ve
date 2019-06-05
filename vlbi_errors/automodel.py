@@ -748,7 +748,7 @@ class AutoModeler(object):
         export_difmap_model([eg], self._init_single_comp_eg, self.freq_hz)
 
         # RMS near core before suggesting components
-        self.rms_residuals = None
+        self.rms_residuals = list()
 
         # ID of the best model
         self.best_id = None
@@ -828,8 +828,8 @@ class AutoModeler(object):
         # RMS in core region
         beam = int(round(self.beam/mas_in_pix))
         print("imsize = {}, beam={}".format(imsize, beam))
-        self.rms_residuals = np.std(image.image[int(imsize/2)-3*beam: int(imsize/2)+3*beam,
-                                                int(imsize/2)-3*beam: int(imsize/2)+3*beam])
+        self.rms_residuals.append(np.std(image.image[int(imsize/2)-3*beam: int(imsize/2)+3*beam,
+                                         int(imsize/2)-3*beam: int(imsize/2)+3*beam]))
         amp, y, x, bmaj = infer_gaussian(image.image)
         print("Suggested bmaj = {} pixels".format(bmaj))
         x = mas_in_pix * (x - imsize / 2) * np.sign(image.dx)

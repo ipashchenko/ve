@@ -44,7 +44,6 @@ class UVData(object):
         self._nw_indxs = self._weights <= 0
         self._pw_indxs = self._weights > 0
 
-        self._error = None
         self._scans_bl = None
         self._stokes = None
         self._times = None
@@ -473,7 +472,7 @@ class UVData(object):
     @property
     def errors_from_weights_masked_freq_averaged(self):
         if self.nif > 1:
-            result = np.ma.mean(self.errors_from_weights, axis=1)
+            result = np.ma.mean(self.errors_from_weights, axis=1)/np.sqrt(self.nif)
         else:
             result = self.errors_from_weights[:, 0, :]
         return result
@@ -1289,23 +1288,22 @@ class UVData(object):
             Numpy.ndarray with shape (#N, [#IF,] #stokes,) where #N - number of
             groups.
         """
-        if self._error is None:
-            noise_dict = self.noise(use_V=use_V, split_scans=False,
-                                    average_freq=average_freq)
-            if not average_freq:
-                self._error = np.empty((len(self.uvdata), self.nif,
-                                        self.nstokes,), dtype=float)
-            else:
-                self._error = np.empty((len(self.uvdata), self.nstokes,),
-                                       dtype=float)
+        noise_dict = self.noise(use_V=use_V, split_scans=False,
+                                average_freq=average_freq)
+        if not average_freq:
+            error = np.empty((len(self.uvdata), self.nif,
+                                    self.nstokes,), dtype=float)
+        else:
+            error = np.empty((len(self.uvdata), self.nstokes,),
+                                   dtype=float)
 
-            for i, baseline in enumerate(self.hdu.data['BASELINE']):
-                # FIXME: Until ``UVData.noise`` always returns (#, [#IF],
-                # #Stokes) even for ``use_V=True`` - i must repeat array for
-                # each Stokes if ``use_V=True`` is used!
-                self._error[i] = noise_dict[baseline]
+        for i, baseline in enumerate(self.hdu.data['BASELINE']):
+            # FIXME: Until ``UVData.noise`` always returns (#, [#IF],
+            # #Stokes) even for ``use_V=True`` - i must repeat array for
+            # each Stokes if ``use_V=True`` is used!
+            error[i] = noise_dict[baseline]
 
-        return self._error
+        return error
 
     def scale_amplitude(self, scale):
         """
@@ -1821,7 +1819,7 @@ class UVData(object):
                freq_average=False, sym=None, phase_range=None, amp_range=None,
                re_range=None, im_range=None, colors=None, color='#4682b4',
                fig=None, start_time=None, stop_time=None, alpha=1.0,
-               uv_radius_lims=None, ms=None, mew=None):
+               uv_radius_lims=None, ms=None, mew=None, label_size=14):
         """
         Method that plots uv-data for given baseline vs. uv-radius.
 
@@ -1849,6 +1847,13 @@ class UVData(object):
 
         .. note:: All checks are in ``_choose_uvdata`` method.
         """
+        import matplotlib
+        matplotlib.rcParams['xtick.labelsize'] = label_size
+        matplotlib.rcParams['ytick.labelsize'] = label_size
+        matplotlib.rcParams['axes.titlesize'] = label_size
+        matplotlib.rcParams['axes.labelsize'] = label_size
+        matplotlib.rcParams['font.size'] = label_size
+        matplotlib.rcParams['legend.fontsize'] = label_size
 
         if not pylab:
             raise Exception('Install ``pylab`` for plotting!')

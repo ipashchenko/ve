@@ -42,7 +42,7 @@ def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=Fals
     #             AddedComponentFluxLessRMSFluxStopping(),
     stoppers = [AddedTooDistantComponentStopping(n_rms=2, mode="or"),
                 AddedTooSmallComponentStopping(),
-                AddedNegativeFluxComponentStopping(),
+                # AddedNegativeFluxComponentStopping(),
                 # for 0430 exclude it
                 # AddedOverlappingComponentStopping(),
                 NLastDifferesFromLast(),
@@ -74,7 +74,7 @@ def automodel_bk(simulated_uv_fits_path, best_dfm_model_path, core_elliptic=Fals
     # located far away from source.)
     filters = [SmallSizedComponentsModelFilter(),
                ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
-               NegativeFluxComponentModelFilter(),
+               # NegativeFluxComponentModelFilter(),
                # ToElongatedCoreModelFilter()]
                #OverlappingComponentsModelFilter(),
                ]

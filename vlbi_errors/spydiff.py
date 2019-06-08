@@ -103,7 +103,9 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         mapsize_restore = mapsize_clean
 
     if command_file is None:
-        command_file = "difmap_commands"
+        # command_file = "difmap_commands"
+        stamp = datetime.datetime.now()
+        command_file = os.path.join(outpath, "difmap_commands_{}".format(stamp.isoformat()))
 
     difmapout = open(command_file, "w")
     difmapout.write("observe " + os.path.join(path, fname) + "\n")
@@ -136,6 +138,9 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     if not show_difmap_output:
         shell_command += " >/dev/null"
     os.system(shell_command)
+
+    # Remove command file
+    os.unlink(command_file)
 
 
 def import_difmap_model(mdl_fname, mdl_dir=None):
@@ -636,6 +641,10 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
         lines = fo.readlines()
     line = [line for line in lines if "Reduced Chi-squared=" in line][-1]
     rchisq = float(line.split(" ")[4].split("=")[1])
+
+    # Remove command file
+    os.unlink(command_file)
+
     return rchisq
 
 

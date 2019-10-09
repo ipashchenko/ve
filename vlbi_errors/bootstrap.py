@@ -3,12 +3,7 @@ import copy
 import glob
 import numpy as np
 from gains import Absorber
-try:
-    import corner
-except ImportError:
-    import sys
-    sys.path.insert(0, '/home/ilya/github/corner.py')
-    import corner
+import corner
 from utils import (fit_2d_gmm, vcomplex, nested_ddict, make_ellipses,
                    baselines_2_ants, find_outliers_2d_mincov,
                    find_outliers_2d_dbscan, find_outliers_dbscan, fit_kde,
@@ -403,16 +398,16 @@ class Bootstrap(object):
         else:
             stokes_list = list()
             for stoke in stokes:
-                print "Parsing {}".format(stoke)
-                print self.residuals.stokes
+                print("Parsing {}".format(stoke))
+                print(self.residuals.stokes)
                 stokes_list.append(self.residuals.stokes.index(stoke))
             stokes = stokes_list
 
-        print "Plotting IFs {}".format(IF)
-        print "Plotting Stokes {}".format(stokes)
+        print("Plotting IFs {}".format(IF))
+        print("Plotting Stokes {}".format(stokes))
 
         for baseline in self.residuals.baselines:
-            print baseline
+            print(baseline)
             ant1, ant2 = baselines_2_ants([baseline])
 
             if split_scans:
@@ -537,7 +532,7 @@ class Bootstrap(object):
                 else:
                     for IF_ in IF:
                         for stoke in stokes:
-                            print "Stokes {}".format(stoke)
+                            print("Stokes {}".format(stoke))
                             # Complex 1D array to plot
                             data_ = data[:, IF_, stoke]
                             # weigths_ = weights[:, IF_, stoke]
@@ -611,7 +606,7 @@ class Bootstrap(object):
         :param split_scans:
             Boolean. Find outliers on each scan separately?
         """
-        print "Searching for outliers in residuals..."
+        print("Searching for outliers in residuals...")
         for baseline in self.residuals.baselines:
             indxs = self.residuals._indxs_baselines[baseline]
             baseline_data = self.residuals.uvdata[indxs]
@@ -627,15 +622,15 @@ class Bootstrap(object):
                         # Use only valid data with positive weight
                         data_pw = data[self.residuals._pw_indxs[indxs, if_, stokes]]
                         data_nw = data[self.residuals._nw_indxs[indxs, if_, stokes]]
-                        print "NW {}".format(np.count_nonzero(data_nw))
+                        print("NW {}".format(np.count_nonzero(data_nw)))
 
                         # If data are zeros
                         if not np.any(data_pw):
                             continue
 
-                        print "Baseline {}, IF {}, Stokes {}".format(baseline,
+                        print("Baseline {}, IF {}, Stokes {}".format(baseline,
                                                                      if_,
-                                                                     stokes)
+                                                                     stokes))
                         outliers_re = find_outliers_dbscan(data_pw.real, 1., 5)
                         outliers_im = find_outliers_dbscan(data_pw.imag, 1., 5)
                         outliers_1d = np.logical_or(outliers_re, outliers_im)
@@ -662,14 +657,14 @@ class Bootstrap(object):
                             # Use only valid data with positive weight
                             data_pw = data[self.residuals._pw_indxs[scan_indxs, if_, stokes]]
                             data_nw = data[self.residuals._nw_indxs[scan_indxs, if_, stokes]]
-                            print "NW {}".format(np.count_nonzero(data_nw))
+                            print("NW {}".format(np.count_nonzero(data_nw)))
 
                             # If data are zeros
                             if not np.any(data_pw):
                                 continue
 
-                            print "Baseline {}, scan {}, IF {}," \
-                                  " Stokes {}".format(baseline, i, if_, stokes)
+                            print("Baseline {}, scan {}, IF {}," \
+                                  " Stokes {}".format(baseline, i, if_, stokes))
                             outliers_re = find_outliers_dbscan(data_pw.real, 1., 5)
                             outliers_im = find_outliers_dbscan(data_pw.imag, 1., 5)
                             outliers_1d = np.logical_or(outliers_re, outliers_im)
@@ -682,7 +677,7 @@ class Bootstrap(object):
         """
         Calculate centers of residuals for each baseline[/scan]/IF/stokes.
         """
-        print "Finding centers"
+        print("Finding centers")
         for baseline in self.residuals.baselines:
             # Find centers for baselines only
             if not split_scans:
@@ -702,12 +697,12 @@ class Bootstrap(object):
                         if not np.any(data_pw):
                             continue
 
-                        print "Baseline {}, IF {}, Stokes {}".format(baseline, if_,
-                                                                     stokes)
+                        print("Baseline {}, IF {}, Stokes {}".format(baseline, if_,
+                                                                     stokes))
                         outliers = self._residuals_outliers[baseline][if_][stokes]
                         x_c = np.sum(data_pw.real[~outliers]) / np.count_nonzero(~outliers)
                         y_c = np.sum(data_pw.imag[~outliers]) / np.count_nonzero(~outliers)
-                        print "Center: ({:.4f}, {:.4f})".format(x_c, y_c)
+                        print("Center: ({:.4f}, {:.4f})".format(x_c, y_c))
                         self._residuals_centers[baseline][if_][stokes] = (x_c, y_c)
             # Find residuals centers on each scan
             else:
@@ -731,12 +726,12 @@ class Bootstrap(object):
                             if not np.any(data_pw):
                                 continue
 
-                            print "Baseline {}, #scan {}, IF {}," \
-                                  " Stokes {}".format(baseline, i, if_, stokes)
+                            print("Baseline {}, #scan {}, IF {}," \
+                                  " Stokes {}".format(baseline, i, if_, stokes))
                             outliers = self._residuals_outliers_scans[baseline][i][if_][stokes]
                             x_c = np.sum(data_pw.real[~outliers]) / np.count_nonzero(~outliers)
                             y_c = np.sum(data_pw.imag[~outliers]) / np.count_nonzero(~outliers)
-                            print "Center: ({:.4f}, {:.4f})".format(x_c, y_c)
+                            print("Center: ({:.4f}, {:.4f})".format(x_c, y_c))
                             self._residuals_centers_scans[baseline][i][if_][stokes] = (x_c, y_c)
 
     # FIXME: Use real Stokes parameters as keys.
@@ -759,9 +754,9 @@ class Bootstrap(object):
                     if not np.any(data):
                         continue
 
-                    print "Baseline {}, IF {}, Stokes {}".format(baseline, if_,
-                                                                 stokes)
-                    print "Shape: {}".format(baseline_data.shape)
+                    print("Baseline {}, IF {}, Stokes {}".format(baseline, if_,
+                                                                 stokes))
+                    print("Shape: {}".format(baseline_data.shape))
                     try:
                         clf = fit_2d_gmm(data)
                     # This occurs when baseline has 1 point only
@@ -785,7 +780,7 @@ class Bootstrap(object):
             At each baseline/scan residuals are fitted with Kernel Density
             Model.
         """
-        print "Fitting residuals"
+        print("Fitting residuals")
         if combine_scans:
             raise NotImplementedError
 
@@ -809,8 +804,8 @@ class Bootstrap(object):
                         # Don't count outliers
                         data_pw = data_pw[~self._residuals_outliers[baseline][if_][stokes]]
 
-                        print "Baseline {}, IF {}, Stokes {}".format(baseline, if_,
-                                                                     stokes)
+                        print("Baseline {}, IF {}, Stokes {}".format(baseline, if_,
+                                                                     stokes))
                         if recenter:
                             x_c, y_c = self._residuals_centers[baseline][if_][stokes]
                             data_pw -= x_c + 1j * y_c
@@ -844,8 +839,8 @@ class Bootstrap(object):
                             # Don't count outliers
                             data_pw = data_pw[~self._residuals_outliers_scans[baseline][i][if_][stokes]]
 
-                            print "Baseline {}, Scan {}, IF {}, Stokes" \
-                                  " {}".format(baseline, i, if_, stokes)
+                            print("Baseline {}, Scan {}, IF {}, Stokes" \
+                                  " {}".format(baseline, i, if_, stokes))
                             if recenter:
                                 x_c, y_c = self._residuals_centers_scans[baseline][i][if_][stokes]
                                 data_pw -= x_c - 1j * y_c
@@ -963,14 +958,14 @@ class Bootstrap(object):
         # ``split_scans=False`` & ``use_V=False`` etc.
         noise_residuals = self.residuals.noise(split_scans=split_scans,
                                                use_V=use_V)
-        print "Getting noise residuals ", noise_residuals
+        print("Getting noise residuals ", noise_residuals)
         # To make ``noise_residuals`` shape ([#scans], #IF, #stokes) for
         # ``use_V=True`` option.
         if use_V:
             nstokes = self.residuals.nstokes
             for key, value in noise_residuals.items():
-                print "key", key
-                print "value", np.shape(value)
+                print("key", key)
+                print("value", np.shape(value))
                 shape = list(np.shape(value))
                 shape.extend([nstokes])
                 value = np.tile(value, nstokes)
@@ -1096,10 +1091,10 @@ class Bootstrap(object):
                         res = uvdata_r._choose_uvdata(baselines=[baseline],
                                                       IF=if_+1,
                                                       stokes=stoke_par)[0][:, 0]
-                        print "Baseline {}, IF {}, Stokes {}".format(baseline,
+                        print("Baseline {}, IF {}, Stokes {}".format(baseline,
                                                                      if_,
-                                                                     stoke)
-                        print "Shape: {}".format(res.shape)
+                                                                     stoke))
+                        print("Shape: {}".format(res.shape))
                         re = res.real
                         im = res.imag
                         reim = np.vstack((re, im)).T
@@ -1179,16 +1174,16 @@ class Bootstrap(object):
         # Find outliers in baseline/scan data
         if not split_scans:
             if not self._residuals_outliers:
-                print "Finding outliers in baseline's data..."
+                print("Finding outliers in baseline's data...")
                 self.find_outliers_in_residuals(split_scans=False)
             else:
-                print "Already found outliers in baseline's data..."
+                print("Already found outliers in baseline's data...")
         else:
             if not self._residuals_centers_scans:
-                print "Finding outliers in scan's data..."
+                print("Finding outliers in scan's data...")
                 self.find_outliers_in_residuals(split_scans=True)
             else:
-                print "Already found outliers in scan's data..."
+                print("Already found outliers in scan's data...")
 
         # Find residuals centers
         if recenter:
@@ -1199,39 +1194,39 @@ class Bootstrap(object):
             if not nonparametric:
                 # Using KDE estimate of residuals density
                 if use_kde:
-                    print "Using parametric bootstrap"
+                    print("Using parametric bootstrap")
                     if not split_scans and not self._residuals_fits:
-                        print "Fitting residuals with KDE for each" \
-                              " baseline/IF/Stokes..."
+                        print("Fitting residuals with KDE for each" \
+                              " baseline/IF/Stokes...")
                         self.fit_residuals_kde(split_scans=split_scans,
                                                combine_scans=combine_scans,
                                                recenter=recenter)
                     if split_scans and not self._residuals_fits_scans:
-                        print "Fitting residuals with KDE for each" \
-                              " baseline/scan/IF/Stokes..."
+                        print("Fitting residuals with KDE for each" \
+                              " baseline/scan/IF/Stokes...")
                         self.fit_residuals_kde(split_scans=split_scans,
                                                combine_scans=combine_scans,
                                                recenter=recenter)
                     if not split_scans and self._residuals_fits:
-                        print "Residuals were already fitted with KDE on each" \
-                              " baseline/IF/Stokes"
+                        print("Residuals were already fitted with KDE on each" \
+                              " baseline/IF/Stokes")
                     if split_scans and self._residuals_fits_scans:
-                        print "Residuals were already fitted with KDE on each" \
-                              " baseline/scan/IF/Stokes"
+                        print("Residuals were already fitted with KDE on each" \
+                              " baseline/scan/IF/Stokes")
                 # Use parametric gaussian estimate of residuals density
                 else:
                     # FIXME: This is needed only for cycle after!!!
                     self.fit_residuals_kde(split_scans=split_scans,
                                            combine_scans=combine_scans,
                                            recenter=recenter)
-                    print "only for cycle"
+                    print("only for cycle")
                     if not self.noise_residuals:
-                        print "Estimating gaussian STDs on each baseline[/scan]..."
+                        print("Estimating gaussian STDs on each baseline[/scan]...")
                         self.noise_residuals = self.get_residuals_noise(split_scans,
                                                                         use_v)
                     else:
-                        print "Gaussian STDs for each baseline[/scan] are already" \
-                              " estimated"
+                        print("Gaussian STDs for each baseline[/scan] are already" \
+                              " estimated")
 
         # Resampling is done in subclasses
         for i in range(n):
@@ -1525,7 +1520,7 @@ class CleanBootstrap(Bootstrap):
 
         if self.sigma_ampl_scale is not None:
             scale_factor = 1. + np.random.normal(0., self.sigma_ampl_scale)
-            print "Scaling amplitudes on {}".format(scale_factor)
+            print("Scaling amplitudes on {}".format(scale_factor))
             copy_of_model_data.scale_amplitude(scale_factor)
 
         if self.additional_noise is not None:

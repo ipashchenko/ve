@@ -44,7 +44,7 @@ i = i[:, 0, 0]
 rl = rl[:, 0, 0]
 lr = lr[:, 0, 0]
 
-import pyfits as pf
+import astropy.io.fits as pf
 hdus = pf.open(os.path.join(uv_data_dir, uv_fname))
 hdu = hdus[3]
 ant1, ant2 = baselines_2_ants([baseline])

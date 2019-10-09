@@ -364,7 +364,7 @@ class Gains(object):
                             self._data[indx]['gains'] *\
                             other.find_gains_for_antenna(t, ant)
                     if other.find_gains_for_antenna(t, ant) is None:
-                        print self_copy._data['gains'][indx]
+                        print(self_copy._data['gains'][indx])
         else:
             raise Exception('Gains instances can be multiplied only on'
                             'instances of Gains class!')
@@ -428,11 +428,11 @@ class Gains(object):
                 & (self._data['antenna'] == ant))[0]
 
         if not indx:
-            print "No gains for time and antenna: " + str(t) + ' ' + str(ant)
+            print("No gains for time and antenna: " + str(t) + ' ' + str(ant))
             gains = np.empty(np.shape(self.gains[0]))
             gains[:] = np.nan
-            print "Returning"
-            print gains
+            print("Returning")
+            print(gains)
         else:
             # Shape (#if, #pol)
             gains = np.squeeze(self._data[indx]['gains'])
@@ -571,8 +571,8 @@ class Absorber(object):
             try:
                 self.absorb_one(fname)
             except:
-                print "Failed to read in gains"
-                print fname
+                print("Failed to read in gains")
+                print(fname)
 
     def exclude_one(self, fname):
         """

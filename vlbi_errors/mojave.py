@@ -1,16 +1,12 @@
 import os
 import urllib
-import BeautifulSoup
-import urllib2
+import bs4 as BeautifulSoup
 import fnmatch
 import numpy as np
 import pandas as pd
-import sys
-
 from spydiff import clean_difmap
 from from_fits import create_image_from_fits_file, \
     create_clean_image_from_fits_file
-from uv_data import UVData
 
 
 # TODO: check connection to MOJAVE servers
@@ -33,8 +29,8 @@ def mojave_uv_fits_fname(source, band, epoch, ext='uvf'):
 
 def get_all_mojave_sources(use_db='u'):
     url_dict = {'u': mojave_u_url, 'multifreq': mojave_multifreq_url}
-    request = urllib2.Request(url_dict[use_db])
-    response = urllib2.urlopen(request)
+    request = urllib.request.Request(url_dict[use_db])
+    response = urllib.request.urlopen(request)
     soup = BeautifulSoup.BeautifulSoup(response)
 
     sources = list()
@@ -55,8 +51,8 @@ def get_all_mojave_sources(use_db='u'):
 def get_epochs_for_source(source, use_db='u'):
     url_dict = {'u': os.path.join(mojave_u_url, source),
                 'multifreq': mojave_multifreq_url}
-    request = urllib2.Request(url_dict[use_db])
-    response = urllib2.urlopen(request)
+    request = urllib.request.Request(url_dict[use_db])
+    response = urllib.request.urlopen(request)
     soup = BeautifulSoup.BeautifulSoup(response)
 
     epochs = list()
@@ -104,8 +100,8 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
 
     if 'u' in bands:
         # Finding epochs in u-band data
-        request = urllib2.Request(os.path.join(mojave_u_url, source))
-        response = urllib2.urlopen(request)
+        request = urllib.request.Request(os.path.join(mojave_u_url, source))
+        response = urllib.request.urlopen(request)
         soup = BeautifulSoup.BeautifulSoup(response)
 
         available_epochs = list()
@@ -133,11 +129,11 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
                 print("File {} does exist in {}."
                       " Skipping...".format(fname, download_dir))
                 continue
-            urllib.urlretrieve(url, path)
+            urllib.request.urlretrieve(url, path)
 
     # Downloading (optionally) x, y & j-band data
-    request = urllib2.Request(mojave_multifreq_url)
-    response = urllib2.urlopen(request)
+    request = urllib.request.Request(mojave_multifreq_url)
+    response = urllib.request.urlopen(request)
     soup = BeautifulSoup.BeautifulSoup(response)
 
     download_list = list()
@@ -162,14 +158,14 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
             print("File {} does exist in {}."
                   " Skipping...".format(fname, download_dir))
             continue
-        urllib.urlretrieve(url, os.path.join(download_dir, fname))
+        urllib.request.urlretrieve(url, os.path.join(download_dir, fname))
 
     # Downloading (optionally) l-band data
     if 'l18' in bands or 'l20' in bands or 'l21' in bands or 'l22' in bands:
-        request = urllib2.Request(os.path.join(mojave_l_url, source))
+        request = urllib.request.Request(os.path.join(mojave_l_url, source))
         try:
-            response = urllib2.urlopen(request)
-        except urllib2.HTTPError:
+            response = urllib.request.urlopen(request)
+        except urllib.error.HTTPError:
             print("No L-bands data available")
             return
         soup = BeautifulSoup.BeautifulSoup(response)
@@ -199,7 +195,7 @@ def download_mojave_uv_fits(source, epochs=None, bands=None, download_dir=None):
                         print("File {} does exist in {}."
                               " Skipping...".format(fname, download_dir))
                         continue
-                    urllib.urlretrieve(url, os.path.join(download_dir, fname))
+                    urllib.request.urlretrieve(url, os.path.join(download_dir, fname))
 
 
 # TODO: Fetch data from VizieR
@@ -241,7 +237,7 @@ def get_mojave_mdl_file(tsv_table, source, epoch, outfile=None, outdir=None):
     for (flux, r, pa, bmaj, e, bpa) in np.asarray(model_df[['flux', 'r', 'pa',
                                                             'bmaj', 'e',
                                                             'bpa']]):
-        print flux, r, pa, bmaj, e, bpa
+        print(flux, r, pa, bmaj, e, bpa)
         if not r.strip(' '):
             r = '0.0'
         if not pa.strip(' '):
@@ -313,12 +309,12 @@ def get_stacked_map(source, mojave_dir=None, out_dir=None, imsize=(512, 0.1),
         out_dir = mojave_dir
     beams_dict = dict()
 
-    print "Output directory : {}".format(out_dir)
+    print("Output directory : {}".format(out_dir))
 
     # First clean and restore with native beam
     epoch_stokes_dict = dict()
     for epoch in sorted(epochs):
-        print "Cleaning epoch {} with naitive restoring beam".format(epoch)
+        print("Cleaning epoch {} with naitive restoring beam".format(epoch))
         uv_fits_fname = mojave_uv_fits_fname(source, 'u', epoch)
         uvdata = UVData(os.path.join(out_dir, uv_fits_fname))
         uv_stokes = uvdata.stokes
@@ -332,18 +328,18 @@ def get_stacked_map(source, mojave_dir=None, out_dir=None, imsize=(512, 0.1),
             continue
         epoch_stokes_dict.update({epoch: stokes})
         im_fits_fname = "{}_{}_{}_{}.fits".format(source, 'U', epoch, stokes)
-        print "Difmap params: "
-        print "uv_fits_fname : {}".format(uv_fits_fname)
-        print "im_fits_fname : {}".format(im_fits_fname)
-        print "path : {}".format(out_dir)
-        print "outpath: {}".format(out_dir)
+        print("Difmap params: ")
+        print("uv_fits_fname : {}".format(uv_fits_fname))
+        print("im_fits_fname : {}".format(im_fits_fname))
+        print("path : {}".format(out_dir))
+        print("outpath: {}".format(out_dir))
         clean_difmap(uv_fits_fname, im_fits_fname, stokes, imsize,
                      path=out_dir, path_to_script=path_to_script,
                      outpath=out_dir)
         ccimage = create_clean_image_from_fits_file(os.path.join(out_dir,
                                                                  im_fits_fname))
         beam = ccimage.beam
-        print "Beam for epoch {} : {} [mas, mas, deg]".format(epoch, beam)
+        print("Beam for epoch {} : {} [mas, mas, deg]".format(epoch, beam))
         beams_dict.update({epoch: ccimage.beam})
 
     circ_beam = np.mean([np.sqrt(beam[0]*beam[1]) for beam in beams_dict.values()])
@@ -355,11 +351,11 @@ def get_stacked_map(source, mojave_dir=None, out_dir=None, imsize=(512, 0.1),
         uv_fits_fname = mojave_uv_fits_fname(source, 'u', epoch)
         im_fits_fname = "{}_{}_{}_{}_circ.fits".format(source, 'U', epoch,
                                                        stokes)
-        print "Difmap params: "
-        print "uv_fits_fname : {}".format(uv_fits_fname)
-        print "im_fits_fname : {}".format(im_fits_fname)
-        print "path : {}".format(out_dir)
-        print "outpath: {}".format(out_dir)
+        print("Difmap params: ")
+        print("uv_fits_fname : {}".format(uv_fits_fname))
+        print("im_fits_fname : {}".format(im_fits_fname))
+        print("path : {}".format(out_dir))
+        print("outpath: {}".format(out_dir))
         clean_difmap(uv_fits_fname, im_fits_fname, stokes, imsize,
                      path=out_dir, path_to_script=path_to_script,
                      outpath=out_dir, beam_restore=(circ_beam, circ_beam, 0))
@@ -387,7 +383,7 @@ if __name__ == '__main__':
         print("Querying source {}".format(source))
         epochs = get_epochs_for_source(source, use_db='multifreq')
         source_epoch_dict.update({source: sorted(epochs)[-1]})
-    print source_epoch_dict
+    print(source_epoch_dict)
 
     source_uv_dict = dict()
     from uv_data import UVData

@@ -588,6 +588,7 @@ class UVData(object):
         """
         return 2*self.n_usable_visibilities_difmap(stokes=model.stokes) - model.size
 
+    # TODO: Optionally use Q & U models for adding D-terms
     def add_D(self, d_dict, imodel=None):
         """
         Add D-terms contribution (in linear approximation) to data.
@@ -643,7 +644,6 @@ class UVData(object):
                 self.uvdata[bl_indx, band, self.stokes_dict_inv["LR"]] =\
                     self.uvdata[bl_indx, band, self.stokes_dict_inv["LR"]] + add_LR
                 self.sync()
-
 
     @property
     def scans(self):

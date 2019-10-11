@@ -660,7 +660,20 @@ class DeltaComponent(Component):
         if beam is not None:
             flux = beam.convolve(flux)
 
-        image._image[y, x] += flux
+        try:
+            image._image[y, x] += flux
+        except IndexError:
+            imsize = image.imsize[0]
+            # print(x, y, flux)
+            if x > imsize-1:
+                x = imsize-1
+            if x < 0:
+                x = 0
+            if y > imsize-1:
+                y = imsize-1
+            if y < 0:
+                y = 0
+            image._image[y, x] += flux
 
     def substract_from_image(self, image, beam=None):
         """

@@ -261,7 +261,6 @@ def create_random_D_dict(uvdata, sigma_D):
     """
     d_dict = dict()
     for baseline in uvdata.baselines:
-        print(baseline)
         ant1, ant2 = baselines_2_ants([baseline])
         antname1 = uvdata.antenna_mapping[ant1]
         antname2 = uvdata.antenna_mapping[ant2]
@@ -291,7 +290,6 @@ def create_const_amp_D_dict(uvdata, amp_D):
     """
     d_dict = dict()
     for baseline in uvdata.baselines:
-        print(baseline)
         ant1, ant2 = baselines_2_ants([baseline])
         antname1 = uvdata.antenna_mapping[ant1]
         antname2 = uvdata.antenna_mapping[ant2]

@@ -621,8 +621,7 @@ class UVData(object):
             if qmodel is None:
                 raise Exception("Need both Q&U models!")
 
-        # FIXME: Use qmodel & umodel also
-        if imodel is not None or qmodel is None:
+        if imodel is not None or qmodel is not None:
             models = list()
             if imodel is not None:
                 models.append(imodel)
@@ -1723,7 +1722,7 @@ class UVData(object):
             each stokes parameter. If there are two, say I-stokes models, then
             sum them firstly using ``Model.__add__``.
 
-        :param baseline (optional):
+        :param baselines (optional):
             Iterable of baselines on which to substitute visibilities. If
             ``None`` then substitute on all baselines.
             (default: ``None``)

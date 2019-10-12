@@ -589,7 +589,7 @@ class UVData(object):
         return 2*self.n_usable_visibilities_difmap(stokes=model.stokes) - model.size
 
     # TODO: Optionally use Q & U models for adding D-terms
-    def add_D(self, d_dict, imodel=None):
+    def add_D(self, d_dict, imodel=None, qmodel=None, umodel=None):
         """
         Add D-terms contribution (in linear approximation) to data.
         See http://adsabs.harvard.edu/abs/1994ApJ...427..718R equations (A1) &
@@ -601,14 +601,35 @@ class UVData(object):
             Instance of ``Model`` class for Stokes I. If not ``None`` then use
             FT of this model as Stokes I visibilities that are subject to
             D-terms. (default: ``None``)
+        :param qmodel: (optional)
+            Instance of ``Model`` class for Stokes Q. If not ``None`` then use
+            FT of this model with those for ``U`` as a subject to
+            D-terms. (default: ``None``)
+        :param umodel: (optional)
+            Instance of ``Model`` class for Stokes U. If not ``None`` then use
+            FT of this model with those for ``U`` as a subject to
+            D-terms. (default: ``None``)
         """
 
         from PA import PA
         from utils import GRT_coordinates
 
-        if imodel is not None:
+        if qmodel is not None:
+            if umodel is None:
+                raise Exception("Need both Q&U models!")
+        if umodel is not None:
+            if qmodel is None:
+                raise Exception("Need both Q&U models!")
+
+        # FIXME: Use qmodel & umodel also
+        if imodel is not None or qmodel is None:
+            models = list()
+            if imodel is not None:
+                models.append(imodel)
+            if qmodel is not None:
+                models.extend([qmodel, umodel])
             uvdata_copy = copy.deepcopy(self)
-            uvdata_copy.substitute([imodel])
+            uvdata_copy.substitute(models)
         else:
             uvdata_copy = self
 

@@ -15,52 +15,13 @@ from image import find_shift, find_bbox
 from images import Images
 from image_ops import (pol_mask, analyze_rotm_slice, hovatta_find_sigma_pang,
                        rms_image, rms_image_shifted)
-from bootstrap import CleanBootstrap
+from bootstrap import CleanBootstrap, hdi_of_mcmc
 from image import plot as iplot
-from utils import hdi_of_mcmc
 from mojave import download_mojave_uv_fits, get_epochs_for_source
 
 
 chisq_crit_values = {1: 3.841, 2: 5.991, 3: 7.815, 4: 9.488, 5: 11.070,
                      6: 12.592, 7: 14.067, 8: 15.507, 9: 16.919, 10: 18.307}
-
-
-def boot_ci(boot_images, original_image, alpha=0.68, kind=None):
-    """
-    Calculate bootstrap CI.
-
-    :param boot_images:
-        Iterable of 2D numpy arrays with bootstrapped images.
-    :param original_image:
-        2D numpy array with original image.
-    :param kind: (optional)
-        Type of CI.
-    :return:
-        Two numpy arrays with low and high CI borders for each pixel.
-
-    """
-
-    images_cube = np.dstack(boot_images)
-    boot_ci = np.zeros(np.shape(images_cube[:, :, 0]))
-    mean_boot = np.zeros(np.shape(images_cube[:, :, 0]))
-    hdi_0 = np.zeros(np.shape(images_cube[:, :, 0]))
-    hdi_1 = np.zeros(np.shape(images_cube[:, :, 0]))
-    print("calculating CI intervals")
-    for (x, y), value in np.ndenumerate(boot_ci):
-        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=alpha)
-        boot_ci[x, y] = hdi[1] - hdi[0]
-        hdi_0[x, y] = hdi[0]
-        hdi_1[x, y] = hdi[1]
-        mean_boot[x, y] = np.mean(images_cube[x, y, :])
-
-    if kind == 'asym':
-        hdi_low = original_image.image - (mean_boot - hdi_0)
-        hdi_high = original_image.image + hdi_1 - mean_boot
-    else:
-        hdi_low = original_image.image - boot_ci / 2.
-        hdi_high = original_image.image + boot_ci / 2.
-
-    return hdi_low, hdi_high
 
 
 class MFObservations(object):

@@ -32,6 +32,44 @@ def xy_2_rtheta(params):
     return result
 
 
+def boot_ci(boot_images, original_image, alpha=0.68, kind=None):
+    """
+    Calculate bootstrap CI.
+
+    :param boot_images:
+        Iterable of 2D numpy arrays with bootstrapped images.
+    :param original_image:
+        2D numpy array with original image.
+    :param kind: (optional)
+        Type of CI.
+    :return:
+        Two numpy arrays with low and high CI borders for each pixel.
+
+    """
+
+    images_cube = np.dstack(boot_images)
+    boot_ci = np.zeros(np.shape(images_cube[:, :, 0]))
+    mean_boot = np.zeros(np.shape(images_cube[:, :, 0]))
+    hdi_0 = np.zeros(np.shape(images_cube[:, :, 0]))
+    hdi_1 = np.zeros(np.shape(images_cube[:, :, 0]))
+    print("calculating CI intervals")
+    for (x, y), value in np.ndenumerate(boot_ci):
+        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=alpha)
+        boot_ci[x, y] = hdi[1] - hdi[0]
+        hdi_0[x, y] = hdi[0]
+        hdi_1[x, y] = hdi[1]
+        mean_boot[x, y] = np.mean(images_cube[x, y, :])
+
+    if kind == 'asym':
+        hdi_low = original_image.image - (mean_boot - hdi_0)
+        hdi_high = original_image.image + hdi_1 - mean_boot
+    else:
+        hdi_low = original_image.image - boot_ci / 2.
+        hdi_high = original_image.image + boot_ci / 2.
+
+    return hdi_low, hdi_high
+
+
 def analyze_bootstrap_samples(dfm_model_fname, booted_mdl_paths,
                               dfm_model_dir=None, plot_comps=None,
                               plot_file=None, txt_file=None, cred_mass=0.68,

@@ -26,6 +26,17 @@ stokes_dict = {-4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR', 1: 'I', 2: 'Q', 3: 'U',
                4: 'V'}
 
 
+def kernel(a, b, amp, scale):
+    sqdist = np.sum(a**2, 1).reshape(-1, 1) + np.sum(b**2, 1) - 2*np.dot(a, b.T)
+    return amp**2*np.exp(-0.5 * (1/(scale*scale)) * sqdist)
+
+
+def gp_pred(amp, scale, v, t):
+    K_ss = kernel(t.reshape(-1, 1), t.reshape(-1, 1), amp, scale)
+    L = np.linalg.cholesky(K_ss+1e-6*np.eye(len(t)))
+    return np.dot(L, v.reshape(-1, 1))[:, 0]
+
+
 # FIXME: Handling FITS files with only one scan (used for CV)
 class UVData(object):
 
@@ -70,6 +81,10 @@ class UVData(object):
         rec = pf.getdata(self.fname, extname='AIPS AN')
         self._antenna_mapping = {number: rec['ANNAME'][i] for i, number in
                                  enumerate(self.antennas)}
+        self._antennas_baselines = None
+        self._antennas_times = None
+        self._minimal_antennas_time = None
+        self._antennas_gains = None
 
     def _get_baselines_info(self):
         """
@@ -548,6 +563,105 @@ class UVData(object):
             self._times = Time(self.hdu.data['DATE'] + self.hdu.data['_DATE'],
                                format='jd')
         return self._times
+
+    @property
+    def antennas_baselines(self):
+        if self._antennas_baselines is None:
+            self._antennas_baselines = dict()
+            for antenna in self.antennas:
+                self._antennas_baselines.update({antenna: list()})
+                for baseline in self.baselines:
+                    ant1, ant2 = baselines_2_ants([baseline])
+                    if ant1 == antenna or ant2 == antenna:
+                        self._antennas_baselines[antenna].append(baseline)
+        return self._antennas_baselines
+
+    @property
+    def antennas_times(self):
+        if self._antennas_times is None:
+            self._antennas_times = dict()
+            for antenna in self.antennas:
+                self._antennas_times.update({antenna: list()})
+                for baseline in self.antennas_baselines[antenna]:
+                    # Find times of current baseline
+                    indexes = self._get_baseline_indexes(baseline)
+                    bl_times = self.times[indexes]
+                    self._antennas_times[antenna].extend(list(bl_times))
+                ordered_times = sorted(set(self._antennas_times[antenna]))
+                self._antennas_times[antenna] = ordered_times
+        return self._antennas_times
+
+    @property
+    def minimal_antennas_time(self):
+        if self._minimal_antennas_time is None:
+            minimal_times = [np.min(self.antennas_times[ant]) for ant in self.antennas]
+            self._minimal_antennas_time = np.min(minimal_times)
+        return self._minimal_antennas_time
+
+    def antennas_gains(self, amp_gpamp=np.exp(-3), amp_gpphase=np.exp(-3), scale_gpamp=np.exp(6),
+                       scale_gpphase=np.exp(5), rewrite=False):
+
+        if self._antennas_gains is None or rewrite:
+            t_min = self.minimal_antennas_time
+
+            # For each antenna - create GP of amp and phase
+            self._antennas_gains = dict()
+            for ant in self.antennas:
+                self._antennas_gains[ant] = dict()
+                ant_time = self.antennas_times[ant]
+                tdeltas = [t - t_min for t in ant_time]
+                tdeltas = [dt.sec for dt in tdeltas]
+                for pol in ("r", "l"):
+                    # Amplitude
+                    v = np.random.normal(0, 1, size=len(tdeltas))
+                    amp = 1 + gp_pred(amp_gpamp, scale_gpamp, v, np.array(tdeltas))
+                    # Phase
+                    v = np.random.normal(0, 1, size=len(tdeltas))
+                    phase = gp_pred(amp_gpphase, scale_gpphase, v, np.array(tdeltas))
+                    self._antennas_gains[ant][pol] = {"amp": {t: a for (t, a) in zip(ant_time, amp)},
+                                                      "phase": {t: p for (t, p) in zip(ant_time, phase)}}
+
+        return self._antennas_gains
+
+    @property
+    def ngroups(self):
+        return self.hdu.header["GCOUNT"]
+
+    def inject_gains(self):
+        from cmath import exp
+        gains = self.antennas_gains()
+
+        baselines = self.hdu.data["BASELINE"]
+        for i in range(self.ngroups):
+            t = self.times[i]
+            baseline = baselines[i]
+            ant1, ant2 = baselines_2_ants([baseline])
+            amp1r = gains[ant1]["r"]["amp"][t]
+            amp1l = gains[ant1]["l"]["amp"][t]
+            amp2r = gains[ant2]["r"]["amp"][t]
+            amp2l = gains[ant2]["l"]["amp"][t]
+            phase1r = gains[ant1]["r"]["phase"][t]
+            phase1l = gains[ant1]["l"]["phase"][t]
+            phase2r = gains[ant2]["r"]["phase"][t]
+            phase2l = gains[ant2]["l"]["phase"][t]
+            gain1r = amp1r*exp(1j*phase1r)
+            gain1l = amp1l*exp(1j*phase1l)
+            gain2r = amp2r*exp(1j*phase2r)
+            gain2l = amp2l*exp(1j*phase2l)
+            # vis_real_new = amp1 * amp2 * (np.cos(phase1 - phase2) * vis_real - np.sin(phase1 - phase2) * vis_imag)
+            # vis_imag_new = amp1 * amp2 * (np.cos(phase1 - phase2) * vis_imag + np.sin(phase1 - phase2) * vis_real)
+            # vis_real_gained.append(vis_real_new)
+            # vis_imag_gained.append(vis_imag_new)
+            # Stokes 0 (RR)
+            if self._check_stokes_present("RR"):
+                self.uvdata[i, :, 0] = gain1r * gain2r.conjugate() * self.uvdata[i, :, 0]
+            if self._check_stokes_present("LL"):
+                self.uvdata[i, :, 1] = gain1l * gain2l.conjugate() * self.uvdata[i, :, 1]
+            if self._check_stokes_present("RL"):
+                self.uvdata[i, :, 2] = gain1r * gain2l.conjugate() * self.uvdata[i, :, 2]
+            if self._check_stokes_present("LR"):
+                self.uvdata[i, :, 3] = gain1l * gain2r.conjugate() * self.uvdata[i, :, 3]
+        self.sync()
 
     def n_usable_visibilities_difmap(self, stokes="I", freq_average=False):
         """
@@ -2097,8 +2211,23 @@ class UVData(object):
 
 
 if __name__ == "__main__":
-    import os; os.chdir("/home/ilya/data/ngc315/")
-    uvdatau = UVData("0055+300.u.2006_02_12.uvf")
-    uvdata_modelu = UVData("/home/ilya/data/ngc315/best_model_u.fits")
-    fig = uvdatau.uv_coverage(model_uvdata=uvdata_modelu)
-    fig.savefig("/home/ilya/data/ngc315/uvcoverage_diff_v2.pdf")
+    fn = "/home/ilya/data/0415+379.u.2019_07_19.uvf"
+    orig_uvdata = UVData(fn)
+    uvdata = UVData(fn)
+
+    from components import CGComponent
+    from model import Model
+    model = Model(stokes="I")
+    cg1 = CGComponent(1., -0.1, -0.1, 0.1)
+    cg2 = CGComponent(0.5, 0.2, 0.2, 0.3)
+    model.add_components(cg1, cg2)
+    noise = uvdata.noise()
+    uvdata.substitute([model])
+    orig_uvdata.substitute([model])
+    gains = uvdata.antennas_gains(amp_gpamp=np.exp(-3), amp_gpphase=np.exp(-2), scale_gpamp=np.exp(5), scale_gpphase=np.exp(5))
+    uvdata.inject_gains()
+    uvdata.noise_add(noise)
+    import matplotlib
+    matplotlib.use("Qt5Agg")
+    fig = orig_uvdata.uvplot(alpha=0.5)
+    fig = uvdata.uvplot(fig=fig, color='r', alpha=0.5)

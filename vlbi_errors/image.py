@@ -373,8 +373,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             v = np.ma.array(v, mask=vectors_mask[x_slice, y_slice])
         vec = ax.quiver(y[::vinc], x[::vinc], u[::vinc, ::vinc],
                         v[::vinc, ::vinc], angles='uv',
-                        units='xy', headwidth=0., headlength=0., scale=0.005,
-                        width=0.05, headaxislength=0.)
+                        units='xy', headwidth=0., headlength=0., scale=None,
+                        width=0.05, headaxislength=0., color="white")
     # Set equal aspect
     ax.set_aspect('equal')
 
@@ -1081,6 +1081,16 @@ class CleanImage(Image):
             if not self.imsize == np.shape(image):
                 raise Exception("Images have incompatible parameters!")
             self._image_original = image
+
+    # def __mul__(self, other):
+    #     if isinstance(other, CleanImage):
+    #         if self == other:
+    #             self.image *= other.image
+    #         else:
+    #             raise Exception("Different image parameters")
+    #     else:
+    #         self.image = self.image * other
+    #     return self
 
     @property
     def cc_image(self):

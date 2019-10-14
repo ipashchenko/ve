@@ -61,11 +61,11 @@ def boot_ci(boot_images, original_image, alpha=0.68, kind=None):
         mean_boot[x, y] = np.mean(images_cube[x, y, :])
 
     if kind == 'asym':
-        hdi_low = original_image.image - (mean_boot - hdi_0)
-        hdi_high = original_image.image + hdi_1 - mean_boot
+        hdi_low = original_image - (mean_boot - hdi_0)
+        hdi_high = original_image + hdi_1 - mean_boot
     else:
-        hdi_low = original_image.image - boot_ci / 2.
-        hdi_high = original_image.image + boot_ci / 2.
+        hdi_low = original_image - boot_ci / 2.
+        hdi_high = original_image + boot_ci / 2.
 
     return hdi_low, hdi_high
 

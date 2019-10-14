@@ -14,6 +14,7 @@ from utils import (baselines_2_ants, index_of, get_uv_correlations,
 
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 try:
     import pylab
@@ -622,6 +623,37 @@ class UVData(object):
                                                       "phase": {t: p for (t, p) in zip(ant_time, phase)}}
 
         return self._antennas_gains
+
+    def plot_antennas_gains(self):
+        color_dict = {"r": "#1f77b4", "l": "#ff7f0e"}
+        antennas_gains = self.antennas_gains()
+        fig, axes = plt.subplots(len(antennas_gains), 2, sharex=True, figsize=(24, 20))
+        t_min = self.minimal_antennas_time
+        for i, ant in enumerate(antennas_gains):
+            ant_time = self.antennas_times[ant]
+            tdeltas = [t - t_min for t in ant_time]
+            tdeltas = [dt.sec for dt in tdeltas]
+            for pol in ("r", "l"):
+                amp = antennas_gains[ant][pol]["amp"]
+                phase = antennas_gains[ant][pol]["phase"]
+                if i == 0:
+                    label = pol
+                else:
+                    label = None
+                dots, = axes[i, 0].plot(tdeltas, list(amp.values()), '.', color=color_dict[pol])
+                if label is not None:
+                    dots.set_label(label.upper())
+                    axes[i, 0].legend(loc="upper right")
+                axes[i, 1].plot(tdeltas, list(phase.values()), '.', color=color_dict[pol])
+                axes[i, 1].yaxis.set_ticks_position("right")
+        axes[0, 0].set_title("Amplitudes")
+        axes[0, 1].set_title("Phases")
+        axes[i, 0].set_xlabel("time, s")
+        axes[i, 1].set_xlabel("time, s")
+        # if savefn:
+        #     fig.savefig(savefn, bbox_inches="tight", dpi=300)
+        fig.show()
+        return fig
 
     @property
     def ngroups(self):
@@ -2225,9 +2257,13 @@ if __name__ == "__main__":
     uvdata.substitute([model])
     orig_uvdata.substitute([model])
     gains = uvdata.antennas_gains(amp_gpamp=np.exp(-3), amp_gpphase=np.exp(-2), scale_gpamp=np.exp(5), scale_gpphase=np.exp(5))
-    uvdata.inject_gains()
-    uvdata.noise_add(noise)
     import matplotlib
-    matplotlib.use("Qt5Agg")
-    fig = orig_uvdata.uvplot(alpha=0.5)
-    fig = uvdata.uvplot(fig=fig, color='r', alpha=0.5)
+    matplotlib.use('Qt5Agg')
+    uvdata.plot_antennas_gains()
+    # uvdata.inject_gains()
+    # uvdata.noise_add(noise)
+    # import matplotlib
+    # matplotlib.use("Qt5Agg")
+    # fig = orig_uvdata.uvplot(alpha=0.5)
+    # fig = uvdata.uvplot(fig=fig, color='r', alpha=0.5)
+    # uvdata.save("/home/ilya/data/0415+379.u.2019_07_19_unself.uvf")

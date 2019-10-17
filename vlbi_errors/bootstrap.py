@@ -7,7 +7,7 @@ import corner
 from utils import (fit_2d_gmm, vcomplex, nested_ddict, make_ellipses,
                    baselines_2_ants, find_outliers_2d_mincov,
                    find_outliers_2d_dbscan, find_outliers_dbscan, fit_kde,
-                   fit_2d_kde, hdi_of_mcmc, ants_2_baselines)
+                   fit_2d_kde, hdi_of_mcmc, hdi_of_sample, bc_endpoint, ants_2_baselines)
 import matplotlib
 from uv_data import UVData
 from from_fits import create_model_from_fits_file
@@ -32,7 +32,7 @@ def xy_2_rtheta(params):
     return result
 
 
-def boot_ci(boot_images, original_image, alpha=0.68, kind=None):
+def boot_ci(boot_images, original_image, cred_mass=0.68, kind=None):
     """
     Calculate bootstrap CI.
 
@@ -41,31 +41,40 @@ def boot_ci(boot_images, original_image, alpha=0.68, kind=None):
     :param original_image:
         2D numpy array with original image.
     :param kind: (optional)
-        Type of CI.
+        Type of CI. "asym", "bc" or None. If ``None`` than symmetric one.
+        (default: ``None``)
     :return:
         Two numpy arrays with low and high CI borders for each pixel.
 
     """
-
     images_cube = np.dstack(boot_images)
     boot_ci = np.zeros(np.shape(images_cube[:, :, 0]))
     mean_boot = np.zeros(np.shape(images_cube[:, :, 0]))
     hdi_0 = np.zeros(np.shape(images_cube[:, :, 0]))
     hdi_1 = np.zeros(np.shape(images_cube[:, :, 0]))
+    hdi_low = np.zeros(np.shape(images_cube[:, :, 0]))
+    hdi_high = np.zeros(np.shape(images_cube[:, :, 0]))
+    alpha = 1 - cred_mass
     print("calculating CI intervals")
-    for (x, y), value in np.ndenumerate(boot_ci):
-        hdi = hdi_of_mcmc(images_cube[x, y, :], cred_mass=alpha)
-        boot_ci[x, y] = hdi[1] - hdi[0]
-        hdi_0[x, y] = hdi[0]
-        hdi_1[x, y] = hdi[1]
-        mean_boot[x, y] = np.mean(images_cube[x, y, :])
 
-    if kind == 'asym':
-        hdi_low = original_image - (mean_boot - hdi_0)
-        hdi_high = original_image + hdi_1 - mean_boot
+    if kind == "bc":
+        for (x, y), value in np.ndenumerate(boot_ci):
+            hdi_low = bc_endpoint(images_cube[x, y, :], original_image[x, y], cred_mass=alpha/2.)
+            hdi_high = bc_endpoint(images_cube[x, y, :], original_image[x, y], cred_mass=1-alpha/2.)
     else:
-        hdi_low = original_image - boot_ci / 2.
-        hdi_high = original_image + boot_ci / 2.
+        for (x, y), value in np.ndenumerate(boot_ci):
+            hdi = hdi_of_sample(images_cube[x, y, :], cred_mass=cred_mass)
+            boot_ci[x, y] = hdi[1] - hdi[0]
+            hdi_0[x, y] = hdi[0]
+            hdi_1[x, y] = hdi[1]
+            mean_boot[x, y] = np.mean(images_cube[x, y, :])
+
+        if kind == 'asym':
+            hdi_low = original_image - (mean_boot - hdi_0)
+            hdi_high = original_image + hdi_1 - mean_boot
+        else:
+            hdi_low = original_image - boot_ci / 2.
+            hdi_high = original_image + boot_ci / 2.
 
     return hdi_low, hdi_high
 

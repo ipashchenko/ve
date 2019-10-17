@@ -1544,10 +1544,14 @@ def hdi_of_mcmc(sample, cred_mass=0.95, return_mean_median=False, mask_nan=True)
         return hdi_min, hdi_max
 
 
+def hdi_of_sample(sample, cred_mass=0.95):
+    alpha = 1. - cred_mass
+    return scoreatpercentile(sample, [alpha/2, 1-alpha/2])
+
+
 def bc_endpoint(sample_vec, sample_val, alpha):
     """
-    Function that calculates Bias Corrected bootstrap confidence interval
-    endpoints.
+    Function that calculates Bias Corrected bootstrap confidence interval endpoints.
 
     :param sample_vec:
         Sample of bootstrapped statistics.
@@ -1560,10 +1564,8 @@ def bc_endpoint(sample_vec, sample_val, alpha):
     """
     n = len(sample_vec)
     import scipy
-    z0 = scipy.stats.norm.ppf(float(len(sample_vec[sample_vec < sample_val]))
-                              / n)
-    f = scipy.stats.norm.cdf(2. * z0 +
-                             scipy.stats.norm.ppf(alpha))
+    z0 = scipy.stats.norm.ppf(float(len(sample_vec[sample_vec < sample_val])) / n)
+    f = scipy.stats.norm.cdf(2. * z0 + scipy.stats.norm.ppf(alpha))
     return scipy.stats.scoreatpercentile(sample_vec, 100. * f)
 
 

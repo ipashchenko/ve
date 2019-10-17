@@ -2250,20 +2250,22 @@ if __name__ == "__main__":
     from components import CGComponent
     from model import Model
     model = Model(stokes="I")
-    cg1 = CGComponent(1., -0.1, -0.1, 0.1)
-    cg2 = CGComponent(0.5, 0.2, 0.2, 0.3)
-    model.add_components(cg1, cg2)
+    cg1 = CGComponent(1., 0, 0, 0.25)
+    # cg2 = CGComponent(0.5, 0.2, 0.2, 0.3)
+    model.add_components(cg1)
     noise = uvdata.noise()
+    for baseline in noise:
+        noise[baseline] *= 5
     uvdata.substitute([model])
     orig_uvdata.substitute([model])
     gains = uvdata.antennas_gains(amp_gpamp=np.exp(-3), amp_gpphase=np.exp(-2), scale_gpamp=np.exp(5), scale_gpphase=np.exp(5))
     import matplotlib
     matplotlib.use('Qt5Agg')
     uvdata.plot_antennas_gains()
-    # uvdata.inject_gains()
-    # uvdata.noise_add(noise)
-    # import matplotlib
-    # matplotlib.use("Qt5Agg")
-    # fig = orig_uvdata.uvplot(alpha=0.5)
-    # fig = uvdata.uvplot(fig=fig, color='r', alpha=0.5)
-    # uvdata.save("/home/ilya/data/0415+379.u.2019_07_19_unself.uvf")
+    uvdata.inject_gains()
+    uvdata.noise_add(noise)
+    import matplotlib
+    matplotlib.use("Qt5Agg")
+    fig = orig_uvdata.uvplot(alpha=0.5)
+    fig = uvdata.uvplot(fig=fig, color='r', alpha=0.5)
+    uvdata.save("/home/ilya/data/0415+379.u.2019_07_19_unself_3x.uvf")

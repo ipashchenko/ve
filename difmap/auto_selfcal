@@ -1,0 +1,200 @@
+integer clean_niter;
+float clean_gain; clean_gain = 0.03
+float dynam;
+float flux_peak;
+
+! Define the inner loop as a macro.
+
+float flux_cutoff
+float dyn_range
+float last_in_rms
+float in_rms
+float target_rms
+float V_rms
+float uvstat_rms_before
+float uvstat_rms_after
+float uvstat_sigma_before
+float uvstat_sigma_after
+
+#+map_residual \
+flux_peak = peak(flux);\
+flux_cutoff = imstat(rms) * dynam;\
+while(abs(flux_peak)>flux_cutoff);\
+ clean clean_niter,clean_gain;\
+ flux_cutoff = imstat(rms) * dynam;\
+ flux_peak = peak(flux);\
+end while
+
+! The following macro stops
+! when the the in_frame RMS matches the
+! the V RMS OR if there is not improvement
+! in the in_frame RMS
+
+#+deep_map_residual \
+in_rms = imstat(rms);\
+print "Target RMS: ", target_rms, "  In Frame RMS: ", in_rms;\
+while(in_rms > target_rms);\
+ clean min(100*(in_rms/target_rms),500),clean_gain;\
+ last_in_rms = in_rms;\
+ in_rms = imstat(rms);\
+ print "Target RMS: ", target_rms, "  In Frame RMS: ", in_rms;\
+ if(last_in_rms <= in_rms);\
+  in_rms = target_rms;\
+ end if;\
+end while
+
+
+! select V and get the V_rms for comparison
+select v
+clrmod true,true,true
+! delwin
+uvw 0,-2
+uvtaper 0
+V_rms = imstat(rms)
+
+! select the stokes
+select i
+
+! clear previous model
+clrmod true,true,true
+
+! delete any windows
+! delwin
+
+! remove any tapering
+uvtaper 0
+
+print "*********** FIRST TRY SUPER-UNIFORM WEIGHTING **********"
+print "**** -- only if dynamic range is higher than 10 -- *****"
+
+dynam = 10
+clean_niter = 10
+uvw 20,-1
+map_residual
+uvw 10,-1
+map_residual
+clean_niter = 50
+
+print "*********** REGULAR UNIFORM WEIGHTING NEXT ***************"
+uvw 2,-1
+dynam = 3
+map_residual
+
+
+print "*********** SELF-CALIBRATE PHASES ***************"
+selfflag false, 3, 4
+uvstat_rms_before = uvstat(rms)
+uvstat_sigma_before = sqrt(uvstat(chisq))
+selfcal
+uvstat_rms_after = uvstat(rms)
+uvstat_sigma_after = sqrt(uvstat(chisq))
+
+
+print "*********** UNFLAG, CLEAN AND SELF-CALIBRATE PHASES ***************"
+unflag *
+uvw 2,-1
+dynam = 3
+map_residual
+uvstat_rms_before = uvstat(rms)
+uvstat_sigma_before = sqrt(uvstat(chisq))
+selfcal
+uvstat_rms_after = uvstat(rms)
+uvstat_sigma_after = sqrt(uvstat(chisq))
+
+
+
+print "*********** FIRST TRY SUPER-UNIFORM WEIGHTING **********"
+print "**** -- only if dynamic range is higher than 10 -- *****"
+
+dynam = 10
+clean_niter = 10
+uvw 20,-1
+map_residual
+uvw 10,-1
+map_residual
+clean_niter = 50
+
+print "*********** REGULAR UNIFORM WEIGHTING NEXT ***************"
+uvw 2,-1
+dynam = 3
+map_residual
+
+print "*********** SELF-CALIBRATE AMPLITUDES ***************"
+uvstat_rms_before = uvstat(rms)
+uvstat_sigma_before = sqrt(uvstat(chisq))
+selfcal true, false, 1e6
+uvstat_rms_after = uvstat(rms)
+uvstat_sigma_after = sqrt(uvstat(chisq))
+
+clrmod true,true,true
+
+
+print "*********** FIRST TRY SUPER-UNIFORM WEIGHTING **********"
+print "**** -- only if dynamic range is higher than 10 -- *****"
+
+dynam = 10
+clean_niter = 10
+uvw 20,-1
+map_residual
+uvw 10,-1
+map_residual
+clean_niter = 50
+
+print "*********** REGULAR UNIFORM WEIGHTING NEXT ***************"
+uvw 2,-1
+dynam = 3
+map_residual
+
+print "*********** SELF-CALIBRATE PHASES ***************"
+uvstat_rms_before = uvstat(rms)
+uvstat_sigma_before = sqrt(uvstat(chisq))
+selfcal
+uvstat_rms_after = uvstat(rms)
+uvstat_sigma_after = sqrt(uvstat(chisq))
+
+print "*********** NATURAL WEIGHTING ***************"
+uvw 2,0
+dynam = 3
+map_residual
+
+print "*********** SELF-CALIBRATE AMPLITUDES ***************"
+uvstat_rms_before = uvstat(rms)
+uvstat_sigma_before = sqrt(uvstat(chisq))
+selfcal true, false, 0.5
+uvstat_rms_after = uvstat(rms)
+uvstat_sigma_after = sqrt(uvstat(chisq))
+
+clrmod true,true,true
+
+
+print "*********** FIRST TRY SUPER-UNIFORM WEIGHTING **********"
+print "**** -- only if dynamic range is higher than 10 -- *****"
+
+dynam = 10
+clean_niter = 10
+uvw 20,-1
+map_residual
+uvw 10,-1
+map_residual
+clean_niter = 50
+
+print "*********** REGULAR UNIFORM WEIGHTING NEXT ***************"
+uvw 2,-1
+dynam = 6
+map_residual
+print "********** DEEP CLEANING AT NATURAL WEIGHTING **************"
+uvw 0,-2
+! now let clean go deep
+target_rms = imstat(noise)
+if(target_rms < imstat(rms))
+  deep_map_residual
+else
+  ! clean 1 component just to have something to restore
+  clean 1, clean_gain
+end if
+
+in_rms = imstat(rms)
+print "********** FINAL CLEAN IS FINISHED **************"
+print "Target RMS was: ", target_rms, " Reached RMS: ", in_rms
+print "For comparison uncleaned V RMS is: ", V_rms
+print "*************************************************"

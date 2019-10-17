@@ -59,8 +59,8 @@ def boot_ci(boot_images, original_image, cred_mass=0.68, kind=None):
 
     if kind == "bc":
         for (x, y), value in np.ndenumerate(boot_ci):
-            hdi_low = bc_endpoint(images_cube[x, y, :], original_image[x, y], cred_mass=alpha/2.)
-            hdi_high = bc_endpoint(images_cube[x, y, :], original_image[x, y], cred_mass=1-alpha/2.)
+            hdi_low[x, y] = bc_endpoint(images_cube[x, y, :], original_image[x, y], alpha/2.)
+            hdi_high[x, y] = bc_endpoint(images_cube[x, y, :], original_image[x, y], 1-alpha/2.)
     else:
         for (x, y), value in np.ndenumerate(boot_ci):
             hdi = hdi_of_sample(images_cube[x, y, :], cred_mass=cred_mass)

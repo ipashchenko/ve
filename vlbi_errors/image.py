@@ -151,7 +151,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
          show_points=None, components=None, slice_color='black',
          plot_colorbar=True, label_size=12, ra_range=None, dec_range=None,
-         fig=None, axes=None, contour_linewidth=0.5):
+         fig=None, axes=None, contour_linewidth=0.5, vector_color="black"):
     """
     Plot image(s).
 
@@ -374,7 +374,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         vec = ax.quiver(y[::vinc], x[::vinc], u[::vinc, ::vinc],
                         v[::vinc, ::vinc], angles='uv',
                         units='xy', headwidth=0., headlength=0., scale=None,
-                        width=0.05, headaxislength=0., color="white")
+                        width=0.05, headaxislength=0., color=vector_color)
     # Set equal aspect
     ax.set_aspect('equal')
 

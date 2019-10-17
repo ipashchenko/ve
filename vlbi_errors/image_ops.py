@@ -365,8 +365,10 @@ def fpol_map(q_array, u_array, i_array, mask=None):
         [Jy/beam])
 
     """
-    cpol_array = cpol_map(q_array, u_array, mask=mask)
-    return np.sqrt(cpol_array * cpol_array.conj()).real / i_array
+    if mask is not None:
+        q_array = np.ma.array(q_array, mask=mask, fill_value=np.nan)
+        u_array = np.ma.array(u_array, mask=mask, fill_value=np.nan)
+    return np.hypot(q_array, u_array)/i_array
 
 
 def rotm(freqs, chis, s_chis=None, p0=None, plot=False, plot_title=None,

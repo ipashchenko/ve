@@ -1487,7 +1487,8 @@ def get_uv_correlations(uv, models):
         uv_correlations.update({'LL': LL})
 
     else:
-        if model_dict['RR'] or model_dict['LL']:
+        # Only I, Q, U, V are in model_dict by default
+        if 'RR' in model_dict or 'LL' in model_dict:
             try:
                 RR = model_dict['RR'].ft(uv)
                 uv_correlations.update({'RR': RR})

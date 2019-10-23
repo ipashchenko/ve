@@ -150,19 +150,13 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     os.unlink(command_file)
 
 
-def selfcal_difmap(fname, outfname, mapsize_clean, solint=30, path=None,
-                   path_to_script=None, outpath=None, show_difmap_output=False,
-                   command_file=None, clean_box=None):
+def selfcal_difmap(fname, outfname, path=None, path_to_script=None, outpath=None, show_difmap_output=False):
     """
     Self-calibrated uv-data in difmap.
     :param fname:
         Filename of uv-data to clean.
     :param outfname:
         Filename with CCs.
-    :param mapsize_clean:
-        Parameters of map for cleaning (map size, pixel size [mas]).
-    :param solint: (optional)
-        The finest solution interval [s]. (default: ``30``)
     :param path: (optional)
         Path to uv-data to self-calibrate. If ``None`` then use current directory.
         (default: ``None``)
@@ -174,17 +168,6 @@ def selfcal_difmap(fname, outfname, mapsize_clean, solint=30, path=None,
         (default: ``None``)
     :param show_difmap_output: (optional)
         Show difmap output? (default: ``False``)
-    :param command_file: (optional)
-        Script file name to store `difmap` commands. If ``None`` then use
-        ``difmap_commands``. (default: ``None``)
-    :param clean_box: (optional)
-         xa  -   The relative Right-Ascension of either edge of the new window.
-         xb  -   The relative Right-Ascension of the opposite edge to 'xa', of
-         the new window.
-         ya  -   The relative Declination of either edge of the new window.
-         yb  -   The relative Declination of the opposite edge to 'ya', of the
-         new window.
-         If ``None`` than do not use CLEAN windows. (default: ``None``)
 
     """
     if path is None:
@@ -192,25 +175,15 @@ def selfcal_difmap(fname, outfname, mapsize_clean, solint=30, path=None,
     if outpath is None:
         outpath = os.getcwd()
 
-    if command_file is None:
-        # command_file = "difmap_commands"
-        stamp = datetime.datetime.now()
-        command_file = os.path.join(outpath, "difmap_commands_{}".format(stamp.isoformat()))
+    stamp = datetime.datetime.now()
+    command_file = os.path.join(outpath, "difmap_commands_{}".format(stamp.isoformat()))
 
     difmapout = open(command_file, "w")
-    # Read uv-data with binning in ``solint`` and updating weights
-    difmapout.write("observe " + os.path.join(path, fname) + ", {}, true\n".format(solint))
-    difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
-                    str(mapsize_clean[1]) + "\n")
-    if clean_box is not None:
-        difmapout.write("addwin " + str(clean_box[0]) + ', ' + str(clean_box[1]) + ', '
-                        + str(clean_box[2]) + ', ' + str(clean_box[3]) + "\n")
-    difmapout.write("@" + path_to_script + "\n")
+    difmapout.write("@" + path_to_script + " " + os.path.join(path, fname) + "\n")
     if outpath is None:
         outpath = path
     elif not outpath.endswith("/"):
         outpath = outpath + "/"
-    # difmapout.write("unflag *\n")
     difmapout.write("wobs " + os.path.join(outpath, outfname) + "\n")
     difmapout.write("exit\n")
     difmapout.close()

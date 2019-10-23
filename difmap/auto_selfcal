@@ -1,200 +1,215 @@
-integer clean_niter;
+!YYK: ver2 (with uvav, uvtaper, etc.).
+!-----------------------------------------------------------------------
+! Hands off mapping procedure for reasonably well calibrated and edited
+! data.  Works only in versions 2.1 and later of Difmap.
+!
+! WARNING: The output of this script should be checked carefully!
+! This script is not intended for use as a "black box" that spits
+! out maps ready for publication.  Some parameters will require 
+! careful setting and adjustment before this script will produce
+! reasonable results.  There are several common failure
+! modes for this script.  A few of them are indicated below and 
+! the potential user is advised to peruse Appendix A. Automatic 
+! Mapping.  
+!    Failure Mode          Symptoms                  Key Parameter
+! ------------------------ -----------------------   ----------------
+! 1) Map size too small    high noise in map,bad fit field_size
+! 2) dynam too low         too many clean boxes      dynam
+! 3) dynam too high        real components missed    dynam
+!
+! Input:
+!  uvfile  literal-string    The name of the UV FITS file.
+!  field_size         int    The map dimension for a single field.
+!                            This depends on the source size.
+!  field_cell       float    The cell size to use with 'field_size'.
+!                            This depends on the sampling of the data.
+!  clean_niter        int    The number of CLEAN-iterations per cycle.
+!  clean_gain       float    The CLEAN loop gain.
+!  dynam            float    The minimum dynamic range required for a peak.
+!                            This depends strongly on the SNR of the data.
+!  soltime          float    Solution time for phase selfcal (minutes).
+!                            This depends strongly on the SNR of the data.
+!  thresh           float    The threshold peak clean flux above which
+!                            unconstrained amplitude self-cal is viable.
+!                            This depends strongly on the SNR of the data.
+!  win_mult         float    Multiplier for the size of the clean windows
+!                            in units of the restoring beam.
+! Output:
+!  One cleaned and self-calibrated map.
+!
+! Written by Martin Shepherd and Greg Taylor on 3/15/1994
+! Modified 12/21/1995 to clear model and start over. Takes 
+!          a bit longer but seems to improve image quality.
+!-----------------------------------------------------------------------
+
+
+integer clean_niter; clean_niter = 100
 float clean_gain; clean_gain = 0.03
-float dynam;
-float flux_peak;
+float dynam;  dynam = 6.0
+float soltime1; soltime1 = 120
+float soltime2; soltime2 = 20
+float thresh; thresh = 0.5
+float win_mult; win_mult = 1.8
+float time_av; time_av = 16
+! U-band:
+float field_size; field_size = 512
+float field_cell; field_cell = 0.1
+float taper_size; taper_size = 120.
 
 ! Define the inner loop as a macro.
 
+float old_peak
+float new_peak
 float flux_cutoff
-float dyn_range
-float last_in_rms
-float in_rms
-float target_rms
-float V_rms
-float uvstat_rms_before
-float uvstat_rms_after
-float uvstat_sigma_before
-float uvstat_sigma_after
 
 #+map_residual \
-flux_peak = peak(flux);\
 flux_cutoff = imstat(rms) * dynam;\
-while(abs(flux_peak)>flux_cutoff);\
+repeat;\
+ if (peak(flux) > flux_cutoff) peakwin win_mult;\
  clean clean_niter,clean_gain;\
  flux_cutoff = imstat(rms) * dynam;\
- flux_peak = peak(flux);\
-end while
+ selfcal;\
+ new_peak = peak(flux);\
+until(new_peak<=flux_cutoff)
 
-! The following macro stops
-! when the the in_frame RMS matches the
-! the V RMS OR if there is not improvement
-! in the in_frame RMS
-
-#+deep_map_residual \
-in_rms = imstat(rms);\
-print "Target RMS: ", target_rms, "  In Frame RMS: ", in_rms;\
-while(in_rms > target_rms);\
- clean min(100*(in_rms/target_rms),500),clean_gain;\
- last_in_rms = in_rms;\
- in_rms = imstat(rms);\
- print "Target RMS: ", target_rms, "  In Frame RMS: ", in_rms;\
- if(last_in_rms <= in_rms);\
-  in_rms = target_rms;\
- end if;\
-end while
+#+map_noselfcal \
+flux_cutoff = imstat(rms) * dynam;\
+repeat;\
+ if (peak(flux) > flux_cutoff) peakwin win_mult;\
+ clean clean_niter,clean_gain;\
+ flux_cutoff = imstat(rms) * dynam;\
+ keep;\
+ new_peak = peak(flux);\
+until(new_peak<=flux_cutoff)
 
 
-! select V and get the V_rms for comparison
-select v
-clrmod true,true,true
-! delwin
-uvw 0,-2
-uvtaper 0
-V_rms = imstat(rms)
+observe %1
+select I
 
-! select the stokes
-select i
+! Create the map grid.
 
-! clear previous model
-clrmod true,true,true
+mapsize field_size, field_cell
 
-! delete any windows
-! delwin
+! Average in time
+! uvav time_av
+!uvav time_av, true
 
-! remove any tapering
-uvtaper 0
+! Self-cal to a point source.
 
-print "*********** FIRST TRY SUPER-UNIFORM WEIGHTING **********"
-print "**** -- only if dynamic range is higher than 10 -- *****"
+startmod
 
-dynam = 10
-clean_niter = 10
-uvw 20,-1
-map_residual
-uvw 10,-1
-map_residual
-clean_niter = 50
+! Start mapping the field, using uniform weighting.
 
-print "*********** REGULAR UNIFORM WEIGHTING NEXT ***************"
 uvw 2,-1
-dynam = 3
+map_residual
+print "************** FINISHED UNIFORM WEIGHTING CLEAN **************"
+
+! See if natural weighting reveals any further flux in the current field.
+
+uvw 0,-1
+win_mult = win_mult * 1.6
+clean_niter = clean_niter * 2
+dynam = dynam - 0.5
+map_residual
+print "************** FINISHED NATURAL WEIGHTING CLEAN **************"
+
+! check antenna gain calibration (computes 1 scale factor/antenna)
+gscale true
+dynam = dynam - 0.5
 map_residual
 
-
-print "*********** SELF-CALIBRATE PHASES ***************"
-selfflag false, 3, 4
-uvstat_rms_before = uvstat(rms)
-uvstat_sigma_before = sqrt(uvstat(chisq))
+! Amplitude self-cal with a long solution time.
+selfcal true, true, soltime1
+dynam = dynam - 0.75
+clean clean_niter,clean_gain
 selfcal
-uvstat_rms_after = uvstat(rms)
-uvstat_sigma_after = sqrt(uvstat(chisq))
-
-
-print "*********** UNFLAG, CLEAN AND SELF-CALIBRATE PHASES ***************"
-unflag *
-uvw 2,-1
-dynam = 3
 map_residual
-uvstat_rms_before = uvstat(rms)
-uvstat_sigma_before = sqrt(uvstat(chisq))
+
+selfcal true, true, soltime2
+clean clean_niter,clean_gain
 selfcal
-uvstat_rms_after = uvstat(rms)
-uvstat_sigma_after = sqrt(uvstat(chisq))
-
-
-
-print "*********** FIRST TRY SUPER-UNIFORM WEIGHTING **********"
-print "**** -- only if dynamic range is higher than 10 -- *****"
-
-dynam = 10
-clean_niter = 10
-uvw 20,-1
-map_residual
-uvw 10,-1
-map_residual
-clean_niter = 50
-
-print "*********** REGULAR UNIFORM WEIGHTING NEXT ***************"
-uvw 2,-1
-dynam = 3
 map_residual
 
-print "*********** SELF-CALIBRATE AMPLITUDES ***************"
-uvstat_rms_before = uvstat(rms)
-uvstat_sigma_before = sqrt(uvstat(chisq))
-selfcal true, false, 1e6
-uvstat_rms_after = uvstat(rms)
-uvstat_sigma_after = sqrt(uvstat(chisq))
-
-clrmod true,true,true
-
-
-print "*********** FIRST TRY SUPER-UNIFORM WEIGHTING **********"
-print "**** -- only if dynamic range is higher than 10 -- *****"
-
-dynam = 10
-clean_niter = 10
-uvw 20,-1
-map_residual
-uvw 10,-1
-map_residual
-clean_niter = 50
-
-print "*********** REGULAR UNIFORM WEIGHTING NEXT ***************"
-uvw 2,-1
-dynam = 3
-map_residual
-
-print "*********** SELF-CALIBRATE PHASES ***************"
-uvstat_rms_before = uvstat(rms)
-uvstat_sigma_before = sqrt(uvstat(chisq))
+uvtaper 0.3,taper_size
+win_mult = win_mult * 1.2
+selfcal true, true, soltime2
+clean clean_niter,clean_gain
 selfcal
-uvstat_rms_after = uvstat(rms)
-uvstat_sigma_after = sqrt(uvstat(chisq))
-
-print "*********** NATURAL WEIGHTING ***************"
-uvw 2,0
-dynam = 3
 map_residual
+uvtaper 0,0
+win_mult = win_mult / 1.2
 
-print "*********** SELF-CALIBRATE AMPLITUDES ***************"
-uvstat_rms_before = uvstat(rms)
-uvstat_sigma_before = sqrt(uvstat(chisq))
-selfcal true, false, 0.5
-uvstat_rms_after = uvstat(rms)
-uvstat_sigma_after = sqrt(uvstat(chisq))
+print "************** FINISHED AMPLITUDE SELF-CAL **************"
 
-clrmod true,true,true
+! Restore the map and if the peak flux in the clean map is over a certain
+! threshold then run an unconstrained selfcal on amplitude as well as phase.
 
-
-print "*********** FIRST TRY SUPER-UNIFORM WEIGHTING **********"
-print "**** -- only if dynamic range is higher than 10 -- *****"
-
-dynam = 10
-clean_niter = 10
-uvw 20,-1
-map_residual
-uvw 10,-1
-map_residual
-clean_niter = 50
-
-print "*********** REGULAR UNIFORM WEIGHTING NEXT ***************"
-uvw 2,-1
-dynam = 6
-map_residual
-print "********** DEEP CLEANING AT NATURAL WEIGHTING **************"
-uvw 0,-2
-! now let clean go deep
-target_rms = imstat(noise)
-if(target_rms < imstat(rms))
-  deep_map_residual
-else
-  ! clean 1 component just to have something to restore
-  clean 1, clean_gain
+restore
+if(peak(flux) > thresh)
+  selfcal true, true
+  clean clean_niter,clean_gain
+  selfcal
+  map_residual
+  selfcal true, true
 end if
 
-in_rms = imstat(rms)
-print "********** FINAL CLEAN IS FINISHED **************"
-print "Target RMS was: ", target_rms, " Reached RMS: ", in_rms
-print "For comparison uncleaned V RMS is: ", V_rms
-print "*************************************************"
+print "************** CLEARING MODEL AND STARTING OVER **********"
+! Mozhet byt' stoit delat' clean snachala s uvw 2,-1, potom s 0,-1
+! Dan predlagaet.
+! Esli uvw 2,-1 dast chto-to plohoe, ono potom usredintsa iz-za
+! svertki s beam s vzveshivaniem 0,-1
+clrmod true
+uvw 2,-1
+clean clean_niter,clean_gain
+uvw 0,-1
+map_noselfcal
+
+uvtaper 0.3,taper_size
+!clean_niter = clean_niter * 2
+clean clean_niter,clean_gain
+map_noselfcal
+uvtaper 0,0
+
+! 4 predyduchikh stroki koda menyayu na 2 sleduyushikh
+!uvw 0,2
+!clean clean_niter,clean_gain
+
+! one last clean/selfcal loop for luck
+clean 
+selfcal
+
+! save %1
+wmodel %1_map.mod
+wobs %1_uvs.fits
+wwins %1_map.win
+
+! now clean the entire map
+x = (field_size-8) * field_cell / 4
+addwin -x,x,-x,x
+clean (field_size*4),0.01
+keep
+
+! show the map (uncomment and put in a bottom contour level
+! in cmul in units of Jy/beam if you want this displayed)
+!device /xw
+!cmul=0.001
+!loglevs (imstat(rms)*3),10000,2
+!loglevs 0.13
+!mapl cln
+
+
+
+
+
+wmap %1_map.fits
+float peak_flux; peak_flux = peak(flux,max)
+print "The peak flux is",peak_flux
+invert
+float image_rms; image_rms = imstat(rms)
+print "The final image rms is",image_rms
+device %1_map.eps/VPS
+loglevs 100*3*image_rms/peak_flux
+print "clev=",int(3*image_rms*10000)/10000
+print "peak=",int(1000*peak_flux)/1000
+mapcolor none
+mapplot cln

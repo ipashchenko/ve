@@ -38,13 +38,22 @@ def gp_pred(amp, scale, v, t):
     return np.dot(L, v.reshape(-1, 1))[:, 0]
 
 
+def downscale_uvdata_by_freq(uvdata):
+    if abs(uvdata.hdu.data[0][0]) > 1:
+        downscale_by_freq = True
+    else:
+        downscale_by_freq = False
+    return downscale_by_freq
+
+
 # FIXME: Handling FITS files with only one scan (used for CV)
 class UVData(object):
 
-    def __init__(self, fname, mode='readonly'):
+    def __init__(self, fname, mode='readonly', verify_option="silentfix"):
+        self.verify_option = verify_option
         self.fname = fname
         self.hdulist = pf.open(fname, mode=mode, save_backup=True)
-        self.hdulist.verify('silentfix')
+        self.hdulist.verify(self.verify_option)
         self.hdu = self.hdulist[0]
         self._stokes_dict = {'RR': 0, 'LL': 1, 'RL': 2, 'LR': 3}
         self.learn_data_structure(self.hdu)
@@ -245,7 +254,7 @@ class UVData(object):
         if data is None:
             if downscale_by_freq:
                 self._downscale_uvw_by_frequency()
-            self.hdulist.writeto(fname, output_verify='silentfix')
+            self.hdulist.writeto(fname, output_verify=self.verify_option)
         else:
             # datas = np.array(sorted(data, key=lambda x: x['DATE']+x['_DATE']),
             #                 dtype=data.dtype)
@@ -268,7 +277,7 @@ class UVData(object):
             # FIXME: Sometimes i need this to be commented
             if downscale_by_freq:
                 self._downscale_uvw_by_frequency()
-            hdulist.writeto(fname, output_verify='silentfix')
+            hdulist.writeto(fname, output_verify=self.verify_option)
 
     def save_fraction(self, fname, frac, random_state=0):
         """
@@ -2255,7 +2264,7 @@ if __name__ == "__main__":
     model.add_components(cg1)
     noise = uvdata.noise()
     for baseline in noise:
-        noise[baseline] *= 5
+        noise[baseline] *= 3
     uvdata.substitute([model])
     orig_uvdata.substitute([model])
     gains = uvdata.antennas_gains(amp_gpamp=np.exp(-3), amp_gpphase=np.exp(-2), scale_gpamp=np.exp(5), scale_gpphase=np.exp(5))
@@ -2268,4 +2277,4 @@ if __name__ == "__main__":
     matplotlib.use("Qt5Agg")
     fig = orig_uvdata.uvplot(alpha=0.5)
     fig = uvdata.uvplot(fig=fig, color='r', alpha=0.5)
-    uvdata.save("/home/ilya/data/0415+379.u.2019_07_19_unself_3x.uvf")
+    uvdata.save("/home/ilya/data/unself_3x.uvf")

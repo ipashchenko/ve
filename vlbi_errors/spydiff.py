@@ -1,10 +1,111 @@
 import os
+import sys
 import datetime
 import numpy as np
 import copy
 from utils import degree_to_rad
 from components import DeltaComponent, CGComponent, EGComponent
 from astropy.stats import mad_std
+from astropy.wcs import WCS
+from astropy.io.fits import getheader
+import astropy.units as u
+from scipy.ndimage.measurements import label
+from scipy.ndimage.morphology import generate_binary_structure
+from scipy.stats import normaltest, anderson
+from skimage.measure import regionprops
+from from_fits import create_clean_image_from_fits_file, create_image_from_fits_file
+sys.path.insert(0, '/home/ilya/github/dterms')
+from my_utils import find_image_std, find_bbox
+
+
+def is_prop_normally_distributed(prop, array):
+    res = normaltest(array[prop.slice].ravel())
+    if res.pvalue < 0.05:
+        return False
+    return True
+
+
+def is_prop_inside_area(prop, array_shape, blc_target, trc_target):
+
+    bbox_target = [blc_target[1], blc_target[0], trc_target[1], trc_target[0]]
+    # print("bbox_target {}".format(bbox_target))
+    slice_target = (slice(bbox_target[0], bbox_target[2], None), slice(bbox_target[1], bbox_target[3], None))
+    # print("slice target {}".format(slice_target))
+
+    sum = np.zeros(array_shape)
+    sum[slice_target] += 1
+    sum[prop.slice] += 1
+
+    twos = np.count_nonzero(sum == 2)
+    # print("Number of intersections = ", twos)
+    # print("Prop.area = ", prop.area)
+    if twos > 0.25*prop.area:
+        return True
+    return False
+
+
+def find_patches(array, level, min_area_pix):
+    """
+    Find bounding box for part of image containing uncleaned flux.
+
+    :param array:
+        Numpy 2D array with image.
+    :param level:
+        Level at which threshold image in image units.
+    :param min_area_pix:
+        Minimum area for region to include.
+    """
+    signal = array > level
+    s = generate_binary_structure(2, 2)
+    labeled_array, num_features = label(signal, structure=s)
+    props = regionprops(labeled_array, intensity_image=array)
+
+    signal_props = list()
+    # TODO: Simulate what threshold value for solidity is/
+    # TODO: Using 10 beams as min area pix
+    # TODO: Normally distribution check does not play much role here
+    for prop in props:
+        if prop.area > min_area_pix and prop.solidity < 0.75 and not is_prop_normally_distributed(prop, array):
+            signal_props.append(prop)
+
+    return signal_props
+
+
+def check_dmap(darray, array, npixels_beam):
+    std = find_image_std(array, beam_npixels=npixels_beam)
+    patches = find_patches(darray, level=1*std, min_area_pix=10*npixels_beam)
+    blc, trc = find_bbox(array, level=4*std, min_maxintensity_mjyperbeam=4*std,
+                         min_area_pix=2*npixels_beam, delta=0)
+    uncleaned = list()
+    for patch in patches:
+        if is_prop_inside_area(patch, array.shape, blc, trc):
+            uncleaned.append(patch)
+
+    uncleaned_flux = list()
+    for patch in uncleaned:
+        uncleaned_flux.append(np.sum(darray[patch.slice].ravel())/npixels_beam)
+    uncleaned_flux = np.sum(uncleaned_flux)
+    print("Estimated uncleaned flux = {} Jy/beam".format(uncleaned_flux))
+    return uncleaned_flux, uncleaned
+
+
+def convert_bbox_to_radec_ranges(wcs, blc, trc):
+    """
+    Given BLC, TRC in coordinates of numpy array return RA, DEC ranges.
+    :param wcs:
+        Instance of ``astropy.wcs.wcs.WCS``.
+    :return:
+        RA_min, RA_max, DEC_min, DEC_max
+    """
+    blc_deg = wcs.all_pix2world(blc[0], blc[1], 1)
+    trc_deg = wcs.all_pix2world(trc[0], trc[1], 1)
+
+    ra_max = blc_deg[0]
+    ra_min = trc_deg[0]
+    dec_min = blc_deg[1]
+    dec_max = trc_deg[1]
+
+    return ra_min, ra_max, dec_min, dec_max
 
 
 def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
@@ -148,6 +249,178 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
 
     # Remove command file
     os.unlink(command_file)
+
+
+def deep_clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
+                      path_to_script=None, mapsize_restore=None, beam_restore=None,
+                      outpath=None, shift=None, show_difmap_output=False,
+                      command_file=None, clean_box=None, prefix="tmp"):
+    """
+    Map self-calibrated uv-data in difmap.
+    :param fname:
+        Filename of uv-data to clean.
+    :param outfname:
+        Filename with CCs.
+    :param stokes:
+        Stokes parameter 'i', 'q', 'u' or 'v'.
+    :param mapsize_clean:
+        Parameters of map for cleaning (map size, pixel size [mas]).
+    :param path: (optional)
+        Path to uv-data to clean. If ``None`` then use current directory.
+        (default: ``None``)
+    :param path_to_script: (optional)
+        Path to ``clean`` difmap script. If ``None`` then use current directory.
+        (default: ``None``)
+    :param mapsize_restore: (optional)
+        Parameters of map for restoring CC (map size, pixel size). If
+        ``None`` then use naitive. (default: ``None``)
+    :param beam_restore: (optional)
+        Beam parameter for restore map (bmaj, bmin, bpa). If ``None`` then use
+        the same beam as in cleaning. (default: ``None``)
+    :param outpath: (optional)
+        Path to file with CCs. If ``None`` then use ``path``.
+        (default: ``None``)
+    :param shift: (optional)
+        Iterable of 2 values - shifts in both directions - East & North [mas].
+        If ``None`` then don't shift. (default: ``None``)
+    :param show_difmap_output: (optional)
+        Show difmap output? (default: ``False``)
+    :param command_file: (optional)
+        Script file name to store `difmap` commands. If ``None`` then use
+        ``difmap_commands``. (default: ``None``)
+    :param clean_box: (optional)
+         xa  -   The relative Right-Ascension of either edge of the new window.
+         xb  -   The relative Right-Ascension of the opposite edge to 'xa', of
+         the new window.
+         ya  -   The relative Declination of either edge of the new window.
+         yb  -   The relative Declination of the opposite edge to 'ya', of the
+         new window.
+         If ``None`` than do not use CLEAN windows. (default: ``None``)
+
+
+    """
+    if path is None:
+        path = os.getcwd()
+    if outpath is None:
+        outpath = os.getcwd()
+
+    if not mapsize_restore:
+        mapsize_restore = mapsize_clean
+
+    if command_file is None:
+        # command_file = "difmap_commands"
+        stamp = datetime.datetime.now()
+        command_file = os.path.join(outpath, "difmap_commands_{}".format(stamp.isoformat()))
+
+    difmapout = open(command_file, "w")
+    difmapout.write("observe " + os.path.join(path, fname) + "\n")
+    # if shift is not None:
+    #     difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
+    difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
+                    str(mapsize_clean[1]) + "\n")
+    if clean_box is not None:
+        difmapout.write("addwin " + str(clean_box[0]) + ', ' +
+                        str(clean_box[1]) + ', ' + str(clean_box[2]) + ', ' +
+                        str(clean_box[3]) + "\n")
+    difmapout.write("@" + path_to_script + " " + stokes + "\n")
+    if beam_restore:
+        difmapout.write("restore " + str(beam_restore[0]) + ', ' +
+                        str(beam_restore[1]) + ', ' + str(beam_restore[2]) +
+                        "\n")
+    # difmapout.write("mapsize " + str(mapsize_restore[0] * 2) + ', ' +
+    #                 str(mapsize_restore[1]) + "\n")
+    # if outpath is None:
+    #     outpath = path
+    # elif not outpath.endswith("/"):
+    #     outpath = outpath + "/"
+    if shift is not None:
+        difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
+    difmapout.write("wmap " + os.path.join(outpath, outfname) + "\n")
+    difmapout.write("wdmap " + os.path.join(outpath, "dmap_" + outfname) + "\n")
+
+    if os.path.exists("{}.fits".format(prefix)):
+        for ext in ("fits", "mod", "par", "uvf"):
+            os.unlink("{}.{}".format(prefix, ext))
+
+    difmapout.write("save " + prefix + "\n")
+    difmapout.write("exit\n")
+    difmapout.close()
+    # TODO: Use subprocess for silent cleaning?
+    shell_command = "difmap < " + command_file + " 2>&1"
+    if not show_difmap_output:
+        shell_command += " >/dev/null"
+    os.system(shell_command)
+
+
+    header = getheader(os.path.join(outpath, outfname))
+    wcs = WCS(header)
+    # Ignore FREQ, STOKES - only RA, DEC matters here
+    wcs = wcs.celestial
+    # Make offset coordinates
+    wcs.wcs.crval = 0., 0.
+    wcs.wcs.ctype = 'XOFFSET', 'YOFFSET'
+    wcs.wcs.cunit = 'mas', 'mas'
+    wcs.wcs.cdelt = (wcs.wcs.cdelt * u.deg).to(u.mas)
+    print(wcs)
+
+    ccimage = create_clean_image_from_fits_file(os.path.join(outpath, outfname))
+    dimage = create_image_from_fits_file(os.path.join(outpath, "dmap_" + outfname))
+    beam = ccimage.beam
+    npixels_beam = np.pi * beam[0] * beam[1] / mapsize_clean[1] ** 2
+    print("Checking uncleaned patches...")
+    uncleaned_flux, uncleaned_patches = check_dmap(dimage.image, ccimage.image, npixels_beam)
+
+    # uncleaned_patches = list()
+
+    if uncleaned_patches:
+        # Remove old command file
+        os.unlink(command_file)
+
+        # TODO: Create CLEAN boxes from patches
+        boxes = list()
+        for patch in uncleaned_patches:
+            bbox = patch.bbox
+            blc = (int(bbox[1]), int(bbox[0]))
+            trc = (int(bbox[3]), int(bbox[2]))
+            print("patch wiht blc,trc ", blc, trc)
+            ra_min, ra_max, dec_min, dec_max = convert_bbox_to_radec_ranges(wcs, blc, trc)
+            boxes.append((ra_min, ra_max, dec_min, dec_max))
+
+        print(boxes)
+
+        difmapout = open(command_file, "w")
+        print("Loading saved state...")
+        # difmapout.write("get " + prefix + "\n")
+        difmapout.write("@{}.par\n".format(prefix))
+        difmapout.write("uvw 0,-2\n")
+
+        for box in boxes:
+            difmapout.write("addwin {},{},{},{}\n".format(*box))
+
+        # difmapout.write("select i\n")
+        # difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
+        #                 str(mapsize_clean[1]) + "\n")
+        print("NW CLEAN with 500, 0.03")
+        difmapout.write("clean 10000,0.03\n")
+        if beam_restore:
+            difmapout.write("restore " + str(beam_restore[0]) + ', ' +
+                            str(beam_restore[1]) + ', ' + str(beam_restore[2]) +
+                            "\n")
+        difmapout.write("wmap " + os.path.join(outpath, outfname) + "\n")
+        difmapout.write("wdmap " + os.path.join(outpath, "dmap_" + outfname) + "\n")
+        difmapout.write("exit\n")
+        difmapout.close()
+
+        # TODO: Use subprocess for silent cleaning?
+        shell_command = "difmap < " + command_file + " 2>&1"
+        os.system(shell_command)
+
+    # Remove command file
+    # os.unlink(command_file)
+    # Remove saved state if any
+    if os.path.exists(os.path.join(outpath, "{}.fits".format(prefix))):
+        for ext in ("fits", "mod", "par", "uvf"):
+            os.unlink(os.path.join(outpath, "{}.{}".format(prefix, ext)))
 
 
 def selfcal_difmap(fname, outfname, path=None, path_to_script=None, outpath=None, show_difmap_output=False):

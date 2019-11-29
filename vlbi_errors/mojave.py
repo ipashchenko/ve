@@ -69,6 +69,13 @@ def get_epochs_for_source(source, use_db='u'):
     return sorted(set(epochs))
 
 
+def convert_mojave_epoch(epoch):
+    year = epoch.split('-')[0]
+    month = epoch.split('-')[1]
+    day = epoch.split('-')[2]
+    return "{}_{}_{}".format(year, month, day)
+
+
 def convert_mojave_epoch_to_float(epoch):
     year = epoch.split('-')[0]
     month = epoch.split('-')[1]

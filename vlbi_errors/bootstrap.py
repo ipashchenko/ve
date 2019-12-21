@@ -324,6 +324,7 @@ def create_random_D_dict(uvdata, sigma_D):
     return d_dict
 
 
+# TODO: Workaround if no antenna/pol/IF informtation is available from dict
 def create_const_amp_D_dict(uvdata, amp_D):
     """
     Create dictionary with random D-terms for each antenna/IF/polarization.
@@ -331,10 +332,12 @@ def create_const_amp_D_dict(uvdata, amp_D):
     :param uvdata:
         Instance of ``UVData`` to generate D-terms.
     :param amp_D:
-        D-terms amplitude.
+        D-terms amplitude. Float or mappable with keys [antenna][pol][IF] and
+        values - residual D-term amplitude.
     :return:
         Dictionary with keys [antenna name][integer of IF]["R"/"L"]
     """
+    import collections
     d_dict = dict()
     for baseline in uvdata.baselines:
         ant1, ant2 = baselines_2_ants([baseline])
@@ -348,8 +351,14 @@ def create_const_amp_D_dict(uvdata, amp_D):
             for pol in ("R", "L"):
                 # Generating random complex number near (0, 0)
                 phases = np.random.uniform(-np.pi, np.pi, size=2)
-                d_dict[antname1][band][pol] = amp_D*(np.cos(phases[0])+1j*np.sin(phases[0]))
-                d_dict[antname2][band][pol] = amp_D*(np.cos(phases[1])+1j*np.sin(phases[1]))
+                if isinstance(amp_D, collections.Mapping):
+                    amp1 = amp_D[antname1][pol][band]
+                    amp2 = amp_D[antname2][pol][band]
+                else:
+                    amp1 = amp_D
+                    amp2 = amp_D
+                d_dict[antname1][band][pol] = amp1*(np.cos(phases[0])+1j*np.sin(phases[0]))
+                d_dict[antname2][band][pol] = amp2*(np.cos(phases[1])+1j*np.sin(phases[1]))
     return d_dict
 
 

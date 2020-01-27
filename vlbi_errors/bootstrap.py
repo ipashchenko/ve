@@ -302,63 +302,61 @@ def create_random_D_dict(uvdata, sigma_D):
     :param uvdata:
         Instance of ``UVData`` to generate D-terms.
     :param sigma_D:
-        D-terms residual noise.
+        D-terms residual noise or mapping from antenna names to residual D-term std.
     :return:
         Dictionary with keys [antenna name][integer of IF]["R"/"L"]
     """
+    import collections
     d_dict = dict()
-    for baseline in uvdata.baselines:
-        ant1, ant2 = baselines_2_ants([baseline])
-        antname1 = uvdata.antenna_mapping[ant1]
-        antname2 = uvdata.antenna_mapping[ant2]
-        d_dict[antname1] = dict()
-        d_dict[antname2] = dict()
+    for ant in list(uvdata.antenna_mapping.values()):
+        d_dict[ant] = dict()
         for band in range(uvdata.nif):
-            d_dict[antname1][band] = dict()
-            d_dict[antname2][band] = dict()
+            d_dict[ant][band] = dict()
             for pol in ("R", "L"):
                 # Generating two random complex numbers near (0, 0)
-                rands = np.random.normal(loc=0, scale=sigma_D, size=4)
-                d_dict[antname1][band][pol] = rands[0]+1j*rands[1]
-                d_dict[antname2][band][pol] = rands[2]+1j*rands[3]
+                if isinstance(sigma_D, collections.Mapping):
+                    rands = np.random.normal(loc=0, scale=sigma_D[ant], size=2)
+                else:
+                    rands = np.random.normal(loc=0, scale=sigma_D, size=2)
+                d_dict[ant][band][pol] = rands[0]+1j*rands[1]
     return d_dict
 
 
 # TODO: Workaround if no antenna/pol/IF informtation is available from dict
-def create_const_amp_D_dict(uvdata, amp_D):
+def create_const_amp_D_dict(uvdata, amp_D, per_antenna=True):
     """
     Create dictionary with random D-terms for each antenna/IF/polarization.
 
     :param uvdata:
         Instance of ``UVData`` to generate D-terms.
     :param amp_D:
-        D-terms amplitude. Float or mappable with keys [antenna][pol][IF] and
-        values - residual D-term amplitude.
+        D-terms amplitude. Float or mappable with keys [antenna] or
+        [antenna][pol][IF] (depending on ``per_antenna``) and values - residual
+        D-term amplitude.
+    :param per_antenna: (optional)
+        Boolean. If ``amp_D`` mapping from antenna to Ds or full (IF/pol)?
+        (default: ``True``)
     :return:
-        Dictionary with keys [antenna name][integer of IF]["R"/"L"]
+        Dictionary with keys [antenna name][integer of IF]["R"/"L"] and values -
+        D-terms.
     """
     import collections
     d_dict = dict()
-    for baseline in uvdata.baselines:
-        ant1, ant2 = baselines_2_ants([baseline])
-        antname1 = uvdata.antenna_mapping[ant1]
-        antname2 = uvdata.antenna_mapping[ant2]
-        d_dict[antname1] = dict()
-        d_dict[antname2] = dict()
+    for ant in list(uvdata.antenna_mapping.values()):
+        d_dict[ant] = dict()
         for band in range(uvdata.nif):
-            d_dict[antname1][band] = dict()
-            d_dict[antname2][band] = dict()
+            d_dict[ant][band] = dict()
             for pol in ("R", "L"):
                 # Generating random complex number near (0, 0)
-                phases = np.random.uniform(-np.pi, np.pi, size=2)
+                phase = np.random.uniform(-np.pi, np.pi, size=1)[0]
                 if isinstance(amp_D, collections.Mapping):
-                    amp1 = amp_D[antname1][pol][band]
-                    amp2 = amp_D[antname2][pol][band]
+                    if per_antenna:
+                        amp = amp_D[ant]
+                    else:
+                        amp = amp_D[ant][pol][band]
                 else:
-                    amp1 = amp_D
-                    amp2 = amp_D
-                d_dict[antname1][band][pol] = amp1*(np.cos(phases[0])+1j*np.sin(phases[0]))
-                d_dict[antname2][band][pol] = amp2*(np.cos(phases[1])+1j*np.sin(phases[1]))
+                    amp = amp_D
+                d_dict[ant][band][pol] = amp*(np.cos(phase)+1j*np.sin(phase))
     return d_dict
 
 

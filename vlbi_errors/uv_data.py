@@ -364,7 +364,7 @@ class UVData(object):
         self.slices_dict = slices_dict
         uvdata_slices_dict = OrderedDict()
         for key, value in slices_dict.items():
-            if value is not 0:
+            if value != 0:
                 uvdata_slices_dict.update({key: value})
         self.uvdata_slices_dict = uvdata_slices_dict
 
@@ -1482,12 +1482,37 @@ class UVData(object):
 
     def scale_amplitude(self, scale):
         """
-        Scale amplitude of uv-data by some scale factor.
+        Scale amplitude of uv-data by some scale factor. Changes ``uvdata`` and
+        synchronizes internal representation with it.
 
         :param scale:
             Float. Factor of scaling.
         """
         self.uvdata *= scale
+        self.sync()
+
+    def scale_hands(self, scale_r=1.0, scale_l=1.0):
+        """
+        Scale correlations of uv-data by some scale factor. Changes ``uvdata``
+        and synchronizes internal representation with it.
+
+        :param scale_r: (optional)
+            Float. Factor of scaling for gains R. (default: ``1.0``)
+        :param scale_l: (optional)
+            Float. Factor of scaling for gains L. (default: ``1.0``)
+        """
+        for stokes, index in self.stokes_dict_inv.items():
+            if stokes == 'RR':
+                self.uvdata.uvdata[..., index] *= scale_r**2
+            elif stokes == 'LL':
+                self.uvdata.uvdata[..., index] *= scale_l**2
+            elif stokes == 'RL':
+                self.uvdata.uvdata[..., index] *= scale_r*scale_l
+            elif stokes == 'LR':
+                self.uvdata.uvdata[..., index] *= scale_l*scale_r
+            else:
+                raise Exception("Implemented only for RR, LL, RL & LR!")
+        self.sync()
 
     # FIXME: Fix logic of arguments. How one can plot one antennas with others,
     # several baselines, all baselines etc.

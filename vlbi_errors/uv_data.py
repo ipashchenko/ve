@@ -1503,13 +1503,13 @@ class UVData(object):
         """
         for stokes, index in self.stokes_dict_inv.items():
             if stokes == 'RR':
-                self.uvdata.uvdata[..., index] *= scale_r**2
+                self.uvdata[..., index] *= scale_r**2
             elif stokes == 'LL':
-                self.uvdata.uvdata[..., index] *= scale_l**2
+                self.uvdata[..., index] *= scale_l**2
             elif stokes == 'RL':
-                self.uvdata.uvdata[..., index] *= scale_r*scale_l
+                self.uvdata[..., index] *= scale_r*scale_l
             elif stokes == 'LR':
-                self.uvdata.uvdata[..., index] *= scale_l*scale_r
+                self.uvdata[..., index] *= scale_l*scale_r
             else:
                 raise Exception("Implemented only for RR, LL, RL & LR!")
         self.sync()

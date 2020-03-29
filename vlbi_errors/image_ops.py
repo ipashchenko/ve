@@ -283,8 +283,8 @@ def pang_map(q_array, u_array, mask=None):
     assert q_array.shape == u_array.shape
 
     if mask is not None:
-        q_array = np.ma.array(q_array, mask=mask, fill_value=np.nan)
-        u_array = np.ma.array(u_array, mask=mask, fill_value=np.nan)
+        q_array = np.ma.array(q_array, mask=mask)
+        u_array = np.ma.array(u_array, mask=mask)
 
     return 0.5 * np.arctan2(u_array, q_array)
 
@@ -314,8 +314,8 @@ def cpol_map(q_array, u_array, mask=None):
     assert q_array.shape == u_array.shape
 
     if mask is not None:
-        q_array = np.ma.array(q_array, mask=mask, fill_value=np.nan)
-        u_array = np.ma.array(u_array, mask=mask, fill_value=np.nan)
+        q_array = np.ma.array(q_array, mask=mask)
+        u_array = np.ma.array(u_array, mask=mask)
 
     return q_array + 1j * u_array
 
@@ -366,8 +366,8 @@ def fpol_map(q_array, u_array, i_array, mask=None):
 
     """
     if mask is not None:
-        q_array = np.ma.array(q_array, mask=mask, fill_value=np.nan)
-        u_array = np.ma.array(u_array, mask=mask, fill_value=np.nan)
+        q_array = np.ma.array(q_array, mask=mask)
+        u_array = np.ma.array(u_array, mask=mask)
     return np.hypot(q_array, u_array)/i_array
 
 

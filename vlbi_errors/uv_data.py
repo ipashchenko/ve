@@ -1514,10 +1514,16 @@ class UVData(object):
                 raise Exception("Implemented only for RR, LL, RL & LR!")
         self.sync()
 
+    def scale_cross_hands(self, scale):
+        assert "RL" in self.stokes
+        assert "LR" in self.stokes
+        self.uvdata[..., 2] *= scale
+        self.uvdata[..., 3] *= scale
+        self.sync()
+
     # FIXME: Fix logic of arguments. How one can plot one antennas with others,
     # several baselines, all baselines etc.
-    def uv_coverage(self, antennas=None, baselines=None, sym='.k', fig=None,
-                    model_uvdata=None):
+    def uv_coverage(self, antennas=None, baselines=None, sym='.k', fig=None):
         """
         Make plots of uv-coverage for selected baselines/antennas.
 
@@ -1569,9 +1575,9 @@ class UVData(object):
         indxs = self._get_baselines_indexes(baselines=baselines_to_display)
         observed = self._choose_uvdata(baselines=baselines_to_display,
                                        stokes='I', freq_average=True)
-        model = model_uvdata._choose_uvdata(baselines=baselines_to_display,
-                                            stokes='I', freq_average=True)
-        diff = np.angle(observed) - np.angle(model)
+        # model = model_uvdata._choose_uvdata(baselines=baselines_to_display,
+        #                                     stokes='I', freq_average=True)
+        # diff = np.angle(observed) - np.angle(model)
 
         uv = self.uv[indxs]
 
@@ -1580,21 +1586,21 @@ class UVData(object):
         else:
             axes = fig.get_axes()[0]
 
-        if model_uvdata is None:
-            axes.plot(uv[:, 0], uv[:, 1], sym, ms=0.5)
-            # FIXME: This is right only for RR/LL!
-            axes.plot(-uv[:, 0], -uv[:, 1], sym, ms=0.5)
-        else:
-            axes.scatter(uv[:, 0], uv[:, 1], c=diff, alpha=1, s=4,
-                              cmap='jet', vmin=-0.75, vmax=0.75)
-            # FIXME: This is right only for RR/LL!
-            im = axes.scatter(-uv[:, 0], -uv[:, 1], c=-diff, alpha=1, s=4,
-                              cmap='jet', vmin=-0.75, vmax=0.75)
-            from mpl_toolkits.axes_grid1 import make_axes_locatable
-            divider = make_axes_locatable(axes)
-            cax = divider.append_axes("right", size="10%", pad=0.00)
-            cb = fig.colorbar(im, cax=cax)
-            cb.set_label(r"$\phi_{\rm obs} - \phi_{\rm model}$, rad")
+        # if model_uvdata is None:
+        axes.plot(uv[:, 0], uv[:, 1], sym, ms=0.5)
+        # FIXME: This is right only for RR/LL!
+        axes.plot(-uv[:, 0], -uv[:, 1], sym, ms=0.5)
+        # else:
+        #     axes.scatter(uv[:, 0], uv[:, 1], c=diff, alpha=1, s=4,
+        #                       cmap='jet', vmin=-0.75, vmax=0.75)
+        #     # FIXME: This is right only for RR/LL!
+        #     im = axes.scatter(-uv[:, 0], -uv[:, 1], c=-diff, alpha=1, s=4,
+        #                       cmap='jet', vmin=-0.75, vmax=0.75)
+        #     from mpl_toolkits.axes_grid1 import make_axes_locatable
+        #     divider = make_axes_locatable(axes)
+        #     cax = divider.append_axes("right", size="10%", pad=0.00)
+        #     cb = fig.colorbar(im, cax=cax)
+        #     cb.set_label(r"$\phi_{\rm obs} - \phi_{\rm model}$, rad")
         # Find max(u & v)
         umax = max(abs(uv[:, 0]))
         vmax = max(abs(uv[:, 1]))

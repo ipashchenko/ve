@@ -12,6 +12,7 @@ import matplotlib
 # matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Circle
+from matplotlib import cm
 
 try:
     import pylab
@@ -151,7 +152,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
          show_points=None, components=None, slice_color='black',
          plot_colorbar=True, label_size=12, ra_range=None, dec_range=None,
-         fig=None, axes=None, contour_linewidth=0.5, vector_color="black"):
+         fig=None, axes=None, contour_linewidth=0.5, vector_color="black",
+         n_discrete_colors=None):
     """
     Plot image(s).
 
@@ -353,6 +355,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 cb = fig.colorbar(co, cax=cax)
                 cb.set_label(colorbar_label)
     if colors is not None:
+        if n_discrete_colors is not None:
+            cmap = cm.get_cmap(cmap, int(n_discrete_colors))
         im = ax.imshow(colors[x_slice, y_slice], interpolation='none',
                        origin='lower', extent=[y[0], y[-1], x[0], x[-1]],
                        cmap=plt.get_cmap(cmap), clim=color_clim)
@@ -394,7 +398,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         if plot_colorbar:
             from mpl_toolkits.axes_grid1 import make_axes_locatable
             divider = make_axes_locatable(ax)
-            cax = divider.append_axes("right", size="10%", pad=0.00)
+            cax = divider.append_axes("right", size="5%", pad=0.00)
             cb = fig.colorbar(im, cax=cax)
             if colorbar_label is not None:
                 cb.set_label(colorbar_label)

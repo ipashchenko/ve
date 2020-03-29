@@ -14,8 +14,8 @@ from scipy.ndimage.morphology import generate_binary_structure
 from scipy.stats import normaltest, anderson
 from skimage.measure import regionprops
 from from_fits import create_clean_image_from_fits_file, create_image_from_fits_file
-+sys.path.insert(0, '/home/ilya/github/stackemall')
-+from stack_utils import find_image_std, find_bbox
+sys.path.insert(0, '/home/ilya/github/stackemall')
+from stack_utils import find_image_std, find_bbox
 
 
 

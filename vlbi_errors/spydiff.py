@@ -14,9 +14,122 @@ from scipy.ndimage.morphology import generate_binary_structure
 from scipy.stats import normaltest, anderson
 from skimage.measure import regionprops
 from from_fits import create_clean_image_from_fits_file, create_image_from_fits_file
-sys.path.insert(0, '/home/ilya/github/stackemall')
-from stack_utils import find_image_std, find_bbox
 
+
+def check_bbox(blc, trc, image_size):
+    """
+    :note:
+        This can make quadratic image rectangular.
+    """
+    # If some bottom corner coordinate become negative
+    blc = list(blc)
+    trc = list(trc)
+    if blc[0] < 0:
+        blc[0] = 0
+    if blc[1] < 0:
+        blc[1] = 0
+    # If some top corner coordinate become large than image size
+    if trc[0] > image_size:
+        delta = abs(trc[0]-image_size)
+        blc[0] -= delta
+        # Check if shift have not made it negative
+        if blc[0] < 0 and trc[0] > image_size:
+            blc[0] = 0
+        trc[0] -= delta
+    if trc[1] > image_size:
+        delta = abs(trc[1]-image_size)
+        blc[1] -= delta
+        # Check if shift have not made it negative
+        if blc[1] < 0 and trc[1] > image_size:
+            blc[1] = 0
+        trc[1] -= delta
+    return tuple(blc), tuple(trc)
+
+
+def find_bbox(array, level, min_maxintensity_mjyperbeam, min_area_pix,
+              delta=0.):
+    """
+    Find bounding box for part of image containing source.
+
+    :param array:
+        Numpy 2D array with image.
+    :param level:
+        Level at which threshold image in image units.
+    :param min_maxintensity_mjyperbeam:
+        Minimum of the maximum intensity in the region to include.
+    :param min_area_pix:
+        Minimum area for region to include.
+    :param delta: (optional)
+        Extra space to add symmetrically [pixels]. (default: ``0``)
+    :return:
+        Tuples of BLC & TRC.
+
+    :note:
+        This is BLC, TRC for numpy array (i.e. transposed source map as it
+        conventionally seen on VLBI maps).
+    """
+    signal = array > level
+    s = generate_binary_structure(2, 2)
+    labeled_array, num_features = label(signal, structure=s)
+    props = regionprops(labeled_array, intensity_image=array)
+
+    signal_props = list()
+    for prop in props:
+        if prop.max_intensity > min_maxintensity_mjyperbeam/1000 and prop.area > min_area_pix:
+            signal_props.append(prop)
+
+    # Sometimes no regions are found. In that case return full image
+    if not signal_props:
+        return (0, 0,), (array.shape[1], array.shape[1],)
+
+    blcs = list()
+    trcs = list()
+
+    for prop in signal_props:
+        bbox = prop.bbox
+        blc = (int(bbox[1]), int(bbox[0]))
+        trc = (int(bbox[3]), int(bbox[2]))
+        blcs.append(blc)
+        trcs.append(trc)
+
+    min_blc_0 = min([blc[0] for blc in blcs])
+    min_blc_1 = min([blc[1] for blc in blcs])
+    max_trc_0 = max([trc[0] for trc in trcs])
+    max_trc_1 = max([trc[1] for trc in trcs])
+    blc_rec = (min_blc_0-delta, min_blc_1-delta,)
+    trc_rec = (max_trc_0+delta, max_trc_1+delta,)
+
+    blc_rec_ = blc_rec
+    trc_rec_ = trc_rec
+    blc_rec_, trc_rec_ = check_bbox(blc_rec_, trc_rec_, array.shape[0])
+
+    # Enlarge 10% each side
+    delta_ra = abs(trc_rec[0]-blc_rec[0])
+    delta_dec = abs(trc_rec[1]-blc_rec[1])
+    blc_rec = (blc_rec[0] - int(0.1*delta_ra), blc_rec[1] - int(0.1*delta_dec))
+    trc_rec = (trc_rec[0] + int(0.1*delta_ra), trc_rec[1] + int(0.1*delta_dec))
+
+    blc_rec, trc_rec = check_bbox(blc_rec, trc_rec, array.shape[0])
+
+    return blc_rec, trc_rec
+
+
+def find_image_std(image_array, beam_npixels):
+    # Robustly estimate image pixels std
+    std = mad_std(image_array)
+
+    # Find preliminary bounding box
+    blc, trc = find_bbox(image_array, level=4*std,
+                         min_maxintensity_mjyperbeam=4*std,
+                         min_area_pix=2*beam_npixels,
+                         delta=0)
+
+    # Now mask out source emission using found bounding box and estimate std
+    # more accurately
+    mask = np.zeros(image_array.shape)
+    mask[blc[1]: trc[1], blc[0]: trc[0]] = 1
+    outside_icn = np.ma.array(image_array, mask=mask)
+    return mad_std(outside_icn)
 
 
 def is_prop_normally_distributed(prop, array):

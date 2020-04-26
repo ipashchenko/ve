@@ -1013,7 +1013,7 @@ class AutoModeler(object):
                                             outname=os.path.join(self.out_dir, "{}_image_{}.png".format(self._mdl_prefix, self.counter)),
                                             ra_range=self.ra_range_plot,
                                             dec_range=self.dec_range_plot)
-        except TypeError:
+        except (TypeError, IndexError):
             with open(os.path.join(self.out_dir, "{}_image_{}_NOPNG_TypeError.txt".format(self._mdl_prefix, self.counter)), "w") as fo:
                 pass
 

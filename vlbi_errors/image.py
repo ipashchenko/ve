@@ -456,7 +456,9 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     if components:
         facecolor = "red"
         for comp in components:
+            # RA
             x_c = -comp.p[1]
+            # DEC
             y_c = -comp.p[2]
             if len(comp) == 6:
                 e_height = comp.p[3]

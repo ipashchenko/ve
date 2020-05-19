@@ -3,6 +3,9 @@ import math
 import numpy as np
 import astropy.io.fits as pf
 from scipy import signal
+from scipy.ndimage.measurements import label
+from scipy.ndimage.morphology import generate_binary_structure
+from skimage.measure import regionprops
 from utils import (create_grid, create_mask, mas_to_rad, v_round,
                    get_fits_image_info_from_hdulist, get_hdu_from_hdulist)
 from model import Model
@@ -94,7 +97,79 @@ def find_shift(image1, image2, max_shift, shift_step, min_shift=0,
     return shift, shift_dict, shift_values_dict
 
 
-def find_bbox(array, level, delta=0.):
+# def find_bbox(array, level, delta=0.):
+#     """
+#     Find bounding box for part of image containing source.
+#
+#     :param array:
+#         Numpy 2D array with image.
+#     :param level:
+#         Level at which threshold image in image units.
+#     :param delta:
+#         Extra space to add symmetrically [pixels].
+#     :return:
+#         Tuples of BLC & TRC.
+#     """
+#     from scipy.ndimage.measurements import label
+#     from scipy.ndimage.morphology import generate_binary_structure
+#     from skimage.measure import regionprops
+#
+#     signal = array > level
+#     s = generate_binary_structure(2, 2)
+#     labeled_array, num_features = label(signal, structure=s)
+#     props = regionprops(labeled_array, intensity_image=array)
+#
+#     max_prop = props[0]
+#     for prop in props[1:]:
+#         if prop.max_intensity > max_prop.max_intensity:
+#             max_prop = prop
+#
+#     bbox = max_prop.bbox
+#     blc = (int(bbox[1]), int(bbox[0]))
+#     trc = (int(bbox[3]), int(bbox[2]))
+#     # delta_blc = delta
+#     # delta_trc = delta
+#     # if blc[0] == 0 or blc[1] == 0:
+#     #     delta_blc = -1
+#     # if trc[0] == array.shape[0] or trc[1] == array.shape[1]:
+#     #     delta_trc = 0
+#     blc = (int(blc[0] - delta), int(blc[1] - delta))
+#     trc = (int(trc[0] + delta), int(trc[1] + delta))
+#     return blc, trc
+
+
+def check_bbox(blc, trc, image_size):
+    """
+    :note:
+        This can make quadratic image rectangular.
+    """
+    # If some bottom corner coordinate become negative
+    blc = list(blc)
+    trc = list(trc)
+    if blc[0] < 0:
+        blc[0] = 0
+    if blc[1] < 0:
+        blc[1] = 0
+    # If some top corner coordinate become large than image size
+    if trc[0] > image_size:
+        delta = abs(trc[0]-image_size)
+        blc[0] -= delta
+        # Check if shift have not made it negative
+        if blc[0] < 0 and trc[0] > image_size:
+            blc[0] = 0
+        trc[0] -= delta
+    if trc[1] > image_size:
+        delta = abs(trc[1]-image_size)
+        blc[1] -= delta
+        # Check if shift have not made it negative
+        if blc[1] < 0 and trc[1] > image_size:
+            blc[1] = 0
+        trc[1] -= delta
+    return tuple(blc), tuple(trc)
+
+
+def find_bbox(array, level, min_maxintensity_mjyperbeam=None, min_area_pix=None,
+              delta=0.):
     """
     Find bounding box for part of image containing source.
 
@@ -102,37 +177,67 @@ def find_bbox(array, level, delta=0.):
         Numpy 2D array with image.
     :param level:
         Level at which threshold image in image units.
-    :param delta:
-        Extra space to add symmetrically [pixels].
+    :param min_maxintensity_mjyperbeam:
+        Minimum of the maximum intensity in the region to include.
+    :param min_area_pix:
+        Minimum area for region to include.
+    :param delta: (optional)
+        Extra space to add symmetrically [pixels]. (default: ``0``)
     :return:
         Tuples of BLC & TRC.
-    """
-    from scipy.ndimage.measurements import label
-    from scipy.ndimage.morphology import generate_binary_structure
-    from skimage.measure import regionprops
 
+    :note:
+        This is BLC, TRC for numpy array (i.e. transposed source map as it
+        conventionally seen on VLBI maps).
+    """
+    if min_maxintensity_mjyperbeam is None:
+        min_maxintensity_mjyperbeam = 3*level
+    if min_area_pix is None:
+        min_area_pix = 100
     signal = array > level
     s = generate_binary_structure(2, 2)
     labeled_array, num_features = label(signal, structure=s)
     props = regionprops(labeled_array, intensity_image=array)
 
-    max_prop = props[0]
-    for prop in props[1:]:
-        if prop.max_intensity > max_prop.max_intensity:
-            max_prop = prop
+    signal_props = list()
+    for prop in props:
+        if prop.max_intensity > min_maxintensity_mjyperbeam/1000 and prop.area > min_area_pix:
+            signal_props.append(prop)
 
-    bbox = max_prop.bbox
-    blc = (int(bbox[1]), int(bbox[0]))
-    trc = (int(bbox[3]), int(bbox[2]))
-    # delta_blc = delta
-    # delta_trc = delta
-    # if blc[0] == 0 or blc[1] == 0:
-    #     delta_blc = -1
-    # if trc[0] == array.shape[0] or trc[1] == array.shape[1]:
-    #     delta_trc = 0
-    blc = (int(blc[0] - delta), int(blc[1] - delta))
-    trc = (int(trc[0] + delta), int(trc[1] + delta))
-    return blc, trc
+    # Sometimes no regions are found. In that case return full image
+    if not signal_props:
+        return (0, 0,), (array.shape[1], array.shape[1],)
+
+    blcs = list()
+    trcs = list()
+
+    for prop in signal_props:
+        bbox = prop.bbox
+        blc = (int(bbox[1]), int(bbox[0]))
+        trc = (int(bbox[3]), int(bbox[2]))
+        blcs.append(blc)
+        trcs.append(trc)
+
+    min_blc_0 = min([blc[0] for blc in blcs])
+    min_blc_1 = min([blc[1] for blc in blcs])
+    max_trc_0 = max([trc[0] for trc in trcs])
+    max_trc_1 = max([trc[1] for trc in trcs])
+    blc_rec = (min_blc_0-delta, min_blc_1-delta,)
+    trc_rec = (max_trc_0+delta, max_trc_1+delta,)
+
+    blc_rec_ = blc_rec
+    trc_rec_ = trc_rec
+    blc_rec_, trc_rec_ = check_bbox(blc_rec_, trc_rec_, array.shape[0])
+
+    # Enlarge 10% each side
+    delta_ra = abs(trc_rec[0]-blc_rec[0])
+    delta_dec = abs(trc_rec[1]-blc_rec[1])
+    blc_rec = (blc_rec[0] - int(0.1*delta_ra), blc_rec[1] - int(0.1*delta_dec))
+    trc_rec = (trc_rec[0] + int(0.1*delta_ra), trc_rec[1] + int(0.1*delta_dec))
+
+    blc_rec, trc_rec = check_bbox(blc_rec, trc_rec, array.shape[0])
+
+    return (int(blc_rec[0]), int(blc_rec[1])), (int(trc_rec[0]), int(trc_rec[1]))
 
 
 # FIXME: When plotting w & wo colors it flips axes! When only contours are
@@ -842,8 +947,14 @@ class Image(BasicImage):
         return x0, y0
 
     def _convert_array_coordinate(self, coord):
-        dec = (self.x/mas_to_rad)[coord[1]]
-        ra = (self.y/mas_to_rad)[coord[0]]
+        try:
+            dec = (self.x/mas_to_rad)[coord[1]]
+        except IndexError:
+            dec = (self.x/mas_to_rad)[coord[1]-1]
+        try:
+            ra = (self.y/mas_to_rad)[coord[0]]
+        except IndexError:
+            ra = (self.y/mas_to_rad)[coord[0]-1]
         return dec, ra
 
     def _convert_array_bbox(self, blc, trc):

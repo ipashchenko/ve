@@ -615,7 +615,7 @@ class ComponentAwayFromSourceModelFilter(ModelFilter):
     specified RA & DEC ranges or by using area of image that is inside
     ``n_rms`` rectangular area. In last case image must be specified.
     """
-    def __init__(self, ccimage=None, cc_image_fits=None, n_rms=1,
+    def __init__(self, ccimage=None, cc_image_fits=None, n_rms=3,
                  hovatta_factor=False, ra_range=None, dec_range=None):
         if ccimage is None:
             if cc_image_fits is not None:
@@ -623,6 +623,8 @@ class ComponentAwayFromSourceModelFilter(ModelFilter):
         if ccimage is not None:
             threshold = n_rms*rms_image(ccimage, hovatta_factor)
             blc, trc = find_bbox(ccimage.image, threshold)
+            print("BLC = ", blc)
+            print("TRC = ", trc)
             dec_range, ra_range = ccimage._convert_array_bbox(blc, trc)
 
         self.ra_range = ra_range
@@ -1332,13 +1334,16 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
         blc, trc = find_bbox(image.image, n_rms_size*rms, 10)
     else:
         blc, trc = None, None
-    fig = iplot(image.image, x=image.x, y=image.y,
-                min_abs_level=n_rms_level*rms,
-                beam=beam, show_beam=True, blc=blc, trc=trc, components=comps,
-                close=True, colorbar_label="Jy/beam", ra_range=ra_range,
-                dec_range=dec_range, show=False)
-    if outname is not None:
-        fig.savefig(outname, bbox_inches='tight', dpi=300)
+    try:
+        fig = iplot(image.image, x=image.x, y=image.y,
+                    min_abs_level=n_rms_level*rms,
+                    beam=beam, show_beam=True, blc=blc, trc=trc, components=comps,
+                    close=True, colorbar_label="Jy/beam", ra_range=ra_range,
+                    dec_range=dec_range, show=False)
+        if outname is not None:
+            fig.savefig(outname, bbox_inches='tight', dpi=300)
+    except:
+        fig = None
     return fig
 
 

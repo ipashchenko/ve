@@ -1093,7 +1093,9 @@ def gaussian_beam(size_x, bmaj, bmin, bpa, size_y=None):
         Numpy array of shape (``size_x``, ``size_y``,).
     """
     size_y = size_y or size_x
-    x, y = np.mgrid[-size_x: size_x, -size_y: size_y]
+    # FIXME: it depends on where is reference pixel. This works for (512, 513)
+    # Or for (256, 257)
+    x, y = np.mgrid[-size_x-1: size_x-1, -size_y+1: size_y+1]
     # Constructing parameters of gaussian from ``bmaj``, ``bmin``, ``bpa``.
     a0 = 1. / (0.5 * bmaj) ** 2.
     c0 = 1. / (0.5 * bmin) ** 2.
@@ -1107,8 +1109,6 @@ def gaussian_beam(size_x, bmaj, bmin, bpa, size_y=None):
                        c0 * math.cos(theta) ** 2.)
 
     g = np.exp(-a * x ** 2. - b * x * y - c * y ** 2.)
-    # FIXME: It is already normalized?
-    # return g/g.sum()
     return g
 
 

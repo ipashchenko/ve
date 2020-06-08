@@ -91,7 +91,7 @@ class CleanBeam(Beam):
         :param bmin:
             Beam minor axis [pxl].
         :param bpa:
-            Beam positional angle [deg].
+            Beam positional angle [rad].
         :param size:
             Size of beam image [pxl].
         """
@@ -100,4 +100,4 @@ class CleanBeam(Beam):
         self.bpa = kwargs.pop("bpa")
         self.size = kwargs.pop("imsize")
         self.image = gaussian_beam(self.size[0], self.bmaj, self.bmin,
-                                   self.bpa + 90., self.size[1])
+                                   np.rad2deg(self.bpa) + 90., self.size[1])

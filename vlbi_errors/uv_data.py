@@ -89,8 +89,9 @@ class UVData(object):
         self._noise_v = None
 
         rec = pf.getdata(self.fname, extname='AIPS AN')
-        self._antenna_mapping = {number: rec['ANNAME'][i] for i, number in
-                                 enumerate(self.antennas)}
+        # self._antenna_mapping = {number: rec['ANNAME'][i] for i, number in
+        #                          enumerate(self.antennas)}
+        self._antenna_mapping = {antenna: rec['ANNAME'][antenna-1] for antenna in self.antennas}
         self._antennas_baselines = None
         self._antennas_times = None
         self._minimal_antennas_time = None
@@ -524,6 +525,14 @@ class UVData(object):
             Dictionary with keys - antenna numbers and values - antenna names.
         """
         return self._antenna_mapping
+
+    @property
+    def inverse_antenna_mapping(self):
+        """
+        :return:
+            Dictionary with keys - antenna names and values - antenna numbers.
+        """
+        return {v: k for k, v in self._antenna_mapping.items()}
 
     @property
     def frequency(self):

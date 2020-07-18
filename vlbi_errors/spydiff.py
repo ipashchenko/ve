@@ -607,7 +607,7 @@ def selfcal_difmap(fname, outfname, path=None, path_to_script=None, outpath=None
     os.unlink(command_file)
 
 
-def import_difmap_model(mdl_fname, mdl_dir=None):
+def import_difmap_model(mdl_fname, mdl_dir=None, remove_last_char=True):
     """
     Function that reads difmap-format model and returns list of ``Components``
     instances.
@@ -617,6 +617,10 @@ def import_difmap_model(mdl_fname, mdl_dir=None):
     :param mdl_dir: (optional)
         Directory with difmap model. If ``None`` then use CWD. (default:
         ``None``)
+    :param remove_last_char: (optional)
+        Remove last character (v ~ variable) from value? It works for difmap
+        modelfit files, but for difmap CC files should be ``False``. (default:
+        ``True``)
     :return:
         List of ``Components`` instances.
     """
@@ -650,9 +654,14 @@ def import_difmap_model(mdl_fname, mdl_dir=None):
         if flux[-1] != 'v':
             list_fixed.append('flux')
 
-        x = -float(radius[:-1]) * np.sin(np.deg2rad(float(theta[:-1])))
-        y = -float(radius[:-1]) * np.cos(np.deg2rad(float(theta[:-1])))
-        flux = float(flux[:-1])
+        if remove_last_char:
+            x = -float(radius[:-1]) * np.sin(np.deg2rad(float(theta[:-1])))
+            y = -float(radius[:-1]) * np.cos(np.deg2rad(float(theta[:-1])))
+            flux = float(flux[:-1])
+        else:
+            x = -float(radius) * np.sin(np.deg2rad(float(theta)))
+            y = -float(radius) * np.cos(np.deg2rad(float(theta)))
+            flux = float(flux)
 
         if int(type_) == 0:
             comp = DeltaComponent(flux, x, y)

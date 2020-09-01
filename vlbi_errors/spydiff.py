@@ -294,7 +294,7 @@ def time_average(uvfits, outfname, time_sec=120, show_difmap_output=True,
 def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  path_to_script=None, mapsize_restore=None, beam_restore=None,
                  outpath=None, shift=None, show_difmap_output=False,
-                 command_file=None, clean_box=None):
+                 command_file=None, clean_box=None, dfm_model=None):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
@@ -336,8 +336,9 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
          yb  -   The relative Declination of the opposite edge to 'ya', of the
          new window.
          If ``None`` than do not use CLEAN windows. (default: ``None``)
-
-
+    :param dfm_model: (optional)
+        File name to save difmap-format model with CCs. If ``None`` then do
+        not writw model. (default: ``None``)
     """
     if path is None:
         path = os.getcwd()
@@ -376,6 +377,8 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     if shift is not None:
         difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
     difmapout.write("wmap " + os.path.join(outpath, outfname) + "\n")
+    if dfm_model is not None:
+        difmapout.write("wmodel " + dfm_model + "\n")
     difmapout.write("exit\n")
     difmapout.close()
     # TODO: Use subprocess for silent cleaning?

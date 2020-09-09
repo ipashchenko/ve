@@ -294,7 +294,8 @@ def time_average(uvfits, outfname, time_sec=120, show_difmap_output=True,
 def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  path_to_script=None, mapsize_restore=None, beam_restore=None,
                  outpath=None, shift=None, show_difmap_output=False,
-                 command_file=None, clean_box=None, dfm_model=None):
+                 command_file=None, clean_box=None, dfm_model=None, omit_residuals=False,
+                 do_smooth=True):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
@@ -364,9 +365,17 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                         str(clean_box[1]) + ', ' + str(clean_box[2]) + ', ' +
                         str(clean_box[3]) + "\n")
     difmapout.write("@" + path_to_script + " " + stokes + "\n")
-    if beam_restore:
-        difmapout.write("restore " + str(beam_restore[0]) + ', ' +
-                        str(beam_restore[1]) + ', ' + str(beam_restore[2]) +
+    if beam_restore is not None:
+        if omit_residuals:
+            omit_residuals = "true"
+        else:
+            omit_residuals = "false"
+        if do_smooth:
+            do_smooth = "true"
+        else:
+            do_smooth = "false"
+        difmapout.write("restore " + str(beam_restore[1]) + ', ' +
+                        str(beam_restore[0]) + ', ' + str(beam_restore[2]) + ", " + omit_residuals + ", " + do_smooth +
                         "\n")
     difmapout.write("mapsize " + str(mapsize_restore[0] * 2) + ', ' +
                     str(mapsize_restore[1]) + "\n")

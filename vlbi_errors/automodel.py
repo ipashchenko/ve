@@ -1127,7 +1127,7 @@ class AutoModeler(object):
     def select_best(self, selectors, filters):
         # Select best model using custom selectors
         files = self.fitted_model_paths
-        files_toremove = self.files[:]
+        files_toremove = files[:]
         if selectors:
             id_best = max(selector.select(files) for selector in selectors)
         else:
@@ -1360,22 +1360,22 @@ if __name__ == '__main__':
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
 
-        path_to_script = '/home/ilya/github/vlbi_errors/difmap/final_clean_nw'
+        path_to_script = '/home/ilya/github/ve/difmap/final_clean_nw'
 
         automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
                                   n_comps_terminate=20,
                                   core_elliptic=False,
-                                  mapsize_clean=(1024, 0.75),
+                                  mapsize_clean=(1024, 0.1),
                                   ra_range_plot=None,
                                   dec_range_plot=None,
                                   show_difmap_output_modelfit=True)
         # Stoppers define when to stop adding components to model
         rchsq_stopping = RChiSquaredStopping(mode="or")
-        stoppers = [# AddedComponentFluxLessRMSStopping(mode="or"),
-                    # AddedComponentFluxLessRMSFluxStopping(mode="or"),
-                    # AddedTooDistantComponentStopping(mode="or"),
+        stoppers = [AddedComponentFluxLessRMSStopping(n_rms=5.0, mode="or"),
+                    AddedComponentFluxLessRMSFluxStopping(mode="or"),
+                    AddedTooDistantComponentStopping(mode="or"),
                     # AddedTooSmallComponentStopping(mode="and"),
-                    # AddedNegativeFluxComponentStopping(mode="or"),
+                    AddedNegativeFluxComponentStopping(mode="or"),
                     # for 0430 exclude it
                     # AddedOverlappingComponentStopping(),
                     # NLastDifferesFromLast(mode="or"),

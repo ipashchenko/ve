@@ -369,8 +369,8 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     difmapout.write("@" + path_to_script + " " + stokes + "\n")
 
     # FIXME: Do I need this?
-    difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
-                    str(mapsize_clean[1]) + "\n")
+    # difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
+    #                 str(mapsize_clean[1]) + "\n")
 
     if shift is not None:
         difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
@@ -396,6 +396,7 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     if dmap is not None:
         difmapout.write("wdmap " + os.path.join(outpath, dmap) + "\n")
     if dfm_model is not None:
+        # FIXME: Difmap doesn't apply shift to model components!
         difmapout.write("wmodel " + os.path.join(outpath, dfm_model) + "\n")
     difmapout.write("exit\n")
     difmapout.close()

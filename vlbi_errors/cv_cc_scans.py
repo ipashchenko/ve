@@ -5,12 +5,11 @@ from astropy import units as u
 from string import Template
 import pickle
 from uv_data import UVData
-# from sklearn.model_selection import KFold
 from model import Model
-from spydiff import (clean_n, clean_difmap, flag_baseline, flag_baseline_scan,
-                     import_difmap_model, modelfit_difmap)
+from spydiff import (clean_difmap, flag_baseline, flag_baseline_scan,
+                     import_difmap_model)
 from from_fits import create_model_from_fits_file
-from utils import to_boolean_array, baselines_2_ants
+from utils import baselines_2_ants
 import calendar
 
 months_dict = {v: k for k, v in enumerate(calendar.month_abbr)}
@@ -118,8 +117,8 @@ class ScansCV(object):
             ta, tb = baselines_2_ants([bl])
             ta = self.uvdata.antenna_mapping[ta]
             tb = self.uvdata.antenna_mapping[tb]
-            n_scans = len(scans_times)
-            rnd_scan_number = np.random.randint(n_scans)
+            # n_scans = len(scans_times)
+            # rnd_scan_number = np.random.randint(n_scans)
             # half_scan_number = int(n_scans/2)
             # if half_scan_number == 0:
             #     half_scan_number = 1
@@ -159,70 +158,40 @@ class ScansCV(object):
                 yield self.train_uvfits, self.test_uvfits
 
 
-    # def __iter__(self):
-    #     for i in range(self.k):
-    #         train_indxs = np.zeros(len(self.uvdata.hdu.data))
-    #         test_indxs = np.zeros(len(self.uvdata.hdu.data))
-    #         for bl, kfolds in self.baseline_folds.items():
-    #             itrain, itest = kfolds[i]
-    #             # itrain = to_boolean_array(itrain)
-    #             train_indxs = np.logical_or(train_indxs, itrain)
-    #             test_indxs = np.logical_or(test_indxs, itest)
-    #         train_data = self.uvdata.hdu.data[train_indxs]
-    #         test_data = self.uvdata.hdu.data[test_indxs]
-    #         print("saving data to {} and {}".format(self.test_fname,
-    #                                                 self.train_fname))
-    #         self.uvdata.save(self.test_fname, test_data, rewrite=True)
-    #         self.uvdata.save(self.train_fname, train_data, rewrite=True)
-    #
-    #         yield self.train_fname, self.test_fname
-
-
 if __name__ == '__main__':
-    data_dir = "/home/ilya/data/cv"
-    original_uvfits = "0212+735.u.2020_11_29_edt.uvf"
+
+    name = "l1_2005_05_26"
+    data_dir = os.path.join("/home/ilya/data/cv", name)
+    if not os.path.exists(data_dir):
+        os.mkdir(data_dir)
+
+    original_uvfits = "/home/ilya/data/cv/0212+735.u.2005_05_26.uvf"
     # Beam mas
     beam = 0.66
+    # beam = None
 
-    template_script = os.path.join(data_dir, "script_clean_rms_template")
+    template_script = "/home/ilya/data/cv/script_clean_rms_template"
     path_to_script = os.path.join(data_dir, "script_clean_rms")
 
-    # path_to_scripts = {# 0.1: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k0.1',
-    #                    # 0.5: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k0.5',
-    #                    0.55: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k0.55',
-    #                    0.6: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k0.6',
-    #                    0.65: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k0.65',
-    #                    0.7: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k0.7',
-    #                    # 0.75: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k0.75',
-    #                    # 0.875: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k0.875',
-    #                    # 1: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k1',
-    #                    # 1.125: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k1.125',
-    #                    # 1.25: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k1.25',
-    #                    # 1.5: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k1.5',
-    #                    # 2: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k2',
-    #                    # 3: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k3',
-    #                    # 5: '/home/ilya/github/stackemall/external_scripts/script_clean_rms_k5'}
-    # }
-    scans_cv = ScansCV(os.path.join(data_dir, original_uvfits), outdir=data_dir)
-    # scans_cv.create_train_test_uvfits(data_dir)
+    scans_cv = ScansCV(original_uvfits, outdir=data_dir)
 
     cv_scores = dict()
 
-    for k in np.linspace(0.5, 1.0, 5):
+    for overclean_coeff in np.linspace(0.5, 1.0, 5):
 
         filein = open(template_script)
         src = Template(filein.read())
-        result = src.substitute({"overclean_coef": k})
+        result = src.substitute({"overclean_coef": overclean_coeff})
         with open(path_to_script, "w") as fo:
             print(result, file=fo)
 
-        cv_scores[k] = dict()
+        cv_scores[overclean_coeff] = dict()
         for i, (train_uvfits_fname, test_uvfits_fname) in enumerate(scans_cv):
             print("BASELINE = ", scans_cv.cur_bl, ", SCAN# = ", scans_cv.cur_scan, " ====================")
 
             # Optionally create entry in dict
-            if scans_cv.cur_bl not in cv_scores[k]:
-                cv_scores[k][scans_cv.cur_bl] = list()
+            if scans_cv.cur_bl not in cv_scores[overclean_coeff]:
+                cv_scores[overclean_coeff][scans_cv.cur_bl] = list()
 
             print(train_uvfits_fname, test_uvfits_fname)
             # CLEAN train data set
@@ -237,8 +206,26 @@ if __name__ == '__main__':
                              os.path.join(data_dir, "trained_cc.fits"),
                              bmaj=beam, score="l1")
             print("CV score = ", cv_score)
-            cv_scores[k][scans_cv.cur_bl].append(cv_score)
-            print("Result for current k = {} is {}".format(k, cv_scores[k]))
+            cv_scores[overclean_coeff][scans_cv.cur_bl].append(cv_score)
+            print("Result for current k = {} is {}".format(overclean_coeff, cv_scores[overclean_coeff]))
 
-    with open("cv_scores_dump_beam_l1_edt.pkl", "wb") as fo:
+    with open(os.path.join(data_dir, "cv_scores_dump_beam_{}.pkl".format(name)), "wb") as fo:
         pickle.dump(cv_scores, fo)
+
+    # Plot
+    cv_values = list()
+    cv_values_dict = dict()
+    for k in cv_scores.keys():
+        cv_values_dict[k] = list()
+    for k in cv_scores.keys():
+        for bl in cv_scores[k].keys():
+            cv_values_dict[k].extend(cv_scores[k][bl])
+    for k in cv_values_dict.keys():
+        cv_values.append(np.mean(cv_values_dict[k]))
+
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(1, 1)
+    axes.scatter(list(cv_values_dict.keys()), cv_values)
+    axes.set_xlabel("Overclean coefficient")
+    axes.set_ylabel("CV score")
+    fig.savefig(os.path.join(data_dir, "CV_{}.png".format(name)), bbox_inches="tight")

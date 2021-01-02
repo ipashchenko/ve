@@ -2,7 +2,8 @@ import os
 import glob
 import numpy as np
 from uv_data import UVData
-from sklearn.cross_validation import KFold
+# from sklearn.cross_validation import KFold
+from sklearn.model_selection import KFold
 from utils import to_boolean_array, mask_boolean_with_boolean
 from spydiff import import_difmap_model, modelfit_difmap, clean_difmap, clean_n
 from model import Model
@@ -57,10 +58,9 @@ class KFoldCV(object):
                   " positive weight".format(bl, np.count_nonzero(bl_indxs)))
 
             try:
-                kfold = KFold(np.count_nonzero(bl_indxs), self.k, shuffle=False,
-                              random_state=self.seed)
+                kfold = KFold(self.k, shuffle=False, random_state=self.seed)
                 baseline_folds[bl] = list()
-                for train, test in kfold:
+                for train, test in kfold.split(np.count_nonzero(bl_indxs)):
                     tr = to_boolean_array(np.nonzero(bl_indxs)[0][train],
                                           len(bl_indxs))
                     te = to_boolean_array(np.nonzero(bl_indxs)[0][test],

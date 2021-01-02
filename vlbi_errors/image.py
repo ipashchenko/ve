@@ -371,6 +371,13 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     # Set BLC & TRC
     blc = blc or (1, 1,)
     trc = trc or image.shape
+
+    # TODO: Some diff from calculon
+    if blc[0] == 0:
+        blc = (blc[0]+1, blc[1])
+    if blc[1] == 0:
+        blc = (blc[0], blc[1]+1)
+
     # Use ``-1`` because user expect AIPS-like behavior of ``blc`` & ``trc``
     x_slice = slice(blc[1] - 1, trc[1], None)
     y_slice = slice(blc[0] - 1, trc[0],  None)

@@ -11,7 +11,7 @@ from spydiff import (export_difmap_model, modelfit_difmap, import_difmap_model,
                      clean_difmap, append_component_to_difmap_model,
                      clean_n, difmap_model_flux,
                      sort_components_by_distance_from_cj,
-                     component_joiner_serial)
+                     component_joiner_serial, time_average)
 from components import CGComponent, EGComponent
 from from_fits import (create_clean_image_from_fits_file,
                        create_model_from_fits_file)
@@ -87,7 +87,8 @@ class RChiSquaredStopping(StoppingIterationsCriterion):
         return len(self.files) > 1
 
     def check_criterion(self):
-        if self.values[-1] - self.values[-2] < self.delta_min:
+        print("DELTA RCHISQ = ", self.values[-2] - self.values[-1])
+        if self.values[-2] - self.values[-1] < self.delta_min:
             return True
         else:
             return False
@@ -257,7 +258,7 @@ class AddedComponentFluxLessRMSFluxStopping(ImageBasedStoppingCriterion):
         Beam area in pixels
         """
         if self._beam_size is None:
-            self._beam_size = np.sqrt(self.ccimage.beam[0] * self.ccimage.beam[1])
+            self._beam_size = np.pi*self.ccimage.beam[0] * self.ccimage.beam[1]/(4*np.log(2))
         return self._beam_size
 
     def check_criterion(self):
@@ -278,7 +279,7 @@ class AddedTooDistantComponentStopping(ImageBasedStoppingCriterion):
     specified RA & DEC ranges or by using area of image that is inside
     ``n_rms`` rectangular area. In last case image must be specified.
     """
-    def __init__(self, n_rms=1.0, hovatta_factor=False, dec_range=None,
+    def __init__(self, n_rms=1.0, hovatta_factor=1.2, dec_range=None,
                  ra_range=None, mode="or"):
         super(AddedTooDistantComponentStopping, self).__init__(mode=mode)
         self.n_rms = n_rms
@@ -1349,32 +1350,53 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
 
 if __name__ == '__main__':
     import glob
-    data_dir = "/home/ilya/data/sashaplavin"
-    # uv_fits_paths = glob.glob(os.path.join(data_dir, "*_S_*"))
-    uv_fits_paths = [os.path.join(data_dir, "J0510+1800_S_2007_05_03_sok_vis.fits")]
-
+    data_dir = "/home/ilya/data/zhenya"
+    uv_fits_paths = glob.glob(os.path.join(data_dir, "*.uvf_difmap*"))
+    bands_pixsize_dict = {"u1": 0.1, "x1": 0.2, "x2": 0.2, "c1": 0.3, "c2": 0.3, "q1": 0.03, "k1": 0.05}
+    band_avetime_dict = {"q1": None, "k1": 30, "u1": 60, "x1": 120, "x2": 120, "c1": 120, "c2": 120}
+    bands_files_dict = {}
     for uv_fits_path in uv_fits_paths:
+        fname = os.path.split(uv_fits_path)[-1]
+        band = fname.split(".")[1]
+        bands_files_dict.update({band: uv_fits_path})
+    # uv_fits_paths = [os.path.join(data_dir, "J0510+1800_S_2007_05_03_sok_vis.fits")]
+    # uv_fits_paths = ["/home/ilya/github/bam/data/0716+714/0716+714.u.2006_12_01.uvf"]
+    base_outdir = "/home/ilya/data/zhenya"
+
+    for band, uv_fits_path in bands_files_dict.items():
+        path, fname = os.path.split(uv_fits_path)
+
+        if band_avetime_dict[band] is not None:
+            to_fit_uvfits = os.path.join(path, "ta{}sec_{}".format(band_avetime_dict[band], fname))
+            if not os.path.exists(to_fit_uvfits):
+                time_average(uv_fits_path, to_fit_uvfits, time_sec=band_avetime_dict[band])
+        else:
+            to_fit_uvfits = uv_fits_path
+
         # Create directory for current source
-        source = os.path.split(uv_fits_path)[-1].split("_")[0]
-        out_dir = "/home/ilya/data/sashaplavin/test_uv/{}".format(source)
+        # source = os.path.split(uv_fits_path)[-1].split("_")[0]
+        # out_dir = "/home/ilya/data/sashaplavin/test_uv/{}".format(source)
+        uvfits_fname = os.path.split(uv_fits_path)[-1]
+        uvfits_basename = ".".join(uvfits_fname.split(".")[:-1])
+        out_dir = "/home/ilya/data/zhenya/with_overlap/{}".format(band)
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
 
         path_to_script = '/home/ilya/github/ve/difmap/final_clean_nw'
 
-        automodeler = AutoModeler(uv_fits_path, out_dir, path_to_script,
+        automodeler = AutoModeler(to_fit_uvfits, out_dir, path_to_script,
                                   n_comps_terminate=20,
                                   core_elliptic=False,
-                                  mapsize_clean=(1024, 0.1),
+                                  mapsize_clean=(1024, bands_pixsize_dict[band]),
                                   ra_range_plot=None,
-                                  dec_range_plot=None,
+                                  dec_range_plot=None, niter_difmap=200,
                                   show_difmap_output_modelfit=True)
         # Stoppers define when to stop adding components to model
-        rchsq_stopping = RChiSquaredStopping(mode="or")
+        rchsq_stopping = RChiSquaredStopping(mode="or", delta_min=0.01)
         stoppers = [AddedComponentFluxLessRMSStopping(n_rms=5.0, mode="or"),
-                    AddedComponentFluxLessRMSFluxStopping(mode="or"),
-                    AddedTooDistantComponentStopping(mode="or"),
-                    # AddedTooSmallComponentStopping(mode="and"),
+                    # AddedComponentFluxLessRMSFluxStopping(mode="or"),
+                    AddedTooDistantComponentStopping(mode="or", n_rms=3.0),
+                    AddedTooSmallComponentStopping(mode="and", ),
                     AddedNegativeFluxComponentStopping(mode="or"),
                     # for 0430 exclude it
                     # AddedOverlappingComponentStopping(),
@@ -1390,14 +1412,15 @@ if __name__ == '__main__':
         # Filters additionally remove complex models with non-physical
         # components (e.g. too small faint component or component
         # located far away from source.)
-        filters = [# SmallSizedComponentsModelFilter(),
-                   # ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
-                   # NegativeFluxComponentModelFilter()]
-                   # ToElongatedCoreModelFilter()]
+        filters = [SmallSizedComponentsModelFilter(),
+                   ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
+                   NegativeFluxComponentModelFilter(),
+                   ToElongatedCoreModelFilter(),
                    # OverlappingComponentsModelFilter()]
 ]
         automodeler.run(stoppers)
         best_model = automodeler.select_best(selectors, filters)
+        os.system("cp {} {}".format(best_model, os.path.join(out_dir, "BEST.mdl")))
         automodeler.plot_results(best_model=best_model,
                                  stoppers_dict={"RChiSQ": rchsq_stopping})
         # automodeler.archive_images()

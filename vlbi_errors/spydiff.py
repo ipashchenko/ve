@@ -3,7 +3,7 @@ import sys
 import datetime
 import numpy as np
 import copy
-from utils import degree_to_rad
+from utils import degree_to_rad, baselines_2_ants
 from components import DeltaComponent, CGComponent, EGComponent
 from astropy.stats import mad_std
 from astropy.wcs import WCS
@@ -14,6 +14,10 @@ from scipy.ndimage.morphology import generate_binary_structure
 from scipy.stats import normaltest, anderson
 from skimage.measure import regionprops
 from from_fits import create_clean_image_from_fits_file, create_image_from_fits_file
+import calendar
+
+months_dict = {v: k for k, v in enumerate(calendar.month_abbr)}
+months_dict_inv = {k: v for k, v in enumerate(calendar.month_abbr)}
 
 
 def check_bbox(blc, trc, image_size):
@@ -288,13 +292,106 @@ def time_average(uvfits, outfname, time_sec=120, show_difmap_output=True,
     os.unlink(command_file)
 
 
+def flag_baseline(uvfits, outfname, ta, tb, show_difmap_output=False):
+    """
+    Flag specified baseline.
+    """
+    stamp = datetime.datetime.now()
+    command_file = "difmap_commands_{}".format(stamp.isoformat())
+    difmapout = open(command_file, "w")
+    difmapout.write("observe " + uvfits + "\n")
+    difmapout.write("select i\n")
+
+    difmapout.write("flag 1:{}-{}, true\n".format(ta, tb))
+
+    difmapout.write("wobs {}\n".format(outfname))
+    difmapout.write("exit\n")
+    difmapout.close()
+    # TODO: Use subprocess for silent cleaning?
+    shell_command = "difmap < " + command_file + " 2>&1"
+    if not show_difmap_output:
+        shell_command += " >/dev/null"
+    os.system(shell_command)
+    # Remove command file
+    os.unlink(command_file)
+
+
+def flag_baseline_scan(uvfits, outfname, ta, tb=None, start_time=None, stop_time=None, except_time_range=False,
+                       show_difmap_output=False):
+    """
+    Flag visibilities on baselines/antenna in specified time range (or all except specified time range).
+
+    :param uvfits:
+        Path to UVFITS file.
+    :param outfname:
+        Path to UVFITS save file.
+    :param ta:
+        First telescope to flag.
+    :param tb: (optional)
+        Second telescope to flag. If ``None``, then flag all with ``ta``. (default: ``None``)
+    :param start_time: (optional)
+        Astropy Time object. Start of the flagging interval. If ``None`` then flag from the beginning.
+        (default: ``None``)
+    :param stop_time: (optional)
+        Astropy Time object. Stop of the flagging interval. If ``None`` then flag till the end.
+        (default: ``None``)
+    :param except_time_range: (optional)
+        Flag outside of the time interval? (default: ``False``)
+    """
+    if start_time is not None:
+        y, month, d, h, m, s = start_time.ymdhms
+        # dd-mmm-yyyy-mm:hh:mm:ss
+        t_start_difmap = "{}-{}-{}:{}:{}:{}".format(str(d).zfill(2), months_dict_inv[month].lower(), y, str(h).zfill(2),
+                                                    str(m).zfill(2), str(int(round(s-1, 0))).zfill(2))
+    else:
+        t_start_difmap = ""
+
+    if stop_time is not None:
+        y, month, d, h, m, s = stop_time.ymdhms
+        # dd-mmm-yyyy-mm:hh:mm:ss
+        t_stop_difmap = "{}-{}-{}:{}:{}:{}".format(str(d).zfill(2), months_dict_inv[month].lower(), y, str(h).zfill(2),
+                                                   str(m).zfill(2), str(int(round(s+1, 0))).zfill(2))
+    else:
+        t_stop_difmap = ""
+
+    stamp = datetime.datetime.now()
+    command_file = "difmap_commands_{}".format(stamp.isoformat())
+    difmapout = open(command_file, "w")
+    difmapout.write("observe " + uvfits + "\n")
+    difmapout.write("select i\n")
+
+    if not except_time_range:
+        if tb is not None:
+            difmapout.write("flag 1:{}-{}, true, {}, {}\n".format(ta, tb, t_start_difmap, t_stop_difmap))
+        else:
+            difmapout.write("flag 1:{}, true, {}, {}\n".format(ta, t_start_difmap, t_stop_difmap))
+    else:
+        if tb is not None:
+            difmapout.write("flag 1:{}-{}, true, {}, {}\n".format(ta, tb, "", t_start_difmap))
+            difmapout.write("flag 1:{}-{}, true, {}, {}\n".format(ta, tb, t_stop_difmap, ""))
+        else:
+            difmapout.write("flag 1:{}, true, {}, {}\n".format(ta, "", t_start_difmap))
+            difmapout.write("flag 1:{}, true, {}, {}\n".format(ta, t_stop_difmap, ""))
+
+    difmapout.write("wobs {}\n".format(outfname))
+    difmapout.write("exit\n")
+    difmapout.close()
+    # TODO: Use subprocess for silent cleaning?
+    shell_command = "difmap < " + command_file + " 2>&1"
+    if not show_difmap_output:
+        shell_command += " >/dev/null"
+    os.system(shell_command)
+    # Remove command file
+    os.unlink(command_file)
+
+
 # TODO: add ``shift`` argument, that shifts image before cleaning. It must be
 # more accurate to do this in difmap. Or add such method in ``UVData`` that
 # multiplies uv-data on exp(-1j * (u*x_shift + v*y_shift)).
 def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  path_to_script=None, mapsize_restore=None, beam_restore=None,
                  outpath=None, shift=None, show_difmap_output=False,
-                 command_file=None, clean_box=None, dfm_model=None):
+                 command_file=None, clean_box=None, text_box=None, dfm_model=None):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
@@ -336,6 +433,9 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
          yb  -   The relative Declination of the opposite edge to 'ya', of the
          new window.
          If ``None`` than do not use CLEAN windows. (default: ``None``)
+    :param text_box: (optional)
+        Path to text file with clean box (difmap output) to use. If ``None``
+        then do not use text box. (default: ``None``)
     :param dfm_model: (optional)
         File name to save difmap-format model with CCs. If ``None`` then do
         not writw model. (default: ``None``)
@@ -363,13 +463,18 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         difmapout.write("addwin " + str(clean_box[0]) + ', ' +
                         str(clean_box[1]) + ', ' + str(clean_box[2]) + ', ' +
                         str(clean_box[3]) + "\n")
+    if text_box is not None:
+        difmapout.write("rwins " + str(text_box) + "\n")
+
     difmapout.write("@" + path_to_script + " " + stokes + "\n")
+    difmapout.write("mapsize " + str(mapsize_restore[0] * 2) + ', ' +
+                    str(mapsize_restore[1]) + "\n")
     if beam_restore:
         difmapout.write("restore " + str(beam_restore[0]) + ', ' +
                         str(beam_restore[1]) + ', ' + str(beam_restore[2]) +
                         "\n")
-    difmapout.write("mapsize " + str(mapsize_restore[0] * 2) + ', ' +
-                    str(mapsize_restore[1]) + "\n")
+    # difmapout.write("mapsize " + str(mapsize_restore[0] * 2) + ', ' +
+    #                 str(mapsize_restore[1]) + "\n")
     if outpath is None:
         outpath = path
     elif not outpath.endswith("/"):
@@ -1036,6 +1141,332 @@ def transform_component(difmap_model_file, new_type, freq_hz, comp_id=0,
     if outname is None:
         outname = difmap_model_file
     export_difmap_model(new_comps, outname, freq_hz)
+
+
+
+def tb_gaussian(flux_jy, bmaj_mas, freq_ghz, z=0, bmin_mas=None, D=1.0):
+    """
+    Brightness temperature (optionally corrected for redshift and Doppler
+    factor) in K.
+    """
+    k = 1.38*10**(-16)
+    c = 29979245800.0
+    mas_to_rad = 4.8481368*1E-09
+
+    bmaj_mas *= mas_to_rad
+    if bmin_mas is None:
+        bmin_mas = bmaj_mas
+    else:
+        bmin_mas *= mas_to_rad
+    freq_ghz *= 10**9
+    flux_jy *= 10**(-23)
+    return 2.*np.log(2)*(1.+z)*flux_jy*c**2/(freq_ghz**2*np.pi*k*bmaj_mas*bmin_mas*D)
+
+
+def sigma_tb_gaussian(sigma_flux_jy, sigma_d_mas, flux_jy, d_mas, freq_ghz, z=0, D=1.0):
+    """
+    Brightness temperature (optionally corrected for redshift and Doppler
+    factor) in K.
+    """
+    k = 1.38*10**(-16)
+    c = 29979245800.0
+    mas_to_rad = 4.8481368*1E-09
+
+    d_mas *= mas_to_rad
+    sigma_d_mas *= mas_to_rad
+    freq_ghz *= 10**9
+    flux_jy *= 10**(-23)
+    sigma_flux_jy *= 10**(-23)
+    return 2.*np.log(2)*(1.+z)*c**2/(freq_ghz**2*np.pi*k*d_mas**2*D)*np.sqrt(sigma_flux_jy**2 + (2*flux_jy/d_mas)**2*sigma_d_mas**2)
+
+
+def convert_bbox_to_radec_ranges(wcs, blc, trc):
+    """
+    Given BLC, TRC in coordinates of numpy array return RA, DEC ranges.
+    :param wcs:
+        Instance of ``astropy.wcs.wcs.WCS``.
+    :return:
+        RA_min, RA_max, DEC_min, DEC_max
+    """
+    blc_deg = wcs.all_pix2world(blc[0], blc[1], 1)
+    trc_deg = wcs.all_pix2world(trc[0], trc[1], 1)
+
+    ra_max = blc_deg[0]
+    ra_min = trc_deg[0]
+    dec_min = blc_deg[1]
+    dec_max = trc_deg[1]
+
+    return ra_min, ra_max, dec_min, dec_max
+
+
+def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
+                    out_path=None, stokes="I", show_difmap_output=True):
+    import glob
+    import pandas as pd
+    import astropy.io.fits as pf
+    # Conversion coefficient from degrees to mas
+    deg2mas = 3.6*10**6
+
+    columns = ["flux", "ra", "dec", "major", "minor", "posangle", "type", "snr", "rms", "flux_err",
+               "r_err", "major_unresolved", "minor_unresolved", "major_err", "minor_err",
+               # "PA_core", "size_across_PA_core", "resolved_across_PA_core", "size_across_PA_core_err",
+               "Tb", "Tb_err", "upper_limit_Tb"]
+    df_dict = dict()
+    for column in columns:
+        df_dict[column] = list()
+
+    if out_path is None:
+        out_path = os.getcwd()
+
+    # Remove old log-file if any
+    difmap_log_files = glob.glob("difmap.log*")
+    for difmap_log_file in difmap_log_files:
+        try:
+            os.unlink(difmap_log_file)
+        except OSError:
+            pass
+
+    stamp = datetime.datetime.now()
+    command_file = os.path.join(out_path, "difmap_commands_{}".format(stamp.isoformat()))
+    difmapout = open(command_file, "w")
+    difmapout.write("observe " + fname + "\n")
+    difmapout.write("select " + stokes + "\n")
+    difmapout.write("rmodel " + mdl_fname + "\n")
+    difmapout.write("mapsize " + str(dmap_size[0]) + "," + str(dmap_size[1]) + "\n")
+    difmapout.write("invert\n")
+    # Obtain dirty image
+    if dmap_name is None:
+        dmap_name = "dirty_residuals_map.fits"
+    difmapout.write("wdmap " + os.path.join(out_path, dmap_name) + "\n")
+
+    # Get beam info
+    difmapout.write("restore\n")
+
+    difmapout.write("exit\n")
+    difmapout.close()
+
+    # TODO: Use subprocess?
+    shell_command = "difmap < " + command_file + " 2>&1"
+    if not show_difmap_output:
+        shell_command += " >/dev/null"
+    os.system(shell_command)
+
+
+    # Get final reduced chi_squared
+    with open("difmap.log", "r") as fo:
+        lines = fo.readlines()
+    line = [line for line in lines if "Restoring with beam:" in line][-1]
+    bmaj = float(line.split()[4])
+    bmin = float(line.split()[6])
+    if bmaj < bmin:
+        bmaj, bmin = bmin, bmaj
+    bpa = np.deg2rad(float(line.split()[8]))
+    beam_area_mas = np.pi*bmaj*bmin/(4*np.log(2))
+
+    if PA is None:
+        theta_beam = np.sqrt(bmaj*bmin)
+    else:
+        theta_beam = 2*bmaj*bmin*np.sqrt((1+np.tan(PA-bpa)**2)/(bmin**2+bmaj**2*np.tan(PA-bpa)**2))
+
+    # Remove Difmap command and log-file
+    os.unlink(command_file)
+    os.unlink("difmap.log")
+
+    header = pf.getheader(os.path.join(out_path, dmap_name))
+
+    # Build coordinate system
+    wcs = WCS(header)
+    # Ignore FREQ, STOKES - only RA, DEC matters here
+    wcs = wcs.celestial
+    # Make offset coordinates
+    wcs.wcs.crval = 0., 0.
+    wcs.wcs.ctype = 'XOFFSET', 'YOFFSET'
+    wcs.wcs.cunit = 'mas', 'mas'
+    wcs.wcs.cdelt = (wcs.wcs.cdelt * u.deg).to(u.mas)
+
+    dimage = pf.getdata(os.path.join(out_path, dmap_name)).squeeze()
+    # Characteristic size of the beam in pixels
+    beam_pxl = int(np.sqrt(bmaj * bmin) / dmap_size[1])
+
+    # Read components from difmap dirty image CC-table
+    comps = pf.getdata(os.path.join(out_path, dmap_name), ext=("AIPS CC ", 1))
+    sizes_lim = list()
+    unresolved_maj = None
+    unresolved_min = None
+    upper_limit_Tb = None
+
+    x = np.arange(header["NAXIS1"])
+    y = np.arange(header["NAXIS2"])
+    X, Y = np.meshgrid(x, y)
+    # Arrays of RA, DEC for all pixels (just in case)
+    # ra_pix_all, dec_pix_all = wcs.wcs_pix2world(X, Y, 0)
+
+    for comp in comps:
+        # RA, DEC of component center
+        ra = comp[1]*deg2mas
+        dec = comp[2]*deg2mas
+        # TODO: Currently it is from phase center - not core!
+        PA_core = np.arctan2(ra, dec)
+        ra_pix, dec_pix = wcs.wcs_world2pix(ra.reshape(-1, 1), dec.reshape(-1, 1), 0)
+        ra_pix = ra_pix[0][0]
+        dec_pix = dec_pix[0][0]
+        # Create mask of size N*beam_pxl with center in (ra_pix, dec_pix)
+        mask = np.sqrt((X-ra_pix)**2+(Y-dec_pix)**2) < 3*beam_pxl
+        # Need to add to map center (512, 512) add DEC in pixels (with sign)
+        rms = np.std(dimage[mask])
+        print("RMS = ", rms)
+
+        # For CG
+        if comp["TYPE OBJ"] == 1.0:
+            size = comp["MAJOR AX"]*deg2mas
+            print("comp size = ", size)
+            # Calculate first time for SNR
+            peak_flux = 4*np.log(2)*comp["FLUX"] * (np.pi*size**2/(4*np.log(2)*beam_area_mas)) / (np.pi*size**2)
+            print("peak flux = ", peak_flux)
+            SNR = peak_flux / rms
+            size_lim = theta_beam*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
+            print("Size lim = ", size_lim)
+            # If it is a limit - re-calculate peak flux
+            unresolved_min = None
+            if size < size_lim:
+                unresolved_maj = True
+                size = size_lim
+                upper_limit_Tb = True
+            else:
+                unresolved_maj = False
+                upper_limit_Tb = False
+            # Re-calculate if sizes are limits
+            peak_flux = 4*np.log(2)*comp["FLUX"] * (np.pi*size**2/(4*np.log(2)*beam_area_mas)) / (np.pi*size**2)
+            print("new peak flux = ", peak_flux)
+            sigma_peak = rms*np.sqrt(1 + peak_flux/rms)
+            sigma_tot_flux = sigma_peak*np.sqrt(1 + comp["FLUX"]**2/peak_flux**2)
+            sigma_size = size*sigma_peak/peak_flux
+            tb = tb_gaussian(comp["FLUX"], size, 15.4)
+            sigma_tb = sigma_tb_gaussian(sigma_tot_flux, sigma_size, comp["FLUX"], size, 15.4)
+
+            # size_across_PA_core = size
+            # resolved_across_PA_core = unresolved_maj
+            # size_across_PA_core_err = size_across_PA_core*sigma_peak/peak_flux
+
+            df_dict["major"].append(size)
+            df_dict["minor"].append(size)
+            df_dict["major_err"].append(sigma_size)
+            df_dict["minor_err"].append(sigma_size)
+            df_dict["posangle"].append(None)
+            df_dict["type"].append(1)
+            df_dict["r_err"].append(0.5*sigma_size)
+
+        # For EG
+        elif comp["TYPE OBJ"] == 2.0:
+            upper_limit_Tb = False
+            size_major = comp["MAJOR AX"]*deg2mas
+            size_minor = comp["MINOR AX"]*deg2mas
+            # size_across_PA_core = 2*size_minor*size_major*np.sqrt((1+np.tan(PA_core+np.pi/2-np.deg2rad(comp["POSANGLE"]))**2)/(bmin**2+bmaj**2*np.tan(PA_core+np.pi/2-np.deg2rad(comp["POSANGLE"]))**2))
+
+            # Calculate first time for SNR
+            peak_flux = 4*np.log(2)*comp["FLUX"] * (np.pi*size_major*size_minor/(4*np.log(2)*beam_area_mas)) / (np.pi*size_major*size_minor)
+            SNR = peak_flux / rms
+
+            theta_beam_along_major = 2*bmaj*bmin*np.sqrt((1+np.tan(np.deg2rad(comp["POSANGLE"])-bpa)**2)/(bmin**2 + bmaj**2*np.tan(np.deg2rad(comp["POSANGLE"])-bpa)**2))
+            theta_beam_along_minor = 2*bmaj*bmin*np.sqrt((1+np.tan(np.deg2rad(comp["POSANGLE"]+90)-bpa)**2)/(bmin**2 + bmaj**2*np.tan(np.deg2rad(comp["POSANGLE"]+90)-bpa)**2))
+
+            size_lim_major = theta_beam_along_major*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
+            size_lim_minor = theta_beam_along_minor*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
+
+            # If it is a limit - re-calculate peak flux
+            if size_major < size_lim_major:
+                size_major = size_lim_major
+                unresolved_maj = True
+                upper_limit_Tb = True
+            else:
+                unresolved_maj = False
+
+            if size_minor < size_lim_minor:
+                size_minor = size_lim_minor
+                unresolved_min = True
+                upper_limit_Tb = True
+            else:
+                unresolved_min = False
+
+            # Re-calculate if sizes are limits
+            peak_flux = 4*np.log(2)*comp["FLUX"] * (np.pi*size_major*size_minor/(4*np.log(2)*beam_area_mas)) / (np.pi*size_minor*size_major)
+            sigma_peak = rms*np.sqrt(1 + peak_flux/rms)
+            sigma_tot_flux = sigma_peak*np.sqrt(1 + comp["FLUX"]**2/peak_flux**2)
+            sigma_size_major = size_major*sigma_peak/peak_flux
+            sigma_size_minor = size_minor*sigma_peak/peak_flux
+            tb = tb_gaussian(comp["FLUX"], size_major, 15.4, bmin_mas=size_minor)
+            sigma_tb = sigma_tb_gaussian(sigma_tot_flux, 0.5*(sigma_size_minor+sigma_size_major), comp["FLUX"], 0.5*(size_minor+size_major), 15.4)
+
+            # theta_beam_across_PA_core = 2*bmaj*bmin*np.sqrt((1+np.tan(PA_core-bpa)**2)/(bmin**2 + bmaj**2*np.tan(PA_core-bpa)**2))
+            # size_lim_across_PA_core = theta_beam_across_PA_core*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
+            # if size_across_PA_core > size_lim_across_PA_core:
+            #     resolved_across_PA_core = True
+            # else:
+            #     resolved_across_PA_core = False
+            #     size_across_PA_core = size_lim_across_PA_core
+            # size_across_PA_core_err = size_across_PA_core*sigma_peak/peak_flux
+
+
+            df_dict["major"].append(size_major)
+            df_dict["minor"].append(size_minor)
+            df_dict["posangle"].append(np.deg2rad(comp["POSANGLE"]))
+            df_dict["type"].append(2)
+            df_dict["r_err"].append(0.5*0.5*(sigma_size_minor+sigma_size_major))
+            df_dict["major_err"].append(sigma_size_major)
+            df_dict["minor_err"].append(sigma_size_minor)
+
+        # For delta
+        # FIXME: Must be different size limits along beam bmaj & bmin
+        elif comp["TYPE OBJ"] == 0.0:
+            unresolved_maj = None
+            unresolved_min = None
+            upper_limit_Tb = True
+            peak_flux = comp["FLUX"]
+            SNR = peak_flux/rms
+            size_lim = theta_beam*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
+            size = size_lim
+            peak_flux = 4*np.log(2)*comp["FLUX"] * (np.pi*size**2/(4*np.log(2)*beam_area_mas)) / (np.pi*size**2)
+            sigma_peak = rms*np.sqrt(1 + peak_flux/rms)
+            sigma_tot_flux = sigma_peak*np.sqrt(1 + comp["FLUX"]**2/peak_flux**2)
+            sigma_size = size*sigma_peak/peak_flux
+            tb = tb_gaussian(comp["FLUX"], size, 15.4)
+            sigma_tb = sigma_tb_gaussian(sigma_tot_flux, sigma_size, comp["FLUX"], size, 15.4)
+            # size_across_PA_core = size
+            # resolved_across_PA_core = None
+            # size_across_PA_core_err = size_across_PA_core*sigma_peak/peak_flux
+
+            df_dict["major"].append(size)
+            df_dict["minor"].append(size)
+            df_dict["posangle"].append(None)
+            df_dict["type"].append(0)
+            df_dict["r_err"].append(0.5*sigma_size)
+            df_dict["major_err"].append(sigma_size)
+            df_dict["minor_err"].append(sigma_size)
+        else:
+            raise Exception
+
+        df_dict["snr"].append(SNR)
+        df_dict["rms"].append(rms)
+        df_dict["flux"].append(comp["FLUX"])
+        df_dict["ra"].append(ra)
+        df_dict["dec"].append(dec)
+        df_dict["flux_err"].append(sigma_tot_flux)
+        df_dict["major_unresolved"].append(unresolved_maj)
+        df_dict["minor_unresolved"].append(unresolved_min)
+        # df_dict["PA_core"].append(PA_core)
+        # df_dict["resolved_across_PA_core"].append(resolved_across_PA_core)
+        # df_dict["size_across_PA_core"].append(size_across_PA_core)
+        # df_dict["size_across_PA_core_err"].append(size_across_PA_core_err)
+        df_dict["Tb"].append(tb)
+        df_dict["Tb_err"].append(sigma_tb)
+        df_dict["upper_limit_Tb"].append(upper_limit_Tb)
+
+    try:
+        os.unlink(os.path.join(out_path, "dirty_residuals_map.fits"))
+    except FileNotFoundError:
+        pass
+
+    return pd.DataFrame.from_dict(df_dict)
 
 
 # TODO: Add iteration till chi-squared is increasing for some number of
@@ -1724,116 +2155,6 @@ def make_map_with_core_at_zero(mdl_file, uv_fits_fname, mapsize_clean,
 
 
 if __name__ == "__main__":
-    import numpy as np
-    from model import Model
-    from uv_data import UVData
-    from image import find_bbox
-    from image import plot as iplot
-    from image_ops import rms_image
-    from from_fits import (create_clean_image_from_fits_file, create_model_from_fits_file)
-    import matplotlib
-    matplotlib.use("Qt5Agg")
-
-    # # Create artificial data set
-    test_dir = "/home/ilya/data/test"
-    # cg1 = CGComponent(10.0, -2, 1, 0.1)
-    # cg2 = CGComponent(0.1, -1, -1, 0.25)
-    # cg3 = CGComponent(0.2, -3, -3, 0.5)
-    # model = Model(stokes="I")
-    # model.add_components(cg1, cg2, cg3)
-    # uvdata = UVData("/home/ilya/data/test/0055+300.u.2006_02_12.uvf")
-    # noise = uvdata.noise()
-    # uvdata.substitute([model])
-    # uvdata.noise_add(noise)
-    # uvdata.save(os.path.join(test_dir, "test.uvf"), rewrite=True)
-    #
-    # clean_difmap(fname="test.uvf",
-    #              outfname="test_cc.fits",
-    #              stokes="i", path=test_dir,
-    #              outpath=test_dir,
-    #              mapsize_clean=(512, 0.1),
-    #              path_to_script="/home/ilya/github/ve/difmap/final_clean_nw",
-    #              show_difmap_output=True)
-    # ccimage = create_clean_image_from_fits_file(os.path.join(test_dir, "test_cc.fits"))
-    # rms = rms_image(ccimage)
-    # beam = ccimage.beam
-    # blc, trc = find_bbox(ccimage.image, 2.0*rms, 50)
-    # fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=2.0*rms,
-    #             beam=beam, show_beam=True, beam_place="ul", blc=blc, trc=trc,
-    #             close=False, colorbar_label="Jy/beam", show=True)
-    # fig.savefig(os.path.join(test_dir, "test_cc.pdf"), dpi=300,
-    #             bbox_inches="tight")
-    # fig.show()
-
-    # beam_fractions = np.linspace(0.5, 1.5, 5)
-    beam_fraction = 1.5
-    result = modelfit_core_wo_extending_single("/home/ilya/data/test/0055+300.u.2006_02_12.uvf",
-                                               beam_fraction=1.5,
-                                               path=test_dir,
-                                               mapsize_clean=(512, 0.1),
-                                               path_to_script="/home/ilya/github/ve/difmap/final_clean_nw",
-                                               niter=100, out_path=test_dir,
-                                               use_brightest_pixel_as_initial_guess=True)
-
-    cg = CGComponent(result["flux"], -result["ra"], -result["dec"], result["size"])
-    model = Model(stokes="I")
-    model.add_component(cg)
-    uvdata_orig = UVData("/home/ilya/data/test/0055+300.u.2006_02_12.uvf")
-    freq_hz = uvdata_orig.frequency
-    uvdata_model = UVData("/home/ilya/data/test/0055+300.u.2006_02_12.uvf")
-    uvdata_model.substitute([model])
-    uvdata = uvdata_orig - uvdata_model
-    uvdata.save(os.path.join(test_dir, "extended.uvf"), rewrite=True)
-
-    clean_difmap(fname="extended.uvf",
-                 outfname="extended_cc.fits",
-                 stokes="i", path=test_dir,
-                 outpath=test_dir,
-                 mapsize_clean=(512, 0.1),
-                 path_to_script="/home/ilya/github/ve/difmap/final_clean_nw",
-                 show_difmap_output=True)
-    ccimage = create_clean_image_from_fits_file(os.path.join(test_dir, "extended_cc.fits"))
-    rms = rms_image(ccimage)
-    beam = ccimage.beam
-    blc, trc = find_bbox(ccimage.image, 2.0*rms, 50)
-    fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=2.0*rms,
-                beam=beam, show_beam=True, beam_place="ul", blc=blc, trc=trc,
-                close=False, colorbar_label="Jy/beam", show=True,
-                components=[cg])
-    fig.savefig(os.path.join(test_dir, "extended_cc.pdf"), dpi=300,
-                bbox_inches="tight")
-    fig.show()
-
-    # Residuals between original uv-data and first estimate of core
-    model = create_model_from_fits_file(os.path.join(test_dir, "extended_cc.fits"))
-    r_c = (-cg.p[1], -cg.p[2])
-    # Exclude core region
-    model.filter_components_by_r(beam_fraction*np.sqrt(beam[0] * beam[1])/2., r_c=r_c)
-    # Leave only extended structure visibilities
-    uvdata_model.substitute([model])
-    fig = uvdata_model.uvplot()
-    fig.savefig(os.path.join(test_dir, "extended_radplot_2.png"))
-    # Here's only core visibilities
-    uvdata = uvdata_orig - uvdata_model
-    uvdata.save(os.path.join(test_dir, "uv_diff.uvf"), rewrite=True)
-
-
-    # Model core
-    comp0 = CGComponent(cg.p[0], cg.p[1], cg.p[2], cg.p[3])
-
-    export_difmap_model([comp0], os.path.join(test_dir, "init.mdl"),
-                        freq_hz)
-    modelfit_difmap(fname=os.path.join(test_dir, "uv_diff.uvf"),
-                    mdl_fname=os.path.join(test_dir, "init.mdl"),
-                    out_fname=os.path.join(test_dir, "it2.mdl"),
-                    niter=100, stokes='i', path=test_dir,
-                    mdl_path=test_dir, out_path=test_dir,
-                    show_difmap_output=True,
-                    save_dirty_residuals_map=False,
-                    dmap_size=None)
-    comp = import_difmap_model("it2.mdl", test_dir)[0]
-    result2 = {"flux": comp.p[0], "ra": -comp.p[1], "dec": -comp.p[2],
-               "size": comp.p[3]}
-    from pprint import pprint
-    pprint(result)
-    pprint(result2)
+    uvfits = "/home/ilya/github/jetpol/scripts/2200+420.u.2017_01_28.uvf"
+    dfm_model = "/home/ilya/Documents/Tb/MOJAVE_difmap_models/modfits/2200+420_2017-01-28.mod"
+    df = components_info(uvfits, dfm_model, dmap_size=(1024, 0.1), PA=None)

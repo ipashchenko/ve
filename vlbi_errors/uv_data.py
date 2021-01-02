@@ -15,6 +15,11 @@ from utils import (baselines_2_ants, index_of, get_uv_correlations,
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import calendar
+
+months_dict = {v: k for k, v in enumerate(calendar.month_abbr)}
+months_dict_inv = {k: v for k, v in enumerate(calendar.month_abbr)}
+
 
 try:
     import pylab
@@ -79,6 +84,9 @@ class UVData(object):
         # scans) in ``UVData.uvdata`` array
         self._indxs_baselines = dict()
         self._indxs_baselines_scans = dict()
+        # Dictionary with keys - baselines and values - lists of arrays with
+        # timestamps. Each list - separate scan
+        self.baselines_scans_times = dict()
         # Dictionary with keys - baselines & values - tuples or lists of tuples
         # of shapes of part for that baseline (or it's scans) in
         # ``UVData.uvdata`` array
@@ -87,6 +95,7 @@ class UVData(object):
         self._get_baselines_info()
         self._noise_diffs = None
         self._noise_v = None
+
 
         rec = pf.getdata(self.fname, extname='AIPS AN')
         # self._antenna_mapping = {number: rec['ANNAME'][i] for i, number in
@@ -899,24 +908,32 @@ class UVData(object):
 
     @property
     def scans_bl(self):
+
         if self._scans_bl is None:
             scans_dict = dict()
             for bl in self.baselines:
+                self.baselines_scans_times[bl] = list()
                 bl_scans = list()
                 bl_indxs = self._get_baseline_indexes(bl)
-                # JD-formated times for current baseline
+                # JD-formatted times for current baseline
                 bl_times = self.hdu.data['DATE'][bl_indxs] +\
                            self.hdu.data['_DATE'][bl_indxs]
                 bl_times = bl_times.reshape((bl_times.size, 1))
-                db = DBSCAN(eps=TimeDelta(100., format='sec').jd, min_samples=10,
+                db = DBSCAN(eps=TimeDelta(120., format='sec').jd, min_samples=3,
                             leaf_size=5).fit(bl_times)
                 core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
                 core_samples_mask[db.core_sample_indices_] = True
                 labels = db.labels_
+
+                # Make start/stop for each scan
+                bl_times = bl_times[:, 0]
+                for label in set(labels):
+                    scan_times = bl_times[np.where(labels == label)]
+                    self.baselines_scans_times[bl].append(scan_times)
+
                 if -1 in set(labels):
                     ant1, ant2 = baselines_2_ants([bl])
-                    # print "Non-typical scan structure for baseline" \
-                    #       " {}-{}".format(ant1, ant2)
+                    print("Non-typical scan structure for baseline {}, antennas {}-{}".format(bl, ant1, ant2))
                     scans_dict[bl] = None
                 else:
                     bl_indxs_ = np.array(bl_indxs, dtype=int)

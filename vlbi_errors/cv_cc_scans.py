@@ -46,7 +46,7 @@ def score(uv_fits_path, mdl_path, stokes='I', bmaj=None, score="l2"):
     else:
         c = 1.0
 
-    # Loading test data
+    # Loading test data with its own big mask
     uvdata = UVData(uv_fits_path)
     uvdata_model = UVData(uv_fits_path)
 
@@ -67,10 +67,13 @@ def score(uv_fits_path, mdl_path, stokes='I', bmaj=None, score="l2"):
     if stokes == 'I':
         i_diff = 0.5*(uvdata_diff.uvdata_weight_masked[..., 0] +
                       uvdata_diff.uvdata_weight_masked[..., 1])
+        weights = uvdata.weights_nw_masked[..., 0] + uvdata.weights_nw_masked[..., 1]
     elif stokes == 'RR':
         i_diff = uvdata_diff.uvdata_weight_masked[..., 0]
+        weights = uvdata.weights_nw_masked[..., 0]
     elif stokes == 'LL':
         i_diff = uvdata_diff.uvdata_weight_masked[..., 1]
+        weights = uvdata.weights_nw_masked[..., 1]
     else:
         raise Exception("Only stokes (I, RR, LL) supported!")
 
@@ -90,9 +93,9 @@ def score(uv_fits_path, mdl_path, stokes='I', bmaj=None, score="l2"):
 
     print("Number of independent test data points = ", factor)
     if score == "l2":
-        result = np.sqrt(float(np.sum(i_diff*i_diff.conj())))/factor
+        result = np.sqrt(float(np.ma.sum(i_diff*i_diff.conj()*weights))/np.ma.sum(weights))/factor
     elif score == "l1":
-        result = float(np.sum(np.abs(i_diff)))/factor
+        result = float(np.ma.sum(np.abs(i_diff)*weights))/(np.ma.sum(weights)*factor)
     else:
         raise Exception("score must be in (l1, l2)!")
     return result

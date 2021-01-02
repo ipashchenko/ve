@@ -391,7 +391,8 @@ def flag_baseline_scan(uvfits, outfname, ta, tb=None, start_time=None, stop_time
 def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  path_to_script=None, mapsize_restore=None, beam_restore=None,
                  outpath=None, shift=None, show_difmap_output=False,
-                 command_file=None, clean_box=None, text_box=None, dfm_model=None):
+                 command_file=None, clean_box=None, dfm_model=None, omit_residuals=False,
+                 do_smooth=True, dmap=None, text_box=None):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
@@ -438,7 +439,10 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         then do not use text box. (default: ``None``)
     :param dfm_model: (optional)
         File name to save difmap-format model with CCs. If ``None`` then do
-        not writw model. (default: ``None``)
+        not save model. (default: ``None``)
+    :param dmap: (optional)
+        FIle name to save the residual map. If ``None`` then do not save
+        the residual map. (default: ``None``)
     """
     if path is None:
         path = os.getcwd()
@@ -455,8 +459,7 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
 
     difmapout = open(command_file, "w")
     difmapout.write("observe " + os.path.join(path, fname) + "\n")
-    # if shift is not None:
-    #     difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
+
     difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
                     str(mapsize_clean[1]) + "\n")
     if clean_box is not None:
@@ -467,23 +470,37 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         difmapout.write("rwins " + str(text_box) + "\n")
 
     difmapout.write("@" + path_to_script + " " + stokes + "\n")
-    difmapout.write("mapsize " + str(mapsize_restore[0] * 2) + ', ' +
-                    str(mapsize_restore[1]) + "\n")
-    if beam_restore:
-        difmapout.write("restore " + str(beam_restore[0]) + ', ' +
-                        str(beam_restore[1]) + ', ' + str(beam_restore[2]) +
+
+    # FIXME: Do I need this?
+    # difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +
+    #                 str(mapsize_clean[1]) + "\n")
+
+    if shift is not None:
+        difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
+
+    if beam_restore is not None:
+        if omit_residuals:
+            omit_residuals = "true"
+        else:
+            omit_residuals = "false"
+        if do_smooth:
+            do_smooth = "true"
+        else:
+            do_smooth = "false"
+        difmapout.write("restore " + str(beam_restore[1]) + ', ' +
+                        str(beam_restore[0]) + ', ' + str(beam_restore[2]) + ", " + omit_residuals + ", " + do_smooth +
                         "\n")
-    # difmapout.write("mapsize " + str(mapsize_restore[0] * 2) + ', ' +
-    #                 str(mapsize_restore[1]) + "\n")
     if outpath is None:
         outpath = path
     elif not outpath.endswith("/"):
         outpath = outpath + "/"
-    if shift is not None:
-        difmapout.write("shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n")
+
     difmapout.write("wmap " + os.path.join(outpath, outfname) + "\n")
+    if dmap is not None:
+        difmapout.write("wdmap " + os.path.join(outpath, dmap) + "\n")
     if dfm_model is not None:
-        difmapout.write("wmodel " + dfm_model + "\n")
+        # FIXME: Difmap doesn't apply shift to model components!
+        difmapout.write("wmodel " + os.path.join(outpath, dfm_model) + "\n")
     difmapout.write("exit\n")
     difmapout.close()
     # TODO: Use subprocess for silent cleaning?

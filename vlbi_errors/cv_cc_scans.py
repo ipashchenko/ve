@@ -17,7 +17,7 @@ months_dict_inv = {k: v for k, v in enumerate(calendar.month_abbr)}
 mas_to_rad = u.mas.to(u.rad)
 
 
-def score(uv_fits_path, mdl_path, stokes='I', bmaj=None, score="l2"):
+def score(uv_fits_path, mdl_path, stokes='I', bmaj=None, score="l2", use_weights=True):
     """
     Returns rms of the trained model (CLEAN or difmap) on a given test UVFITS
     data set.
@@ -77,6 +77,9 @@ def score(uv_fits_path, mdl_path, stokes='I', bmaj=None, score="l2"):
     else:
         raise Exception("Only stokes (I, RR, LL) supported!")
 
+    # Normalize weights
+    weights = weights/np.ma.sum(weights)
+
     # Account for beam
     if bmaj is not None:
         u = uvdata_diff.uv[:, 0]
@@ -93,9 +96,15 @@ def score(uv_fits_path, mdl_path, stokes='I', bmaj=None, score="l2"):
 
     print("Number of independent test data points = ", factor)
     if score == "l2":
-        result = np.sqrt(float(np.ma.sum(i_diff*i_diff.conj()*weights))/np.ma.sum(weights))/factor
+        if use_weights:
+            result = np.sqrt((np.ma.sum(i_diff*i_diff.conj()*weights)).real)
+        else:
+            result = np.sqrt((np.ma.sum(i_diff*i_diff.conj())).real/factor)
     elif score == "l1":
-        result = float(np.ma.sum(np.abs(i_diff)*weights))/(np.ma.sum(weights)*factor)
+        if use_weights:
+            result = (np.ma.sum(np.abs(i_diff)*weights)).real
+        else:
+            result = (np.ma.sum(np.abs(i_diff))).real/factor
     else:
         raise Exception("score must be in (l1, l2)!")
     return result
@@ -133,13 +142,13 @@ class ScansCV(object):
                 start_time = Time(scan_times[0], format="jd")
                 stop_time = Time(scan_times[-1], format="jd")
                 # Train data
-                # flag_baseline_scan(self.fname, os.path.join(self.outdir, "cv_bl_{}_scan_{}_train.uvf".format(int(bl), scan_num)), ta, tb,
+                # flag_baseline_scan(self.original_uvfits, os.path.join(self.outdir, "cv_bl_{}_scan_{}_train.uvf".format(int(bl), scan_num)), ta, tb,
                 #                    start_time=start_time, stop_time=stop_time, except_time_range=False)
                 flag_baseline_scan(self.original_uvfits, os.path.join(self.outdir, self.train_uvfits), ta, tb,
                                    start_time=start_time, stop_time=stop_time, except_time_range=False)
                 # Test data
                 # Manage target baseline
-                # flag_baseline_scan(self.fname, os.path.join(self.outdir, "cv_bl_{}_scan_{}_test.uvf".format(int(bl), scan_num)), ta, tb,
+                # flag_baseline_scan(self.original_uvfits, os.path.join(self.outdir, "cv_bl_{}_scan_{}_test.uvf".format(int(bl), scan_num)), ta, tb,
                 #                    start_time=start_time, stop_time=stop_time, except_time_range=True)
                 flag_baseline_scan(self.original_uvfits, os.path.join(self.outdir, self.test_uvfits), ta, tb,
                                    start_time=start_time, stop_time=stop_time, except_time_range=True)
@@ -163,12 +172,12 @@ class ScansCV(object):
 
 if __name__ == '__main__':
 
-    name = "l1_2005_05_26"
+    name = "l1_2005_11_07_weights"
     data_dir = os.path.join("/home/ilya/data/cv", name)
     if not os.path.exists(data_dir):
         os.mkdir(data_dir)
 
-    original_uvfits = "/home/ilya/data/cv/0212+735.u.2005_05_26.uvf"
+    original_uvfits = "/home/ilya/data/cv/0212+735.u.2005_11_07.uvf"
     # Beam mas
     beam = 0.66
     # beam = None
@@ -177,6 +186,9 @@ if __name__ == '__main__':
     path_to_script = os.path.join(data_dir, "script_clean_rms")
 
     scans_cv = ScansCV(original_uvfits, outdir=data_dir)
+    # scans_cv.create_train_test_uvfits()
+
+    # import sys; sys.exit(0)
 
     cv_scores = dict()
 
@@ -207,7 +219,7 @@ if __name__ == '__main__':
             # Score trained model on test data set
             cv_score = score(os.path.join(data_dir, test_uvfits_fname),
                              os.path.join(data_dir, "trained_cc.fits"),
-                             bmaj=beam, score="l1")
+                             bmaj=beam, score="l1", use_weights=True)
             print("CV score = ", cv_score)
             cv_scores[overclean_coeff][scans_cv.cur_bl].append(cv_score)
             print("Result for current k = {} is {}".format(overclean_coeff, cv_scores[overclean_coeff]))

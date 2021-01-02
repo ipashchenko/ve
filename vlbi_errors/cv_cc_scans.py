@@ -93,12 +93,12 @@ def score(uv_fits_path, mdl_path, stokes='I', bmaj=None, score="l2"):
     # squared_diff = uvdata_diff.uvdata_weight_masked[:, :, :2] * \
     #                uvdata_diff.uvdata_weight_masked[:, :, :2].conj()
     if score == "l2":
-        score_diff = i_diff*i_diff.conj()
+        result = np.sqrt(float(np.sum(i_diff*i_diff.conj())))/factor
     elif score == "l1":
-        score_diff = np.abs(i_diff)
+        result = float(np.sum(np.abs(i_diff)))/factor
     else:
         raise Exception("score must be in (l1, l2)!")
-    return np.sqrt(float(np.sum(score_diff))/factor)
+    return result
 
 
 class ScansCV(object):

@@ -76,10 +76,11 @@ def score(uv_fits_path, mdl_path, stokes='I', bmaj=None, score="l2"):
         raise Exception("Only stokes (I, RR, LL) supported!")
 
     # Account for beam
-    u = uvdata_diff.uv[:, 0]
-    v = uvdata_diff.uv[:, 1]
-    taper = np.exp(-c*(u*u + v*v))
-    i_diff = i_diff*taper[:, np.newaxis]
+    if bmaj is not None:
+        u = uvdata_diff.uv[:, 0]
+        v = uvdata_diff.uv[:, 1]
+        taper = np.exp(-c*(u*u + v*v))
+        i_diff = i_diff*taper[:, np.newaxis]
 
     # Number of unmasked visibilities (accounting each IF)
     if stokes == "I":
@@ -89,9 +90,6 @@ def score(uv_fits_path, mdl_path, stokes='I', bmaj=None, score="l2"):
         factor = np.count_nonzero(~i_diff.mask)
 
     print("Number of independent test data points = ", factor)
-    # factor = np.count_nonzero(~uvdata_diff.uvdata_weight_masked.mask[:, :, :2])
-    # squared_diff = uvdata_diff.uvdata_weight_masked[:, :, :2] * \
-    #                uvdata_diff.uvdata_weight_masked[:, :, :2].conj()
     if score == "l2":
         result = np.sqrt(float(np.sum(i_diff*i_diff.conj())))/factor
     elif score == "l1":

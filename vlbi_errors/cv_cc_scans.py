@@ -129,15 +129,15 @@ class ScansCV(object):
             ta, tb = baselines_2_ants([bl])
             ta = self.uvdata.antenna_mapping[ta]
             tb = self.uvdata.antenna_mapping[tb]
-            # n_scans = len(scans_times)
+            n_scans = len(scans_times)
             # rnd_scan_number = np.random.randint(n_scans)
-            # half_scan_number = int(n_scans/2)
+            half_scan_number = int(n_scans/2)
             # if half_scan_number == 0:
             #     half_scan_number = 1
             for scan_num, scan_times in enumerate(scans_times):
                 self.cur_scan = scan_num
-                # if scan_num != half_scan_number:
-                #     continue
+                if scan_num != half_scan_number:
+                    continue
                 print("SCAN # ", scan_num)
                 start_time = Time(scan_times[0], format="jd")
                 stop_time = Time(scan_times[-1], format="jd")
@@ -172,7 +172,7 @@ class ScansCV(object):
 
 if __name__ == '__main__':
 
-    name = "l1_2005_11_07_weights"
+    name = "l1_2005_11_07_noweights_box_scan"
     data_dir = os.path.join("/home/ilya/data/cv", name)
     if not os.path.exists(data_dir):
         os.mkdir(data_dir)
@@ -192,7 +192,7 @@ if __name__ == '__main__':
 
     cv_scores = dict()
 
-    for overclean_coeff in np.linspace(0.5, 1.0, 5):
+    for overclean_coeff in np.linspace(0.1, 2.0, 15):
 
         filein = open(template_script)
         src = Template(filein.read())
@@ -215,11 +215,12 @@ if __name__ == '__main__':
                          stokes='i', mapsize_clean=(512, 0.1),
                          path=data_dir, outpath=data_dir,
                          path_to_script=path_to_script,
-                         show_difmap_output=False)
+                         show_difmap_output=False,
+                         text_box="/home/ilya/data/cv/box.clean")
             # Score trained model on test data set
             cv_score = score(os.path.join(data_dir, test_uvfits_fname),
                              os.path.join(data_dir, "trained_cc.fits"),
-                             bmaj=beam, score="l1", use_weights=True)
+                             bmaj=beam, score="l2", use_weights=False)
             print("CV score = ", cv_score)
             cv_scores[overclean_coeff][scans_cv.cur_bl].append(cv_score)
             print("Result for current k = {} is {}".format(overclean_coeff, cv_scores[overclean_coeff]))

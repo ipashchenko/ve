@@ -7,7 +7,8 @@ from utils import degree_to_rad, baselines_2_ants
 from components import DeltaComponent, CGComponent, EGComponent
 from astropy.stats import mad_std
 from astropy.wcs import WCS
-from astropy.io.fits import getheader
+from astropy.io.fits import getheader, getdata
+import astropy.io.fits as pf
 import astropy.units as u
 from scipy.ndimage.measurements import label
 from scipy.ndimage.morphology import generate_binary_structure
@@ -290,6 +291,117 @@ def time_average(uvfits, outfname, time_sec=120, show_difmap_output=True,
 
     # Remove command file
     os.unlink(command_file)
+
+
+def convolve_difmap_model_with_nonuniform_beam(difmap_model_file, stokes, mapsize, uvfits_template,
+                                               original_beam, image_std_jyperbeam, out_ccfits="tmp_cc.fits",
+                                               show_difmap_output=False):
+    npixels_beam = np.pi*original_beam[0]*original_beam[1]/(4*np.log(2)*mapsize[1]**2)
+    image_std_jyperpixel = image_std_jyperbeam/npixels_beam
+    # Flux, r, theta
+    cc_comps = np.loadtxt(difmap_model_file, comments="!")
+    # Container for convolved images
+    result_image = np.zeros((mapsize[0], mapsize[0]))
+    for i in range(len(cc_comps)):
+        # Create difmap model file for current component
+        np.savetxt("difmap_tmp.mdl", cc_comps[i].reshape(1, -1))
+
+        # Find SNR of current CC
+        snr = abs(cc_comps[i][0])/image_std_jyperpixel
+        print("CC Flux[Jy] = ", cc_comps[i][0], "SNR = ", snr)
+
+        # Find beam to convolve with
+        bmaj = original_beam[0]/np.log10(snr)
+        local_beam = (bmaj, bmaj, 0)
+
+        stamp = datetime.datetime.now()
+        command_file = "difmap_commands_{}".format(stamp.isoformat())
+        difmapout = open(command_file, "w")
+        difmapout.write("observe " + uvfits_template + "\n")
+        difmapout.write("select " + stokes + "\n")
+        difmapout.write("rmodel " + difmap_model_file + "\n")
+        difmapout.write("mapsize " + str(int(2*mapsize[0])) + ","+str(mapsize[1])+"\n")
+        print("Restoring difmap model with BEAM : bmin = "+str(local_beam[1])+", bmaj = "+str(local_beam[0])+", "+str(local_beam[2])+" deg")
+        # default dimfap: false,true (parameters: omit_residuals, do_smooth)
+        difmapout.write("restore "+str(local_beam[1])+","+str(local_beam[0])+","+str(local_beam[2])+
+                        ","+"true,false"+"\n")
+        difmapout.write("wmap " + out_ccfits + "\n")
+        difmapout.write("exit\n")
+        difmapout.close()
+
+        shell_command = "difmap < "+command_file+" 2>&1"
+        if not show_difmap_output:
+            shell_command += " >/dev/null"
+        os.system(shell_command)
+        # Remove command file
+        os.unlink(command_file)
+
+        # Load convolved image
+        image = getdata(out_ccfits).squeeze()
+        result_image += image
+
+    hdus = pf.open(out_ccfits, mode="update")
+    hdus[0].data[0, 0, ...] = result_image
+    hdus.flush()
+
+
+def clean_difmap_and_convolve_nubeam(uvfits, stokes, mapsize, outfile, original_beam, path_to_script):
+    clean_difmap(fname=uvfits,
+                 outfname=outfile, stokes=stokes.lower(),
+                 mapsize_clean=mapsize,
+                 path_to_script=path_to_script,
+                 # With residuals
+                 # show_difmap_output=True, beam_restore=None, omit_residuals=True, do_smooth=False)
+                 beam_restore=None, omit_residuals=False, do_smooth=False,
+                 dfm_model="dfm_cc_{}.mdl".format(stokes), show_difmap_output=True,
+                 dmap="dmap_{}.fits".format(stokes.lower()))
+
+    # Find noise
+    dimage = pf.getdata("dmap_{}.fits".format(stokes.lower()))[0, 0, ...]
+    std = mad_std(dimage)
+    print("dimage size = ", dimage.shape)
+
+    print("Image std [Jy/beam] = ", std)
+
+    convolve_difmap_model_with_nonuniform_beam("dfm_cc_{}.mdl".format(stokes), stokes, mapsize, uvfits,
+                                               original_beam, std, out_ccfits=outfile)
+
+
+def convert_difmap_model_file_to_CCFITS(difmap_model_file, stokes, mapsize, restore_beam, uvfits_template, out_ccfits,
+                                        show_difmap_output=True):
+    """
+    Using difmap-formated model file (e.g. flux, r, theta) obtain convolution of your model with the specified beam.
+
+    :param difmap_model_file:
+        Difmap-formated model file. Use ``JetImage.save_image_to_difmap_format`` to obtain it.
+    :param stokes:
+        Stokes parameter.
+    :param mapsize:
+        Iterable of image size and pixel size (mas).
+    :param restore_beam:
+        Beam to restore: bmaj(mas), bmin(mas), bpa(deg).
+    :param uvfits_template:
+        Template uvfits observation to use. Difmap can't read model without having observation at hand.
+    :param out_ccfits:
+        File name to save resulting convolved map.
+    :param show_difmap_output: (optional)
+        Boolean. Show Difmap output? (default: ``True``)
+    """
+    stamp = datetime.datetime.now()
+    command_file = "difmap_commands_{}".format(stamp.isoformat())
+    difmapout = open(command_file, "w")
+    difmapout.write("observe " + uvfits_template + "\n")
+    difmapout.write("select " + stokes + "\n")
+    difmapout.write("rmodel " + difmap_model_file + "\n")
+    difmapout.write("mapsize " + str(mapsize[0]) + "," + str(mapsize[1]) + "\n")
+    print("Restoring difmap model with BEAM : bmin = " + str(restore_beam[1]) + ", bmaj = " + str(restore_beam[0]) + ", " + str(restore_beam[2]) + " deg")
+    # default dimfap: false,true (parameters: omit_residuals, do_smooth)
+    difmapout.write("restore " + str(restore_beam[1]) + "," + str(restore_beam[0]) + "," + str(restore_beam[2]) +
+                    "," + "true,false" + "\n")
+    difmapout.write("wmap " + out_ccfits + "\n")
+    difmapout.write("exit\n")
+    difmapout.close()
+
 
 
 def flag_baseline(uvfits, outfname, ta, tb, show_difmap_output=False):

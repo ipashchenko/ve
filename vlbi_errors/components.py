@@ -1,3 +1,4 @@
+import copy
 import math
 import numpy as np
 from utils import _function_wrapper, mas_to_rad, vcomplex, gaussian
@@ -48,6 +49,9 @@ class Component(object):
     def parnames(self):
         return np.array(self._parnames)[~self._fixed]
 
+    def __copy__(self):
+        return copy.deepcopy(self)
+
     def add_prior(self, **lnprior):
         """
         Add prior for some parameters.
@@ -70,11 +74,22 @@ class Component(object):
             else:
                 raise Exception("Uknown parameter name: " + str(key))
 
+    @property
+    def p_all(self):
+        """
+        Shortcut for all parameters of model.
+        """
+        return self._p
+
+    @p_all.setter
+    def p_all(self, p):
+        self._p = p
+
     # TODO: properties must return only free parameters!
     @property
     def p(self):
         """
-        Shortcut for parameters of model.
+        Shortcut for variable parameters of model.
         """
         return self._p[np.logical_not(self._fixed)]
 
@@ -84,6 +99,10 @@ class Component(object):
         # print "Before: ", self._p
         self._p[np.logical_not(self._fixed)] = p[:]
         # print "After: ", self._p
+
+    def set_value(self, val, index, isfixed=False):
+        self._p[index] = val
+        self._fixed[index] = isfixed
 
     def is_within_radec(self, ra_range, dec_range):
         # Coordinates in mas

@@ -1,3 +1,4 @@
+import glob
 import os
 import sys
 import datetime
@@ -16,6 +17,8 @@ from scipy.stats import normaltest, anderson
 from skimage.measure import regionprops
 from from_fits import create_clean_image_from_fits_file, create_image_from_fits_file
 import calendar
+from uv_data import UVData
+from astropy.time import Time
 
 months_dict = {v: k for k, v in enumerate(calendar.month_abbr)}
 months_dict_inv = {k: v for k, v in enumerate(calendar.month_abbr)}
@@ -356,10 +359,18 @@ def clean_difmap_and_convolve_nubeam(uvfits, stokes, mapsize, outfile, original_
                  dfm_model="dfm_cc_{}.mdl".format(stokes), show_difmap_output=True,
                  dmap="dmap_{}.fits".format(stokes.lower()))
 
+    # Filter CCs - keep only those within the source
+    pass
+
     # Find noise
-    dimage = pf.getdata("dmap_{}.fits".format(stokes.lower()))[0, 0, ...]
-    std = mad_std(dimage)
-    print("dimage size = ", dimage.shape)
+    from uv_data import UVData
+    uvdata = UVData(uvfits)
+    noise = uvdata.noise(average_freq=True)
+    noise = np.mean(list(noise.values()))
+    std = noise/np.sqrt(uvdata.n_usable_visibilities_difmap(freq_average=True))
+    # dimage = pf.getdata("dmap_{}.fits".format(stokes.lower()))[0, 0, ...]
+    # std = mad_std(dimage)
+    # print("dimage size = ", dimage.shape)
 
     print("Image std [Jy/beam] = ", std)
 
@@ -401,7 +412,12 @@ def convert_difmap_model_file_to_CCFITS(difmap_model_file, stokes, mapsize, rest
     difmapout.write("wmap " + out_ccfits + "\n")
     difmapout.write("exit\n")
     difmapout.close()
-
+    shell_command = "difmap < " + command_file + " 2>&1"
+    if not show_difmap_output:
+        shell_command += " >/dev/null"
+    os.system(shell_command)
+    # Remove command file
+    os.unlink(command_file)
 
 
 def flag_baseline(uvfits, outfname, ta, tb, show_difmap_output=False):
@@ -929,8 +945,8 @@ def import_difmap_model(mdl_fname, mdl_dir=None, remove_last_char=True):
 
 def export_difmap_model(comps, out_fname, freq_hz):
     """
-    Function that export iterable of ``Component`` instances to difmap format
-    model file.
+    Export iterable of ``Component`` instances to the Difmap-format model file.
+
     :param comps:
         Iterable of ``Component`` instances.
     :param out_fname:
@@ -941,24 +957,36 @@ def export_difmap_model(comps, out_fname, freq_hz):
 ! Freq (Hz)     SpecIndex\n")
         for comp in comps:
             if isinstance(comp, EGComponent):
-                if comp.size == 4:
+                if len(comp.p_all) == 4:
                     # Jy, mas, mas, mas
-                    flux, x, y, bmaj = comp.p
+                    flux, x, y, bmaj = comp.p_all
                     e = "1.00000"
                     bpa = "000.000"
                     type = "1"
-                    bmaj = "{}v".format(bmaj)
-                elif comp.size == 6:
+                    if not comp._fixed[3]:
+                        bmaj = "{}v".format(bmaj)
+                    else:
+                        bmaj = "{}".format(bmaj)
+                elif len(comp.p_all) == 6:
                     # Jy, mas, mas, mas, -, deg
-                    flux, x, y, bmaj, e, bpa = comp.p
-                    e = "{}v".format(e)
-                    bpa = "{}v".format((bpa-np.pi/2)/degree_to_rad)
-                    bmaj = "{}v".format(bmaj)
+                    flux, x, y, bmaj, e, bpa = comp.p_all
+                    if not comp._fixed[4]:
+                        e = "{}v".format(e)
+                    else:
+                        e = "{}".format(e)
+                    if not comp._fixed[5]:
+                        bpa = "{}v".format((bpa-np.pi/2)/degree_to_rad)
+                    else:
+                        bpa = "{}".format((bpa-np.pi/2)/degree_to_rad)
+                    if not comp._fixed[3]:
+                        bmaj = "{}v".format(bmaj)
+                    else:
+                        bmaj = "{}".format(bmaj)
                     type = "1"
                 else:
                     raise Exception
             elif isinstance(comp, DeltaComponent):
-                flux, x, y = comp.p
+                flux, x, y = comp.p_all
                 e = "1.00000"
                 bmaj = "0.0000"
                 bpa = "000.000"
@@ -970,9 +998,25 @@ def export_difmap_model(comps, out_fname, freq_hz):
             # rad
             theta = np.arctan2(-x, -y)
             theta /= degree_to_rad
-            fo.write("{}v {}v {}v {} {} {} {} {} 0\n".format(flux, r, theta,
-                                                           bmaj, e, bpa, type,
-                                                           freq_hz))
+
+            if not comp._fixed[0]:
+                flux = "{}v".format(flux)
+            else:
+                flux = "{}".format(flux)
+
+            if comp._fixed[1]:
+                r = "{}".format(r)
+            else:
+                r = "{}v".format(r)
+
+            if comp._fixed[2]:
+                theta = "{}".format(theta)
+            else:
+                theta = "{}v".format(theta)
+
+            fo.write("{} {} {} {} {} {} {} {} 0\n".format(flux, r, theta,
+                                                          bmaj, e, bpa, type,
+                                                          freq_hz))
 
 
 def append_component_to_difmap_model(comp, out_fname, freq_hz):
@@ -1682,6 +1726,354 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
     os.unlink(command_file)
 
     return rchisq
+
+
+def find_stat_of_difmap_model(dfm_model_file, uvfits, stokes="I", working_dir=None,
+                              show_difmap_output=False, unselfcalibrated_uvfits=None,
+                              nmodelfit=20, use_pselfcal=True, out_dfm_model=None):
+
+    if unselfcalibrated_uvfits is None:
+        uvfile = uvfits
+    else:
+        uvfile = unselfcalibrated_uvfits
+
+    original_dir = os.getcwd()
+    if working_dir is None:
+        working_dir = os.getcwd()
+    os.chdir(working_dir)
+
+    # Find and remove all log-files
+    previous_logs = glob.glob("difmap.log*")
+    for log in previous_logs:
+        os.unlink(log)
+
+    stamp = datetime.datetime.now()
+    command_file = os.path.join(working_dir, "difmap_commands_{}".format(stamp.isoformat()))
+    difmapout = open(command_file, "w")
+    difmapout.write("observe " + uvfile + "\n")
+    difmapout.write("select " + stokes + "\n")
+    difmapout.write("rmodel " + dfm_model_file + "\n")
+    if use_pselfcal:
+        difmapout.write("selfcal\n")
+        difmapout.write("modelfit {}\n".format(nmodelfit))
+        difmapout.write("selfcal\n")
+    difmapout.write("modelfit {}\n".format(nmodelfit))
+    if out_dfm_model:
+        difmapout.write("wmod {}\n".format(out_dfm_model))
+    difmapout.write("quit\n")
+    difmapout.close()
+
+    # TODO: Use subprocess?
+    shell_command = "difmap < " + command_file + " 2>&1"
+    if not show_difmap_output:
+        shell_command += " >/dev/null"
+    os.system(shell_command)
+
+    # Get final reduced chi_squared
+    log = os.path.join(working_dir, "difmap.log")
+    with open(log, "r") as fo:
+        lines = fo.readlines()
+    line = [line for line in lines if "Reduced Chi-squared=" in line][-1]
+    rchisq = float(line.split(" ")[4].split("=")[1])
+
+    line = [line for line in lines if "degrees of freedom" in line][-1]
+    dof = int(float(line.split(" ")[-4]))
+
+    # Remove command file
+    os.unlink(command_file)
+    # os.unlink("difmap.log")
+    os.chdir(original_dir)
+
+    return {"rchisq": rchisq, "dof": dof}
+
+
+def find_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", working_dir=None,
+                                    delta_t_sec=10.0, gain_phase_tcoh=30.0,
+                                    show_difmap_output=False, nmodelfit=20,
+                                    unselfcalibrated_uvfits=None):
+
+    # Nuber of time stamps for gain phases to "forget" their values
+    t_eff = gain_phase_tcoh/delta_t_sec
+    rho = np.exp(-(delta_t_sec/gain_phase_tcoh)**2)
+
+    # Find gains DoF
+    uvdata = UVData(uvfits)
+    n_use_vis = uvdata.n_usable_visibilities_difmap(stokes=stokes)
+    n_IF = uvdata.nif
+    n_ant = len(uvdata.antennas)
+
+    # Coefficient of correlation between gains in close IFs
+    rho_IF = 0.75
+    n_IF_eff = n_IF/(1+(n_IF-1)*rho_IF)
+
+
+    baseline_scan_times = uvdata.baselines_scans_times
+    n_scans = np.argmax(np.bincount([len(a) for a in baseline_scan_times.values()]))
+
+    n_measurements = 0
+    time_of_scan = list()
+    for bl, scans in baseline_scan_times.items():
+        for scan in scans:
+            delta_t_scan_sec = (Time(scan[-1], format="jd") - Time(scan[0], format="jd")).sec
+            time_of_scan.append(delta_t_scan_sec)
+            n_measurements += delta_t_scan_sec/10.
+    time_of_scan = np.median(time_of_scan)
+
+    n_eff_gain_phases = n_scans * time_of_scan * n_IF_eff / delta_t_sec * (n_ant-1) / t_eff
+    if stokes == "I":
+        n_eff_gain_phases *= 2
+
+    import dlib
+    # Just best rchisq (w/o any fit or self-cal)
+    stat_dict = find_stat_of_difmap_model(dfm_model_file, uvfits, stokes, working_dir, nmodelfit=100, use_pselfcal=True,
+                                          out_dfm_model="selfcaled.mdl")
+    rchisq0 = stat_dict["rchisq"]
+    dof = stat_dict["dof"] - n_eff_gain_phases
+    delta_rchisq = 1.0/dof
+    required_chisq = rchisq0 + delta_rchisq
+    # original_comps = import_difmap_model(dfm_model_file)
+    original_comps = import_difmap_model("selfcaled.mdl")
+    original_comps = sorted(original_comps, key=lambda c: np.hypot(c.p[1], c.p[2]))
+    # comps = import_difmap_model(dfm_model_file)
+    comps = import_difmap_model("selfcaled.mdl")
+
+    errors = list()
+
+    for i, comp in enumerate(comps):
+        # x, y
+        for index in (1, 2):
+
+            par0 = comp.p[index]
+
+            def min_func_lower(delta):
+                ccomp = copy.copy(comp)
+                ccomp.set_value(par0 - delta, index)
+                # Hack to fix r & theta
+                ccomp._fixed[1] = True
+                ccomp._fixed[2] = True
+                new_comps = comps.copy()
+                new_comps.insert(i, ccomp)
+                new_comps.pop(i+1)
+                export_difmap_model(new_comps, "dfm.mdl", 15.4E+09)
+                sdict = find_stat_of_difmap_model("dfm.mdl", uvfits, stokes, working_dir, show_difmap_output,
+                                                  nmodelfit=nmodelfit, use_pselfcal=True)
+                print("For delta = {} differece = {}".format(delta, abs(required_chisq - sdict["rchisq"])))
+                return (required_chisq - sdict["rchisq"])**2
+
+            def min_func_upper(delta):
+                ccomp = copy.copy(comp)
+                ccomp.set_value(par0 + delta, index)
+                # Hack to fix r & theta
+                ccomp._fixed[1] = True
+                ccomp._fixed[2] = True
+                new_comps = comps.copy()
+                new_comps.insert(i, ccomp)
+                new_comps.pop(i+1)
+                export_difmap_model(new_comps, "dfm.mdl", 15.4E+09)
+                sdict = find_stat_of_difmap_model("dfm.mdl", uvfits, stokes, working_dir,
+                                                  nmodelfit=nmodelfit, use_pselfcal=True)
+                return (required_chisq - sdict["rchisq"])**2
+
+            # First find upper bound
+            lower_bounds = [1E-7]
+            upper_bounds = [1.0]
+            n_fun_eval = 50
+            delta_lower, _ = dlib.find_min_global(min_func_lower, lower_bounds, upper_bounds, n_fun_eval)
+            delta_upper, _ = dlib.find_min_global(min_func_upper, lower_bounds, upper_bounds, n_fun_eval)
+
+            print("Parameters = {} - {} + {}".format(par0, delta_lower, delta_upper))
+            errors.append((delta_lower, delta_upper))
+            # sys.exit(0)
+    return errors
+
+
+def find_2D_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", working_dir=None,
+                                       delta_t_sec=10.0, gain_phase_tcoh=30.0,
+                                       show_difmap_output=False, nmodelfit=50,
+                                       unselfcalibrated_uvfits=None):
+
+    # Nuber of time stamps for gain phases to "forget" their values
+    t_eff = gain_phase_tcoh/delta_t_sec
+    rho = np.exp(-(delta_t_sec/gain_phase_tcoh)**2)
+
+    # Find gains DoF
+    uvdata = UVData(uvfits)
+    n_use_vis = uvdata.n_usable_visibilities_difmap(stokes=stokes)
+    n_IF = uvdata.nif
+    n_ant = len(uvdata.antennas)
+
+    # Coefficient of correlation between gains in close IFs
+    rho_IF = 0.75
+    n_IF_eff = n_IF/(1+(n_IF-1)*rho_IF)
+
+
+    baseline_scan_times = uvdata.baselines_scans_times
+    n_scans = np.argmax(np.bincount([len(a) for a in baseline_scan_times.values()]))
+
+    n_measurements = 0
+    time_of_scan = list()
+    for bl, scans in baseline_scan_times.items():
+        for scan in scans:
+            delta_t_scan_sec = (Time(scan[-1], format="jd") - Time(scan[0], format="jd")).sec
+            time_of_scan.append(delta_t_scan_sec)
+            n_measurements += delta_t_scan_sec/delta_t_sec
+    time_of_scan = np.median(time_of_scan)
+
+    n_eff_gain_phases = n_scans * time_of_scan * n_IF_eff / delta_t_sec * (n_ant-1) / t_eff
+    if stokes == "I":
+        n_eff_gain_phases *= 2
+
+    print("N_eff phases = ", n_eff_gain_phases)
+
+    import dlib
+    stat_dict = find_stat_of_difmap_model(dfm_model_file, uvfits, stokes, working_dir, nmodelfit=200, use_pselfcal=True,
+                                          out_dfm_model="selfcaled.mdl")
+    rchisq0 = stat_dict["rchisq"]
+    dof = stat_dict["dof"] - n_eff_gain_phases
+    print("DoF = ", dof)
+    delta_rchisq = 2.0/dof
+    required_chisq = rchisq0 + delta_rchisq
+    # original_comps = import_difmap_model(dfm_model_file)
+    original_comps = import_difmap_model("selfcaled.mdl")
+    original_comps = sorted(original_comps, key=lambda c: np.hypot(c.p[1], c.p[2]))
+    # comps = import_difmap_model(dfm_model_file)
+    comps = import_difmap_model("selfcaled.mdl")
+    comps = sorted(comps, key=lambda c: np.hypot(c.p[1], c.p[2]))
+
+    errors = dict()
+
+    for i, comp in enumerate(comps):
+        errors[i] = list()
+        # Cycle through the polar angle in coordinate system with origin at the best position
+        for PA_cur in np.arange(0, np.deg2rad(360), np.deg2rad(15)):
+
+            x0, y0 = comp.p[1], comp.p[2]
+            # Convert to RA, DEC
+            dec0 = -y0
+            ra0 = -x0
+
+            print("Searching along PA = {:.1f} deg around RA = {:.3f}, DEC = {:.3f}".format(np.rad2deg(PA_cur), ra0, dec0))
+
+            def rot_shift(ra, dec, PA, delta):
+                """
+                RA&DEC after rotating on PA (rad) counter-clockwise around (ra, dec) and shifting on delta (mas)
+                """
+                return ra + delta*np.sin(PA), dec + delta*np.cos(PA)
+
+            def min_func(delta):
+                ra_new, dec_new = rot_shift(ra0, dec0, PA_cur, delta)
+                ccomp = copy.copy(comp)
+                # Set x (-RA)
+                ccomp.set_value(-ra_new, 1)
+                # Set y (-DEC)
+                ccomp.set_value(-dec_new, 2)
+                # Hack to fix r & theta
+                ccomp._fixed[1] = True
+                ccomp._fixed[2] = True
+                new_comps = comps.copy()
+                new_comps.insert(i, ccomp)
+                new_comps.pop(i+1)
+                export_difmap_model(new_comps, "dfm.mdl", 15.4E+09)
+                sdict = find_stat_of_difmap_model("dfm.mdl", uvfits, stokes, working_dir, show_difmap_output,
+                                                  nmodelfit=nmodelfit, use_pselfcal=True)
+                print("For delta = {} differece = {}".format(delta, abs(required_chisq - sdict["rchisq"])))
+                return (required_chisq - sdict["rchisq"])**2
+
+            # First find upper bound
+            lower_bounds = [1E-7]
+            upper_bounds = [1.0]
+            n_fun_eval = 50
+            delta_bound, _ = dlib.find_min_global(min_func, lower_bounds, upper_bounds, n_fun_eval)
+            # delta_upper, _ = dlib.find_min_global(min_func_upper, lower_bounds, upper_bounds, n_fun_eval)
+
+            print("Parameters: PA = {:.1f} deg, delta = {:.7f}".format(np.rad2deg(PA_cur), delta_bound[0]))
+            errors[i].append((PA_cur, delta_bound[0]))
+        # sys.exit(0)
+    return errors
+
+
+def convert_2D_position_errors_to_ell_components(dfm_model_file, errors, include_shfit=True):
+    """
+    :param dfm_model_file:
+    :param errors:
+        Dictionary with keys - component numbers and values lists of tuples with
+        first element - theta [rad], second element - distance in this direction
+        [mas]. Angle ``theta`` counts from North to East (as usually),
+    :return:
+        Iterable of elliptical components representing 2D positional errors.
+    """
+    from components import EGComponent
+    comps = import_difmap_model(dfm_model_file)
+    error_comps = list()
+    for i, comp in enumerate(comps):
+        error_list = errors[i]
+        theta = list()
+        r = list()
+        for error_entry in error_list:
+            theta.append(error_entry[0])
+            r.append(error_entry[1])
+        fit = fit_ellipse_to_2D_position_errors(theta, r)
+        dRA = fit["xc"]
+        dDEC = fit["yc"]
+        a = fit["a"]
+        b = fit["b"]
+        bmaj = max(a, b)
+        bmin = min(a, b)
+        e = bmin/bmaj
+        bpa = fit["theta"]
+        # FIXME: Hack to fix skimage result
+        if bpa < np.pi/2:
+            bpa += np.pi/2
+        print("Component #{}, BPA = {}".format(i, np.rad2deg(bpa)))
+        comp_ra = -comp.p[1]
+        comp_dec = -comp.p[2]
+        if include_shfit:
+            error_comp = EGComponent(0.0, -comp_ra-dRA, -comp_dec-dDEC, 2*bmaj, e,
+                                     bpa + np.pi/2)
+        else:
+            error_comp = EGComponent(0.0, -comp_ra, -comp_dec, 2*bmaj, e,
+                                     bpa + np.pi/2)
+        error_comps.append(error_comp)
+    return error_comps
+
+# This return semi-axes lengths
+def fit_ellipse_to_2D_position_errors(PA, dr, use="skimage"):
+
+    t = np.array(PA)
+    dr = np.array(dr)
+
+    # Filter small values
+    indx = dr > 1E-04
+    t = t[indx]
+    dr = dr[indx]
+
+    x = dr*np.cos(t)
+    y = dr*np.sin(t)
+
+    if use == "skimage":
+        from skimage.measure import EllipseModel
+        ell = EllipseModel()
+        ell.estimate(np.dstack((x, y))[0])
+        xc, yc, a, b, theta = ell.params
+        # xc - adds to DEC, yc - adds to RA, PA = theta + 90 deg
+        return {"xc": xc, "yc": yc, "a": a, "b": b, "theta": theta}
+
+    if use == "dlib":
+        import dlib
+
+        def min_func(a, b, theta):
+            xt = a*np.cos(theta)*np.cos(t) - b*np.sin(theta)*np.sin(t)
+            yt = a*np.sin(theta)*np.cos(t) + b*np.cos(theta)*np.sin(t)
+            return np.sum((x - xt)**2 + (y - yt)**2)
+
+        lower_bounds = [1E-07, 1E-07, -np.pi]
+        upper_bounds = [1.0, 1.0, np.pi]
+        n_fun_eval = 1000
+        res, _ = dlib.find_min_global(min_func, lower_bounds, upper_bounds, n_fun_eval)
+        return {"a": res[0], "b": res[1], "theta": res[2]}
+
+    else:
+        raise Exception("Methods: skimage or dlib")
 
 
 def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,

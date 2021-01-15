@@ -255,10 +255,10 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
          colorbar_label=None, show=True, contour_color='k',
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
-         show_points=None, components=None, slice_color='black',
+         show_points=None, components=None, components_errors=None, slice_color='black',
          plot_colorbar=True, label_size=12, ra_range=None, dec_range=None,
          fig=None, axes=None, contour_linewidth=0.5, vector_color="black",
-         n_discrete_colors=None):
+         n_discrete_colors=None, fixed_component_color="deepskyblue"):
     """
     Plot image(s).
 
@@ -417,6 +417,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         ax = axes
     else:
         ax = fig.get_axes()[0]
+        ax.set_xlabel(r'Relative R.A. (mas)')
+        ax.set_ylabel(r'Relative Decl. (mas)')
 
     if ra_range:
         ax.set_xlim(ra_range)
@@ -568,47 +570,82 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
     if components:
         facecolor = "red"
         for comp in components:
+            if np.any(comp._fixed):
+                is_some_parameter_fixed = True
+            else:
+                is_some_parameter_fixed = False
+
             # RA
-            x_c = -comp.p[1]
+            x_c = -comp.p_all[1]
             # DEC
-            y_c = -comp.p[2]
+            y_c = -comp.p_all[2]
+            # len used for all parameters (even fixed)
             if len(comp) == 6:
-                e_height = comp.p[3]
-                e_width = comp.p[3] * comp.p[4]
+                e_height = comp.p_all[3]
+                e_width = comp.p_all[3] * comp.p_all[4]
                 if e_height < 0.25*plot_pixel_size and e_width < 0.25*plot_pixel_size:
                     facecolor = "green"
                 if e_height < 0.25*plot_pixel_size:
                     e_height = 0.25*plot_pixel_size
                 if e_width < 0.25*plot_pixel_size:
-                    e_width = 0.25*plot_pixel_size*comp.p[4]
+                    e_width = 0.25*plot_pixel_size*comp.p_all[4]
                 else:
                     facecolor = "red"
-                if comp.p[0] < 0:
+                if comp.p_all[0] < 0:
                     facecolor = "blue"
+
+                if is_some_parameter_fixed:
+                    facecolor = fixed_component_color
+
+                # FIXME: Here must be total length of vertical/horizontal axis
                 e = Ellipse((x_c, y_c), e_width, e_height,
-                            angle=90.0-180*comp.p[5]/np.pi,
+                            angle=90.0-180*comp.p_all[5]/np.pi,
                             edgecolor=beam_edge_color, facecolor=facecolor,
                             alpha=beam_alpha)
             elif len(comp) == 4:
                 # It is radius so dividing in 2
-                c_size = comp.p[3]/2.0
+                c_size = comp.p_all[3]/2.0
                 if c_size < 0.25*plot_pixel_size:
                     c_size = 0.25*plot_pixel_size
                     facecolor = "green"
                 else:
                     facecolor = "red"
-                if comp.p[0] < 0:
+                if comp.p_all[0] < 0:
                     facecolor = "blue"
+
+                if is_some_parameter_fixed:
+                    facecolor = fixed_component_color
+
                 e = Circle((x_c, y_c), c_size,
                             edgecolor=beam_edge_color, facecolor=facecolor,
                             alpha=beam_alpha)
             elif len(comp) == 3:
+
+                if is_some_parameter_fixed:
+                    facecolor = fixed_component_color
+
                 e = Circle((x_c, y_c), plot_pixel_size,
                             edgecolor=beam_edge_color, facecolor='green',
                             alpha=beam_alpha)
             else:
                 raise Exception("Only Point, Circle or Ellipse components are"
                                 " plotted")
+            ax.add_patch(e)
+
+    if components_errors is not None:
+        facecolor = "gray"
+        # Each components represent error ellipse
+        for comp in components_errors:
+            # RA
+            x_c = -comp.p_all[1]
+            # DEC
+            y_c = -comp.p_all[2]
+            e_height = comp.p_all[3]
+            e_width = comp.p_all[3] * comp.p_all[4]
+            e = Ellipse((x_c, y_c), e_width, e_height,
+                        angle=90.0-180*comp.p_all[5]/np.pi,
+                        edgecolor=beam_edge_color, facecolor=facecolor,
+                        alpha=beam_alpha)
             ax.add_patch(e)
 
     # Saving output
@@ -621,7 +658,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
 
         path = os.path.join(outdir, outfile)
         print("Saving to {}.{}".format(path, ext))
-        plt.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=200)
+        plt.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=500)
 
     if show and fig is not None:
         fig.show()

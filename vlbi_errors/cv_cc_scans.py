@@ -192,7 +192,7 @@ if __name__ == '__main__':
 
     cv_scores = dict()
 
-    for overclean_coeff in np.linspace(0.1, 2.0, 15):
+    for overclean_coeff in np.linspace(0.5, 1.0, 3):
 
         filein = open(template_script)
         src = Template(filein.read())

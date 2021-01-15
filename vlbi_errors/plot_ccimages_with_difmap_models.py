@@ -35,7 +35,7 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     uvfits_file = "1652+398.u.{}.uvf".format(epoch)
     uvdata = UVData(os.path.join(data_dir, uvfits_file))
     all_stokes = uvdata.stokes
-    if "I" in all_stokes:
+    if "RR" in all_stokes and "LL" in all_stokes:
         stokes = "I"
     else:
         if "RR" in all_stokes:

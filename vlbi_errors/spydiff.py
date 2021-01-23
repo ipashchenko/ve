@@ -520,7 +520,8 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  path_to_script=None, mapsize_restore=None, beam_restore=None,
                  outpath=None, shift=None, show_difmap_output=False,
                  command_file=None, clean_box=None, dfm_model=None, omit_residuals=False,
-                 do_smooth=True, dmap=None, text_box=None):
+                 do_smooth=True, dmap=None, text_box=None,
+                 box_rms_factor=None, window_file=None):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
@@ -597,7 +598,12 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     if text_box is not None:
         difmapout.write("rwins " + str(text_box) + "\n")
 
-    difmapout.write("@" + path_to_script + " " + stokes + "\n")
+    # This is interface to final_clean_box script
+    if box_rms_factor is not None and window_file is not None:
+        difmapout.write("@" + path_to_script + " " + stokes + ", " + str(box_rms_factor) + ", " + window_file + "\n")
+    # Here boxes are optionally included via text_box argument
+    else:
+        difmapout.write("@"+path_to_script+" "+stokes+"\n")
 
     # FIXME: Do I need this?
     # difmapout.write("mapsize " + str(mapsize_clean[0] * 2) + ', ' +

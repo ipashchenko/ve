@@ -514,6 +514,11 @@ def find_card_from_header(header, value=None, keyword=None,
     :return:
         Instance of ``astropy.io.fits.card.Card`` class.
     """
+    # HISTORY often holds shitty stuff
+    try:
+        del header["HISTORY"]
+    except KeyError:
+        pass
     if comment_contens is not None:
         search = [card for card in header.cards if comment_contens in
                   card.comment]

@@ -11,12 +11,13 @@ from spydiff import (find_image_std, import_difmap_model, find_bbox,
                      convert_2D_position_errors_to_ell_components)
 from from_fits import create_clean_image_from_fits_file
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
 
 pixsize_mas = 0.1
 data_dir = "/home/ilya/data/Mkn501/difmap_models"
+save_dir = os.path.join(data_dir, "test")
 ccfits_files = sorted(glob.glob(os.path.join(data_dir, "*.icn.fits.gz")))
 ccfits_files = [os.path.split(path)[-1] for path in ccfits_files]
 print(ccfits_files)
@@ -28,6 +29,9 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     if epoch in ["1997_03_13", "2001_12_30", "2003_08_23", "2004_05_29"]:
     # if mdl_file != "1997_03_13.mod":
         continue
+
+    # if epoch not in ["1995_01_20"]:
+    #     continue
 
     print(mdl_file, ccfits_file)
 
@@ -44,18 +48,18 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
             stokes = "LL"
     print("Stokes parameter: ", stokes)
 
-    # Find errors if they are not calculated
-    if not os.path.exists(os.path.join(data_dir, "errors_{}.pkl".format(epoch))):
-        errors = find_2D_position_errors_using_chi2(os.path.join(data_dir, mdl_file),
-                                                    os.path.join(data_dir, uvfits_file),
-                                                    stokes=stokes,
-                                                    show_difmap_output=False)
-        with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "wb") as fo:
-            pickle.dump(errors, fo)
-    # Or just load already calculated
-    else:
-        with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "rb") as fo:
-            errors = pickle.load(fo)
+    # # Find errors if they are not calculated
+    # if not os.path.exists(os.path.join(data_dir, "errors_{}.pkl".format(epoch))):
+    #     errors = find_2D_position_errors_using_chi2(os.path.join(data_dir, mdl_file),
+    #                                                 os.path.join(data_dir, uvfits_file),
+    #                                                 stokes=stokes,
+    #                                                 show_difmap_output=False)
+    #     with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "wb") as fo:
+    #         pickle.dump(errors, fo)
+    # # Or just load already calculated
+    # else:
+    with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "rb") as fo:
+        errors = pickle.load(fo)
     # Make dummy elliptical components for plotting errors
     error_comps = convert_2D_position_errors_to_ell_components(os.path.join(data_dir, mdl_file),
                                                                errors, include_shfit=False)
@@ -72,7 +76,7 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
                 blc=blc, trc=trc, beam=beam, show_beam=True, show=False,
                 close=True, contour_color='black',
                 plot_colorbar=False, components=comps, components_errors=error_comps,
-                outfile="{}_original_model_errors2D".format(epoch), outdir=data_dir, fig=fig)
+                outfile="{}_original_model_errors2D_test".format(epoch), outdir=save_dir, fig=fig)
 
 
     #

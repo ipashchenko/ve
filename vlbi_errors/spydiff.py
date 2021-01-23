@@ -1998,12 +1998,14 @@ def convert_2D_position_errors_to_ell_components(dfm_model_file, errors, include
     :param errors:
         Dictionary with keys - component numbers and values lists of tuples with
         first element - theta [rad], second element - distance in this direction
-        [mas]. Angle ``theta`` counts from North to East (as usually),
+        [mas]. Angle ``theta`` counts from North to East (as usually).
+        Components are sorted by r.
     :return:
         Iterable of elliptical components representing 2D positional errors.
     """
     from components import EGComponent
     comps = import_difmap_model(dfm_model_file)
+    comps = sorted(comps, key=lambda c: np.hypot(c.p[1], c.p[2]))
     error_comps = list()
     for i, comp in enumerate(comps):
         error_list = errors[i]
@@ -2012,7 +2014,7 @@ def convert_2D_position_errors_to_ell_components(dfm_model_file, errors, include
         for error_entry in error_list:
             theta.append(error_entry[0])
             r.append(error_entry[1])
-        fit = fit_ellipse_to_2D_position_errors(theta, r)
+        fit = fit_ellipse_to_2D_position_errors(theta, r, use="skimage")
         dRA = fit["xc"]
         dDEC = fit["yc"]
         a = fit["a"]
@@ -2021,18 +2023,20 @@ def convert_2D_position_errors_to_ell_components(dfm_model_file, errors, include
         bmin = min(a, b)
         e = bmin/bmaj
         bpa = fit["theta"]
+        print("Fitted BPA = ", np.rad2deg(bpa))
         # FIXME: Hack to fix skimage result
-        if bpa < np.pi/2:
-            bpa += np.pi/2
+        # if bpa < np.pi/2:
+        #     print("Addin 90 deg")
+        bpa += np.pi/2
         print("Component #{}, BPA = {}".format(i, np.rad2deg(bpa)))
         comp_ra = -comp.p[1]
         comp_dec = -comp.p[2]
         if include_shfit:
             error_comp = EGComponent(0.0, -comp_ra-dRA, -comp_dec-dDEC, 2*bmaj, e,
-                                     bpa + np.pi/2)
+                                     bpa)
         else:
             error_comp = EGComponent(0.0, -comp_ra, -comp_dec, 2*bmaj, e,
-                                     bpa + np.pi/2)
+                                     bpa)
         error_comps.append(error_comp)
     return error_comps
 
@@ -2047,8 +2051,16 @@ def fit_ellipse_to_2D_position_errors(PA, dr, use="skimage"):
     t = t[indx]
     dr = dr[indx]
 
-    x = dr*np.cos(t)
-    y = dr*np.sin(t)
+    import matplotlib.pyplot as plt
+    # FIXME:
+    # t -= np.pi/2
+    plt.polar(t, dr, ".k")
+    plt.show()
+
+    x = -dr*np.sin(t)
+    y = dr*np.cos(t)
+    # x = dr*np.cos(t)
+    # y = dr*np.sin(t)
 
     if use == "skimage":
         from skimage.measure import EllipseModel
@@ -2072,8 +2084,180 @@ def fit_ellipse_to_2D_position_errors(PA, dr, use="skimage"):
         res, _ = dlib.find_min_global(min_func, lower_bounds, upper_bounds, n_fun_eval)
         return {"a": res[0], "b": res[1], "theta": res[2]}
 
+    if use == "simple":
+        a, b, x_c, y_c, theta = fit_ellipse(x, y)
+        # cen = ellipse_center(res)
+        # lengths = ellipse_axis_length(res)
+        # theta = ellipse_angle_of_rotation(res)
+        return {"xc": x_c, "yc": y_c, "a": a, "b": b, "theta": np.deg2rad(theta)}
+
     else:
         raise Exception("Methods: skimage or dlib")
+
+
+
+from numpy.linalg import eig, inv, svd
+from math import atan2
+import numpy as np
+
+
+def __fit_ellipse(x, y):
+    x, y = x[:, np.newaxis], y[:, np.newaxis]
+    D = np.hstack((x * x, x * y, y * y, x, y, np.ones_like(x)))
+    S, C = np.dot(D.T, D), np.zeros([6, 6])
+    C[0, 2], C[2, 0], C[1, 1] = 2, 2, -1
+    U, s, V = svd(np.dot(inv(S), C))
+    a = U[:, 0]
+    return a
+
+def ellipse_center(a):
+    b, c, d, f, g, a = a[1] / 2, a[2], a[3] / 2, a[4] / 2, a[5], a[0]
+    num = b * b - a * c
+    x0 = (c * d - b * f) / num
+    y0 = (a * f - b * d) / num
+    return np.array([x0, y0])
+
+def ellipse_axis_length(a):
+    b, c, d, f, g, a = a[1] / 2, a[2], a[3] / 2, a[4] / 2, a[5], a[0]
+    up = 2 * (a * f * f + c * d * d + g * b * b - 2 * b * d * f - a * c * g)
+    down1 = (b * b - a * c) * (
+        (c - a) * np.sqrt(1 + 4 * b * b / ((a - c) * (a - c))) - (c + a)
+    )
+    down2 = (b * b - a * c) * (
+        (a - c) * np.sqrt(1 + 4 * b * b / ((a - c) * (a - c))) - (c + a)
+    )
+    res1 = np.sqrt(up / down1)
+    res2 = np.sqrt(up / down2)
+    return np.array([res1, res2])
+
+def ellipse_angle_of_rotation(a):
+    b, c, d, f, g, a = a[1] / 2, a[2], a[3] / 2, a[4] / 2, a[5], a[0]
+    return atan2(2 * b, (a - c)) / 2
+
+def fit_ellipse(x, y):
+    """@brief fit an ellipse to supplied data points: the 5 params
+        returned are:
+        M - major axis length
+        m - minor axis length
+        cx - ellipse centre (x coord.)
+        cy - ellipse centre (y coord.)
+        phi - rotation angle of ellipse bounding box
+    @param x first coordinate of points to fit (array)
+    @param y second coord. of points to fit (array)
+    """
+    a = __fit_ellipse(x, y)
+    centre = ellipse_center(a)
+    phi = ellipse_angle_of_rotation(a)
+    M, m = ellipse_axis_length(a)
+    # assert that the major axix M > minor axis m
+    if m > M:
+        M, m = m, M
+    # ensure the angle is betwen 0 and 2*pi
+    phi -= 2 * np.pi * int(phi / (2 * np.pi))
+    return [M, m, centre[0], centre[1], phi]
+
+
+
+
+
+
+# def fitEllipse(x,y):
+#     from numpy import linalg
+#     x = x[:,np.newaxis]
+#     y = y[:,np.newaxis]
+#     D =  np.hstack((x*x, x*y, y*y, x, y, np.ones_like(x)))
+#     S = np.dot(D.T,D)
+#     C = np.zeros([6,6])
+#     C[0,2] = C[2,0] = 2; C[1,1] = -1
+#     E, V =  linalg.eig(np.dot(linalg.inv(S), C))
+#     n = np.argmax(np.abs(E))
+#     a = V[:,n]
+#     return a
+#
+# def ellipse_center(a):
+#     b,c,d,f,g,a = a[1]/2, a[2], a[3]/2, a[4]/2, a[5], a[0]
+#     num = b*b-a*c
+#     x0=(c*d-b*f)/num
+#     y0=(a*f-b*d)/num
+#     return np.array([x0,y0])
+#
+# def ellipse_angle_of_rotation( a ):
+#     b,c,d,f,g,a = a[1]/2, a[2], a[3]/2, a[4]/2, a[5], a[0]
+#     return 0.5*np.arctan(2*b/(a-c))
+#
+# def ellipse_axis_length( a ):
+#     b,c,d,f,g,a = a[1]/2, a[2], a[3]/2, a[4]/2, a[5], a[0]
+#     up = 2*(a*f*f+c*d*d+g*b*b-2*b*d*f-a*c*g)
+#     down1=(b*b-a*c)*( (c-a)*np.sqrt(1+4*b*b/((a-c)*(a-c)))-(c+a))
+#     down2=(b*b-a*c)*( (a-c)*np.sqrt(1+4*b*b/((a-c)*(a-c)))-(c+a))
+#     res1=np.sqrt(up/down1)
+#     res2=np.sqrt(up/down2)
+#     return np.array([res1, res2])
+#
+# def find_ellipse(x, y):
+#     xmean = x.mean()
+#     ymean = y.mean()
+#     x -= xmean
+#     y -= ymean
+#     a = fitEllipse(x,y)
+#     center = ellipse_center(a)
+#     center[0] += xmean
+#     center[1] += ymean
+#     phi = ellipse_angle_of_rotation(a)
+#     axes = ellipse_axis_length(a)
+#     x += xmean
+#     y += ymean
+#     return center, phi, axes
+
+
+
+
+# def fitEllipse(x,y):
+#     from numpy.linalg import eig, inv
+#     x = x[:,np.newaxis]
+#     y = y[:,np.newaxis]
+#     D =  np.hstack((x*x, x*y, y*y, x, y, np.ones_like(x)))
+#     S = np.dot(D.T,D)
+#     C = np.zeros([6,6])
+#     C[0,2] = C[2,0] = 2; C[1,1] = -1
+#     E, V =  eig(np.dot(inv(S), C))
+#     n = np.argmax(np.abs(E))
+#     a = V[:,n]
+#     return a
+#
+# def ellipse_center(a):
+#     b,c,d,f,g,a = a[1]/2, a[2], a[3]/2, a[4]/2, a[5], a[0]
+#     num = b*b-a*c
+#     x0=(c*d-b*f)/num
+#     y0=(a*f-b*d)/num
+#     return np.array([x0,y0])
+#
+# def ellipse_angle_of_rotation( a ):
+#     b,c,d,f,g,a = a[1]/2, a[2], a[3]/2, a[4]/2, a[5], a[0]
+#     return 0.5*np.arctan(2*b/(a-c))
+#
+# def ellipse_axis_length( a ):
+#     b,c,d,f,g,a = a[1]/2, a[2], a[3]/2, a[4]/2, a[5], a[0]
+#     up = 2*(a*f*f+c*d*d+g*b*b-2*b*d*f-a*c*g)
+#     down1=(b*b-a*c)*( (c-a)*np.sqrt(1+4*b*b/((a-c)*(a-c)))-(c+a))
+#     down2=(b*b-a*c)*( (a-c)*np.sqrt(1+4*b*b/((a-c)*(a-c)))-(c+a))
+#     res1=np.sqrt(up/down1)
+#     res2=np.sqrt(up/down2)
+#     return np.array([res1, res2])
+#
+#
+# def ellipse_angle_of_rotation2( a ):
+#     b,c,d,f,g,a = a[1]/2, a[2], a[3]/2, a[4]/2, a[5], a[0]
+#     if b == 0:
+#         if a > c:
+#             return 0
+#         else:
+#             return np.pi/2
+#     else:
+#         if a > c:
+#             return np.arctan(2*b/(a-c))/2
+#         else:
+#             return np.pi/2 + np.arctan(2*b/(a-c))/2
 
 
 def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,

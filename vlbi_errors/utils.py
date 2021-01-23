@@ -520,6 +520,9 @@ def find_card_from_header(header, value=None, keyword=None,
     else:
         search = header.cards
 
+    # Fix just in case
+    [card.verify("fix") for card in search]
+
     if value is not None and keyword is None:
         result = [card for card in search if card.value == value]
     elif value is None and keyword is not None:

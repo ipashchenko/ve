@@ -429,11 +429,14 @@ def get_fits_image_info_from_hdulist(hdulist):
             # In Denise data it is in PrimaryHDU ``HISTORY``
             # TODO: Use ``pyfits.header._HeaderCommentaryCards`` interface if
             # any
-            for line in pr_header['HISTORY']:
-                if 'BMAJ' in line and 'BMIN' in line and 'BPA' in line:
-                    bmaj = float(line.split()[3]) * degree_to_rad
-                    bmin = float(line.split()[5]) * degree_to_rad
-                    bpa = float(line.split()[7]) * degree_to_rad
+            try:
+                for line in pr_header['HISTORY']:
+                    if 'BMAJ' in line and 'BMIN' in line and 'BPA' in line:
+                        bmaj = float(line.split()[3]) * degree_to_rad
+                        bmin = float(line.split()[5]) * degree_to_rad
+                        bpa = float(line.split()[7]) * degree_to_rad
+            except KeyError:
+                pass
         if not (bmaj and bmin and bpa):
             warnings.warn("Beam info absent!")
 
@@ -823,7 +826,7 @@ def aips_bintable_fortran_fields_to_dtype_conversion(aips_type):
     try:
         repeat = int(re.search(r"^(\d+)" + aips_char,
                      aips_type).groups()[0])
-        if aips_char is 'A':
+        if aips_char == 'A':
             dtype_char = str(repeat) + dtype_char
             repeat = 1
     except AttributeError:

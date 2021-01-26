@@ -1793,6 +1793,183 @@ def find_stat_of_difmap_model(dfm_model_file, uvfits, stokes="I", working_dir=No
     return {"rchisq": rchisq, "dof": dof}
 
 
+
+def find_stat_of_difmap_model_ap(dfm_model_file, uvfits, stokes="I", working_dir=None,
+                                 show_difmap_output=False, unselfcalibrated_uvfits=None,
+                                 nmodelfit=100, use_apselfcal=True, out_dfm_model=None):
+
+    if unselfcalibrated_uvfits is None:
+        uvfile = uvfits
+    else:
+        uvfile = unselfcalibrated_uvfits
+
+    original_dir = os.getcwd()
+    if working_dir is None:
+        working_dir = os.getcwd()
+    os.chdir(working_dir)
+
+    # Find and remove all log-files
+    previous_logs = glob.glob("difmap.log*")
+    for log in previous_logs:
+        os.unlink(log)
+
+    stamp = datetime.datetime.now()
+    command_file = os.path.join(working_dir, "difmap_commands_{}".format(stamp.isoformat()))
+    difmapout = open(command_file, "w")
+    difmapout.write("observe " + uvfile + "\n")
+    difmapout.write("select " + stokes + "\n")
+    difmapout.write("rmodel " + dfm_model_file + "\n")
+    if use_apselfcal:
+        difmapout.write("selfcal true\n")
+        difmapout.write("modelfit {}\n".format(nmodelfit))
+        difmapout.write("selfcal true\n")
+    difmapout.write("modelfit {}\n".format(nmodelfit))
+    if out_dfm_model:
+        difmapout.write("wmod {}\n".format(out_dfm_model))
+    difmapout.write("quit\n")
+    difmapout.close()
+
+    # TODO: Use subprocess?
+    shell_command = "difmap < " + command_file + " 2>&1"
+    if not show_difmap_output:
+        shell_command += " >/dev/null"
+    os.system(shell_command)
+
+    # Get final reduced chi_squared
+    log = os.path.join(working_dir, "difmap.log")
+    with open(log, "r") as fo:
+        lines = fo.readlines()
+    line = [line for line in lines if "Reduced Chi-squared=" in line][-1]
+    rchisq = float(line.split(" ")[4].split("=")[1])
+
+    line = [line for line in lines if "degrees of freedom" in line][-1]
+    dof = int(float(line.split(" ")[-4]))
+
+    # Remove command file
+    os.unlink(command_file)
+    # os.unlink("difmap.log")
+    os.chdir(original_dir)
+
+    return {"rchisq": rchisq, "dof": dof}
+
+
+def find_size_errors_using_chi2(dfm_model_file, uvfits, working_dir=None,
+                                delta_t_sec=10.0, gain_phase_tcoh=30.0, gain_amp_tcoh=60.0,
+                                show_difmap_output=False, nmodelfit=20, rho_IF = 0.75,
+                                unselfcalibrated_uvfits=None, use_selfcal=True):
+
+    # Nuber of time stamps for gain phases to "forget" their values
+    t_eff_ph = gain_phase_tcoh/delta_t_sec
+    rho_ph = np.exp(-(delta_t_sec/gain_phase_tcoh)**2)
+    # The same for amplitudes
+    t_eff_amp = gain_amp_tcoh/delta_t_sec
+    rho_amp = np.exp(-(delta_t_sec/gain_amp_tcoh)**2)
+
+    # Find gains DoF
+    uvdata = UVData(uvfits)
+    all_stokes = uvdata.stokes
+    if "RR" in all_stokes and "LL" in all_stokes:
+        stokes = "I"
+    else:
+        if "RR" in all_stokes:
+            stokes = "RR"
+        else:
+            stokes = "LL"
+    n_use_vis = uvdata.n_usable_visibilities_difmap(stokes=stokes)
+    n_IF = uvdata.nif
+    n_ant = len(uvdata.antennas)
+
+    # Coefficient of correlation between gains in close IFs
+    n_IF_eff = n_IF/(1+(n_IF-1)*rho_IF)
+
+
+    baseline_scan_times = uvdata.baselines_scans_times
+    n_scans = np.argmax(np.bincount([len(a) for a in baseline_scan_times.values()]))
+
+    n_measurements = 0
+    time_of_scan = list()
+    for bl, scans in baseline_scan_times.items():
+        for scan in scans:
+            delta_t_scan_sec = (Time(scan[-1], format="jd") - Time(scan[0], format="jd")).sec
+            time_of_scan.append(delta_t_scan_sec)
+            n_measurements += delta_t_scan_sec/10.
+    time_of_scan = np.median(time_of_scan)
+
+    n_eff_gain_phases = n_scans * time_of_scan * n_IF_eff / delta_t_sec * (n_ant-1) / t_eff_ph
+    n_eff_gain_amps = n_scans * time_of_scan * n_IF_eff / delta_t_sec * (n_ant-1) / t_eff_amp
+    n_eff_gain = n_eff_gain_amps + n_eff_gain_phases
+    if stokes == "I":
+        n_eff_gain *= 2
+
+    import dlib
+    # Just best rchisq (w/o any fit or self-cal)
+    stat_dict = find_stat_of_difmap_model_ap(dfm_model_file, uvfits, stokes, working_dir, nmodelfit=100,
+                                             out_dfm_model="selfcaled.mdl", use_apselfcal=use_selfcal)
+    rchisq0 = stat_dict["rchisq"]
+    if use_selfcal:
+        dof = stat_dict["dof"] - n_eff_gain
+    else:
+        dof = stat_dict["dof"]
+    print("DoF = ", dof)
+    delta_rchisq = 1.0/dof
+    required_chisq = rchisq0 + delta_rchisq
+    print("Required chi2 = ", required_chisq)
+    # original_comps = import_difmap_model(dfm_model_file)
+    original_comps = import_difmap_model("selfcaled.mdl")
+    # original_comps = sorted(original_comps, key=lambda c: np.hypot(c.p[1], c.p[2]))
+    # comps = import_difmap_model(dfm_model_file)
+    comps = import_difmap_model("selfcaled.mdl")
+
+    errors = list()
+
+    for i, comp in enumerate(comps):
+        index = 3
+        par0 = comp.p[index]
+
+        def min_func_lower(delta):
+            ccomp = copy.copy(comp)
+            ccomp.set_value(par0 - delta, index)
+            # Hack to fix size
+            ccomp._fixed[3] = True
+            new_comps = comps.copy()
+            new_comps.insert(i, ccomp)
+            new_comps.pop(i+1)
+            export_difmap_model(new_comps, "dfm.mdl", 15.4E+09)
+            sdict = find_stat_of_difmap_model_ap("dfm.mdl", uvfits, stokes, working_dir, show_difmap_output,
+                                                 nmodelfit=nmodelfit, use_apselfcal=use_selfcal)
+            print("For delta = {} differece = {}".format(delta, abs(required_chisq - sdict["rchisq"])))
+            return (required_chisq - sdict["rchisq"])**2
+
+        def min_func_upper(delta):
+            ccomp = copy.copy(comp)
+            ccomp.set_value(par0 + delta, index)
+            # Hack to fix size
+            ccomp._fixed[3] = True
+            new_comps = comps.copy()
+            new_comps.insert(i, ccomp)
+            new_comps.pop(i+1)
+            export_difmap_model(new_comps, "dfm.mdl", 15.4E+09)
+            sdict = find_stat_of_difmap_model_ap("dfm.mdl", uvfits, stokes, working_dir,
+                                                 nmodelfit=nmodelfit, use_apselfcal=use_selfcal)
+            print("For delta = {} differece = {}".format(delta, abs(required_chisq - sdict["rchisq"])))
+            return (required_chisq - sdict["rchisq"])**2
+
+        # First find upper bound
+        lower_bounds = [1E-7]
+        upper_bounds = [3.0]
+        n_fun_eval = 25
+        delta_lower, _ = dlib.find_min_global(min_func_lower, lower_bounds, upper_bounds, n_fun_eval)
+        delta_upper, _ = dlib.find_min_global(min_func_upper, lower_bounds, upper_bounds, n_fun_eval)
+
+        print("Parameters = {} - {} + {}".format(par0, delta_lower, delta_upper))
+        errors.append((delta_lower, delta_upper))
+        # sys.exit(0)
+    return errors
+
+
+
+
+
 def find_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", working_dir=None,
                                     delta_t_sec=10.0, gain_phase_tcoh=30.0,
                                     show_difmap_output=False, nmodelfit=20,

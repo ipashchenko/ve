@@ -1350,10 +1350,13 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
 
 if __name__ == '__main__':
     import glob
-    data_dir = "/home/ilya/data/zhenya"
-    uv_fits_paths = glob.glob(os.path.join(data_dir, "*.uvf_difmap*"))
-    bands_pixsize_dict = {"u1": 0.1, "x1": 0.2, "x2": 0.2, "c1": 0.3, "c2": 0.3, "q1": 0.03, "k1": 0.05}
-    band_avetime_dict = {"q1": None, "k1": 30, "u1": 60, "x1": 120, "x2": 120, "c1": 120, "c2": 120}
+    # data_dir = "/home/ilya/data/zhenya"
+    data_dir = "/home/ilya/data/3C120/"
+    uv_fits_paths = glob.glob(os.path.join(data_dir, "*.uvf"))
+    # bands_pixsize_dict = {"u1": 0.1, "x1": 0.2, "x2": 0.2, "c1": 0.3, "c2": 0.3, "q1": 0.03, "k1": 0.05}
+    bands_pixsize_dict = {"j": 0.15, "x": 0.2, "y": 0.2, "18cm": 1, "20cm": 1, "21cm": 1, "22cm": 1}
+    # band_avetime_dict = {"q1": None, "k1": 30, "u1": 60, "x1": 120, "x2": 120, "c1": 120, "c2": 120}
+    band_avetime_dict = {k: None for k in bands_pixsize_dict.keys()}
     bands_files_dict = {}
     for uv_fits_path in uv_fits_paths:
         fname = os.path.split(uv_fits_path)[-1]
@@ -1361,9 +1364,11 @@ if __name__ == '__main__':
         bands_files_dict.update({band: uv_fits_path})
     # uv_fits_paths = [os.path.join(data_dir, "J0510+1800_S_2007_05_03_sok_vis.fits")]
     # uv_fits_paths = ["/home/ilya/github/bam/data/0716+714/0716+714.u.2006_12_01.uvf"]
-    base_outdir = "/home/ilya/data/zhenya"
+    base_outdir = os.path.join(data_dir, "results")
 
     for band, uv_fits_path in bands_files_dict.items():
+        if band in ("x", "j"):
+            continue
         path, fname = os.path.split(uv_fits_path)
 
         if band_avetime_dict[band] is not None:
@@ -1378,7 +1383,7 @@ if __name__ == '__main__':
         # out_dir = "/home/ilya/data/sashaplavin/test_uv/{}".format(source)
         uvfits_fname = os.path.split(uv_fits_path)[-1]
         uvfits_basename = ".".join(uvfits_fname.split(".")[:-1])
-        out_dir = "/home/ilya/data/zhenya/with_overlap/{}".format(band)
+        out_dir = "{}/{}".format(base_outdir, band)
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
 
@@ -1396,7 +1401,7 @@ if __name__ == '__main__':
         stoppers = [AddedComponentFluxLessRMSStopping(n_rms=5.0, mode="or"),
                     # AddedComponentFluxLessRMSFluxStopping(mode="or"),
                     AddedTooDistantComponentStopping(mode="or", n_rms=3.0),
-                    AddedTooSmallComponentStopping(mode="and", ),
+                    # AddedTooSmallComponentStopping(mode="and", ),
                     AddedNegativeFluxComponentStopping(mode="or"),
                     # for 0430 exclude it
                     # AddedOverlappingComponentStopping(),

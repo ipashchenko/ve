@@ -675,7 +675,9 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  outpath=None, shift=None, show_difmap_output=False,
                  command_file=None, clean_box=None, dfm_model=None, omit_residuals=False,
                  do_smooth=True, dmap=None, text_box=None,
-                 box_rms_factor=None, window_file=None):
+                 box_rms_factor=None, window_file=None,
+                 super_unif_dynam=None, unif_dynam=None,
+                 taper_gaussian_value=None, taper_gaussian_radius=None):
     """
     Map self-calibrated uv-data in difmap.
     :param fname:
@@ -696,8 +698,8 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         Parameters of map for restoring CC (map size, pixel size). If
         ``None`` then use naitive. (default: ``None``)
     :param beam_restore: (optional)
-        Beam parameter for restore map (bmaj, bmin, bpa). If ``None`` then use
-        the same beam as in cleaning. (default: ``None``)
+        Beam parameter for restore map (bmaj[mas], bmin[mas], bpa[rad]). If
+        ``None`` then use the same beam as in cleaning. (default: ``None``)
     :param outpath: (optional)
         Path to file with CCs. If ``None`` then use ``path``.
         (default: ``None``)
@@ -726,6 +728,24 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     :param dmap: (optional)
         FIle name to save the residual map. If ``None`` then do not save
         the residual map. (default: ``None``)
+
+
+    :Note:
+           Following 4 parameters are used for alpha-project.
+
+    :param super_unif_dynam: (optional)
+        Parameter for minimal dynamic range to use in super uniform weighting.
+        Only for some CLEANing scripts!
+    :param unif_dynam: (optional)
+        Parameter for minimal dynamic range to use in uniform weighting.
+        Only for some CLEANing scripts!
+    :param taper_gaussian_value: (optional)
+        Taper parameter for deep cleaning. Only for some CLEAN scripts!
+    :param taper_gaussian_radius: (optional)
+        Taper parameter for deep cleaning. Only for some CLEAN scripts!
+
+
+
     """
     if path is None:
         path = os.getcwd()
@@ -755,6 +775,14 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     # This is interface to final_clean_box script
     if box_rms_factor is not None and window_file is not None:
         difmapout.write("@" + path_to_script + " " + stokes + ", " + str(box_rms_factor) + ", " + window_file + "\n")
+    elif super_unif_dynam is not None and unif_dynam is not None:
+        if taper_gaussian_value is None or taper_gaussian_radius is None:
+            # No taper
+            taper_gaussian_value = 1.1
+            taper_gaussian_radius = 0.0
+        difmapout.write("@" + path_to_script + " " + stokes + ", " +
+                        str(super_unif_dynam) + ", " + str(unif_dynam) +
+                        str(taper_gaussian_value) + ", " + str(taper_gaussian_radius) + "\n")
     # Here boxes are optionally included via text_box argument
     else:
         difmapout.write("@"+path_to_script+" "+stokes+"\n")

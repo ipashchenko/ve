@@ -1332,7 +1332,8 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
     beam = image.beam
     rms = rms_image(image)
     if ra_range is None or dec_range is None:
-        blc, trc = find_bbox(image.image, n_rms_size*rms, 10)
+        blc, trc = find_bbox(image.image, n_rms_size*rms, min_maxintensity_mjyperbeam=30*rms,
+                             min_area_pix=20*100, delta=10)
     else:
         blc, trc = None, None
     try:
@@ -1349,12 +1350,14 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
 
 
 if __name__ == '__main__':
+    import sys
     import glob
+    import os
     # data_dir = "/home/ilya/data/zhenya"
-    data_dir = "/home/ilya/data/3C120/"
-    uv_fits_paths = glob.glob(os.path.join(data_dir, "*.uvf"))
-    # bands_pixsize_dict = {"u1": 0.1, "x1": 0.2, "x2": 0.2, "c1": 0.3, "c2": 0.3, "q1": 0.03, "k1": 0.05}
-    bands_pixsize_dict = {"j": 0.15, "x": 0.2, "y": 0.2, "18cm": 1, "20cm": 1, "21cm": 1, "22cm": 1}
+    data_dir = "/home/ilya/data/BK150"
+    uv_fits_paths = glob.glob(os.path.join(data_dir, "*.uvf_difmap"))
+    bands_pixsize_dict = {"u1": 0.1, "x1": 0.2, "x2": 0.2, "c1": 0.3, "c2": 0.3, "q1": 0.03, "k1": 0.05}
+    # bands_pixsize_dict = {"j": 0.15, "x": 0.2, "y": 0.2, "18cm": 1, "20cm": 1, "21cm": 1, "22cm": 1}
     # band_avetime_dict = {"q1": None, "k1": 30, "u1": 60, "x1": 120, "x2": 120, "c1": 120, "c2": 120}
     band_avetime_dict = {k: None for k in bands_pixsize_dict.keys()}
     bands_files_dict = {}
@@ -1365,9 +1368,11 @@ if __name__ == '__main__':
     # uv_fits_paths = [os.path.join(data_dir, "J0510+1800_S_2007_05_03_sok_vis.fits")]
     # uv_fits_paths = ["/home/ilya/github/bam/data/0716+714/0716+714.u.2006_12_01.uvf"]
     base_outdir = os.path.join(data_dir, "results")
+    if not os.path.exists(base_outdir):
+        os.mkdir(base_outdir)
 
     for band, uv_fits_path in bands_files_dict.items():
-        if band in ("x", "j"):
+        if band not in ("q1",):
             continue
         path, fname = os.path.split(uv_fits_path)
 
@@ -1431,3 +1436,4 @@ if __name__ == '__main__':
         # automodeler.archive_images()
         # automodeler.archive_models()
         # automodeler.clean()
+        break

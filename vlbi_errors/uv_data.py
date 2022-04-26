@@ -51,6 +51,32 @@ def downscale_uvdata_by_freq(uvdata):
     return downscale_by_freq
 
 
+def get_uvrange(uvfits, stokes=None):
+    """
+    :param stokes: (optional)
+        Stokes to consider masking. If ``None`` then ``I``. (default: ``None``)
+    :return:
+        Minimal and maximal uv-spacing in Ml.
+    """
+    uvdata = UVData(uvfits)
+    if stokes is None:
+        # Get RR and LL correlations
+        rrll = uvdata.uvdata_freq_averaged[:, :2]
+        # Masked array
+        I = np.ma.mean(rrll, axis=1)
+    else:
+        if stokes == "RR":
+            I = uvdata.uvdata_freq_averaged[:, 0]
+        elif stokes == "LL":
+            I = uvdata.uvdata_freq_averaged[:, 1]
+    weights_mask = I.mask
+
+    uv = uvdata.uv
+    uv = uv[~weights_mask]
+    r_uv = np.hypot(uv[:, 0], uv[:, 1])
+    return min(r_uv/10**6), max(r_uv/10**6)
+
+
 # FIXME: Handling FITS files with only one scan (used for CV)
 class UVData(object):
 
@@ -98,9 +124,13 @@ class UVData(object):
 
 
         rec = pf.getdata(self.fname, extname='AIPS AN')
+        # Sometimes from baselines we get non contigious list of antenna numbers
         # self._antenna_mapping = {number: rec['ANNAME'][i] for i, number in
         #                          enumerate(self.antennas)}
-        self._antenna_mapping = {antenna: rec['ANNAME'][antenna-1] for antenna in self.antennas}
+        try:
+            self._antenna_mapping = {antenna: rec['ANNAME'][antenna-1] for antenna in self.antennas}
+        except:
+            print("Failed to make antenna mappings. A bitchy AN-table!")
         self._antennas_baselines = None
         self._antennas_times = None
         self._minimal_antennas_time = None
@@ -837,6 +867,69 @@ class UVData(object):
                 self.uvdata[bl_indx, band, self.stokes_dict_inv["LR"]] =\
                     self.uvdata[bl_indx, band, self.stokes_dict_inv["LR"]] + add_LR
                 self.sync()
+
+
+    def add_D_nonlin(self, d_dict, imodel, qmodel, umodel):
+        """
+        Add D-terms contribution to data. Keep D^2 and D*P terms.
+
+        :param d_dict:
+            Dictionary with keys [antenna name][integer of IF]["R"/"L"]
+        :param imodel:
+            Instance of ``Model`` class for Stokes I.
+        :param qmodel:
+            Instance of ``Model`` class for Stokes Q.
+        :param umodel:
+            Instance of ``Model`` class for Stokes U.
+        """
+
+        from PA import PA
+        from utils import GRT_coordinates
+
+        models = list()
+        models.append(imodel)
+        models.append(qmodel)
+        models.append(umodel)
+        uvdata_copy = copy.deepcopy(self)
+        uvdata_copy.substitute(models)
+
+        for baseline in self.baselines:
+            bl_indx = self._get_baseline_indexes(baseline)
+            JD = self.times.jd[bl_indx]
+            ant1, ant2 = baselines_2_ants([baseline])
+            antname1 = self.antenna_mapping[ant1]
+            antname2 = self.antenna_mapping[ant2]
+            latitude1, longitude1 = GRT_coordinates[antname1]
+            latitude2, longitude2 = GRT_coordinates[antname2]
+            for band in range(self.nif):
+                d1R = d_dict[antname1][band]["R"]
+                d1L = d_dict[antname1][band]["L"]
+                d2R = d_dict[antname2][band]["R"]
+                d2L = d_dict[antname2][band]["L"]
+                I = 0.5*(uvdata_copy.uvdata[bl_indx, band, self.stokes_dict_inv["RR"]] +
+                         uvdata_copy.uvdata[bl_indx, band, self.stokes_dict_inv["LL"]])
+                LR = uvdata_copy.uvdata[bl_indx, band, self.stokes_dict_inv["LR"]]
+                RL = uvdata_copy.uvdata[bl_indx, band, self.stokes_dict_inv["RL"]]
+
+                pa1 = PA(JD, self.ra, self.dec, latitude1, longitude1)
+                pa2 = PA(JD, self.ra, self.dec, latitude2, longitude2)
+
+                # D_{1,R}*exp(+2i*fi_1)*I_{1,2} + D^*_{2,L}*exp(+2i*fi_2)*I_{1,2} --- for RL
+                # D_{1,L}*exp(-2i*fi_1)*I_{1,2} + D^*_{2,R}*exp(-2i*fi_2)*I_{1,2} --- for LR
+                # add_RL = I*(d1R*np.exp(2j*pa1) + d2L.conj()*np.exp(2j*pa2))
+                # add_LR = I*(d1L*np.exp(-2j*pa1) + d2R.conj()*np.exp(-2j*pa2))
+
+                add_RR = d1R*d2R.conj()*I*np.exp(1j*(+pa1-pa2)) + d1R*LR*np.exp(1j*(pa1+pa2)) + d2R.conj()*RL*np.exp(1j*(-pa1-pa2))
+                add_LL = d1L*d2L.conj()*I*np.exp(1j*(-pa1+pa2)) + d1L*RL*np.exp(1j*(-pa1-pa2)) + d2L.conj()*LR*np.exp(1j*(+pa1+pa2))
+                add_RL = I*(d1R*np.exp(1j*(pa1-pa2)) + d2L.conj()*np.exp(1j*(-pa1+pa2))) + d1R*d2L.conj()*LR*np.exp(1j*(+pa1+pa2))
+                add_LR = I*(d1L*np.exp(1j*(pa1+pa2)) + d2R.conj()*np.exp(1j*(pa1-pa2))) + d1L*d2R.conj()*RL*np.exp(1j*(-pa1-pa2))
+
+                self.uvdata[bl_indx, band, self.stokes_dict_inv["RR"]] = self.uvdata[bl_indx, band, self.stokes_dict_inv["RR"]] + add_RR
+                self.uvdata[bl_indx, band, self.stokes_dict_inv["LL"]] = self.uvdata[bl_indx, band, self.stokes_dict_inv["LL"]] + add_LL
+                self.uvdata[bl_indx, band, self.stokes_dict_inv["RL"]] = self.uvdata[bl_indx, band, self.stokes_dict_inv["RL"]] + add_RL
+                self.uvdata[bl_indx, band, self.stokes_dict_inv["LR"]] = self.uvdata[bl_indx, band, self.stokes_dict_inv["LR"]] + add_LR
+                self.sync()
+
 
     @property
     def scans(self):

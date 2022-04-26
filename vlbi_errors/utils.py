@@ -5,6 +5,8 @@ import re
 import math
 import numpy as np
 import astropy.io.fits as pf
+import astropy.units as u
+from astropy.modeling import models, fitting
 import matplotlib as mpl
 import string
 from math import floor
@@ -17,6 +19,7 @@ from sklearn import svm
 from sklearn.covariance import EllipticEnvelope, MinCovDet
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
+from skimage.registration._masked_phase_cross_correlation import cross_correlate_masked
 try:
     from skimage import transform
     have_skimage = True
@@ -40,10 +43,12 @@ vcomplex = np.vectorize(complex)
 v_int = np.vectorize(int)
 v_round = np.vectorize(round)
 
-mas_to_rad = 4.8481368 * 1E-09
-degree_to_rad = 0.01745329
-degree_to_mas = 36. * 10 ** 5
-
+deg2mas = u.deg.to(u.mas)
+deg2rad = u.deg.to(u.rad)
+mas2rad = u.mas.to(u.rad)
+degree_to_mas = deg2mas
+degree_to_rad = deg2rad
+mas_to_rad = mas2rad
 
 stokes_dict = {-8: 'YX', -7: 'XY', -6: 'YY', -5: 'XX',
                -4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR',
@@ -1706,7 +1711,7 @@ def nested_dict_itervalue(nested):
             yield value
 
 
-def flatten(iterable, ltypes=collections.Iterable):
+def flatten(iterable, ltypes=collections.abc.Iterable):
     """
     http://stackoverflow.com/questions/2158395/flatten-an-irregular-list-of-lists-in-python/2158532#2158532
     :param iterable:
@@ -1776,3 +1781,139 @@ def transform_image(image, amplitude, shift_x, shift_y, scale_factor, rotation,
     tr_image *= amplitude
     tr_image[tr_image < cleaning_threshold] = 0.0
     return tr_image
+
+
+def get_significance_mask_from_mc(original_ccfits, mc_ccfits, mask=None, perc=2.5):
+    """
+    :param mask:
+        Pre-determined mask. Consider only unmasked pixesl.
+    """
+    from scipy.stats import percentileofscore
+    original = pf.getdata(original_ccfits).squeeze()
+    result = np.ones(original.shape, dtype=bool)
+    mc = [pf.getdata(ccfits).squeeze() for ccfits in mc_ccfits]
+    mc_cube = np.dstack(mc)
+    if mask is None:
+        mask = np.ones(original.shape, dtype=bool)
+    for (i, j), value in np.ndenumerate(original):
+        if mask[i, j]:
+            continue
+        low = percentileofscore(mc_cube[i, j, :] - np.median(mc_cube[i, j, :]) + original[i, j], 0.0)
+        if low < perc:
+            result[i, j] = False
+    return result
+
+
+def get_significance_mask_from_mc2(original_ccfits, mc_ccfits, mask=None, n_sigma_min=3):
+    """
+    :param mask:
+        Pre-determined mask. Consider only unmasked pixesl.
+    """
+    from scipy.stats import percentileofscore, norm
+    original = pf.getdata(original_ccfits).squeeze()
+    result = np.ones(original.shape, dtype=bool)
+    mc = [pf.getdata(ccfits).squeeze() for ccfits in mc_ccfits]
+    mc_cube = np.dstack(mc)
+    if mask is None:
+        mask = np.ones(original.shape, dtype=bool)
+    for (i, j), value in np.ndenumerate(original):
+        if mask[i, j]:
+            continue
+        sign = percentileofscore(mc_cube[i, j, :] - np.median(mc_cube[i, j, :]) + original[i, j], 0.0)/100.
+        n_sigma = norm.isf(sign)
+
+        if n_sigma > n_sigma_min or sign == 0.0:
+            result[i, j] = False
+
+    return result
+
+
+def get_errors_from_mc(mc_ccfits, mask=None):
+    from scipy.stats import scoreatpercentile
+    mc = [pf.getdata(ccfits).squeeze() for ccfits in mc_ccfits]
+    result = np.nan*np.ones(mc[0].shape, dtype=float)
+    mc_cube = np.dstack(mc)
+    if mask is None:
+        mask = np.ones(result.shape, dtype=bool)
+    for (i, j), value in np.ndenumerate(mc[0]):
+        if mask[i, j]:
+            continue
+        low, up = scoreatpercentile(mc_cube[i, j, :], [16, 84])
+        result[i, j] = 0.5*(up - low)
+    return result
+
+
+def get_beam_params_from_CCFITS(ccfits):
+    """
+    :return:
+        Beam parameters (bmaj[mas], bmin[mas], bpa[deg]).
+    """
+    bmaj, bmin, bpa = None, None, None
+    hdulist = pf.open(ccfits)
+    pr_header = hdulist[0].header
+    try:
+        # BEAM info in ``AIPS CG`` table
+        idx = hdulist.index_of('AIPS CG')
+        data = hdulist[idx].data
+        bmaj = float(data['BMAJ'])*deg2mas
+        bmin = float(data['BMIN'])*deg2mas
+        bpa = float(data['BPA'])
+    # In Petrov's data it in PrimaryHDU header
+    except KeyError:
+        try:
+            bmaj = pr_header['BMAJ']*deg2mas
+            bmin = pr_header['BMIN'] *deg2mas
+            bpa = pr_header['BPA']
+        except KeyError:
+            # In Denise data it is in PrimaryHDU ``HISTORY``
+            # TODO: Use ``pyfits.header._HeaderCommentaryCards`` interface if
+            # any
+            try:
+                for line in pr_header['HISTORY']:
+                    if 'BMAJ' in line and 'BMIN' in line and 'BPA' in line:
+                        bmaj = float(line.split()[3])*deg2mas
+                        bmin = float(line.split()[5])*deg2mas
+                        bpa = float(line.split()[7])
+            except KeyError:
+                pass
+        if not (bmaj and bmin and bpa):
+            raise Exception("Beam info absent!")
+
+    return bmin, bmaj, bpa
+
+
+def registrate_images(image1, image2, mask1, mask2, fit_gaussian=True, n=9):
+    """
+    :param image1:
+        2d numpy array with image.
+    :param image2:
+        2d numpy array with image.
+    :param mask1:
+        Must be ``True`` at valid pixels.
+    :param mask2:
+        Must be ``True`` at valid pixels.
+    :param fit_gaussian: (optional)
+        Fit 2D Gaussian to the peak of the correlation matrix?
+        (default: ``True``)
+    :param n: (optional)
+        Half-width [pix] of the square, centered on the position of the maximum
+        correlation, where to fit 2D Gaussian. (default: ``9``)
+    :return:
+        A tuple of shifts [pixels] (DEC, RA).
+    """
+    corr_matrix = cross_correlate_masked(image1, image2, mask1, mask2)
+    max_pos = np.unravel_index(np.argmax(corr_matrix), corr_matrix.shape)
+
+    if fit_gaussian:
+        # Grab a part pf image around maximal correlation coefficient
+        sub = corr_matrix[max_pos[0]-n:max_pos[0]+n, max_pos[1]-n:max_pos[1]+n]
+        x, y = np.mgrid[:2*n, :2*n]
+        p_init = models.Gaussian2D(1, n, n, n/2, n/2, 0)
+        fit_p = fitting.LevMarLSQFitter()
+        p = fit_p(p_init, x, y, sub)
+        # TODO: Check +1
+        result = p.x_mean.value-n+1, p.y_mean.value-n+1
+    else:
+        result = max_pos[0]-image1.shape[0]+1, max_pos[1]-image2.shape[1]+1
+
+    return result

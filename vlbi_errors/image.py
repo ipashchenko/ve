@@ -10,7 +10,7 @@ from utils import (create_grid, create_mask, mas_to_rad, v_round,
                    get_fits_image_info_from_hdulist, get_hdu_from_hdulist)
 from model import Model
 from beam import CleanBeam
-from skimage.feature import register_translation
+from skimage.registration import phase_cross_correlation
 import matplotlib
 # matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -248,6 +248,437 @@ def find_bbox(array, level, min_maxintensity_mjyperbeam=None, min_area_pix=None,
 # TODO: Plot components from difmap-style txt-file or instances of ``Component``
 # class.
 def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
+         y=None, blc=None, trc=None, cmap='hsv', abs_levels=None,
+         rel_levels=None, min_abs_level=None, min_rel_level=None, k=2, vinc=2,
+         show_beam=False, beam_place='ll', beam=None, contours_mask=None,
+         colors_mask=None, vectors_mask=None, plot_title=None, color_clim=None,
+         outfile=None, outdir=None, ext='png', close=False, slice_points=None,
+         colorbar_label=None, show=True, contour_color='k',
+         beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
+         show_points=None, components=None, components_errors=None, slice_color='black',
+         plot_colorbar=True, label_size=10, ra_range=None, dec_range=None,
+         fig=None, axes=None, contour_linewidth=0.5, vector_color="black",
+         n_discrete_colors=None, fixed_component_color="deepskyblue",
+         show_xlabel_on_current_axes=False, show_ylabel_on_current_axes=False):
+    """
+    Plot image(s).
+
+    :param contours: (optional)
+        Numpy 2D array (possibly masked) that should be plotted using contours.
+    :param colors: (optional)
+        Numpy 2D array (possibly masked) that should be plotted using colors.
+    :param vectors: (optional)
+        Numpy 2D array (possibly masked) that should be plotted using vectors.
+    :param vectors_values: (optional)
+        Numpy 2D array (possibly masked) that should be used as vector's lengths
+        when plotting ``vectors`` array.
+    :param x: (optional)
+        Iterable of x-coordinates. It's length must be comparable to that part
+        of image to display. If ``None`` then don't plot coordinates - just
+        pixel numbers. (default=``None``)
+    :param y: (optional)
+        Iterable of y-coordinates. It's length must be comparable to that part
+        of image to display. If ``None`` then don't plot coordinates - just
+        pixel numbers. (default=``None``)
+    :param blc: (optional)
+        Iterable of two values for Bottom Left Corner (in pixels). Must be in
+        range ``[1, image_size]``. If ``None`` then use ``(1, 1)``. (default:
+        ``None``)
+    :param trc: (optional)
+        Iterable of two values for Top Right Corner (in pixels). Must be in
+        range ``[1, image_size]``. If ``None`` then use ``(image_size,
+        image_size)``. (default: ``None``)
+    :param cmap: (optional)
+        Colormap to use for plotting colors. Available color maps could be
+        printed using ``sorted(m for m in plt.cm.datad if not
+        m.endswith("_r"))`` where ``plt`` is imported ``matplotlib.pyplot``.
+        For further details on plotting available colormaps see
+        http://matplotlib.org/1.2.1/examples/pylab_examples/show_colormaps.html.
+        (default: ``hsv``)
+    :param abs_levels: (optional)
+        Iterable of absolute levels. If ``None`` then construct levels in other
+        way. (default: ``None``)
+    :param min_abs_level: (optional)
+        Values of minimal absolute level. Used with conjunction of ``factor``
+        argument for building sequence of absolute levels. If ``None`` then
+        construct levels in other way. (default: ``None``)
+    :param rel_levels: (optional)
+        Iterable of relative levels. If ``None`` then construct levels in other
+        way. (default: ``None``)
+    :param min_rel_level: (optional)
+        Values of minimal relative level. Used with conjunction of ``factor``
+        argument for building sequence of relative levels. If ``None`` then
+        construct levels in other way. (default: ``None``)
+    :param k: (optional)
+        Factor of incrementation for levels. (default: ``2.0``)
+    :param show_beam: (optional)
+        Convertable to boolean. Should we plot beam in corner? (default:
+        ``False``)
+    :param beam_corner: (optional)
+        Place (corner) where to plot beam on map. One of ('ll', 'lr', 'ul',
+        'ur') where first letter means lower/upper and second - left/right.
+        (default: ``ll'')
+    :param beam: (optional)
+        If ``show_beam`` is True then ``beam`` should be iterable of major axis,
+        minor axis [mas] and beam positional angle [rad]. If no coordinates are
+        supplied then beam parameters must be in pixels.
+    :param colorbar_label: (optional)
+        String to label colorbar. If ``None`` then don't label. (default:
+        ``None``)
+    :param slice_points: (optional)
+        Iterable of 2 coordinates (``y``, ``x``) [mas] to plot slice. If
+        ``None`` then don't plot slice. (default: ``None``)
+    :param show_points: (optional)
+        Iterable of 2 coordinates (``y``, ``x``) [mas] to plot points. If
+        ``None`` then don't plot points. (default: ``None``)
+    :param plot_colorbar: (optional)
+        If colors is set then should we plot colorbar? (default: ``True``).
+
+    :note:
+        ``blc`` & ``trc`` are AIPS-like (from 1 to ``imsize``). Internally
+        converted to python-like zero-indexing. If none are specified then use
+        default values. All images plotted must have the same shape.
+    """
+    matplotlib.rcParams['xtick.labelsize'] = label_size
+    matplotlib.rcParams['ytick.labelsize'] = label_size
+    matplotlib.rcParams['axes.titlesize'] = label_size
+    matplotlib.rcParams['axes.labelsize'] = label_size
+    matplotlib.rcParams['font.size'] = label_size
+    matplotlib.rcParams['legend.fontsize'] = label_size
+    matplotlib.rcParams['pdf.fonttype'] = 42
+    matplotlib.rcParams['ps.fonttype'] = 42
+
+    image = None
+    if contours is not None:
+        image = contours
+    elif colors is not None and image is None:
+        image = colors
+    elif vectors is not None and image is None:
+        image = vectors
+
+    if image is None:
+        raise Exception("No images to plot!")
+    if x is None:
+        x = np.arange(image.shape[0])
+        factor_x = 1
+    else:
+        factor_x = 1. / mas_to_rad
+    if y is None:
+        y = np.arange(image.shape[1])
+        factor_y = 1
+    else:
+        factor_y = 1. / mas_to_rad
+
+    # Set BLC & TRC
+    blc = blc or (1, 1,)
+    trc = trc or image.shape
+
+    # TODO: Some diff from calculon
+    if blc[0] == 0:
+        blc = (blc[0]+1, blc[1])
+    if blc[1] == 0:
+        blc = (blc[0], blc[1]+1)
+
+    # Use ``-1`` because user expect AIPS-like behavior of ``blc`` & ``trc``
+    x_slice = slice(blc[1] - 1, trc[1], None)
+    y_slice = slice(blc[0] - 1, trc[0],  None)
+
+    # Create coordinates
+    imsize_x = x_slice.stop - x_slice.start
+    imsize_y = y_slice.stop - y_slice.start
+    # In mas (if ``x`` & ``y`` were supplied in rad) or in pixels (if no ``x`` &
+    # ``y`` were supplied)
+    x_ = x[x_slice] * factor_x
+    y_ = y[y_slice] * factor_y
+    # With this coordinates are plotted as in Zhenya's map
+    # x_ *= -1.
+    # y_ *= -1.
+    # Coordinates for plotting
+    x = np.linspace(x_[0], x_[-1], imsize_x)
+    y = np.linspace(y_[0], y_[-1], imsize_y)
+
+    plot_pixel_size = np.hypot((x[1]-x[0]), (y[1]-y[0]))
+
+    # Optionally mask arrays
+    if contours is not None and contours_mask is not None:
+        contours = np.ma.array(contours, mask=contours_mask)
+    if colors is not None and colors_mask is not None:
+        colors = np.ma.array(colors, mask=colors_mask)
+    if vectors is not None and vectors_mask is not None:
+        vectors = np.ma.array(vectors, mask=vectors_mask)
+
+    # Actually plotting
+    if fig is None and axes is None:
+        fig = plt.figure()
+        fig.set_size_inches(4.5, 3.5)
+        ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
+        ax.set_xlabel(r'Rel. RA (mas)')
+        ax.set_ylabel(r'Rel. DEC (mas)')
+    if axes is not None:
+        ax = axes
+        if show_xlabel_on_current_axes:
+            ax.set_xlabel(r'Rel. RA (mas)')
+        if show_ylabel_on_current_axes:
+            ax.set_ylabel(r'Rel. DEC (mas)')
+    else:
+        ax = fig.get_axes()[0]
+        ax.set_xlabel(r'Rel. RA (mas)')
+        ax.set_ylabel(r'Rel. DEC (mas)')
+
+    if ra_range:
+        ax.set_xlim(ra_range)
+    if dec_range:
+        ax.set_ylim(dec_range)
+
+    # Plot contours
+    if contours is not None:
+        # If no absolute levels are supplied then construct them
+        if abs_levels is None:
+            # print("constructing absolute levels for contours...")
+            max_level = contours[x_slice, y_slice].max()
+            # from given relative levels
+            if rel_levels is not None:
+                # print("from relative levels...")
+                # Build levels (``pyplot.contour`` takes only absolute values)
+                abs_levels = [-max_level] + [max_level * i for i in rel_levels]
+                # If given only min_abs_level & increment factor ``k``
+            else:
+                # from given minimal absolute level
+                if min_abs_level is not None:
+                    # print("from minimal absolute level...")
+                    n_max = int(math.ceil(math.log(max_level / min_abs_level, k)))
+                # from given minimal relative level
+                elif min_rel_level is not None:
+                    # print("from minimal relative level...")
+                    min_abs_level = min_rel_level * max_level / 100.
+                    n_max = int(math.ceil(math.log(max_level / min_abs_level, k)))
+                abs_levels = [-min_abs_level] + [min_abs_level * k ** i for i in
+                                                 range(n_max)]
+            print("Constructed absolute levels are: {}".format(abs_levels))
+
+        if fig is None and axes is None:
+            extent = [y[0], y[-1], x[-1], x[0]]
+        else:
+            extent = [y[0], y[-1], x[0], x[-1]]
+        co = ax.contour(y, x, contours[x_slice, y_slice], abs_levels,
+                        colors=contour_color, extent=extent,
+                        linewidths=contour_linewidth)
+        # if fig is None:
+        ax.invert_xaxis()
+        # Make colorbar for contours if no colors is supplied
+        if colors is None:
+            if plot_colorbar:
+                from mpl_toolkits.axes_grid1 import make_axes_locatable
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="10%", pad=0.00)
+                cb = fig.colorbar(co, cax=cax)
+                cb.set_label(colorbar_label)
+    if colors is not None:
+        if n_discrete_colors is not None:
+            cmap = cm.get_cmap(cmap, int(n_discrete_colors))
+        im = ax.imshow(colors[x_slice, y_slice], interpolation='none',
+                       origin='lower', extent=[y[0], y[-1], x[0], x[-1]],
+                       cmap=plt.get_cmap(cmap), clim=color_clim)
+    if vectors is not None:
+        if vectors_values is not None:
+            # TODO: Does "-" sign because of RA increases to the left actually?
+            # VLBIers do count angles from North to negative RA.
+            u = -vectors_values[x_slice, y_slice] * np.sin(vectors[x_slice,
+                                                                   y_slice])
+            v = vectors_values[x_slice, y_slice] * np.cos(vectors[x_slice,
+                                                                  y_slice])
+        else:
+            u = -np.sin(vectors[x_slice, y_slice])
+            v = np.cos(vectors[x_slice, y_slice])
+
+        if vectors_mask is not None:
+            u = np.ma.array(u, mask=vectors_mask[x_slice, y_slice])
+            v = np.ma.array(v, mask=vectors_mask[x_slice, y_slice])
+        vec = ax.quiver(y[::vinc], x[::vinc], u[::vinc, ::vinc],
+                        v[::vinc, ::vinc], angles='uv',
+                        units='xy', headwidth=0., headlength=0., scale=None,
+                        width=0.05, headaxislength=0., color=vector_color)
+    # Set equal aspect
+    ax.set_aspect('equal')
+
+    if slice_points is not None:
+        for single_slice in slice_points:
+            ax.plot([single_slice[0][0], single_slice[1][0]],
+                    [single_slice[0][1], single_slice[1][1]], color=slice_color)
+
+    if show_points is not None:
+        for point in show_points:
+            ax.plot(point[0], point[1], '.k')
+
+    if plot_title:
+        title = ax.set_title(plot_title, fontsize='large')
+    # Add colorbar if plotting colors
+    if colors is not None:
+        if plot_colorbar:
+            from mpl_toolkits.axes_grid1 import make_axes_locatable
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.00)
+            if fig is None and axes is not None:
+                fig = ax.get_figure()
+            cb = fig.colorbar(im, cax=cax)
+            if colorbar_label is not None:
+                cb.set_label(colorbar_label)
+
+    if show_beam:
+        from matplotlib.patches import Ellipse
+        e_height = max(beam[0], beam[1])
+        e_width = min(beam[0], beam[1])
+        r_min = e_height / 2
+        if beam_place == 'lr':
+            if y[0]-y[1] > 0:
+                y_c = y[-1] + r_min
+            else:
+                y_c = y[-1] - r_min
+            if x[0]-x[1] > 0:
+                x_c = x[0] - r_min
+            else:
+                x_c = x[0] + r_min
+        elif beam_place == 'll':
+            if y[0]-y[1] > 0:
+                y_c = y[0] - r_min
+            else:
+                y_c = y[0] + r_min
+            if x[0]-x[1] > 0:
+                x_c = x[0] - r_min
+            else:
+                x_c = x[0] + r_min
+        elif beam_place == 'ul':
+            if y[0]-y[1] > 0:
+                y_c = y[0] - r_min
+            else:
+                y_c = y[0] + r_min
+            if x[0]-x[1] > 0:
+                x_c = x[-1] + r_min
+            else:
+                x_c = x[-1] - r_min
+        elif beam_place == 'ur':
+            if y[0]-y[1] > 0:
+                y_c = y[-1] + r_min
+            else:
+                y_c = y[-1] - r_min
+            if x[0]-x[1] > 0:
+                x_c = x[-1] + r_min
+            else:
+                x_c = x[-1] - r_min
+        else:
+            raise Exception
+
+        # FIXME: check how ``bpa`` should be plotted
+        e = Ellipse((y_c, x_c), e_width, e_height, angle=-np.rad2deg(beam[2]),
+                    edgecolor=beam_edge_color, facecolor=beam_face_color,
+                    alpha=beam_alpha)
+        print("Plotting BEAM BPA = {} deg".format(np.rad2deg(beam[2])))
+        ax.add_patch(e)
+
+    if components:
+        facecolor = "red"
+        for comp in components:
+            if np.any(comp._fixed):
+                is_some_parameter_fixed = True
+            else:
+                is_some_parameter_fixed = False
+
+            # RA
+            x_c = -comp.p_all[1]
+            # DEC
+            y_c = -comp.p_all[2]
+            # len used for all parameters (even fixed)
+            if len(comp) == 6:
+                e_height = comp.p_all[3]
+                e_width = comp.p_all[3] * comp.p_all[4]
+                if e_height < 0.25*plot_pixel_size and e_width < 0.25*plot_pixel_size:
+                    facecolor = "green"
+                if e_height < 0.25*plot_pixel_size:
+                    e_height = 0.25*plot_pixel_size
+                if e_width < 0.25*plot_pixel_size:
+                    e_width = 0.25*plot_pixel_size*comp.p_all[4]
+                else:
+                    facecolor = "red"
+                if comp.p_all[0] < 0:
+                    facecolor = "blue"
+
+                if is_some_parameter_fixed:
+                    facecolor = fixed_component_color
+
+                # FIXME: Here must be total length of vertical/horizontal axis
+                e = Ellipse((x_c, y_c), e_width, e_height,
+                            angle=90.0-180*comp.p_all[5]/np.pi,
+                            edgecolor=beam_edge_color, facecolor=facecolor,
+                            alpha=beam_alpha)
+            elif len(comp) == 4:
+                # It is radius so dividing in 2
+                c_size = comp.p_all[3]/2.0
+                if c_size < 0.25*plot_pixel_size:
+                    c_size = 0.25*plot_pixel_size
+                    facecolor = "green"
+                else:
+                    facecolor = "red"
+                if comp.p_all[0] < 0:
+                    facecolor = "blue"
+
+                if is_some_parameter_fixed:
+                    facecolor = fixed_component_color
+
+                e = Circle((x_c, y_c), c_size,
+                            edgecolor=beam_edge_color, facecolor=facecolor,
+                            alpha=beam_alpha)
+            elif len(comp) == 3:
+
+                if is_some_parameter_fixed:
+                    facecolor = fixed_component_color
+
+                e = Circle((x_c, y_c), plot_pixel_size,
+                            edgecolor=beam_edge_color, facecolor='green',
+                            alpha=beam_alpha)
+            else:
+                raise Exception("Only Point, Circle or Ellipse components are"
+                                " plotted")
+            ax.add_patch(e)
+
+    if components_errors is not None:
+        facecolor = "gray"
+        # Each components represent error ellipse
+        for comp in components_errors:
+            # RA
+            x_c = -comp.p_all[1]
+            # DEC
+            y_c = -comp.p_all[2]
+            e_height = comp.p_all[3]
+            e_width = comp.p_all[3] * comp.p_all[4]
+            e = Ellipse((x_c, y_c), e_width, e_height,
+                        angle=90.0-180*comp.p_all[5]/np.pi,
+                        edgecolor=beam_edge_color, facecolor=facecolor,
+                        alpha=beam_alpha)
+            ax.add_patch(e)
+
+    # Saving output
+    if outfile:
+        if outdir is None:
+            outdir = '.'
+        # If the directory does not exist, create it
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+
+        path = os.path.join(outdir, outfile)
+        print("Saving to {}.{}".format(path, ext))
+        plt.savefig("{}.{}".format(path, ext), bbox_inches='tight', dpi=500)
+
+    if show and fig is not None:
+        fig.show()
+    if close:
+        plt.close()
+
+    if fig is not None:
+        return fig
+
+
+
+def plot2(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          y=None, blc=None, trc=None, cmap='hsv', abs_levels=None,
          rel_levels=None, min_abs_level=None, min_rel_level=None, k=2, vinc=2,
          show_beam=False, beam_place='ll', beam=None, contours_mask=None,
@@ -669,6 +1100,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         return fig
 
 
+
+
 class BasicImage(object):
     """
     Image class that implements basic image functionality that physical scale
@@ -881,8 +1314,8 @@ class BasicImage(object):
                 raise NotImplementedError()
             image2[mask2] = 0.
         # Cross-correlate images
-        shift, error, diffphase = register_translation(image1, image2,
-                                                       upsample_factor)
+        shift, error, diffphase = phase_cross_correlation(image1, image2,
+                                                       upsample_factor=upsample_factor)
         result = shift
         if extended_output:
             result = (shift, error, diffphase)
@@ -1200,7 +1633,7 @@ class CleanImage(Image):
     @property
     def beam(self):
         """
-        Shorthand for beam parameters bmaj [mas], bmin [mas], bpa [deg].
+        Shorthand for beam parameters bmaj [mas], bmin [mas], bpa [rad].
         """
         return (self._beam.beam[0] * abs(self.pixsize[0]) / mas_to_rad,
                 self._beam.beam[1] * abs(self.pixsize[0]) / mas_to_rad,
@@ -1313,52 +1746,36 @@ class CleanImage(Image):
 #    pass
 
 if __name__ == '__main__':
-    image = CleanImage()
-    import os
-    image.from_fits(os.path.join('/home/ilya/data/3c273',
-                                 '1226+023.u.2006_06_15.ict.fits'))
+    import matplotlib
+    from astropy.stats import mad_std
+    from from_fits import create_clean_image_from_fits_file
 
+    ccimage = "/home/ilya/data/alpha/results/MOJAVE/model_cc_i_15.4.fits"
+    ccimage = create_clean_image_from_fits_file(ccimage)
+    beam = ccimage.beam
+    print(beam)
+    std = mad_std(ccimage.image)
+    print(std)
+    blc = (400, 430)
+    trc = (980, 710)
+    print(blc, trc)
+    matplotlib.use('Qt5Agg')
 
-    # # Importing stuff
-    # import os
-    # from images import Images
-    # from from_fits import create_clean_image_from_fits_file
-
-    # abs_levels = [-0.0004] + [0.0004 * 2**j for j in range(15)]
-
-    # data_dir = '/home/ilya/vlbi_errors/0952+179/2007_04_30/'
-    # i_dir_c1 = data_dir + 'C1/im/I/'
-    # q_dir_c1 = data_dir + 'C1/im/Q/'
-    # u_dir_c1 = data_dir + 'C1/im/U/'
-    # print "Creating PANG image..."
-    # images = Images()
-    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
-    #                              os.path.join(u_dir_c1, 'cc.fits')])
-    # pang_image = images.create_pang_images()[0]
-
-    # print "Creating PPOL image..."
-    # images = Images()
-    # images.add_from_fits(fnames=[os.path.join(q_dir_c1, 'cc.fits'),
-    #                              os.path.join(u_dir_c1, 'cc.fits')])
-    # ppol_image = images.create_pol_images()[0]
-
-    # print "Creating I image..."
-    # i_image = create_clean_image_from_fits_file(os.path.join(i_dir_c1,
-    #                                                          'cc.fits'))
-    # print "Creating FPOL image..."
-    # images = Images()
-    # images.add_from_fits(fnames=[os.path.join(i_dir_c1, 'cc.fits'),
-    #                              os.path.join(q_dir_c1, 'cc.fits'),
-    #                              os.path.join(u_dir_c1, 'cc.fits')])
-    # fpol_image = images.create_fpol_images()[0]
-
-    # # Creating masks
-    # ppol_mask = np.zeros(ppol_image.imsize)
-    # ppol_mask[ppol_image.image < 0.001] = 1
-
-    # plot(contours=i_image.image_w_residuals, colors=fpol_image.image,
-    #      vectors=pang_image.image, vectors_values=ppol_image.image,
-    #      x=i_image.x[0, :], y=i_image.y[:, 0], blc=(240, 235), trc=(300, 370),
-    #      colors_mask=ppol_mask, vectors_mask=ppol_mask, min_abs_level=0.0005)
-    #      # plot_title="0952+179 C1",
-    #      # outdir='/home/ilya/vlbi_errors/', outfile='0952+179_C1')
+    figsize = (12, 10)
+    fig, axes = plt.subplots(2, 1, figsize=figsize, sharey=True, sharex=True)
+    plt.subplots_adjust(hspace=0, wspace=0)
+    plot(ccimage.image, ccimage.image, x=ccimage.x, y=ccimage.y,
+         min_abs_level=3*std, colors_mask=ccimage.image < 5*std,
+         color_clim=None, blc=blc, trc=trc,
+         beam=beam, colorbar_label=r"$I$, Jy/beam", show_beam=True,
+         cmap='nipy_spectral', contour_color='black', plot_colorbar=True,
+         contour_linewidth=0.25, beam_place="lr", close=False, show=False,
+         axes=axes[0], show_xlabel_on_current_axes=False, show_ylabel_on_current_axes=True)
+    plot(ccimage.image, ccimage.image, x=ccimage.x, y=ccimage.y,
+         min_abs_level=3*std, colors_mask=ccimage.image < 5*std,
+         color_clim=None, blc=blc, trc=trc,
+         beam=beam, colorbar_label=r"$I$, Jy/beam", show_beam=True,
+         cmap='nipy_spectral', contour_color='black', plot_colorbar=True,
+         contour_linewidth=0.25, beam_place="lr", close=False, show=False,
+         axes=axes[1], show_xlabel_on_current_axes=True, show_ylabel_on_current_axes=True)
+    plt.show()

@@ -306,7 +306,7 @@ def create_random_D_dict(uvdata, sigma_D):
     :return:
         Dictionary with keys [antenna name][integer of IF]["R"/"L"]
     """
-    import collections
+    from collections.abc import Mapping
     d_dict = dict()
     for ant in list(uvdata.antenna_mapping.values()):
         d_dict[ant] = dict()
@@ -314,7 +314,7 @@ def create_random_D_dict(uvdata, sigma_D):
             d_dict[ant][band] = dict()
             for pol in ("R", "L"):
                 # Generating two random complex numbers near (0, 0)
-                if isinstance(sigma_D, collections.Mapping):
+                if isinstance(sigma_D, Mapping):
                     rands = np.random.normal(loc=0, scale=sigma_D[ant], size=2)
                 else:
                     rands = np.random.normal(loc=0, scale=sigma_D, size=2)

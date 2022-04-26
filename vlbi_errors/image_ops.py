@@ -91,7 +91,8 @@ def add_dterm_evpa(q, u, i, evpa, d_term, n_ant, n_if, n_scans):
     return q_, u_
 
 
-def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan):
+def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan,
+                            check_equal_image_params=False):
     """
     Function that calculates uncertainty images of PANG & PPOL using (Hovatta et
     al. 2012) approach.
@@ -118,7 +119,8 @@ def hovatta_find_sigma_pang(q, u, i, sigma_evpa, d_term, n_ant, n_if, n_scan):
         uncertainties of PANG and second - with uncertainties of PPOL.
 
     """
-    assert q == u == i
+    if check_equal_image_params:
+        assert q == u == i
 
     # Create images of D-terms uncertainty
     i_peak = np.max(i.image.ravel())

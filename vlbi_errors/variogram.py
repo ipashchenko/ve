@@ -5,7 +5,6 @@ from pylab import *
 
 
 
-
 def variogram(data):
     n = data.shape[0]
     x_coords, y_coords = mgrid[0:n,0:n]
@@ -16,8 +15,8 @@ def variogram(data):
     std_data = std(data)
     var_data = var(data)
     mean_data = mean(data)
-    print "Mean, Std & Variance"
-    print mean_data, std_data, var_data
+    print("Mean, Std & Variance")
+    print(mean_data, std_data, var_data)
     #print flat_data
     #result = array(n*(n-1)/2)
     result = []
@@ -43,20 +42,19 @@ def variogram(data):
         final_distances.append(unique_d)
         final_varys.append(vary_4unique_d)
         number_of_distances.append(len_4unique_d)
-        print   len_4unique_d, unique_d, sum(result[result_4unique_d])/(2.0*len_4unique_d)
+        print(len_4unique_d, unique_d, sum(result[result_4unique_d])/(2.0*len_4unique_d))
 
-    print "DEBUG"
 
-    print type(final_distances),type(final_varys), type(number_of_distances)
-    print final_distances, number_of_distances
+    print(type(final_distances),type(final_varys), type(number_of_distances))
+    print(final_distances, number_of_distances)
 
     final_distances = array(final_distances)
     final_varys = array(final_varys)
     number_of_distances = array(number_of_distances)
-    print "Counting only big numbers"
-    print sort(number_of_distances)[::-1]
-    print final_distances[argsort(number_of_distances)][::-1]
-    print "???????????????"
+    print("Counting only big numbers")
+    print(sort(number_of_distances)[::-1])
+    print(final_distances[argsort(number_of_distances)][::-1])
+    print("???????????????")
     #final_distances = final_distances[0:n+1]
     #final_varys = final_varys[0:n+1]
     #number_of_distances = number_of_distances[0:n+1]
@@ -90,28 +88,28 @@ def variogram(data):
             chisq                   = sum((error_func_gauss(p))**2)
             dof                     = len(final_distances) - len(p)
             redchisq                = ('%.3f' % float(chisq/dof))
-            print "DEBUG"
-            print "chisq, len(final_distances), dof, redchisq"
-            print chisq, len(final_distances), dof, redchisq
+            print("DEBUG")
+            print("chisq, len(final_distances), dof, redchisq")
+            print(chisq, len(final_distances), dof, redchisq)
 
             return p, chisq, redchisq, fitting_func_gauss(p), final_varys - fitting_func_gauss(p)
 
     distance_4_plot = arange(0,max(final_distances),0.01,dtype=float32)
     #choosing initial values of pars. based on variogramm
-    print final_distances
-    print final_varys
+    print(final_distances)
+    print(final_varys)
     p0 = [var_data,0.3*(max(final_distances)-min(final_distances))]
-    print "/////////////// "
-    print "Initial pars. :"
-    print 0.0,p0
-    print "///////////////"
+    print("/////////////// ")
+    print("Initial pars. :")
+    print(0.0,p0)
+    print("///////////////")
+    from skgstat import Variogram
 
     #Give more weigths to small distnces
     sigma_varys = arange(len(final_varys), dtype=final_varys.dtype)
     sigma_varys[1:] = (final_distances[1:])**2
     sigma_varys[0] = sigma_varys[1]/2.0
     p1, chisq1, redchisq1, variogram1, residuals1 = fit_variogramm(final_distances, p0, y = final_varys, y_errors = sigma_varys)
-    print p1
 
     plot(final_distances, final_varys, "ro")
     plot(distance_4_plot, fit_variogramm(distance_4_plot, p1, y = "None"))
@@ -122,10 +120,10 @@ def variogram(data):
     close()
 
 
-    print "Calculating uncertaintes of variogram for second (weighted) fit"
+    print("Calculating uncertaintes of variogram for second (weighted) fit")
     sigma_varys = sqrt(2.0*(variogram1)**2.0/number_of_distances)
     sigma_varys[0] = sigma_varys[1]
-    print final_varys, sigma_varys
+    print(final_varys, sigma_varys)
 
     p2, chisq2, redchisq2, variogram2, residuals2 = fit_variogramm(final_distances, p1, y = final_varys, y_errors = sigma_varys)
 
@@ -137,18 +135,12 @@ def variogram(data):
     savefig('Variogram_weighted1_fit.png')
     close()
 
-    print "Calculating uncertaintes of variogram for final (weighted) fit"
+    print("Calculating uncertaintes of variogram for final (weighted) fit")
     sigma_varys = sqrt(2.0*(variogram2)**2.0/number_of_distances)
     sigma_varys[0] = sigma_varys[1]
-    print "DEBUG DOUBLE"
-    print final_distances
-    print final_varys
-    print sigma_varys
-    print len(sigma_varys), shape(sigma_varys)
-
 
     p3, chisq3, redchisq3, variogram3, residuals3 = fit_variogramm(final_distances, p2, y = final_varys, y_errors = sigma_varys)
-    print p3
+    print(p3)
 
     errorbar(final_distances,final_varys,sigma_varys,fmt='.k',linewidth=0.5)
     plot(distance_4_plot, fit_variogramm(distance_4_plot, p3, y = "None"))
@@ -158,7 +150,7 @@ def variogram(data):
     savefig('Variogram_final_fit.png')
     close()
 
-    print "Estimating covariance matrix C(d_{ij})"
+    print("Estimating covariance matrix C(d_{ij})")
     Cov_plane = arange(len(distance_4_plot),dtype=final_varys.dtype)
     Cov_plane = p3[0] - fit_variogramm(distance_4_plot, p3, y = "None")
 
@@ -179,13 +171,17 @@ def variogram(data):
     savefig('Covariogram_.png')
     close()
 
-    print "//////////////////////////////"
-    print "Now building Covariance matrix"
-    print "//////////////////////////////"
+    print("//////////////////////////////")
+    print("Now building Covariance matrix")
+    print("//////////////////////////////")
+    eps = 1e-5
     Cov_matrix = zeros((n*n,n*n),dtype=float32)
     for i in range(n*n):
         for j in range(n*n):
             Cov_matrix[i,j] = Cov(i,j,n,output="")
+            if i == j:
+                print("adding eps")
+                Cov_matrix[i, j] += eps
 
     #for i in range(n*n):
     #    for k in range((i//n)*n,((i//n)+1)*n):
@@ -195,8 +191,8 @@ def variogram(data):
 
 
     #Cov_matrix = matrix(Cov_matrix)
-    print Cov_matrix
-    print shape(Cov_matrix)
+    # print Cov_matrix
+    # print shape(Cov_matrix)
 
 #    print "Trying to estimate covariance matrix explicitly"
 #    cov_expl = zeros((n*n,n*n),dtype=float32)
@@ -213,7 +209,7 @@ def variogram(data):
     try:
         L = cholesky(Cov_matrix)
     except LinAlgError:
-        print "Matrix is not positive definite!"
+        print("Matrix is not positive definite!")
         w,v=eig(Cov_matrix)
         A = dot(v,sqrt(diag(w)))
 
@@ -221,7 +217,7 @@ def variogram(data):
         mean_newa = []
         std_newa = []
         res_newa = []
-        for i in xrange(1000):
+        for i in range(1000):
             resa = dot(randn(n*n),A.transpose())
             data_newa.append(mean_data + resa)
             mean_newa.append(mean(mean_data + resa))
@@ -242,7 +238,7 @@ def variogram(data):
     std_newa = []
     res_new =[]
     res_newa = []
-    for i in xrange(1000):
+    for i in range(1000):
         res = dot(randn(n*n),L)
         resa = dot(randn(n*n),A.transpose())
         data_new.append(mean_data + res)

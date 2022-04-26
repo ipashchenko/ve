@@ -56,5 +56,7 @@ def PA(JD, ra, dec, latitude, longitude):
 
     """
     LSTs = JD_to_LST(JD, longitude)
+    # HA will be in rad
     HA = LST_to_HA(LSTs, ra)
-    return np.arctan(np.sin(HA)/(np.tan(latitude) * np.cos(dec) - np.sin(dec) * np.cos(HA)))
+    return np.arctan2(np.sin(HA),
+                      np.tan(np.deg2rad(latitude)) * np.cos(np.deg2rad(dec)) - np.sin(np.deg2rad(dec)) * np.cos(HA))

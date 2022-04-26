@@ -1,10 +1,9 @@
 import glob
 import os
-import sys
 import datetime
-import numpy as np
 import copy
-from utils import degree_to_rad, baselines_2_ants
+import pandas as pd
+from utils import degree_to_rad, baselines_2_ants, get_beam_params_from_CCFITS
 from components import DeltaComponent, CGComponent, EGComponent
 from astropy.stats import mad_std
 from astropy.wcs import WCS
@@ -15,13 +14,66 @@ from scipy.ndimage.measurements import label
 from scipy.ndimage.morphology import generate_binary_structure
 from scipy.stats import normaltest, anderson
 from skimage.measure import regionprops
-from from_fits import create_clean_image_from_fits_file, create_image_from_fits_file
+from from_fits import (create_clean_image_from_fits_file,
+                       create_image_from_fits_file, create_model_from_fits_file)
 import calendar
-from uv_data import UVData
+from uv_data import UVData, downscale_uvdata_by_freq
 from astropy.time import Time
 
 months_dict = {v: k for k, v in enumerate(calendar.month_abbr)}
 months_dict_inv = {k: v for k, v in enumerate(calendar.month_abbr)}
+
+deg2mas = u.deg.to(u.mas)
+
+
+def find_nw_beam(uvfits, stokes="I", mapsize=(1024, 0.1), uv_range=None, working_dir=None):
+    """
+    :return:
+        Beam parameters (bmaj[mas], bmin[mas], bpa[deg]).
+    """
+    if working_dir is None:
+        working_dir = os.getcwd()
+
+    original_dir = os.getcwd()
+    os.chdir(working_dir)
+
+    # Find and remove all log-files
+    previous_logs = glob.glob("difmap.log*")
+    for log in previous_logs:
+        os.unlink(log)
+
+    stamp = datetime.datetime.now()
+    command_file = os.path.join(working_dir, "difmap_commands_{}".format(stamp.isoformat()))
+    difmapout = open(command_file, "w")
+    difmapout.write("observe " + uvfits + "\n")
+    difmapout.write("select " + stokes.lower() + "\n")
+    difmapout.write("uvw 0,-2\n")
+    if uv_range is not None:
+        difmapout.write("uvrange " + str(uv_range[0]) + ", " + str(uv_range[1]) + "\n")
+    difmapout.write("mapsize " + str(int(2*mapsize[0])) + ", " + str(mapsize[1]) + "\n")
+    difmapout.write("invert\n")
+    difmapout.write("quit\n")
+    difmapout.close()
+
+    shell_command = "difmap < " + command_file + " 2>&1"
+    shell_command += " >/dev/null"
+    os.system(shell_command)
+
+    # Get final reduced chi_squared
+    log = os.path.join(working_dir, "difmap.log")
+    with open(log, "r") as fo:
+        lines = fo.readlines()
+    line = [line for line in lines if "Estimated beam:" in line][-1]
+    bmin = float(line.split(" ")[3][5:])
+    bmaj = float(line.split(" ")[5][5:])
+    bpa = float(line.split(" ")[7][4:])
+
+    # Remove command and log file
+    os.unlink(command_file)
+    os.unlink("difmap.log")
+    os.chdir(original_dir)
+
+    return bmin, bmaj, bpa
 
 
 def check_bbox(blc, trc, image_size):
@@ -52,6 +104,89 @@ def check_bbox(blc, trc, image_size):
             blc[1] = 0
         trc[1] -= delta
     return tuple(blc), tuple(trc)
+
+
+def filter_CC(ccfits, mask, out_ccfits=None, out_dfm=None, show=False,
+              plotsave_fn=None, axes=None):
+    """
+    :param mask:
+        Mask with region of source flux being True.
+    :param out_ccfits:
+    """
+    mask = np.array(mask, dtype=bool)
+    hdus = pf.open(ccfits)
+    hdus.verify("silentfix")
+    data = hdus[1].data
+    data_ = data.copy()
+    deg2mas = u.deg.to(u.mas)
+
+    header = pf.getheader(ccfits)
+    imsize = header["NAXIS1"]
+    wcs = make_wcs_from_ccfits(ccfits)
+
+    xs = list()
+    ys = list()
+    xs_del = list()
+    ys_del = list()
+    fs_del = list()
+    for flux, x_orig, y_orig in zip(data['FLUX'], data['DELTAX'], data['DELTAY']):
+        # print("FLux = {}, x = {} deg, y = {} deg".format(flux, x_orig, y_orig))
+        x, y = wcs.world_to_array_index(x_orig*u.deg, y_orig*u.deg)
+        # print("x = {}, y = {}".format(x, y))
+        if x >= imsize:
+            x = imsize - 1
+        if y >= imsize:
+            y = imsize - 1
+        if mask[x, y]:
+            # print("Mask = {}, keeping component".format(mask[x, y]))
+            # Keep this component
+            xs.append(x)
+            ys.append(y)
+        else:
+            # print("Mask = {}, removing component".format(mask[x, y]))
+            # Remove row from rec_array
+            xs_del.append(x_orig)
+            ys_del.append(y_orig)
+            fs_del.append(flux)
+
+    for (x, y, f) in zip(xs_del, ys_del, fs_del):
+        local_mask = ~np.logical_and(np.logical_and(data_["DELTAX"] == x, data_["DELTAY"] == y),
+                                     data_["FLUX"] == f)
+        data_ = data_.compress(local_mask, axis=0)
+    print("Deleted {} components".format(len(xs_del)))
+
+    # if plotsave_fn is not None:
+    a = data_['DELTAX']*deg2mas
+    b = data_['DELTAY']*deg2mas
+    a_all = data['DELTAX']*deg2mas
+    b_all = data['DELTAY']*deg2mas
+
+    if show or plotsave_fn is not None:
+        if axes is None:
+            fig, axes = plt.subplots(1, 1)
+        im = axes.scatter(a, b, c=np.log10(1000*data_["FLUX"]), s=5, cmap="binary")
+        # axes.scatter(a_all, b_all, color="gray", alpha=0.25, s=2)
+        # axes.scatter(a, b, color="red", alpha=0.5, s=1)
+        # from mpl_toolkits.axes_grid1 import make_axes_locatable
+        # divider = make_axes_locatable(axes)
+        # cax = divider.append_axes("right", size="5%", pad=0.00)
+        # cb = fig.colorbar(im, cax=cax)
+        # cb.set_label("CC Flux, Jy")
+        axes.invert_xaxis()
+        axes.set_aspect("equal")
+        axes.set_xlabel("RA, mas")
+        axes.set_ylabel("DEC, mas")
+        if plotsave_fn is not None:
+            plt.savefig(plotsave_fn, bbox_inches="tight", dpi=300)
+        if show:
+            plt.show()
+        plt.close()
+
+    hdus[1].data = data_
+    hdus[1].header["NAXIS2"] = len(data_)
+    if out_ccfits is not None:
+        hdus.writeto(out_ccfits, overwrite=True)
+
 
 
 def find_bbox(array, level, min_maxintensity_mjyperbeam, min_area_pix,
@@ -211,25 +346,6 @@ def check_dmap(darray, array, npixels_beam):
     return uncleaned_flux, uncleaned
 
 
-def convert_bbox_to_radec_ranges(wcs, blc, trc):
-    """
-    Given BLC, TRC in coordinates of numpy array return RA, DEC ranges.
-    :param wcs:
-        Instance of ``astropy.wcs.wcs.WCS``.
-    :return:
-        RA_min, RA_max, DEC_min, DEC_max
-    """
-    blc_deg = wcs.all_pix2world(blc[0], blc[1], 1)
-    trc_deg = wcs.all_pix2world(trc[0], trc[1], 1)
-
-    ra_max = blc_deg[0]
-    ra_min = trc_deg[0]
-    dec_min = blc_deg[1]
-    dec_max = trc_deg[1]
-
-    return ra_min, ra_max, dec_min, dec_max
-
-
 def clean_n(fname, outfname, stokes, mapsize_clean, niter=100,
             path_to_script=None, mapsize_restore=None, beam_restore=None,
             outpath=None, shift=None, show_difmap_output=False,
@@ -378,10 +494,44 @@ def clean_difmap_and_convolve_nubeam(uvfits, stokes, mapsize, outfile, original_
                                                original_beam, std, out_ccfits=outfile)
 
 
-def convert_difmap_model_file_to_CCFITS(difmap_model_file, stokes, mapsize, restore_beam, uvfits_template, out_ccfits,
+def CCFITS_to_difmap(ccfits, difmap_mdl_file, shift=None):
+    hdus = pf.open(ccfits)
+    hdus.verify("silentfix")
+    data = hdus[1].data
+    with open(difmap_mdl_file, "w") as fo:
+        for flux, ra, dec in zip(data['FLUX'], data['DELTAX'], data['DELTAY']):
+            ra *= deg2mas
+            dec *= deg2mas
+            if shift is not None:
+                ra -= shift[0]
+                dec -= shift[1]
+            theta = np.rad2deg(np.arctan2(ra, dec))
+            r = np.hypot(ra, dec)
+            fo.write("{} {} {}\n".format(flux, r, theta))
+
+
+def remove_residuals_from_CLEAN_map(ccfits, uvfits, out_ccfits, mapsize, stokes="i", restore_beam=None, shift=None,
+                                    show_difmap_output=True, working_dir=None):
+
+    if working_dir is None:
+        working_dir = os.getcwd()
+    tmp_difmap_mdl_file = os.path.join(working_dir, "dfm.mdl")
+    CCFITS_to_difmap(ccfits, tmp_difmap_mdl_file)
+    if restore_beam is None:
+        # Obtain convolving beam from FITS file
+        restore_beam = get_beam_params_from_CCFITS(ccfits)
+    convert_difmap_model_file_to_CCFITS(tmp_difmap_mdl_file, stokes, mapsize, restore_beam, uvfits, out_ccfits,
+                                        shift, show_difmap_output)
+
+
+# FIXME: Beam BPA in degrees!
+def convert_difmap_model_file_to_CCFITS(difmap_model_file, stokes, mapsize,
+                                        restore_beam, uvfits_template,
+                                        out_ccfits, shift=None,
                                         show_difmap_output=True):
     """
-    Using difmap-formated model file (e.g. flux, r, theta) obtain convolution of your model with the specified beam.
+    Using difmap-formated model file (e.g. flux, r, theta) obtain convolution of
+    your model with the specified beam.
 
     :param difmap_model_file:
         Difmap-formated model file. Use ``JetImage.save_image_to_difmap_format`` to obtain it.
@@ -395,29 +545,33 @@ def convert_difmap_model_file_to_CCFITS(difmap_model_file, stokes, mapsize, rest
         Template uvfits observation to use. Difmap can't read model without having observation at hand.
     :param out_ccfits:
         File name to save resulting convolved map.
+    :param shift: (optional)
+        Shift to apply. Need this because wmodel doesn't apply shift. If
+        ``None`` then do not apply shift. (default: ``None``)
     :param show_difmap_output: (optional)
         Boolean. Show Difmap output? (default: ``True``)
     """
-    stamp = datetime.datetime.now()
-    command_file = "difmap_commands_{}".format(stamp.isoformat())
-    difmapout = open(command_file, "w")
-    difmapout.write("observe " + uvfits_template + "\n")
-    difmapout.write("select " + stokes + "\n")
-    difmapout.write("rmodel " + difmap_model_file + "\n")
-    difmapout.write("mapsize " + str(mapsize[0]) + "," + str(mapsize[1]) + "\n")
+    from subprocess import Popen, PIPE
+
+    cmd = "observe " + uvfits_template + "\n"
+    cmd += "select " + stokes + "\n"
+    cmd += "rmodel " + difmap_model_file + "\n"
+    cmd += "mapsize " + str(mapsize[0] * 2) + "," + str(mapsize[1]) + "\n"
+    if shift is not None:
+        # Here we need shift, because in CLEANing shifts are not applied to
+        # saving model files!
+        cmd += "shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n"
     print("Restoring difmap model with BEAM : bmin = " + str(restore_beam[1]) + ", bmaj = " + str(restore_beam[0]) + ", " + str(restore_beam[2]) + " deg")
     # default dimfap: false,true (parameters: omit_residuals, do_smooth)
-    difmapout.write("restore " + str(restore_beam[1]) + "," + str(restore_beam[0]) + "," + str(restore_beam[2]) +
-                    "," + "true,false" + "\n")
-    difmapout.write("wmap " + out_ccfits + "\n")
-    difmapout.write("exit\n")
-    difmapout.close()
-    shell_command = "difmap < " + command_file + " 2>&1"
-    if not show_difmap_output:
-        shell_command += " >/dev/null"
-    os.system(shell_command)
-    # Remove command file
-    os.unlink(command_file)
+    cmd += "restore " + str(restore_beam[1]) + "," + str(restore_beam[0]) + "," + str(restore_beam[2]) + "," + "true,false" + "\n"
+    cmd += "wmap " + out_ccfits + "\n"
+    cmd += "exit\n"
+
+    with Popen('difmap', stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True) as difmap:
+        outs, errs = difmap.communicate(input=cmd)
+    if show_difmap_output:
+        print(outs)
+        print(errs)
 
 
 def flag_baseline(uvfits, outfname, ta, tb, show_difmap_output=False):
@@ -622,7 +776,7 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         else:
             do_smooth = "false"
         difmapout.write("restore " + str(beam_restore[1]) + ', ' +
-                        str(beam_restore[0]) + ', ' + str(beam_restore[2]) + ", " + omit_residuals + ", " + do_smooth +
+                        str(beam_restore[0]) + ', ' + str(np.rad2deg(beam_restore[2])) + ", " + omit_residuals + ", " + do_smooth +
                         "\n")
     if outpath is None:
         outpath = path
@@ -645,6 +799,252 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
 
     # Remove command file
     os.unlink(command_file)
+
+
+def make_wcs_from_ccfits(ccfits):
+    header = pf.getheader(ccfits)
+
+    wcs = WCS(header)
+    # Ignore FREQ, STOKES - only RA, DEC matters here
+    wcs = wcs.celestial
+
+    # Make offset coordinates
+    wcs.wcs.crval = 0., 0.
+    wcs.wcs.ctype = 'XOFFSET', 'YOFFSET'
+    wcs.wcs.cunit = 'mas', 'mas'
+    wcs.wcs.cdelt = (wcs.wcs.cdelt * u.deg).to(u.mas)
+    return wcs
+
+
+def convert_boxfile_to_mask(ccfits, boxfile):
+    boxes = np.loadtxt(boxfile, comments="!")
+    wcs = make_wcs_from_ccfits(ccfits)
+    blctrc = list()
+    for box in boxes:
+        ra_min, ra_max, dec_min, dec_max = box
+        blc, trc = convert_radec_ranges_to_bbox(wcs, ra_min, ra_max, dec_min, dec_max)
+        blctrc.append((blc, trc))
+
+    header = pf.getheader(ccfits)
+    mask = np.ones((header["NAXIS1"], header["NAXIS2"]), dtype=int)
+    for blc, trc in blctrc:
+        mask[blc[1]:trc[1], blc[0]:trc[0]] = 0
+    return np.array(mask, dtype=bool)
+
+
+def get_rms_from_map_region(ccfits, boxfile):
+    mask = convert_boxfile_to_mask(ccfits, boxfile)
+    image = pf.getdata(ccfits).squeeze()
+    image = np.ma.array(image, mask=mask)
+    return np.ma.std(image)
+
+
+# FIXME: Handle cases when no V is available and we need to estimate target rms from 1 asec distant region
+# FIXME: Note that I have changed ``save_...`` arguments from boolean to None/filename
+def CLEAN_difmap(uvfits, stokes, mapsize, outname, restore_beam=None,
+                 boxfile=None, working_dir=None, uvrange=None,
+                 box_clean_nw_niter=1000, clean_gain=0.03, dynam_su=20, dynam_u=6, deep_factor=1.0,
+                 remove_difmap_logs=True, save_noresid=None, save_resid_only=None, save_dfm=None,
+                 noise_to_use="F"):
+    if noise_to_use not in ("V", "W", "F"):
+        raise Exception("noise_to_use must be V (from Stokes V), W (from weights) or F (from remote region)!")
+    print("=== Using target rms estimate from {}".format({"V": "Stokes V", "W": "weights", "F": "remote region"}[noise_to_use]))
+    stamp = datetime.datetime.now()
+    from subprocess import Popen, PIPE
+
+    if working_dir is None:
+        working_dir = os.getcwd()
+    current_dir = os.getcwd()
+    os.chdir(working_dir)
+
+    # First get noise estimates: from visibility & weights and from Stokes V
+    cmd = "wrap_print_output = false\n"
+    cmd += "observe "+uvfits+"\n"
+    cmd += "select "+stokes+"\n"
+    cmd += "mapsize "+str(int(2*mapsize[0]))+","+str(mapsize[1])+"\n"
+    cmd += "uvw 0, -2\n"
+    if uvrange is not None:
+        cmd += "uvrange {}, {}\n".format(uvrange[0], uvrange[1])
+    cmd += "print \"wtnoise =\", imstat(noise)\n"
+
+    cmd += "select v\n"
+    cmd += "uvw 0, -2\n"
+    if uvrange is not None:
+        cmd += "uvrange {}, {}\n".format(uvrange[0], uvrange[1])
+    cmd += "print \"vnoise =\", imstat(rms)\n"
+
+    cmd += "shift 10000,10000\n"
+    cmd += "print \"farnoise =\", imstat(rms)\n"
+
+    cmd += "exit\n"
+
+    with Popen('difmap', stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True) as difmap:
+        outs, errs = difmap.communicate(input=cmd)
+
+    lines = outs.split("\n")
+    line = [line for line in lines if "wtnoise =" in line][-1]
+    wtnoise = float(line.split("=")[1])
+    line = [line for line in lines if "vnoise =" in line][-1]
+    vnoise = float(line.split("=")[1])
+    line = [line for line in lines if "farnoise =" in line][-1]
+    farnoise = float(line.split("=")[1])
+    line = [line for line in lines if "Estimated beam:" in line][-1]
+    bmin = float(line.split(" ")[2].split("=")[1])
+    bmaj = float(line.split(" ")[4].split("=")[1])
+    bpa = float(line.split(" ")[6].split("=")[1])
+
+    # Large weights noise
+    if wtnoise > 10*vnoise:
+        print("=== Noise from weights ({:.3f} mJy/beam) is much larger then from Stokes V ({:.3f} mJy/beam)".format(1000*wtnoise, 1000*vnoise))
+        if noise_to_use == "V":
+            target_rms = vnoise
+        else:
+            target_rms = farnoise
+    else:
+        if noise_to_use == "V":
+            target_rms = vnoise
+        elif noise_to_use == "W":
+            target_rms = wtnoise
+        else:
+            target_rms = farnoise
+
+    print("=== Far region rms = {:.3f} mJy/beam".format(1000*farnoise))
+    print("=== Weights rms    = {:.3f} mJy/beam".format(1000*wtnoise))
+    print("=== V noise rms    = {:.3f} mJy/beam".format(1000*vnoise))
+
+    if restore_beam is None:
+        restore_beam = (bmin, bmaj, bpa)
+
+    # CLEAN with SU-weighting
+    cmd = "observe "+uvfits+"\n"
+    cmd += "select "+stokes+"\n"
+    if uvrange is not None:
+        cmd += "uvrange {}, {}\n".format(uvrange[0], uvrange[1])
+    cmd += "mapsize "+str(int(2*mapsize[0]))+","+str(mapsize[1])+"\n"
+    cmd += "integer clean_niter;\n float clean_gain;\n clean_gain = {};\n float dynam;\n float flux_peak;\n" \
+           "float flux_cutofff;\n float in_rms;\n float target_rms;\n float last_in_rms\n".format(clean_gain)
+    cmd += "#+map_residual \
+flux_peak = peak(flux);\
+flux_cutoff = imstat(rms) * dynam;\
+while(abs(flux_peak)>flux_cutoff);\
+ clean clean_niter,clean_gain;\
+ flux_cutoff = imstat(rms) * dynam;\
+ flux_peak = peak(flux);\
+end while\n"
+    cmd += "dynam = {}\n clean_niter = 10\n uvw 20,-1\n map_residual\n uvw 10,-1\n map_residual\n".format(dynam_su)
+    cmd += "uvw 2,-1\n dynam = {}\n map_residual\n".format(dynam_u)
+
+    cmd += "#+deep_map_residual \
+in_rms = imstat(rms);\
+while(in_rms > {}*target_rms);\
+ clean min(100*(in_rms/target_rms),500),clean_gain;\
+ last_in_rms = in_rms;\
+ in_rms = imstat(rms);\
+ if(last_in_rms <= in_rms);\
+  in_rms = target_rms;\
+ end if;\
+end while\n".format(deep_factor)
+
+    if boxfile is None:
+        cmd += "uvw 0,-2\n target_rms = imstat(noise)\n deep_map_residual\n"
+        # default dimfap: false,true (parameters: omit_residuals, do_smooth)
+        cmd += "restore " + str(restore_beam[0]) + "," + str(restore_beam[1]) + "," + str(restore_beam[2]) + "," + "false,true" + "\n"
+        cmd += "wmap " + outname + "\n"
+        if save_noresid is not None:
+            cmd += "restore " + str(restore_beam[0]) + "," + str(restore_beam[1]) + "," + str(restore_beam[2]) + "," + "true,false" + "\n"
+            cmd += "wmap " + save_noresid + "\n"
+        if save_resid_only is not None:
+            cmd += "wdmap " + save_resid_only + "\n"
+        if save_dfm is not None:
+            cmd += "wmod " + save_dfm + "\n"
+        cmd += "exit\n"
+    # If boxes
+    else:
+        cmd += "rwins {}\n".format(boxfile)
+        cmd += "save {}\n".format(stamp.isoformat())
+        cmd += "wdmap {}_resid_only.fits\n".format(stamp.isoformat())
+        cmd += "exit\n"
+
+    with Popen('difmap', stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True) as difmap:
+        outs, errs = difmap.communicate(input=cmd)
+
+    if boxfile is not None:
+        box_rms = get_rms_from_map_region(os.path.join(working_dir, "{}_resid_only.fits".format(stamp.isoformat())),
+                                          boxfile)
+        print("INBOX rms = {:.3f} mJy/beam, while TARGET rms = {:.3f} mJy/beam".format(1000*box_rms, 1000*deep_factor*target_rms))
+        while box_rms > deep_factor*target_rms:
+            print("Current INBOX rms = {:.3f} mJy/beam > TARGET rms = {:.3f} mJy/beam => CLEANing deeper...".format(1000*box_rms, 1000*deep_factor*target_rms))
+            cmd = "@{}.par\n".format(stamp.isoformat())
+            cmd += "uvw 0,-2\n"
+            if uvrange is not None:
+                cmd += "uvrange {}, {}\n".format(uvrange[0], uvrange[1])
+            cmd += "clean {}, {}\n".format(box_clean_nw_niter, clean_gain)
+            cmd += "save {}\n".format(stamp.isoformat())
+            cmd += "wdmap {}_resid_only.fits\n".format(stamp.isoformat())
+            cmd += "exit\n"
+            with Popen('difmap', stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True) as difmap:
+                outs, errs = difmap.communicate(input=cmd)
+            box_rms = get_rms_from_map_region(os.path.join(working_dir, "{}_resid_only.fits".format(stamp.isoformat())), boxfile)
+
+        cmd = "@{}.par\n".format(stamp.isoformat())
+        cmd += "restore " + str(restore_beam[0]) + "," + str(restore_beam[1]) + "," + str(restore_beam[2]) + "," + "false,true" + "\n"
+        cmd += "wmap " + outname + "\n"
+        if save_noresid is not None:
+            cmd += "restore " + str(restore_beam[0]) + "," + str(restore_beam[1]) + "," + str(restore_beam[2]) + "," + "true,false" + "\n"
+            cmd += "wmap " + save_noresid + "\n"
+        if save_resid_only is not None:
+            cmd += "wdmap " + save_resid_only + "\n"
+        if save_dfm is not None:
+            cmd += "wmod " + save_dfm + "\n"
+        cmd += "exit\n"
+        with Popen('difmap', stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True) as difmap:
+            outs, errs = difmap.communicate(input=cmd)
+
+        for fn in ("{}_resid_only.fits".format(stamp.isoformat()),
+                   "{}.fits".format(stamp.isoformat()),
+                   "{}.par".format(stamp.isoformat()),
+                   "{}.win".format(stamp.isoformat()),
+                   "{}.uvf".format(stamp.isoformat()),
+                   "{}.mod".format(stamp.isoformat())):
+            os.unlink(os.path.join(working_dir, fn))
+
+    if remove_difmap_logs:
+        logs = glob.glob(os.path.join(working_dir, "difmap.log*"))
+        for log in logs:
+            os.unlink(log)
+
+    os.chdir(current_dir)
+    return outs, errs
+
+
+def rebase_CLEAN_model(target_uvfits, rebased_uvfits, stokes, mapsize, restore_beam, source_ccfits=None,
+                       source_difmap_model=None, noise_scale_factor=1.0, need_downscale_uv=None, remove_cc=False):
+    if source_ccfits is None and source_difmap_model is None:
+        raise Exception("Must specify CCFITS or difmap model file!")
+    if source_ccfits is not None and source_difmap_model is not None:
+        raise Exception("Must specify CCFITS OR difmap model file!")
+    uvdata = UVData(target_uvfits)
+    if need_downscale_uv is None:
+        need_downscale_uv = downscale_uvdata_by_freq(uvdata)
+    noise = uvdata.noise(average_freq=False, use_V=False)
+    uvdata.zero_data()
+    # If one needs to decrease the noise this is the way to do it
+    for baseline, baseline_noise_std in noise.items():
+        noise.update({baseline: noise_scale_factor*baseline_noise_std})
+
+    if source_ccfits is not None:
+        ccmodel = create_model_from_fits_file(source_ccfits)
+    if source_difmap_model is not None:
+        convert_difmap_model_file_to_CCFITS(source_difmap_model, stokes, mapsize,
+                                            restore_beam, target_uvfits, "tmp_cc.fits")
+        ccmodel = create_model_from_fits_file("tmp_cc.fits")
+        if remove_cc:
+            os.unlink("tmp_cc.fits")
+
+    uvdata.substitute([ccmodel])
+    uvdata.noise_add(noise)
+    uvdata.save(rebased_uvfits, rewrite=True, downscale_by_freq=need_downscale_uv)
+
 
 
 def deep_clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
@@ -895,6 +1295,8 @@ def import_difmap_model(mdl_fname, mdl_dir=None, remove_last_char=True):
         line = line.strip('\n ')
         try:
             flux, radius, theta, major, axial, phi, type_, freq, spec = line.split()
+            print("Read line:")
+            print(flux, radius, theta, major, axial, phi, type_, freq, spec)
         except ValueError:
             try:
                 flux, radius, theta, major, axial, phi, type_ = line.split()
@@ -931,7 +1333,13 @@ def import_difmap_model(mdl_fname, mdl_dir=None, remove_last_char=True):
                 list_fixed.append('bmaj')
             except ValueError:
                 bmaj = float(major[:-1])
-            if float(axial[:-1]) == 1:
+
+            # if float(axial[:-1]) == 1.0:
+            try:
+                floataxial = float(axial)
+            except ValueError:
+                floataxial = float(axial[:-1])
+            if floataxial == 1.0:
                 comp = CGComponent(flux, x, y, bmaj, fixed=list_fixed)
             else:
                 try:
@@ -1378,18 +1786,28 @@ def convert_bbox_to_radec_ranges(wcs, blc, trc):
     return ra_min, ra_max, dec_min, dec_max
 
 
+def convert_radec_ranges_to_bbox(wcs, ra_min, ra_max, dec_min, dec_max):
+    blc_deg_0,  blc_deg_1 = wcs.all_world2pix(ra_max, dec_min, 1)
+    trc_deg_0,  trc_deg_1 = wcs.all_world2pix(ra_min, dec_max, 1)
+    return (int(round(float(blc_deg_0), 0)), int(round(float(blc_deg_1), 0))),\
+           (int(round(float(trc_deg_0), 0)), int(round(float(trc_deg_1), 0)))
+
+
 def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
-                    out_path=None, stokes="I", show_difmap_output=True):
-    import glob
-    import pandas as pd
-    import astropy.io.fits as pf
+                    out_path=None, stokes="I", show_difmap_output=True,
+                    freq_ghz=15.4, size_error_coefficient=0.2):
     # Conversion coefficient from degrees to mas
     deg2mas = 3.6*10**6
 
-    columns = ["flux", "ra", "dec", "major", "minor", "posangle", "type", "snr", "rms", "flux_err",
+    # size_errors = find_size_errors_using_chi2(mdl_fname, fname, nmodelfit=100, use_selfcal=False)
+    # size_errors_single = list()
+    # for entry in size_errors:
+    #     size_errors_single.append(0.5*(entry[0] + entry[1]))
+
+    columns = ["flux", "ra", "dec", "original_major", "original_minor",  "major", "minor", "posangle", "type", "snr", "rms", "flux_err",
                "r_err", "major_unresolved", "minor_unresolved", "major_err", "minor_err",
                # "PA_core", "size_across_PA_core", "resolved_across_PA_core", "size_across_PA_core_err",
-               "Tb", "Tb_err", "upper_limit_Tb"]
+               "Tb", "Tb_err", "upper_limit_Tb", "beam"]
     df_dict = dict()
     for column in columns:
         df_dict[column] = list()
@@ -1412,7 +1830,12 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
     difmapout.write("select " + stokes + "\n")
     difmapout.write("rmodel " + mdl_fname + "\n")
     difmapout.write("mapsize " + str(dmap_size[0]) + "," + str(dmap_size[1]) + "\n")
+    difmapout.write("uvw 0,-2\n")
     difmapout.write("invert\n")
+    # difmapout.write("print \"postfitrms =\", uvstat(rms)/sqrt(uvstat(nvis))\n")
+    difmapout.write("print \"postfitrms =\", uvstat(rms)\n")
+    difmapout.write("print \"nvis =\", uvstat(nvis)\n")
+    # difmapout.write("print \"maxampl = \",vis_stats(amplitude)(6)\n")
     # Obtain dirty image
     if dmap_name is None:
         dmap_name = "dirty_residuals_map.fits"
@@ -1430,8 +1853,7 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
         shell_command += " >/dev/null"
     os.system(shell_command)
 
-
-    # Get final reduced chi_squared
+    # Obtain beam info from lof-file:)
     with open("difmap.log", "r") as fo:
         lines = fo.readlines()
     line = [line for line in lines if "Restoring with beam:" in line][-1]
@@ -1441,17 +1863,39 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
         bmaj, bmin = bmin, bmaj
     bpa = np.deg2rad(float(line.split()[8]))
     beam_area_mas = np.pi*bmaj*bmin/(4*np.log(2))
+    print("Beam area (mas^2) = ", beam_area_mas)
+    print("Beam area (pix^2) = ", beam_area_mas/0.01)
+    beam_area_pix = beam_area_mas/0.01
+    beam_circ = np.sqrt(bmaj*bmin)
+    print("BEAM CIRC = ", beam_circ)
+
+
+
+    line = [line for line in lines if "! postfitrms" in line][-1]
+    postfitrms = float(line.strip().split(" ")[-1])
+    print("POSTFITRMS = ", postfitrms)
+    line = [line for line in lines if "! nvis" in line][-1]
+    nvis = int(line.strip().split(" ")[-1])
+    print("NVIS = ", nvis)
+
+    sum_sq_diff_uv = postfitrms**2*nvis
+    print("SUM SQ DIFF UV = ", sum_sq_diff_uv)
+
+    std_from_vis = postfitrms/np.sqrt(2*nvis)
+
 
     if PA is None:
         theta_beam = np.sqrt(bmaj*bmin)
     else:
-        theta_beam = 2*bmaj*bmin*np.sqrt((1+np.tan(PA-bpa)**2)/(bmin**2+bmaj**2*np.tan(PA-bpa)**2))
+        theta_beam = bmaj*bmin*np.sqrt((1+np.tan(PA-bpa)**2)/(bmin**2+bmaj**2*np.tan(PA-bpa)**2))
 
     # Remove Difmap command and log-file
     os.unlink(command_file)
-    os.unlink("difmap.log")
+    # os.unlink("difmap.log")
 
-    header = pf.getheader(os.path.join(out_path, dmap_name))
+    hdulist = pf.open(os.path.join(out_path, dmap_name))
+    hdulist.verify("ignore")
+    header = hdulist[0].header
 
     # Build coordinate system
     wcs = WCS(header)
@@ -1463,12 +1907,28 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
     wcs.wcs.cunit = 'mas', 'mas'
     wcs.wcs.cdelt = (wcs.wcs.cdelt * u.deg).to(u.mas)
 
-    dimage = pf.getdata(os.path.join(out_path, dmap_name)).squeeze()
+    dimage = hdulist[0].data.squeeze()
+    npix = dimage.shape[0]
+    npix *= npix
+    print("NPIX = ", npix)
+
+    parseval_rms_per_pix = np.sqrt(sum_sq_diff_uv/(npix/beam_area_pix))
+    print("PARSEVAL RMS per beam = ", parseval_rms_per_pix)
+
+
+    if postfitrms > 0.1:
+        postfitrms_dimage = np.std(dimage)
+        if postfitrms_dimage < postfitrms:
+            postfitrms = postfitrms_dimage
+
+
     # Characteristic size of the beam in pixels
-    beam_pxl = int(np.sqrt(bmaj * bmin) / dmap_size[1])
+    beam_pxl = int(np.sqrt(beam_area_mas) / dmap_size[1])
+    print("Beam size (pxl) = ", beam_pxl)
 
     # Read components from difmap dirty image CC-table
-    comps = pf.getdata(os.path.join(out_path, dmap_name), ext=("AIPS CC ", 1))
+    comps = hdulist["AIPS CC "].data
+    # comps = pf.getdata(os.path.join(out_path, dmap_name), ext=("AIPS CC ", 1))
     sizes_lim = list()
     unresolved_maj = None
     unresolved_min = None
@@ -1481,30 +1941,79 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
     # ra_pix_all, dec_pix_all = wcs.wcs_pix2world(X, Y, 0)
 
     for comp in comps:
+
+
+
+        # Assume core in the phase center
+        # PA_core = 0
+        # theta_beam_across_component_PA = size_minor*size_major*np.sqrt((1+np.tan(PA_core+np.pi/2-np.deg2rad(comp["POSANGLE"]))**2)/(bmin**2+bmaj**2*np.tan(PA_core+np.pi/2-np.deg2rad(comp["POSANGLE"]))**2))
+
         # RA, DEC of component center
         ra = comp[1]*deg2mas
         dec = comp[2]*deg2mas
-        # TODO: Currently it is from phase center - not core!
-        PA_core = np.arctan2(ra, dec)
+        df_dict["original_major"].append(comp["MAJOR AX"]*deg2mas)
+        df_dict["original_minor"].append(comp["MINOR AX"]*deg2mas)
+        # FIXME: Currently it is from phase center - not from the core!
+        # PA_core = np.arctan2(ra, dec)
         ra_pix, dec_pix = wcs.wcs_world2pix(ra.reshape(-1, 1), dec.reshape(-1, 1), 0)
         ra_pix = ra_pix[0][0]
         dec_pix = dec_pix[0][0]
+
+        mask_radius = 3*beam_pxl
+        if comp["TYPE OBJ"] == 1.0 and comp["POSANGLE"] == 0.0:
+            size = comp["MAJOR AX"]*deg2mas/0.1
+            mask_radius = np.hypot(mask_radius, size)
+        elif comp["TYPE OBJ"] == 1.0 and comp["POSANGLE"] != 0.0:
+            size = 0.5*(comp["MAJOR AX"]*deg2mas + comp["MINOR AX"]*deg2mas)/0.1
+            mask_radius = np.hypot(mask_radius, size)
+        else:
+            size = 0.0
+
         # Create mask of size N*beam_pxl with center in (ra_pix, dec_pix)
-        mask = np.sqrt((X-ra_pix)**2+(Y-dec_pix)**2) < 3*beam_pxl
-        # Need to add to map center (512, 512) add DEC in pixels (with sign)
-        rms = np.std(dimage[mask])
-        print("RMS = ", rms)
+        mask = np.sqrt((X-ra_pix)**2+(Y-dec_pix)**2) < mask_radius
+
+
+        rms_dimage_all = np.std(dimage)
+        rms_dimage_all = mad_std(dimage)
+        print("RMS of ALL DIMAGE (Jy/beam) = ", rms_dimage_all)
+
+        rms_lim = np.std(dimage[mask])
+        # print("RMS DIMAGE (Jy/beam) = ", rms)
+        # rms_lim = rms_dimage_all
+        # rms = postfitrms
+        # print("RMS UV (Jy) = ", rms)
+        # TODO: This was before and gave good results
+        # rms = std_from_vis
+        rms = rms_lim
+
 
         # For CG
-        if comp["TYPE OBJ"] == 1.0:
+        if comp["TYPE OBJ"] == 1.0 and comp["MAJOR AX"] == comp["MINOR AX"]:
             size = comp["MAJOR AX"]*deg2mas
-            print("comp size = ", size)
+            print("SIZE = ", size)
+            comp_area_mas = np.pi*size**2/(4*np.log(2))
+            comp_area_mas_beam_convolved = np.pi*np.hypot(size, beam_circ)**2/(4*np.log(2))
             # Calculate first time for SNR
-            peak_flux = 4*np.log(2)*comp["FLUX"] * (np.pi*size**2/(4*np.log(2)*beam_area_mas)) / (np.pi*size**2)
-            print("peak flux = ", peak_flux)
-            SNR = peak_flux / rms
-            size_lim = theta_beam*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
-            print("Size lim = ", size_lim)
+            peak_flux = comp["FLUX"] * beam_area_mas / (beam_area_mas + comp_area_mas)
+            peak_flux = np.hypot(peak_flux, rms)
+            print("flux (Jy) = ", comp["FLUX"])
+            print("peak flux (Jy/beam) = ", peak_flux)
+            sigma_peak = rms*np.sqrt(1 + peak_flux/rms)
+            # This makes few limits, but they are kinda small
+            # SNR = peak_flux / rms
+            # This makes more limits for NGC315, but besides this all is OK!
+            # SNR = peak_flux / sigma_peak
+            SNR_lim = peak_flux / rms_lim
+            # print("SNR = ", SNR)
+            if SNR_lim > 1:
+                # factor 2 - for uniform weighting, 1 - for natural
+                size_lim = theta_beam*np.sqrt(np.log(SNR_lim/(SNR_lim-1))*4*np.log(2)/np.pi)
+                # size_lim = theta_beam_across_component_PA*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
+            else:
+                size_lim = theta_beam/2
+                # size_lim = theta_beam_across_component_PA/2
+                SNR_lim = 1
+            print("SIZE LIM (MAS) = ", size_lim)
             # If it is a limit - re-calculate peak flux
             unresolved_min = None
             if size < size_lim:
@@ -1514,14 +2023,46 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
             else:
                 unresolved_maj = False
                 upper_limit_Tb = False
+
             # Re-calculate if sizes are limits
-            peak_flux = 4*np.log(2)*comp["FLUX"] * (np.pi*size**2/(4*np.log(2)*beam_area_mas)) / (np.pi*size**2)
-            print("new peak flux = ", peak_flux)
+            comp_area_mas = np.pi*size**2/(4*np.log(2))
+
+            # TODO: Should I re-calculate peak_flux for unresolved components? It doesn't change actually.
+            peak_flux = comp["FLUX"] * beam_area_mas / (beam_area_mas + comp_area_mas)
+            peak_flux = np.hypot(peak_flux, rms)
+
+            # Lee
+            # FIXME: This makes size error of large faint components ~ size
             sigma_peak = rms*np.sqrt(1 + peak_flux/rms)
-            sigma_tot_flux = sigma_peak*np.sqrt(1 + comp["FLUX"]**2/peak_flux**2)
-            sigma_size = size*sigma_peak/peak_flux
-            tb = tb_gaussian(comp["FLUX"], size, 15.4)
-            sigma_tb = sigma_tb_gaussian(sigma_tot_flux, sigma_size, comp["FLUX"], size, 15.4)
+            # Schitzel
+            # sigma_peak = rms
+
+            # An
+            sigma_tot_flux = rms*(comp_area_mas_beam_convolved/beam_area_mas)
+            # Lee and Schitzel
+            # sigma_tot_flux = sigma_peak*np.sqrt(1 + comp["FLUX"]**2/peak_flux**2)
+
+
+            # An
+            # This is not good for the extended components, where the size error could be larger than beam. However, we
+            # include fractional size error in fitting!
+            # sigma_size = beam_circ/SNR
+            # sigma_size = np.hypot(beam_circ, size)/SNR
+            # sigma_size = beam_circ*sigma_peak/peak_flux
+
+            # FIXME: Conventional size error
+            sigma_size = size_error_coefficient*np.hypot(size, beam_circ)*(sigma_peak/peak_flux)
+            sigma_pos = 0.5*sigma_size
+            # sigma_pos = 0.5*beam_circ*sigma_peak/peak_flux
+            # sigma_size = size*sigma_peak/peak_flux
+            print("sigma size (mas) = ", sigma_size)
+            tb = tb_gaussian(comp["FLUX"], size, freq_ghz)
+            sigma_tb = sigma_tb_gaussian(sigma_tot_flux, sigma_size, comp["FLUX"], size, freq_ghz)
+
+            # tb_values = tb_gaussian(np.random.normal(comp["FLUX"], sigma_tot_flux, 1000),
+            #                         np.random.normal(size, sigma_size, 1000),
+            #                         freq_ghz)
+            # sigma_tb = np.std(tb_values)
 
             # size_across_PA_core = size
             # resolved_across_PA_core = unresolved_maj
@@ -1533,24 +2074,43 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
             df_dict["minor_err"].append(sigma_size)
             df_dict["posangle"].append(None)
             df_dict["type"].append(1)
-            df_dict["r_err"].append(0.5*sigma_size)
+            df_dict["r_err"].append(sigma_pos)
 
         # For EG
-        elif comp["TYPE OBJ"] == 2.0:
+        elif comp["TYPE OBJ"] == 1.0 and comp["MAJOR AX"] != comp["MINOR AX"]:
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!   EG   !!!!!!!!!!!!!!!!!!!!!!!")
             upper_limit_Tb = False
             size_major = comp["MAJOR AX"]*deg2mas
             size_minor = comp["MINOR AX"]*deg2mas
-            # size_across_PA_core = 2*size_minor*size_major*np.sqrt((1+np.tan(PA_core+np.pi/2-np.deg2rad(comp["POSANGLE"]))**2)/(bmin**2+bmaj**2*np.tan(PA_core+np.pi/2-np.deg2rad(comp["POSANGLE"]))**2))
+
+            # Assume core at the phase center
+            # PA_core = 0
+            # Component size in direction perpendicular to the component PA
+            # size_across_PA_core = size_minor*size_major*np.sqrt((1+np.tan(PA_core+np.pi/2-np.deg2rad(comp["POSANGLE"]))**2)/(bmin**2+bmaj**2*np.tan(PA_core+np.pi/2-np.deg2rad(comp["POSANGLE"]))**2))
+
+            comp_area_mas = np.pi*size_major*size_minor/(4*np.log(2))
+            comp_area_mas_beam_convolved = np.pi*np.hypot(size_minor, beam_circ)*np.hypot(size_major, beam_circ)/(4*np.log(2))
 
             # Calculate first time for SNR
-            peak_flux = 4*np.log(2)*comp["FLUX"] * (np.pi*size_major*size_minor/(4*np.log(2)*beam_area_mas)) / (np.pi*size_major*size_minor)
-            SNR = peak_flux / rms
+            peak_flux = comp["FLUX"] * beam_area_mas / (beam_area_mas + comp_area_mas)
+            peak_flux = np.hypot(peak_flux, rms)
+            sigma_peak = rms*np.sqrt(1 + peak_flux/rms)
+            # SNR = peak_flux / rms
+            # This makes more limits for NGC315, but besides this all is OK!
+            # SNR = peak_flux / sigma_peak
+            SNR_lim = peak_flux / rms_lim
 
-            theta_beam_along_major = 2*bmaj*bmin*np.sqrt((1+np.tan(np.deg2rad(comp["POSANGLE"])-bpa)**2)/(bmin**2 + bmaj**2*np.tan(np.deg2rad(comp["POSANGLE"])-bpa)**2))
-            theta_beam_along_minor = 2*bmaj*bmin*np.sqrt((1+np.tan(np.deg2rad(comp["POSANGLE"]+90)-bpa)**2)/(bmin**2 + bmaj**2*np.tan(np.deg2rad(comp["POSANGLE"]+90)-bpa)**2))
+            # Removed ``2`` coefficient
+            theta_beam_along_major = bmaj*bmin*np.sqrt((1+np.tan(np.deg2rad(comp["POSANGLE"])-bpa)**2)/(bmin**2 + bmaj**2*np.tan(np.deg2rad(comp["POSANGLE"])-bpa)**2))
+            theta_beam_along_minor = bmaj*bmin*np.sqrt((1+np.tan(np.deg2rad(comp["POSANGLE"]+90)-bpa)**2)/(bmin**2 + bmaj**2*np.tan(np.deg2rad(comp["POSANGLE"]+90)-bpa)**2))
 
-            size_lim_major = theta_beam_along_major*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
-            size_lim_minor = theta_beam_along_minor*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
+            if SNR_lim > 1:
+                size_lim_major = theta_beam_along_major*np.sqrt(np.log(SNR_lim/(SNR_lim-1))*4*np.log(2)/np.pi)
+                size_lim_minor = theta_beam_along_minor*np.sqrt(np.log(SNR_lim/(SNR_lim-1))*4*np.log(2)/np.pi)
+            else:
+                size_lim_major = theta_beam/2
+                size_lim_minor = theta_beam/2
+                SNR_lim = 1
 
             # If it is a limit - re-calculate peak flux
             if size_major < size_lim_major:
@@ -1568,15 +2128,47 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
                 unresolved_min = False
 
             # Re-calculate if sizes are limits
-            peak_flux = 4*np.log(2)*comp["FLUX"] * (np.pi*size_major*size_minor/(4*np.log(2)*beam_area_mas)) / (np.pi*size_minor*size_major)
-            sigma_peak = rms*np.sqrt(1 + peak_flux/rms)
-            sigma_tot_flux = sigma_peak*np.sqrt(1 + comp["FLUX"]**2/peak_flux**2)
-            sigma_size_major = size_major*sigma_peak/peak_flux
-            sigma_size_minor = size_minor*sigma_peak/peak_flux
-            tb = tb_gaussian(comp["FLUX"], size_major, 15.4, bmin_mas=size_minor)
-            sigma_tb = sigma_tb_gaussian(sigma_tot_flux, 0.5*(sigma_size_minor+sigma_size_major), comp["FLUX"], 0.5*(size_minor+size_major), 15.4)
+            comp_area_mas = np.pi*size_major*size_minor/(4*np.log(2))
 
-            # theta_beam_across_PA_core = 2*bmaj*bmin*np.sqrt((1+np.tan(PA_core-bpa)**2)/(bmin**2 + bmaj**2*np.tan(PA_core-bpa)**2))
+            # TODO: Should I re-calculate peak_flux for unresolved components? It doesn't change actually.
+            peak_flux = comp["FLUX"] * beam_area_mas / (beam_area_mas + comp_area_mas)
+            peak_flux = np.hypot(peak_flux, rms)
+
+            # Lee
+            sigma_peak = rms*np.sqrt(1 + peak_flux/rms)
+            # Schitzel
+            # sigma_peak = rms
+
+            # An
+            sigma_tot_flux = rms*(comp_area_mas_beam_convolved/beam_area_mas)
+
+            # Lee and Schitzel
+            # sigma_tot_flux = sigma_peak*np.sqrt(1 + comp["FLUX"]**2/peak_flux**2)
+
+            # An
+            # This is not good for the extended components, where the size error could be larger than beam. However, we
+            # include fractional size error in fitting!
+            # sigma_size_major = bmaj/SNR
+            # sigma_size_minor = bmin/SNR
+            # sigma_size_minor = beam_circ*sigma_peak/peak_flux
+            # sigma_size_major = beam_circ*sigma_peak/peak_flux
+            # sigma_size_major = np.hypot(beam_circ, size_major)/SNR
+            # sigma_size_minor = np.hypot(beam_circ, size_minor)/SNR
+
+            # FIXME: Conventional size error
+            sigma_size_major = size_error_coefficient*np.hypot(size_major, beam_circ)*sigma_peak/peak_flux
+            sigma_size_minor = size_error_coefficient*np.hypot(size_minor, beam_circ)*sigma_peak/peak_flux
+            # sigma_size_major = size_major*sigma_peak/peak_flux
+            # sigma_size_minor = size_minor*sigma_peak/peak_flux
+            sigma_pos = 0.5*(sigma_size_minor + sigma_size_major)
+            # sigma_pos = 0.5*beam_circ*sigma_peak/peak_flux
+
+            tb = tb_gaussian(comp["FLUX"], size_major, freq_ghz, bmin_mas=size_minor)
+            sigma_tb = sigma_tb_gaussian(sigma_tot_flux, 0.5*(sigma_size_minor+sigma_size_major), comp["FLUX"], 0.5*(size_minor+size_major), freq_ghz)
+
+            # Assume core at the phase center
+            PA_core = 0
+            theta_beam_across_PA_core = bmaj*bmin*np.sqrt((1+np.tan(PA_core-bpa)**2)/(bmin**2 + bmaj**2*np.tan(PA_core-bpa)**2))
             # size_lim_across_PA_core = theta_beam_across_PA_core*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
             # if size_across_PA_core > size_lim_across_PA_core:
             #     resolved_across_PA_core = True
@@ -1590,26 +2182,53 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
             df_dict["minor"].append(size_minor)
             df_dict["posangle"].append(np.deg2rad(comp["POSANGLE"]))
             df_dict["type"].append(2)
-            df_dict["r_err"].append(0.5*0.5*(sigma_size_minor+sigma_size_major))
+            df_dict["r_err"].append(sigma_pos)
             df_dict["major_err"].append(sigma_size_major)
             df_dict["minor_err"].append(sigma_size_minor)
 
         # For delta
-        # FIXME: Must be different size limits along beam bmaj & bmin
         elif comp["TYPE OBJ"] == 0.0:
             unresolved_maj = None
             unresolved_min = None
             upper_limit_Tb = True
             peak_flux = comp["FLUX"]
-            SNR = peak_flux/rms
-            size_lim = theta_beam*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
-            size = size_lim
-            peak_flux = 4*np.log(2)*comp["FLUX"] * (np.pi*size**2/(4*np.log(2)*beam_area_mas)) / (np.pi*size**2)
+            peak_flux = np.hypot(peak_flux, rms)
             sigma_peak = rms*np.sqrt(1 + peak_flux/rms)
-            sigma_tot_flux = sigma_peak*np.sqrt(1 + comp["FLUX"]**2/peak_flux**2)
-            sigma_size = size*sigma_peak/peak_flux
-            tb = tb_gaussian(comp["FLUX"], size, 15.4)
-            sigma_tb = sigma_tb_gaussian(sigma_tot_flux, sigma_size, comp["FLUX"], size, 15.4)
+            # SNR = peak_flux/rms
+            # This makes more limits for NGC315, but besides this all is OK!
+            # SNR = peak_flux/sigma_peak
+            SNR_lim = peak_flux / rms_lim
+            size_lim = theta_beam*np.sqrt(np.log(SNR_lim/(SNR_lim-1))*4*np.log(2)/np.pi)
+            # size_lim = theta_beam_across_component_PA*np.sqrt(np.log(SNR/(SNR-1))*4*np.log(2)/np.pi)
+            size = size_lim
+            comp_area_mas_beam_convolved = np.pi*np.hypot(size, beam_circ)*np.hypot(size, beam_circ)/(4*np.log(2))
+
+            # Lee
+            sigma_peak = rms*np.sqrt(1 + peak_flux/rms)
+            # Schitzel
+            # sigma_peak = rms
+
+            # An
+            # sigma_tot_flux = rms
+            sigma_tot_flux = rms*(comp_area_mas_beam_convolved/beam_area_mas)
+
+            # Lee and Schitzel
+            # sigma_tot_flux = sigma_peak*np.sqrt(1 + comp["FLUX"]**2/peak_flux**2)
+
+            # An
+            # This is not good for the extended components, where the size error could be larger than beam. However, we
+            # include fractional size error in fitting!
+            # sigma_size = beam_circ/SNR
+            # sigma_size = beam_circ*sigma_peak/peak_flux
+
+            # FIXME: Conventional size error
+            sigma_size = size_error_coefficient*np.hypot(size, beam_circ)*sigma_peak/peak_flux
+            # sigma_size = size*sigma_peak/peak_flux
+            sigma_pos = 0.5*sigma_size
+            # sigma_pos = 0.5*beam_circ*sigma_peak/peak_flux
+
+            tb = tb_gaussian(comp["FLUX"], size, freq_ghz)
+            sigma_tb = sigma_tb_gaussian(sigma_tot_flux, sigma_size, comp["FLUX"], size, freq_ghz)
             # size_across_PA_core = size
             # resolved_across_PA_core = None
             # size_across_PA_core_err = size_across_PA_core*sigma_peak/peak_flux
@@ -1618,13 +2237,13 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
             df_dict["minor"].append(size)
             df_dict["posangle"].append(None)
             df_dict["type"].append(0)
-            df_dict["r_err"].append(0.5*sigma_size)
+            df_dict["r_err"].append(sigma_pos)
             df_dict["major_err"].append(sigma_size)
             df_dict["minor_err"].append(sigma_size)
         else:
             raise Exception
 
-        df_dict["snr"].append(SNR)
+        df_dict["snr"].append(SNR_lim)
         df_dict["rms"].append(rms)
         df_dict["flux"].append(comp["FLUX"])
         df_dict["ra"].append(ra)
@@ -1639,13 +2258,16 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
         df_dict["Tb"].append(tb)
         df_dict["Tb_err"].append(sigma_tb)
         df_dict["upper_limit_Tb"].append(upper_limit_Tb)
+        df_dict["beam"].append(beam_circ)
 
-    try:
-        os.unlink(os.path.join(out_path, "dirty_residuals_map.fits"))
-    except FileNotFoundError:
-        pass
+    # try:
+    #     os.unlink(os.path.join(out_path, "dirty_residuals_map.fits"))
+    # except FileNotFoundError:
+    #     pass
 
     return pd.DataFrame.from_dict(df_dict)
+
+
 
 
 # TODO: Add iteration till chi-squared is increasing for some number of
@@ -1955,11 +2577,18 @@ def find_size_errors_using_chi2(dfm_model_file, uvfits, working_dir=None,
             return (required_chisq - sdict["rchisq"])**2
 
         # First find upper bound
-        lower_bounds = [1E-7]
-        upper_bounds = [3.0]
-        n_fun_eval = 25
-        delta_lower, _ = dlib.find_min_global(min_func_lower, lower_bounds, upper_bounds, n_fun_eval)
+        lower_bounds = [1E-4]
+        upper_bounds = [10.0]
+        n_fun_eval = 75
         delta_upper, _ = dlib.find_min_global(min_func_upper, lower_bounds, upper_bounds, n_fun_eval)
+
+        print("===================")
+
+        # First find upper bound
+        lower_bounds = [1E-4]
+        upper_bounds = [par0]
+        n_fun_eval = 75
+        delta_lower, _ = dlib.find_min_global(min_func_lower, lower_bounds, upper_bounds, n_fun_eval)
 
         print("Parameters = {} - {} + {}".format(par0, delta_lower, delta_upper))
         errors.append((delta_lower, delta_upper))
@@ -2058,7 +2687,7 @@ def find_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", working_
                 return (required_chisq - sdict["rchisq"])**2
 
             # First find upper bound
-            lower_bounds = [1E-7]
+            lower_bounds = [1E-4]
             upper_bounds = [1.0]
             n_fun_eval = 50
             delta_lower, _ = dlib.find_min_global(min_func_lower, lower_bounds, upper_bounds, n_fun_eval)
@@ -3043,6 +3672,52 @@ def make_map_with_core_at_zero(mdl_file, uv_fits_fname, mapsize_clean,
 
 
 if __name__ == "__main__":
-    uvfits = "/home/ilya/github/jetpol/scripts/2200+420.u.2017_01_28.uvf"
-    dfm_model = "/home/ilya/Documents/Tb/MOJAVE_difmap_models/modfits/2200+420_2017-01-28.mod"
-    df = components_info(uvfits, dfm_model, dmap_size=(1024, 0.1), PA=None)
+    import matplotlib
+    matplotlib.use('qt5Agg')
+    import glob
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Circle
+    # new_path = "/home/ilya/data/silke/1215/last/0d2/"
+    new_path = "/home/ilya/data/Mkn501/difmap_models/tberrors"
+    # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
+    dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/*.mod")
+    # fig, axes = plt.subplots(figsize=(7.5, 10))
+    for dfm_model in dfm_models:
+        fn = os.path.split(dfm_model)[-1]
+        if fn == "1998_05_15_1.mod":
+            continue
+        epoch = fn[:10]
+        # uvfits = "/home/ilya/data/silke/1215/1215+303.u.{}.uvf".format(epoch)
+        uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
+        if epoch != "2010_10_25":
+            df = components_info(uvfits, dfm_model, dmap_size=(1024, 0.1), PA=None,
+                                 size_error_coefficient=0.35)
+            # axes.scatter(df["ra"], df["dec"])
+            # for idx, row in df.iterrows():
+            #     e = Circle((row["ra"], row["dec"]), 0.5*row["major_err"],
+            #                edgecolor="gray", facecolor="C1",
+            #                alpha=0.2)
+            #     axes.add_patch(e)
+            np.savetxt(new_path + "/{}_pos_error.txt".format(epoch), 0.5*df["major_err"])
+            np.savetxt(new_path + "/{}_size_error.txt".format(epoch), df["major_err"])
+            flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
+            np.savetxt(new_path + "/{}_flux_error.txt".format(epoch), flux_err)
+    # df = components_info("/home/ilya/data/silke/1215/1215+303.u.2010_10_25.uvf", "/home/ilya/data/silke/1215/2010_10_25.mod",
+    #                      dmap_size=(1024, 0.1), PA=None, size_error_coefficient=0.35)
+    # np.savetxt(new_path+"2010_10_25_pos_error.txt", 0.5*df["major_err"])
+    # np.savetxt(new_path+"2010_10_25_size_error.txt", df["major_err"])
+    # flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
+    # np.savetxt(new_path+"2010_10_25_flux_error.txt", flux_err)
+    # df = components_info("/home/ilya/data/silke/1215/1215+303.u.2010_10_25.uvf", "/home/ilya/data/silke/1215/2010_10_25_1.mod",
+    #                      dmap_size=(1024, 0.1), PA=None, size_error_coefficient=0.35)
+    # np.savetxt(new_path+"2010_10_25_1_pos_error.txt", 0.5*df["major_err"])
+    # np.savetxt(new_path+"2010_10_25_1_size_error.txt", df["major_err"])
+    # flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
+    # np.savetxt(new_path+"2010_10_25_1_flux_error.txt", flux_err)
+
+    # axes.scatter(df["ra"], df["dec"])
+    # axes.set_xlabel("RA, mas")
+    # axes.set_ylabel("DEC, mas")
+    # axes.set_aspect("equal")
+    # fig.savefig("/home/ilya/data/silke/1215/all.png", bbox_inches="tight")
+    # plt.show()

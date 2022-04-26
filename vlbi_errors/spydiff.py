@@ -561,9 +561,9 @@ def convert_difmap_model_file_to_CCFITS(difmap_model_file, stokes, mapsize,
         # Here we need shift, because in CLEANing shifts are not applied to
         # saving model files!
         cmd += "shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n"
-    print("Restoring difmap model with BEAM : bmin = " + str(restore_beam[1]) + ", bmaj = " + str(restore_beam[0]) + ", " + str(restore_beam[2]) + " deg")
+    print("Restoring difmap model with BEAM : bmin = " + str(restore_beam[0]) + ", bmaj = " + str(restore_beam[1]) + ", " + str(restore_beam[2]) + " deg")
     # default dimfap: false,true (parameters: omit_residuals, do_smooth)
-    cmd += "restore " + str(restore_beam[1]) + "," + str(restore_beam[0]) + "," + str(restore_beam[2]) + "," + "true,false" + "\n"
+    cmd += "restore " + str(restore_beam[0]) + "," + str(restore_beam[1]) + "," + str(restore_beam[2]) + "," + "true,false" + "\n"
     cmd += "wmap " + out_ccfits + "\n"
     cmd += "exit\n"
 
@@ -670,6 +670,7 @@ def flag_baseline_scan(uvfits, outfname, ta, tb=None, start_time=None, stop_time
 # TODO: add ``shift`` argument, that shifts image before cleaning. It must be
 # more accurate to do this in difmap. Or add such method in ``UVData`` that
 # multiplies uv-data on exp(-1j * (u*x_shift + v*y_shift)).
+# FIXME: BPA in deg!
 def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  path_to_script=None, mapsize_restore=None, beam_restore=None,
                  outpath=None, shift=None, show_difmap_output=False,
@@ -698,7 +699,7 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         Parameters of map for restoring CC (map size, pixel size). If
         ``None`` then use naitive. (default: ``None``)
     :param beam_restore: (optional)
-        Beam parameter for restore map (bmaj[mas], bmin[mas], bpa[rad]). If
+        Beam parameter for restore map (bmaj[mas], bmin[mas], bpa[deg]). If
         ``None`` then use the same beam as in cleaning. (default: ``None``)
     :param outpath: (optional)
         Path to file with CCs. If ``None`` then use ``path``.
@@ -804,7 +805,7 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
         else:
             do_smooth = "false"
         difmapout.write("restore " + str(beam_restore[1]) + ', ' +
-                        str(beam_restore[0]) + ', ' + str(np.rad2deg(beam_restore[2])) + ", " + omit_residuals + ", " + do_smooth +
+                        str(beam_restore[0]) + ', ' + str(beam_restore[2]) + ", " + omit_residuals + ", " + do_smooth +
                         "\n")
     if outpath is None:
         outpath = path

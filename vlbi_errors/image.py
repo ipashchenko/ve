@@ -247,6 +247,7 @@ def find_bbox(array, level, min_maxintensity_mjyperbeam=None, min_area_pix=None,
 # TODO: Make possible use ``blc`` & ``trc`` in mas.
 # TODO: Plot components from difmap-style txt-file or instances of ``Component``
 # class.
+# Beam BPA in deg
 def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          y=None, blc=None, trc=None, cmap='hsv', abs_levels=None,
          rel_levels=None, min_abs_level=None, min_rel_level=None, k=2, vinc=2,
@@ -320,7 +321,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         (default: ``ll'')
     :param beam: (optional)
         If ``show_beam`` is True then ``beam`` should be iterable of major axis,
-        minor axis [mas] and beam positional angle [rad]. If no coordinates are
+        minor axis [mas] and beam positional angle [deg]. If no coordinates are
         supplied then beam parameters must be in pixels.
     :param colorbar_label: (optional)
         String to label colorbar. If ``None`` then don't label. (default:
@@ -569,10 +570,10 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             raise Exception
 
         # FIXME: check how ``bpa`` should be plotted
-        e = Ellipse((y_c, x_c), e_width, e_height, angle=-np.rad2deg(beam[2]),
+        e = Ellipse((y_c, x_c), e_width, e_height, angle=-beam[2],
                     edgecolor=beam_edge_color, facecolor=beam_face_color,
                     alpha=beam_alpha)
-        print("Plotting BEAM BPA = {} deg".format(np.rad2deg(beam[2])))
+        print("Plotting BEAM BPA = {} deg".format(beam[2]))
         ax.add_patch(e)
 
     if components:

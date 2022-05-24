@@ -10,8 +10,7 @@ from spydiff import (find_image_std, import_difmap_model, find_bbox,
                      find_2D_position_errors_using_chi2,
                      convert_2D_position_errors_to_ell_components)
 from from_fits import create_clean_image_from_fits_file
-import matplotlib
-matplotlib.use("TkAgg")
+# import matplotlib
 import matplotlib.pyplot as plt
 
 

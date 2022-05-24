@@ -159,7 +159,7 @@ clean_niter = 50
 
 print "*********** REGULAR UNIFORM WEIGHTING NEXT ***************"
 uvw 2,-1
-dynam = 20
+dynam = 8
 map_residual
 print "********** DEEP CLEANING AT NATURAL WEIGHTING **************"
 uvw 0,-2

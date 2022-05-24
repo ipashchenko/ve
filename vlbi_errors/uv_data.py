@@ -1026,7 +1026,8 @@ class UVData(object):
 
                 if -1 in set(labels):
                     ant1, ant2 = baselines_2_ants([bl])
-                    print("Non-typical scan structure for baseline {}, antennas {}-{}".format(bl, ant1, ant2))
+                    # FIXME:
+                    # print("Non-typical scan structure for baseline {}, antennas {}-{}".format(bl, ant1, ant2))
                     scans_dict[bl] = None
                 else:
                     bl_indxs_ = np.array(bl_indxs, dtype=int)

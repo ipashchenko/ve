@@ -47,7 +47,7 @@ ccfits_files = ['J1653+3945_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs
 
 for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     # Problematic epochs
-    if epoch in ["2011_09_24"]:
+    if epoch in []:
         continue
 
     print(mdl_file, ccfits_file)
@@ -148,5 +148,3 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     #             outfile="{}_selfcaled_model".format(epoch), outdir=data_dir, fig=fig)
     #
     # sys.exit(0)
-
-    break

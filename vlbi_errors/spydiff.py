@@ -3088,7 +3088,13 @@ def fit_ellipse_to_2D_position_errors(PA, dr, use="skimage"):
         from skimage.measure import EllipseModel
         ell = EllipseModel()
         ell.estimate(np.dstack((x, y))[0])
-        xc, yc, a, b, theta = ell.params
+        try:
+            xc, yc, a, b, theta = ell.params
+        except TypeError:
+            print("Failed to estimate Ellipsoid!")
+            print("t = ", t)
+            print("dr = ", dr)
+            return {"xc": 0, "yc": 0, "a": np.mean(dr), "b": np.mean(dr), "theta": 0}
         # xc - adds to DEC, yc - adds to RA, PA = theta + 90 deg
         return {"xc": xc, "yc": yc, "a": a, "b": b, "theta": theta}
 

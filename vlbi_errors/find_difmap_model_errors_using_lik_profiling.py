@@ -39,7 +39,9 @@ import astropy.units as u
 
 rad2mas = u.rad.to(u.mas)
 data_dir = "/home/ilya/Downloads/Mrk501_Q_uvfits"
-save_dir = os.path.join(data_dir, "save")
+save_dir = os.path.join(data_dir, "save_gains")
+if not os.path.exists(save_dir):
+    os.mkdir(save_dir)
 mdl_files = sorted(glob.glob(os.path.join(data_dir, "*.mod")))
 mdl_files = [os.path.split(path)[-1] for path in mdl_files]
 epochs = [fn.split(".")[0] for fn in mdl_files]
@@ -47,7 +49,7 @@ ccfits_files = ['J1653+3945_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs
 
 for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     # Problematic epochs
-    if epoch in []:
+    if epoch in ("2016_20_23", "2019_10_11"):
         continue
 
     print(mdl_file, ccfits_file)
@@ -71,7 +73,7 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
                                                     stokes=stokes,
                                                     show_difmap_output=False,
                                                     delta_t_sec=30,
-                                                    use_gain_dofs=False, freq=43E+09,
+                                                    use_gain_dofs=True, freq=43E+09,
                                                     nmodelfit_cycle=50)
         with open(os.path.join(save_dir, "errors_{}.pkl".format(epoch)), "wb") as fo:
             pickle.dump(errors, fo)
@@ -120,7 +122,7 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
         size_errors = find_size_errors_using_chi2(os.path.join(data_dir, mdl_file),
                                                   os.path.join(data_dir, uvfits_file),
                                                   show_difmap_output=False,
-                                                  use_selfcal=False, freq=43E+09,
+                                                  use_selfcal=True, freq=43E+09,
                                                   nmodelfit_cycle=50)
         with open(os.path.join(save_dir, "size_errors_{}.pkl".format(epoch)), "wb") as fo:
             pickle.dump(size_errors, fo)
@@ -129,7 +131,7 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
         flux_errors = find_flux_errors_using_chi2(os.path.join(data_dir, mdl_file),
                                                   os.path.join(data_dir, uvfits_file),
                                                   show_difmap_output=False,
-                                                  use_selfcal=False, freq=43.0E+09,
+                                                  use_selfcal=True, freq=43.0E+09,
                                                   nmodelfit_cycle=50)
         with open(os.path.join(save_dir, "flux_errors_{}.pkl".format(epoch)), "wb") as fo:
             pickle.dump(flux_errors, fo)

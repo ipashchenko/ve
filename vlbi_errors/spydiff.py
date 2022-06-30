@@ -2621,6 +2621,12 @@ def find_size_errors_using_chi2(dfm_model_file, uvfits, working_dir=None,
 
     for i, comp in enumerate(comps):
         index = 3
+
+        # If size is fixed - skip that component
+        if comp._fixed[index]:
+            errors[i] = (0.0, 0.0)
+            continue
+
         par0 = comp.p[index]
 
         def min_func_lower(delta):

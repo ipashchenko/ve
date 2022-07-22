@@ -2442,6 +2442,9 @@ def find_stat_of_difmap_model(dfm_model_file, uvfits, stokes="I", working_dir=No
 
     from subprocess import Popen, PIPE
 
+    # print(uvfile)
+    # print(dfm_model_file)
+
     cmd = "observe " + uvfile + "\n"
     cmd += "select " + stokes + "\n"
     cmd += "rmodel " + dfm_model_file + "\n"
@@ -2457,6 +2460,8 @@ def find_stat_of_difmap_model(dfm_model_file, uvfits, stokes="I", working_dir=No
     if out_dfm_model:
         cmd += "wmod {}\n".format(out_dfm_model)
     cmd += "quit\n"
+
+    # print(cmd)
 
     with Popen('difmap', stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True) as difmap:
         outs, errs = difmap.communicate(input=cmd)
@@ -2952,7 +2957,8 @@ def find_2D_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", worki
         n_eff_gain_phases = 0
         nmodelfit = 0
     stat_dict = find_stat_of_difmap_model(dfm_model_file, uvfits, stokes, working_dir, nmodelfit=nmodelfit,
-                                          use_pselfcal=use_pselfcal, out_dfm_model="selfcaled.mdl")
+                                          use_pselfcal=use_pselfcal, out_dfm_model="selfcaled.mdl",
+                                          show_difmap_output=False)
     rchisq0 = stat_dict["rchisq"]
     dof = stat_dict["dof"] - n_eff_gain_phases
     print("DoF = ", dof)

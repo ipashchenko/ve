@@ -125,12 +125,11 @@ class UVData(object):
 
         rec = pf.getdata(self.fname, extname='AIPS AN')
         # Sometimes from baselines we get non contigious list of antenna numbers
-        # self._antenna_mapping = {number: rec['ANNAME'][i] for i, number in
-        #                          enumerate(self.antennas)}
-        try:
-            self._antenna_mapping = {antenna: rec['ANNAME'][antenna-1] for antenna in self.antennas}
-        except:
-            print("Failed to make antenna mappings. A bitchy AN-table!")
+        self._antenna_mapping = {number: rec['ANNAME'][i] for i, number in enumerate(self.antennas)}
+        # try:
+        #     self._antenna_mapping = {antenna: rec['ANNAME'][antenna-1] for antenna in self.antennas}
+        # except:
+        #     print("Failed to make antenna mappings. A bitchy AN-table!")
         self._antennas_baselines = None
         self._antennas_times = None
         self._minimal_antennas_time = None
@@ -555,7 +554,8 @@ class UVData(object):
         """
         Returns list of antennas numbers.
         """
-        return baselines_2_ants(self.baselines)
+        rec = pf.getdata(self.fname, extname='AIPS AN')
+        return list(range(1, len(rec)+1))
 
     @property
     def antenna_mapping(self):

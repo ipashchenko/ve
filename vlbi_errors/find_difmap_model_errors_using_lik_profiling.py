@@ -47,6 +47,13 @@ freq = 43E+09
 save_dir = os.path.join(models_dir, "save")
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
+
+
+# First, remove exp-d files (we will create them again)
+old_mdl_files = sorted(glob.glob(os.path.join(models_dir, "*_exp.mod")))
+for mdl_file in old_mdl_files:
+    os.unlink(mdl_file)
+
 mdl_files = sorted(glob.glob(os.path.join(models_dir, "*.mod")))
 mdl_files = [os.path.split(path)[-1] for path in mdl_files]
 epochs = [fn.split(".")[0] for fn in mdl_files]

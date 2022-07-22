@@ -167,7 +167,11 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
         fo.write("# r theta r_err\n")
         for i, comp in enumerate(comps):
             error_comp = error_comps[i]
-            flux, x, y, bmaj = comp.p
+            try:
+                flux, x, y, bmaj = comp.p
+            # Size is fixed
+            except ValueError:
+                flux, x, y, bmaj = comp._p
             # mas
             r = np.hypot(x, y)
             # rad
@@ -181,16 +185,27 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     with open(os.path.join(save_dir, "{}_size_errors.txt".format(epoch)), "w") as fo:
         fo.write("# bmaj bmaj_err\n")
         for i, comp in enumerate(comps):
-            flux, x, y, bmaj = comp.p
-            size_err_low = size_errors[i][0][0]
-            size_err_up = size_errors[i][1][0]
-            size_err = 0.5*(size_err_low + size_err_up)
-            fo.write(f"{bmaj} {size_err}\n")
+
+            try:
+                flux, x, y, bmaj = comp.p
+                size_err_low = size_errors[i][0][0]
+                size_err_up = size_errors[i][1][0]
+                size_err = 0.5*(size_err_low+size_err_up)
+                fo.write(f"{bmaj} {size_err}\n")
+            # Size is fixed
+            except ValueError:
+                flux, x, y, bmaj = comp._p
+                fo.write(f"{bmaj} {0}\n")
 
     with open(os.path.join(save_dir, "{}_flux_errors.txt".format(epoch)), "w") as fo:
         fo.write("# flux flux_err\n")
         for i, comp in enumerate(comps):
-            flux, x, y, bmaj = comp.p
+            try:
+                flux, x, y, bmaj = comp.p
+            # Size is fixed
+            except ValueError:
+                flux, x, y, bmaj = comp._p
+
             flux_err_low = flux_errors[i][0][0]
             flux_err_up = flux_errors[i][1][0]
             print(f"Flux = {flux}, flux error low = {flux_err_low}, flux error up = {flux_err_up}")

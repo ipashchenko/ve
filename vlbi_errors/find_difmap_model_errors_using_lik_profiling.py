@@ -16,43 +16,22 @@ matplotlib.use('Agg')
 from image import plot as iplot
 import astropy.units as u
 
-# import pickle
-# data_dir = "/home/ilya/data/Mkn501/difmap_models"
-# pkl_files = glob.glob(os.path.join(data_dir, "*.pkl"))
-# for pkl_file in pkl_files:
-#     epoch = os.path.split(pkl_file)[-1][7:17]
-#     print("Processing epoch ", epoch)
-#     mdl_file = os.path.join(data_dir, "{}.mod".format(epoch))
-#     with open(pkl_file, "rb") as fo:
-#         errors = pickle.load(fo)
-#     errors_comps = convert_2D_position_errors_to_ell_components(os.path.join(data_dir, mdl_file),
-#                                                                 errors, include_shfit=False)
-#     pos_errors = [0.5*errors_comps[i].p[3]*(1+errors_comps[i].p[4]) for i in range(len(errors_comps))]
-#     bpas = [np.rad2ded(errors_comps[i].p[5]) for i in range(len(errors_comps))]
-#     bmajs = [errors_comps[i].p[3] for i in range(len(errors_comps))]
-#     es = [errors_comps[i].p[4] for i in range(len(errors_comps))]
-#     with open(os.path.join(data_dir, "{}_posistion_ellipse_errors_chi2_errors.txt".format(epoch)), "w") as fo:
-#         for err in pos_errors:
-#             fo.write("{}\n".format(err))
 
-
-# ============
+average_time_sec = 30
+account_gains = True
 
 rad2mas = u.rad.to(u.mas)
 # data_dir = "/home/ilya/Downloads/Mrk501_Q_uvfits"
 # models_dir = os.path.join(data_dir, "corrected")
 # freq = 43E+09
 
-average_time_sec = 30
-
 data_dir = "/home/ilya/Downloads/TXS0506"
-freq = 15.3E+09
 models_dir = data_dir
+freq = 15.3E+09
 
 save_dir = os.path.join(models_dir, "save")
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
-
 
 # First, remove exp-d files (we will create them again)
 old_mdl_files = sorted(glob.glob(os.path.join(models_dir, "*_exp.mod")))
@@ -103,12 +82,16 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
 
     # Find errors if they are not calculated
     if not os.path.exists(os.path.join(save_dir, "errors_{}.pkl".format(epoch))):
+        if average_time_sec is not None:
+            delta_t_sec = average_time_sec
+        else:
+            delta_t_sec = 30
         errors = find_2D_position_errors_using_chi2(os.path.join(models_dir, mdl_file),
                                                     os.path.join(data_dir, uvfits_file),
                                                     stokes=stokes,
                                                     show_difmap_output=False,
-                                                    delta_t_sec=30,
-                                                    use_gain_dofs=False, freq=freq,
+                                                    delta_t_sec=delta_t_sec,
+                                                    use_gain_dofs=account_gains, freq=freq,
                                                     nmodelfit_cycle=50)
         with open(os.path.join(save_dir, "errors_{}.pkl".format(epoch)), "wb") as fo:
             pickle.dump(errors, fo)
@@ -155,10 +138,15 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
                 outfile="{}_pos_errors2D".format(epoch), outdir=save_dir, fig=fig)
 
     if not os.path.exists(os.path.join(save_dir, "size_errors_{}.pkl".format(epoch))):
+        if average_time_sec is not None:
+            delta_t_sec = average_time_sec
+        else:
+            delta_t_sec = 30
         size_errors = find_size_errors_using_chi2(os.path.join(models_dir, mdl_file),
                                                   os.path.join(data_dir, uvfits_file),
+                                                  delta_t_sec=delta_t_sec,
                                                   show_difmap_output=False,
-                                                  use_selfcal=False, freq=freq,
+                                                  use_selfcal=account_gains, freq=freq,
                                                   nmodelfit_cycle=50)
         with open(os.path.join(save_dir, "size_errors_{}.pkl".format(epoch)), "wb") as fo:
             pickle.dump(size_errors, fo)
@@ -167,10 +155,15 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
             size_errors = pickle.load(fo)
 
     if not os.path.exists(os.path.join(save_dir, "flux_errors_{}.pkl".format(epoch))):
+        if average_time_sec is not None:
+            delta_t_sec = average_time_sec
+        else:
+            delta_t_sec = 30
         flux_errors = find_flux_errors_using_chi2(os.path.join(models_dir, mdl_file),
                                                   os.path.join(data_dir, uvfits_file),
+                                                  delta_t_sec=delta_t_sec,
                                                   show_difmap_output=False,
-                                                  use_selfcal=False, freq=freq,
+                                                  use_selfcal=account_gains, freq=freq,
                                                   nmodelfit_cycle=50)
         with open(os.path.join(save_dir, "flux_errors_{}.pkl".format(epoch)), "wb") as fo:
             pickle.dump(flux_errors, fo)

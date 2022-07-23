@@ -15,7 +15,7 @@ import astropy.io.fits as pf
 import astropy.units as u
 from scipy.ndimage.measurements import label
 from scipy.ndimage.morphology import generate_binary_structure
-from scipy.stats import normaltest, anderson
+from scipy.stats import normaltest, anderson, chi2
 from skimage.measure import regionprops
 from from_fits import (create_clean_image_from_fits_file,
                        create_image_from_fits_file, create_model_from_fits_file)
@@ -2962,8 +2962,10 @@ def find_2D_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", worki
     rchisq0 = stat_dict["rchisq"]
     dof = stat_dict["dof"] - n_eff_gain_phases
     print("DoF = ", dof)
-    delta_rchisq = 2.0/dof
+    # delta_rchisq = 2.0/dof
+    delta_rchisq = chi2.ppf(1 - 0.32, 2)/dof
     required_chisq = rchisq0 + delta_rchisq
+
     if not use_gain_dofs:
         original_comps = import_difmap_model(dfm_model_file)
     else:

@@ -38,12 +38,14 @@ import astropy.units as u
 # ============
 
 rad2mas = u.rad.to(u.mas)
-data_dir = "/home/ilya/Downloads/Mrk501_Q_uvfits"
-models_dir = os.path.join(data_dir, "corrected")
-freq = 43E+09
-# data_dir = "/home/ilya/Downloads/TXS0506"
-# freq = 15.3E+09
-# save_dir = os.path.join(data_dir, "save_gains")
+# data_dir = "/home/ilya/Downloads/Mrk501_Q_uvfits"
+# models_dir = os.path.join(data_dir, "corrected")
+# freq = 43E+09
+
+data_dir = "/home/ilya/Downloads/TXS0506"
+freq = 15.3E+09
+models_dir = data_dir
+
 save_dir = os.path.join(models_dir, "save")
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
@@ -52,7 +54,10 @@ if not os.path.exists(save_dir):
 # First, remove exp-d files (we will create them again)
 old_mdl_files = sorted(glob.glob(os.path.join(models_dir, "*_exp.mod")))
 for mdl_file in old_mdl_files:
-    os.unlink(mdl_file)
+    try:
+        os.unlink(mdl_file)
+    except:
+        pass
 
 mdl_files = sorted(glob.glob(os.path.join(models_dir, "*.mod")))
 mdl_files = [os.path.split(path)[-1] for path in mdl_files]
@@ -66,8 +71,8 @@ for mdl_file in mdl_files:
 mdl_files = sorted(glob.glob(os.path.join(models_dir, "*_exp.mod")))
 mdl_files = [os.path.split(path)[-1] for path in mdl_files]
 
-ccfits_files = ['J1653+3945_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
-# ccfits_files = ['0506+056.u.{}.icn.fits.gz'.format(epoch) for epoch in epochs]
+# ccfits_files = ['J1653+3945_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
+ccfits_files = ['0506+056.u.{}.icn.fits.gz'.format(epoch) for epoch in epochs]
 
 for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     # Problematic epochs
@@ -77,8 +82,8 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
 
     print(mdl_file, ccfits_file)
 
-    uvfits_file = 'J1653+3945_Q_{}_mar_vis.fits'.format(epoch)
-    # uvfits_file = '0506+056.u.{}.uvf'.format(epoch)
+    # uvfits_file = 'J1653+3945_Q_{}_mar_vis.fits'.format(epoch)
+    uvfits_file = '0506+056.u.{}.uvf'.format(epoch)
     uvdata = UVData(os.path.join(data_dir, uvfits_file))
     all_stokes = uvdata.stokes
     if "RR" in all_stokes and "LL" in all_stokes:

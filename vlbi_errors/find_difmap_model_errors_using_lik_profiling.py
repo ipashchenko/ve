@@ -7,7 +7,8 @@ from uv_data import UVData
 from from_fits import create_clean_image_from_fits_file
 from spydiff import (find_2D_position_errors_using_chi2, convert_2D_position_errors_to_ell_components,
                      import_difmap_model, find_image_std, find_bbox, find_size_errors_using_chi2,
-                     find_flux_errors_using_chi2, CLEAN_difmap, export_difmap_model)
+                     find_flux_errors_using_chi2, CLEAN_difmap, export_difmap_model,
+                     time_average)
 import matplotlib.pyplot as plt
 import pickle
 import matplotlib
@@ -41,6 +42,8 @@ rad2mas = u.rad.to(u.mas)
 # data_dir = "/home/ilya/Downloads/Mrk501_Q_uvfits"
 # models_dir = os.path.join(data_dir, "corrected")
 # freq = 43E+09
+
+average_time_sec = 30
 
 data_dir = "/home/ilya/Downloads/TXS0506"
 freq = 15.3E+09
@@ -84,6 +87,9 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
 
     # uvfits_file = 'J1653+3945_Q_{}_mar_vis.fits'.format(epoch)
     uvfits_file = '0506+056.u.{}.uvf'.format(epoch)
+    if average_time_sec is not None:
+        time_average(uvfits_file, os.path.join(data_dir, "tmp.uvf"), average_time_sec)
+        uvfits_file = os.path.join(data_dir, "tmp.uvf")
     uvdata = UVData(os.path.join(data_dir, uvfits_file))
     all_stokes = uvdata.stokes
     if "RR" in all_stokes and "LL" in all_stokes:

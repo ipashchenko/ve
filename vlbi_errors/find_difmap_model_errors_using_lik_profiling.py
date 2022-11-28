@@ -69,7 +69,7 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     if average_time_sec is not None:
         time_average(os.path.join(data_dir, uvfits_file), os.path.join(data_dir, "tmp.uvf"), average_time_sec)
         uvfits_file = "tmp.uvf"
-    uvdata = UVData(os.path.join(data_dir, uvfits_file))
+    uvdata = UVData(os.path.join(data_dir, uvfits_file), verify_option="warn")
     all_stokes = uvdata.stokes
     if "RR" in all_stokes and "LL" in all_stokes:
         stokes = "I"

@@ -249,10 +249,11 @@ def find_bbox(array, level, min_maxintensity_mjyperbeam=None, min_area_pix=None,
 # class.
 # Beam BPA in deg
 def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
-         y=None, blc=None, trc=None, cmap='hsv', abs_levels=None,
+         y=None, blc=None, trc=None, cmap='hsv', interp=None, abs_levels=None,
          rel_levels=None, min_abs_level=None, min_rel_level=None, k=2, vinc=2,
          show_beam=False, beam_place='ll', beam=None, contours_mask=None,
-         colors_mask=None, vectors_mask=None, plot_title=None, color_clim=None,
+         colors_mask=None, log_color=False, log_offset=None, dynamic_range=1e+03,
+         vectors_mask=None, plot_title=None, color_clim=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
          colorbar_label=None, show=True, contour_color='k',
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
@@ -474,12 +475,26 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 cax = divider.append_axes("right", size="10%", pad=0.00)
                 cb = fig.colorbar(co, cax=cax)
                 cb.set_label(colorbar_label)
+
     if colors is not None:
         if n_discrete_colors is not None:
             cmap = cm.get_cmap(cmap, int(n_discrete_colors))
-        im = ax.imshow(colors[x_slice, y_slice], interpolation='none',
+        if interp is None:
+            interp = "none"
+
+        if log_color:
+            if (colors < 0.0).any():
+                print('clipping values less than 0 in display')
+                colors[colors < 0.0] = 0.0
+            if log_offset is not None:
+                colors = np.log10(colors + log_offset/dynamic_range)
+            else:
+                colors = np.log10(colors + np.max(colors)/dynamic_range)
+
+        im = ax.imshow(colors[x_slice, y_slice], interpolation=interp,
                        origin='lower', extent=[y[0], y[-1], x[0], x[-1]],
                        cmap=plt.get_cmap(cmap), clim=color_clim)
+
     if vectors is not None:
         if vectors_values is not None:
             # TODO: Does "-" sign because of RA increases to the left actually?
@@ -526,10 +541,23 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 cb.set_label(colorbar_label)
 
     if show_beam:
+
+        # https://matplotlib.org/stable/tutorials/text/annotations.html
+        # from matplotlib.patches import Ellipse
+        # from mpl_toolkits.axes_grid1.anchored_artists import AnchoredAuxTransformBox
+        #
+        # fig, ax = plt.subplots()
+        # box = AnchoredAuxTransformBox(ax.transData, loc='upper left')
+        # el = Ellipse((0, 0), width=0.1, height=0.4, angle=30)  # in data coordinates!
+        # box.drawing_area.add_artist(el)
+        # ax.add_artist(box)
+
+
         from matplotlib.patches import Ellipse
         e_height = max(beam[0], beam[1])
         e_width = min(beam[0], beam[1])
         r_min = e_height / 2
+        r_min = e_height
         if beam_place == 'lr':
             if y[0]-y[1] > 0:
                 y_c = y[-1] + r_min
@@ -570,6 +598,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             raise Exception
 
         # FIXME: check how ``bpa`` should be plotted
+        # Here width & height - total widths
         e = Ellipse((y_c, x_c), e_width, e_height, angle=-beam[2],
                     edgecolor=beam_edge_color, facecolor=beam_face_color,
                     alpha=beam_alpha)
@@ -1740,6 +1769,132 @@ class CleanImage(Image):
              min_rel_level=min_rel_level, k=factor)
 
 
+def get_transverse_profile(ccfits, PA, nslices=200, plot_zobs_min=0, plot_zobs_max=None, beam=None, pixsize_mas=None,
+                           treat_as_numpy_array=False, save_dir=None, save_prefix=None, save_figs=True, fig=None,
+                           alpha=1.0, n_good_min=10, fig_res=None):
+    from scipy.ndimage import rotate
+    from astropy.stats import mad_std
+    from astropy.modeling import fitting
+    from astropy.modeling.models import custom_model, Gaussian1D
+    from astropy import units as u
+
+    if save_dir is None:
+        save_dir = os.getcwd()
+    if save_prefix is None:
+        save_prefix = "transverse_profiles"
+
+    if not treat_as_numpy_array:
+        ccimage = create_clean_image_from_fits_file(ccfits)
+        pixsize_mas = abs(ccimage.pixsize[0])*u.rad.to(u.mas)
+        beam = ccimage.beam
+        print("Beam (mas) : ", beam)
+        image = ccimage.image
+    else:
+        image = ccfits
+
+    size = image.shape[0]
+    delta = round(size/2/nslices)
+    print("Pixsize = {:.2f} mas".format(pixsize_mas))
+    # Make jet directing down when plotting with origin=lower in matshow
+    std = mad_std(image)
+    print("std = {:.2f} mJy/beam".format(1000*std))
+    image = rotate(image, PA, reshape=False)
+    widths_mas = list()
+    pos_mas = list()
+    for i in range(nslices):
+        imslice = image[int(size/2) - delta*i, :]
+        g_init = Gaussian1D(amplitude=np.max(imslice), mean=size/2, stddev=beam[0]/pixsize_mas, fixed={'mean': True})
+        fit_g = fitting.LevMarLSQFitter()
+        x = np.arange(size)
+        y = imslice
+        mask = imslice > 5*std
+        n_good = np.count_nonzero(mask)
+        print("Number of unmasked elements for z = {:.2f} is N = {}".format(delta*i*pixsize_mas, n_good))
+        if n_good < n_good_min:
+            continue
+        g = fit_g(g_init, x[mask], y[mask], weights=1/std)
+        print("Convolved FWHM = {:.2f} mas".format(g.fwhm*pixsize_mas))
+        width_mas_deconvolved = np.sqrt((g.fwhm*pixsize_mas)**2 - beam[0]**2)
+        print("Deconvolved FWHM = {:.2f} mas".format(width_mas_deconvolved))
+        if np.isnan(width_mas_deconvolved):
+            continue
+        widths_mas.append(width_mas_deconvolved)
+        pos_mas.append(delta*i*pixsize_mas)
+
+    pos_mas = np.array(pos_mas)
+    widths_mas = np.array(widths_mas)
+    if fig is None:
+        fig, axes = plt.subplots(1, 1)
+    else:
+        axes = fig.get_axes()[0]
+    if plot_zobs_max is not None:
+        assert plot_zobs_max > plot_zobs_min
+        axes.set_xlim([plot_zobs_min, plot_zobs_max])
+        mask = np.logical_and(pos_mas < plot_zobs_max, pos_mas > plot_zobs_min)
+        pos_to_plot = pos_mas[mask]
+        widths_to_plot = widths_mas[mask]
+    else:
+        widths_to_plot = widths_mas
+        pos_to_plot = pos_mas
+
+    axes.plot(pos_to_plot, widths_to_plot, color="C0", alpha=alpha)
+    axes.set_xlabel(r"$z_{\rm obs}$, mas")
+    axes.set_ylabel("FWHM, mas")
+    plt.xscale("log")
+    plt.yscale("log")
+    if save_figs:
+        fig.savefig(os.path.join(save_dir, "{}.png".format(save_prefix)), bbox_inches="tight", dpi=300)
+    plt.show()
+
+    # Now fit profile
+    @custom_model
+    def power_law(r, amp=1.0, r0=0.0, k=0.5):
+        return amp*(r + r0)**k
+    pl_init = power_law(fixed={"r0": True})
+    fit_pl = fitting.LevMarLSQFitter()
+    pl = fit_pl(pl_init, pos_to_plot, widths_to_plot, maxiter=10000)
+    print(fit_pl.fit_info)
+    print("k = ", pl.k)
+    print("r0 = ", pl.r0)
+    print("amp = ", pl.amp)
+
+    # Plot fit
+    xx = np.linspace(np.min(pos_to_plot), np.max(pos_to_plot), 1000)
+    yy = pl(xx)
+    fig_, axes = plt.subplots(1, 1)
+    axes.plot(xx, yy, color="C1", label="k = {:.2f}".format(pl.k.value))
+    axes.scatter(pos_to_plot, widths_to_plot, color="C0", label="data", s=2)
+    axes.set_xlabel(r"$z_{\rm obs}$, mas")
+    axes.set_ylabel("FWHM, mas")
+    plt.legend()
+    plt.xscale("log")
+    plt.yscale("log")
+    if save_figs:
+        fig_.savefig(os.path.join(save_dir, "{}_fit.png".format(save_prefix)), bbox_inches="tight", dpi=300)
+    plt.show()
+    plt.close(fig_)
+
+    # Make residuals and plot them
+    res = widths_to_plot - pl(pos_to_plot)
+    max_res = 1.2*np.max(np.abs(res))
+
+    if fig_res is None:
+        fig_res, axes = plt.subplots(1, 1)
+    else:
+        axes = fig_res.get_axes()[0]
+
+    axes.plot(pos_to_plot, res, color="C0", alpha=1.0)
+    # axes.set_ylim([-max_res, max_res])
+    axes.set_ylim([-2, 2])
+    axes.set_xlabel(r"$z_{\rm obs}$, mas")
+    axes.set_ylabel("residual FWHM, mas")
+    if save_figs:
+        fig_res.savefig(os.path.join(save_dir, "{}_residual_width.png".format(save_prefix)), bbox_inches="tight", dpi=300)
+    plt.show()
+
+    return fig, fig_res
+
+
 #class MemImage(BasicImage, Model):
 #    """
 #    Class that represents image made using MEM algorithm.
@@ -1751,32 +1906,90 @@ if __name__ == '__main__':
     from astropy.stats import mad_std
     from from_fits import create_clean_image_from_fits_file
 
-    ccimage = "/home/ilya/data/alpha/results/MOJAVE/model_cc_i_15.4.fits"
-    ccimage = create_clean_image_from_fits_file(ccimage)
-    beam = ccimage.beam
-    print(beam)
-    std = mad_std(ccimage.image)
-    print(std)
-    blc = (400, 430)
-    trc = (980, 710)
-    print(blc, trc)
-    matplotlib.use('Qt5Agg')
+    # ccimage = "/home/ilya/data/alpha/results/MOJAVE/model_cc_i_15.4.fits"
+    # ccimage = create_clean_image_from_fits_file(ccimage)
+    # beam = ccimage.beam
+    # print(beam)
+    # std = mad_std(ccimage.image)
+    # print(std)
+    # blc = (400, 430)
+    # trc = (980, 710)
+    # print(blc, trc)
+    # matplotlib.use('Qt5Agg')
+    #
+    # figsize = (12, 10)
+    # fig, axes = plt.subplots(2, 1, figsize=figsize, sharey=True, sharex=True)
+    # plt.subplots_adjust(hspace=0, wspace=0)
+    # plot(ccimage.image, ccimage.image, x=ccimage.x, y=ccimage.y,
+    #      min_abs_level=3*std, colors_mask=ccimage.image < 5*std,
+    #      color_clim=None, blc=blc, trc=trc,
+    #      beam=beam, colorbar_label=r"$I$, Jy/beam", show_beam=True,
+    #      cmap='nipy_spectral', contour_color='black', plot_colorbar=True,
+    #      contour_linewidth=0.25, beam_place="lr", close=False, show=False,
+    #      axes=axes[0], show_xlabel_on_current_axes=False, show_ylabel_on_current_axes=True)
+    # plot(ccimage.image, ccimage.image, x=ccimage.x, y=ccimage.y,
+    #      min_abs_level=3*std, colors_mask=ccimage.image < 5*std,
+    #      color_clim=None, blc=blc, trc=trc,
+    #      beam=beam, colorbar_label=r"$I$, Jy/beam", show_beam=True,
+    #      cmap='nipy_spectral', contour_color='black', plot_colorbar=True,
+    #      contour_linewidth=0.25, beam_place="lr", close=False, show=False,
+    #      axes=axes[1], show_xlabel_on_current_axes=True, show_ylabel_on_current_axes=True)
+    # plt.show()
 
-    figsize = (12, 10)
-    fig, axes = plt.subplots(2, 1, figsize=figsize, sharey=True, sharex=True)
-    plt.subplots_adjust(hspace=0, wspace=0)
-    plot(ccimage.image, ccimage.image, x=ccimage.x, y=ccimage.y,
-         min_abs_level=3*std, colors_mask=ccimage.image < 5*std,
-         color_clim=None, blc=blc, trc=trc,
-         beam=beam, colorbar_label=r"$I$, Jy/beam", show_beam=True,
-         cmap='nipy_spectral', contour_color='black', plot_colorbar=True,
-         contour_linewidth=0.25, beam_place="lr", close=False, show=False,
-         axes=axes[0], show_xlabel_on_current_axes=False, show_ylabel_on_current_axes=True)
-    plot(ccimage.image, ccimage.image, x=ccimage.x, y=ccimage.y,
-         min_abs_level=3*std, colors_mask=ccimage.image < 5*std,
-         color_clim=None, blc=blc, trc=trc,
-         beam=beam, colorbar_label=r"$I$, Jy/beam", show_beam=True,
-         cmap='nipy_spectral', contour_color='black', plot_colorbar=True,
-         contour_linewidth=0.25, beam_place="lr", close=False, show=False,
-         axes=axes[1], show_xlabel_on_current_axes=True, show_ylabel_on_current_axes=True)
+
+    # Make transverse slice
+    label_size = 22
+    matplotlib.rcParams['xtick.labelsize'] = label_size
+    matplotlib.rcParams['ytick.labelsize'] = label_size
+    matplotlib.rcParams['axes.titlesize'] = label_size
+    matplotlib.rcParams['axes.labelsize'] = label_size
+    matplotlib.rcParams['font.size'] = label_size
+    matplotlib.rcParams['legend.fontsize'] = label_size
+    matplotlib.rcParams['pdf.fonttype'] = 42
+    matplotlib.rcParams['ps.fonttype'] = 42
+    from scipy.ndimage import rotate
+    from scipy.stats import scoreatpercentile
+
+
+
+
+    # image = pf.getdata("model_cc_i_15.4_0.12pc.fits").squeeze()
+    # R = 0.09
+    image = pf.getdata("/home/ilya/Downloads/model_cc_i_15.4.fits").squeeze()
+    size = image.shape[0]
+    image = rotate(image, 17, reshape=False)
+
+    # from 20 to 30 mas
+    im = [image[int(size/2)-50:int(size/2)+50, int(size/2)+int(i)] for i in np.linspace(200, 300, 50)]
+    low, med, up = scoreatpercentile(im, [16, 50, 84], axis=0)
+    std = np.std(im, axis=0)
+    mean = np.mean(im, axis=0)
+    # -5 to 5 mas
+    x = np.linspace(-5, 5, 100)
+
+    fig, axes = plt.subplots(1, 1, figsize=(13, 4))
+    axes.plot(x, 1000*mean, lw=4, label="stack")
+    axes.fill_between(x, 1000*(mean-std), 1000*(mean+std), alpha=0.3, color="C0", label="std")
+    axes.set_xlabel(r"Transverse distance, mas")
+    axes.set_ylabel(r"Intensity, mJy/beam")
+    # axes.set_xlim([-5, 5])
+    # 0.09 pc
+    # axes.axhline(y=1.5, xmin=0.1, xmax=0.1+0.86/10, lw=5, color="black")
+    # 0.12 pc
+    axes.axhline(y=0.4, xmin=0.1, xmax=0.1+0.86/10, lw=5, color="black")
+    # axes.set_ylim([0, 1.7])
+    # 0.09 pc
+    # axes.text(0.09, 0.78, "FWHM:", fontdict={"fontsize": 22}, transform=axes.transAxes, ha="left")
+    # 0.12 pc
+    axes.text(0.09, 0.68, "FWHM:", fontdict={"fontsize": 22}, transform=axes.transAxes, ha="left")
+    plt.legend(loc="upper right")
+    plt.savefig("/home/ilya/Documents/EVN2022/slice_mean_20_30_mas_0.09pc_wide.png", bbox_inches="tight", dpi=300)
+    plt.show()
+
+    fig, axes = plt.subplots(1, 1, figsize=(9, 9))
+    axes.plot(x, 1000*med, lw=4)
+    axes.fill_between(x, 1000*low, 1000*up, alpha=0.3, color="C0")
+    axes.set_xlabel(r"$R$, mas")
+    axes.set_ylabel(r"$I$, mJy/beam")
+    # plt.savefig("/home/ilya/Documents/EVN2022/slice_med_std_20_30_mas_0.09pc.png", dpi=300)
     plt.show()

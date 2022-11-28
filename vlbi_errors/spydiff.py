@@ -2,6 +2,8 @@ import glob
 import os
 import datetime
 import copy
+import sys
+
 import pandas as pd
 from numpy.linalg import eig, inv, svd
 from math import atan2
@@ -15,7 +17,7 @@ import astropy.io.fits as pf
 import astropy.units as u
 from scipy.ndimage.measurements import label
 from scipy.ndimage.morphology import generate_binary_structure
-from scipy.stats import normaltest, anderson, chi2
+from scipy.stats import normaltest, anderson, chi2, scoreatpercentile
 from skimage.measure import regionprops
 from from_fits import (create_clean_image_from_fits_file,
                        create_image_from_fits_file, create_model_from_fits_file)
@@ -2665,7 +2667,7 @@ def find_size_errors_using_chi2(dfm_model_file, uvfits, working_dir=None,
         # First find upper bound
         lower_bounds = [1E-4]
         upper_bounds = [10.0]
-        n_fun_eval = 75
+        n_fun_eval = 200
         delta_upper, _ = dlib.find_min_global(min_func_upper, lower_bounds, upper_bounds, n_fun_eval)
 
         print("===================")
@@ -2673,7 +2675,7 @@ def find_size_errors_using_chi2(dfm_model_file, uvfits, working_dir=None,
         # First find upper bound
         lower_bounds = [1E-4]
         upper_bounds = [par0]
-        n_fun_eval = 75
+        n_fun_eval = 200
         delta_lower, _ = dlib.find_min_global(min_func_lower, lower_bounds, upper_bounds, n_fun_eval)
 
         print("Parameters = {} - {} + {}".format(par0, delta_lower, delta_upper))
@@ -2793,7 +2795,7 @@ def find_flux_errors_using_chi2(dfm_model_file, uvfits, working_dir=None,
         # First find upper bound
         lower_bounds = [1E-4]
         upper_bounds = [10.0]
-        n_fun_eval = 75
+        n_fun_eval = 200
         delta_upper, _ = dlib.find_min_global(min_func_upper, lower_bounds, upper_bounds, n_fun_eval)
 
         print("===================")
@@ -2801,7 +2803,7 @@ def find_flux_errors_using_chi2(dfm_model_file, uvfits, working_dir=None,
         # Find low bound
         lower_bounds = [1E-4]
         upper_bounds = [par0]
-        n_fun_eval = 75
+        n_fun_eval = 200
         delta_lower, _ = dlib.find_min_global(min_func_lower, lower_bounds, upper_bounds, n_fun_eval)
 
         print("Parameters = {} - {} + {}".format(par0, delta_lower, delta_upper))
@@ -3019,7 +3021,7 @@ def find_2D_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", worki
             # First find upper bound
             lower_bounds = [1E-7]
             upper_bounds = [1.0]
-            n_fun_eval = 50
+            n_fun_eval = 200
             delta_bound, _ = dlib.find_min_global(min_func, lower_bounds, upper_bounds, n_fun_eval)
             # delta_upper, _ = dlib.find_min_global(min_func_upper, lower_bounds, upper_bounds, n_fun_eval)
 
@@ -3029,7 +3031,7 @@ def find_2D_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", worki
     return errors
 
 
-def convert_2D_position_errors_to_ell_components(dfm_model_file, errors, include_shfit=True):
+def convert_2D_position_errors_to_ell_components(dfm_model_file, errors, include_shfit=True, filter_by_r=False):
     """
     :param dfm_model_file:
     :param errors:
@@ -3039,6 +3041,7 @@ def convert_2D_position_errors_to_ell_components(dfm_model_file, errors, include
         Components are sorted by r.
     :return:
         Iterable of elliptical components representing 2D positional errors.
+        Major axis are full widths (2*a).
     """
     from components import EGComponent
     comps = import_difmap_model(dfm_model_file)
@@ -3051,7 +3054,23 @@ def convert_2D_position_errors_to_ell_components(dfm_model_file, errors, include
         for error_entry in error_list:
             theta.append(error_entry[0])
             r.append(error_entry[1])
-        fit = fit_ellipse_to_2D_position_errors(theta, r, use="skimage")
+
+        if filter_by_r:
+            # Remove outliers
+            IQR = scoreatpercentile(r, 75) - scoreatpercentile(r, 25)
+            upper = scoreatpercentile(r, 75) + 1.5*IQR
+            filtered_r = list()
+            filtered_theta = list()
+            for i in range(len(r)):
+                if r[i] < upper:
+                    filtered_r.append(r[i])
+                    filtered_theta.append(theta[i])
+        else:
+            filtered_r = r
+            filtered_theta = theta
+
+
+        fit = fit_ellipse_to_2D_position_errors(filtered_theta, filtered_r, use="skimage")
         dRA = fit["xc"]
         dDEC = fit["yc"]
         a = fit["a"]
@@ -3078,6 +3097,13 @@ def convert_2D_position_errors_to_ell_components(dfm_model_file, errors, include
 
 # This return semi-axes lengths
 def fit_ellipse_to_2D_position_errors(PA, dr, use="skimage"):
+    """
+    :param PA:
+    :param dr:
+    :param use:
+    :return:
+        Returns semi-axis (a & b).
+    """
 
     t = np.array(PA)
     dr = np.array(dr)
@@ -3392,7 +3418,8 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
     if bpa_0 is None:
         bpa_0 = 0.0
 
-    beam = ccimage.beam
+    # beam = ccimage.beam
+    beam = find_nw_beam(fname, stokes, mapsize=mapsize_clean)
     beam = np.sqrt(beam[0]*beam[1])
     if size_0 is None:
         size_0 = 0.1*beam
@@ -3408,6 +3435,7 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         # Need in RA, DEC
         model = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
         # FIXME: It was beam/2 here
+        # TODO: Does r_c is properly accounted for here?
         model.filter_components_by_r(beam_fraction*beam, r_c=r_c)
         uvdata.substitute([model])
         uvdata = uvdata_tmp - uvdata
@@ -3434,7 +3462,8 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         # Need in RA, DEC
         r_c = (-comp.p[1], -comp.p[2])
         print("2nd iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
-        model_local.filter_components_by_r(beam_fraction*beam/2., r_c=r_c)
+        # FIXME: It was beam/2 here
+        model_local.filter_components_by_r(beam_fraction*beam, r_c=r_c)
 
         uvdata.substitute([model_local])
         uvdata = uvdata_tmp - uvdata
@@ -4082,103 +4111,103 @@ if __name__ == "__main__":
 
 # ============
 
-    import matplotlib.pyplot as plt
-    import pickle
-    from image import plot as iplot
-
-
-    pixsize_mas = 0.1
-    data_dir = "/home/ilya/data/Mkn501/difmap_models"
-    save_dir = os.path.join(data_dir, "test")
-    ccfits_files = sorted(glob.glob(os.path.join(data_dir, "*.icn.fits.gz")))
-    ccfits_files = [os.path.split(path)[-1] for path in ccfits_files]
-    epochs = [fn.split(".")[2] for fn in ccfits_files]
-    mdl_files = ["{}.mod".format(epoch) for epoch in epochs]
-
-    for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
-        # Problematic epochs
-        if epoch in ["1997_03_13", "2001_12_30", "2003_08_23", "2004_05_29"]:
-            continue
-
-        print(mdl_file, ccfits_file)
-
-        uvfits_file = "1652+398.u.{}.uvf".format(epoch)
-        uvdata = UVData(os.path.join(data_dir, uvfits_file))
-        all_stokes = uvdata.stokes
-        if "RR" in all_stokes and "LL" in all_stokes:
-            stokes = "I"
-        else:
-            if "RR" in all_stokes:
-                stokes = "RR"
-            else:
-                stokes = "LL"
-        print("Stokes parameter: ", stokes)
-
-        # Find errors if they are not calculated
-        if not os.path.exists(os.path.join(data_dir, "errors_{}.pkl".format(epoch))):
-            errors = find_2D_position_errors_using_chi2(os.path.join(data_dir, mdl_file),
-                                                        os.path.join(data_dir, uvfits_file),
-                                                        stokes=stokes,
-                                                        show_difmap_output=False)
-            with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "wb") as fo:
-                pickle.dump(errors, fo)
-        # Or just load already calculated
-        else:
-            with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "rb") as fo:
-                errors = pickle.load(fo)
-
-        # Make dummy elliptical components for plotting errors
-        error_comps = convert_2D_position_errors_to_ell_components(os.path.join(data_dir, mdl_file),
-                                                                   errors, include_shfit=False)
-
-        comps = import_difmap_model(os.path.join(data_dir, mdl_file))
-        ccimage = create_clean_image_from_fits_file(os.path.join(data_dir, ccfits_file))
-        beam = ccimage.beam
-        npixels_beam = np.pi*beam[0]*beam[1]/(4*np.log(2)*pixsize_mas**2)
-        std = find_image_std(ccimage.image, beam_npixels=npixels_beam)
-        blc, trc = find_bbox(ccimage.image, level=4*std, min_maxintensity_mjyperbeam=6*std,
-                             min_area_pix=4*npixels_beam, delta=10)
-        fig, axes = plt.subplots(1, 1, figsize=(10, 15))
-        fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=3*std,
-                    blc=blc, trc=trc, beam=beam, show_beam=True, show=False,
-                    close=True, contour_color='black',
-                    plot_colorbar=False, components=comps, components_errors=error_comps,
-                    outfile="{}_original_model_errors2D_test".format(epoch), outdir=save_dir, fig=fig)
-
-
-        if not os.path.exists(os.path.join(data_dir, "size_errors_{}.pkl".format(epoch))):
-            size_errors = find_size_errors_using_chi2(os.path.join(data_dir, mdl_file),
-                                                      os.path.join(data_dir, uvfits_file),
-                                                      show_difmap_output=False)
-            with open(os.path.join(data_dir, "size_errors_{}.pkl".format(epoch)), "wb") as fo:
-                pickle.dump(size_errors, fo)
-
-        if not os.path.exists(os.path.join(data_dir, "flux_errors_{}.pkl".format(epoch))):
-            flux_errors = find_flux_errors_using_chi2(os.path.join(data_dir, mdl_file),
-                                                      os.path.join(data_dir, uvfits_file),
-                                                      show_difmap_output=False)
-            with open(os.path.join(data_dir, "flux_errors_{}.pkl".format(epoch)), "wb") as fo:
-                pickle.dump(flux_errors, fo)
-
-        #
-        # stat_dict = find_stat_of_difmap_model(os.path.join(data_dir, mdl_file),
-        #                                       os.path.join(data_dir, uvfits_file),
-        #                                       stokes, data_dir, nmodelfit=100, use_pselfcal=True,
-        #                                       out_dfm_model="selfcaled.mdl")
-        # selfcaled_comps = import_difmap_model(os.path.join(data_dir, "selfcaled.mdl"))
-        # fig, axes = plt.subplots(1, 1, figsize=(10, 15))
-        # fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=3*std,
-        #             blc=blc, trc=trc, beam=beam, show_beam=True, show=False,
-        #             close=True, contour_color='black',
-        #             plot_colorbar=False, components=selfcaled_comps,
-        #             outfile="{}_selfcaled_model".format(epoch), outdir=data_dir, fig=fig)
-        #
-        # sys.exit(0)
-
-
-
-    import sys
-    sys.exit(0)
+    # import matplotlib.pyplot as plt
+    # import pickle
+    # from image import plot as iplot
+    #
+    #
+    # pixsize_mas = 0.1
+    # data_dir = "/home/ilya/data/Mkn501/difmap_models"
+    # save_dir = os.path.join(data_dir, "test")
+    # ccfits_files = sorted(glob.glob(os.path.join(data_dir, "*.icn.fits.gz")))
+    # ccfits_files = [os.path.split(path)[-1] for path in ccfits_files]
+    # epochs = [fn.split(".")[2] for fn in ccfits_files]
+    # mdl_files = ["{}.mod".format(epoch) for epoch in epochs]
+    #
+    # for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
+    #     # Problematic epochs
+    #     if epoch in ["1997_03_13", "2001_12_30", "2003_08_23", "2004_05_29"]:
+    #         continue
+    #
+    #     print(mdl_file, ccfits_file)
+    #
+    #     uvfits_file = "1652+398.u.{}.uvf".format(epoch)
+    #     uvdata = UVData(os.path.join(data_dir, uvfits_file))
+    #     all_stokes = uvdata.stokes
+    #     if "RR" in all_stokes and "LL" in all_stokes:
+    #         stokes = "I"
+    #     else:
+    #         if "RR" in all_stokes:
+    #             stokes = "RR"
+    #         else:
+    #             stokes = "LL"
+    #     print("Stokes parameter: ", stokes)
+    #
+    #     # Find errors if they are not calculated
+    #     if not os.path.exists(os.path.join(data_dir, "errors_{}.pkl".format(epoch))):
+    #         errors = find_2D_position_errors_using_chi2(os.path.join(data_dir, mdl_file),
+    #                                                     os.path.join(data_dir, uvfits_file),
+    #                                                     stokes=stokes,
+    #                                                     show_difmap_output=False)
+    #         with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "wb") as fo:
+    #             pickle.dump(errors, fo)
+    #     # Or just load already calculated
+    #     else:
+    #         with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "rb") as fo:
+    #             errors = pickle.load(fo)
+    #
+    #     # Make dummy elliptical components for plotting errors
+    #     error_comps = convert_2D_position_errors_to_ell_components(os.path.join(data_dir, mdl_file),
+    #                                                                errors, include_shfit=False)
+    #
+    #     comps = import_difmap_model(os.path.join(data_dir, mdl_file))
+    #     ccimage = create_clean_image_from_fits_file(os.path.join(data_dir, ccfits_file))
+    #     beam = ccimage.beam
+    #     npixels_beam = np.pi*beam[0]*beam[1]/(4*np.log(2)*pixsize_mas**2)
+    #     std = find_image_std(ccimage.image, beam_npixels=npixels_beam)
+    #     blc, trc = find_bbox(ccimage.image, level=4*std, min_maxintensity_mjyperbeam=6*std,
+    #                          min_area_pix=4*npixels_beam, delta=10)
+    #     fig, axes = plt.subplots(1, 1, figsize=(10, 15))
+    #     fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=3*std,
+    #                 blc=blc, trc=trc, beam=beam, show_beam=True, show=False,
+    #                 close=True, contour_color='black',
+    #                 plot_colorbar=False, components=comps, components_errors=error_comps,
+    #                 outfile="{}_original_model_errors2D_test".format(epoch), outdir=save_dir, fig=fig)
+    #
+    #
+    #     if not os.path.exists(os.path.join(data_dir, "size_errors_{}.pkl".format(epoch))):
+    #         size_errors = find_size_errors_using_chi2(os.path.join(data_dir, mdl_file),
+    #                                                   os.path.join(data_dir, uvfits_file),
+    #                                                   show_difmap_output=False)
+    #         with open(os.path.join(data_dir, "size_errors_{}.pkl".format(epoch)), "wb") as fo:
+    #             pickle.dump(size_errors, fo)
+    #
+    #     if not os.path.exists(os.path.join(data_dir, "flux_errors_{}.pkl".format(epoch))):
+    #         flux_errors = find_flux_errors_using_chi2(os.path.join(data_dir, mdl_file),
+    #                                                   os.path.join(data_dir, uvfits_file),
+    #                                                   show_difmap_output=False)
+    #         with open(os.path.join(data_dir, "flux_errors_{}.pkl".format(epoch)), "wb") as fo:
+    #             pickle.dump(flux_errors, fo)
+    #
+    #     #
+    #     # stat_dict = find_stat_of_difmap_model(os.path.join(data_dir, mdl_file),
+    #     #                                       os.path.join(data_dir, uvfits_file),
+    #     #                                       stokes, data_dir, nmodelfit=100, use_pselfcal=True,
+    #     #                                       out_dfm_model="selfcaled.mdl")
+    #     # selfcaled_comps = import_difmap_model(os.path.join(data_dir, "selfcaled.mdl"))
+    #     # fig, axes = plt.subplots(1, 1, figsize=(10, 15))
+    #     # fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=3*std,
+    #     #             blc=blc, trc=trc, beam=beam, show_beam=True, show=False,
+    #     #             close=True, contour_color='black',
+    #     #             plot_colorbar=False, components=selfcaled_comps,
+    #     #             outfile="{}_selfcaled_model".format(epoch), outdir=data_dir, fig=fig)
+    #     #
+    #     # sys.exit(0)
+    #
+    #
+    #
+    # import sys
+    # sys.exit(0)
 
 
     # ==========================================================================
@@ -4189,19 +4218,32 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from matplotlib.patches import Circle
     # new_path = "/home/ilya/data/silke/1215/last/0d2/"
-    new_path = "/home/ilya/data/Mkn501/difmap_models/tberrors"
+    # new_path = "/home/ilya/data/Mkn501/difmap_models/tberrors"
+    # new_path = "/home/ilya/Downloads/TXS0506/tberrors"
+    new_path = "/home/ilya/data/silke/0735/15GHz"
     # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
-    dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/*.mod")
+    # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/*.mod")
+    # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
+    dfm_models = glob.glob(os.path.join(new_path, "*.mod"))
+    print(dfm_models)
+    # sys.exit(0)
     # fig, axes = plt.subplots(figsize=(7.5, 10))
     for dfm_model in dfm_models:
         fn = os.path.split(dfm_model)[-1]
-        if fn == "1998_05_15_1.mod":
-            continue
+        # if fn == "1998_05_15_1.mod":
+        #     continue
         epoch = fn[:10]
+        print(f"EPOCH = {epoch} =====================")
+
+        comps = import_difmap_model(dfm_model, new_path)
+        new_dfm_model = os.path.join(new_path, "new_{}".format(os.path.split(dfm_model)[-1]))
+        export_difmap_model(comps, new_dfm_model, 15.4E+09)
         # uvfits = "/home/ilya/data/silke/1215/1215+303.u.{}.uvf".format(epoch)
-        uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
-        if epoch != "2010_10_25":
-            df = components_info(uvfits, dfm_model, dmap_size=(1024, 0.1), PA=None,
+        # uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
+        # uvfits = "/home/ilya/Downloads/TXS0506/0506+056.u.{}.uvf".format(epoch)
+        uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
+        if epoch != "2023_10_25":
+            df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
                                  size_error_coefficient=0.35)
             # axes.scatter(df["ra"], df["dec"])
             # for idx, row in df.iterrows():

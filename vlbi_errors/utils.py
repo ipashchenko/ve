@@ -2055,3 +2055,13 @@ def find_image_std(image_array, beam_npixels, min_num_pixels_used_to_estimate_st
         # raise Exception("Too small area outside found box with source emission to estimate std - try decrease beam_npixels!")
     outside_icn = np.ma.array(image_array, mask=mask)
     return mad_std(outside_icn)
+
+
+def blnoise(sefd1, sefd2, tint, bw):
+    """From eht-imaging code:
+        Determine the standard deviation of Gaussian thermal noise on a baseline
+       This is the noise on the rr/ll/rl/lr product, not the Stokes parameter
+       2-bit quantization is responsible for the 0.88 factor
+    """
+
+    noise = np.sqrt(sefd1*sefd2/(2*bw*tint))/0.88

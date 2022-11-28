@@ -17,17 +17,17 @@ from image import plot as iplot
 import astropy.units as u
 
 
-average_time_sec = 30
-account_gains = True
+average_time_sec = None
+account_gains = False
 
 rad2mas = u.rad.to(u.mas)
-# data_dir = "/home/ilya/Downloads/Mrk501_Q_uvfits"
-# models_dir = os.path.join(data_dir, "corrected")
-# freq = 43E+09
-
-data_dir = "/home/ilya/Downloads/TXS0506"
+data_dir = "/home/ilya/data/silke/0735/43GHz"
 models_dir = data_dir
-freq = 15.3E+09
+freq = 43E+09
+
+# data_dir = "/home/ilya/Downloads/TXS0506"
+# models_dir = data_dir
+# freq = 15.3E+09
 
 save_dir = os.path.join(models_dir, "save")
 if not os.path.exists(save_dir):
@@ -53,19 +53,19 @@ for mdl_file in mdl_files:
 mdl_files = sorted(glob.glob(os.path.join(models_dir, "*_exp.mod")))
 mdl_files = [os.path.split(path)[-1] for path in mdl_files]
 
-# ccfits_files = ['J1653+3945_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
-ccfits_files = ['0506+056.u.{}.icn.fits.gz'.format(epoch) for epoch in epochs]
+ccfits_files = ['J0738+1742_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
+# ccfits_files = ['0506+056.u.{}.icn.fits.gz'.format(epoch) for epoch in epochs]
 
 for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     # Problematic epochs
-    # if epoch in ("2016_20_23", "2019_10_11"):
-    # if epoch in ("2011_09_24",):
-    #     continue
+    if epoch in ("2017_05_01",):
+        continue
 
-    print(mdl_file, ccfits_file)
+    print(epoch, mdl_file, ccfits_file)
+    # continue
 
-    # uvfits_file = 'J1653+3945_Q_{}_mar_vis.fits'.format(epoch)
-    uvfits_file = '0506+056.u.{}.uvf'.format(epoch)
+    uvfits_file = 'J0738+1742_Q_{}_mar_vis.fits'.format(epoch)
+    # uvfits_file = '0506+056.u.{}.uvf'.format(epoch)
     if average_time_sec is not None:
         time_average(os.path.join(data_dir, uvfits_file), os.path.join(data_dir, "tmp.uvf"), average_time_sec)
         uvfits_file = "tmp.uvf"
@@ -102,15 +102,19 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
 
     # Make dummy elliptical components for plotting errors
     error_comps = convert_2D_position_errors_to_ell_components(os.path.join(models_dir, mdl_file),
-                                                               errors, include_shfit=False)
+                                                               errors, include_shfit=False, filter_by_r=True)
 
     comps = import_difmap_model(os.path.join(models_dir, mdl_file))
 
 
     # Original image
-    ccimage = create_clean_image_from_fits_file(os.path.join(data_dir, ccfits_file))
-    pixsize_mas = np.round(abs(ccimage.pixsize[0])*rad2mas, 2)
-    npixels = ccimage.imsize[0]
+    try:
+        ccimage = create_clean_image_from_fits_file(os.path.join(data_dir, ccfits_file))
+        pixsize_mas = np.round(abs(ccimage.pixsize[0])*rad2mas, 2)
+        npixels = ccimage.imsize[0]
+    # Use previous pixsize_mas and npixels values
+    except TypeError:
+        pass
 
     # CLEAN
     CLEAN_difmap(os.path.join(data_dir, uvfits_file), stokes, (npixels, pixsize_mas),
@@ -188,7 +192,8 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
             # rad
             theta = np.arctan2(-x, -y)
             theta *= rad_to_deg
-            pos_error = 0.5*(1+error_comp.p[4])*error_comp.p[3]
+            # Here BMAJ - full width, e.g. 2*a
+            pos_error = 0.5*(1+error_comp.p[4])*error_comp.p[3]/2.
             # if pos_error < 0.1*beam_size:
             #     pos_error = 0.1*beam_size
             fo.write(f"{r} {theta} {pos_error}\n")
@@ -200,7 +205,11 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
             try:
                 flux, x, y, bmaj = comp.p
                 size_err_low = size_errors[i][0][0]
+                if size_err_low < 0.0005:
+                    size_err_low = size_err_up
                 size_err_up = size_errors[i][1][0]
+                if size_err_up < 0.0005:
+                    size_err_up = size_err_low
                 size_err = 0.5*(size_err_low+size_err_up)
                 fo.write(f"{bmaj} {size_err}\n")
             # Size is fixed
@@ -222,6 +231,8 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
             print(f"Flux = {flux}, flux error low = {flux_err_low}, flux error up = {flux_err_up}")
             flux_err = 0.5*(flux_err_low + flux_err_up)
             fo.write(f"{flux} {flux_err}\n")
+
+    # sys.exit(0)
 
 
 

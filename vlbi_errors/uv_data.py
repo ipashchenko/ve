@@ -247,9 +247,9 @@ class UVData(object):
         """
         slices_dict = self.slices_dict.copy()
         slices_dict.update({'COMPLEX': 0})
-        self.hdu.data.data[list(slices_dict.values())] = self.uvdata.real
+        self.hdu.data.data[tuple(slices_dict.values())] = self.uvdata.real
         slices_dict.update({'COMPLEX': 1})
-        self.hdu.data.data[list(slices_dict.values())] = self.uvdata.imag
+        self.hdu.data.data[tuple(slices_dict.values())] = self.uvdata.imag
 
     def scale_uvw(self, scale):
         suffix = '--'
@@ -427,7 +427,7 @@ class UVData(object):
         slices_dict = self.slices_dict.copy()
         for key, key_slice in new_slices_dict.items():
             slices_dict.update({key: key_slice})
-        return self.hdu.data.data[list(slices_dict.values())]
+        return self.hdu.data.data[tuple(slices_dict.values())]
 
     @property
     def stokes(self):

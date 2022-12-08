@@ -2925,7 +2925,9 @@ def find_2D_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", worki
     uvdata = UVData(uvfits)
     n_use_vis = uvdata.n_usable_visibilities_difmap(stokes=stokes)
     n_IF = uvdata.nif
+    print(f"# IF = {n_IF}")
     n_ant = len(uvdata.antennas)
+    print(f"# ant = {n_ant}")
 
     # Coefficient of correlation between gains in close IFs
     rho_IF = 0.75
@@ -2934,6 +2936,7 @@ def find_2D_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", worki
 
     baseline_scan_times = uvdata.baselines_scans_times
     n_scans = np.argmax(np.bincount([len(a) for a in baseline_scan_times.values()]))
+    print(f"# scans = {n_scans}")
 
     n_measurements = 0
     time_of_scan = list()
@@ -2960,13 +2963,16 @@ def find_2D_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", worki
         nmodelfit = 0
     stat_dict = find_stat_of_difmap_model(dfm_model_file, uvfits, stokes, working_dir, nmodelfit=nmodelfit,
                                           use_pselfcal=use_pselfcal, out_dfm_model="selfcaled.mdl",
-                                          show_difmap_output=False)
+                                          show_difmap_output=True)
+    print("STAT DICT : ", stat_dict)
     rchisq0 = stat_dict["rchisq"]
     dof = stat_dict["dof"] - n_eff_gain_phases
     print("DoF = ", dof)
     # delta_rchisq = 2.0/dof
     delta_rchisq = chi2.ppf(1 - 0.32, 2)/dof
+    print(f"Delta rchisq = {delta_rchisq}")
     required_chisq = rchisq0 + delta_rchisq
+    print(f"Required rchisq = {required_chisq}")
 
     if not use_gain_dofs:
         original_comps = import_difmap_model(dfm_model_file)
@@ -3419,7 +3425,8 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         bpa_0 = 0.0
 
     # beam = ccimage.beam
-    beam = find_nw_beam(fname, stokes, mapsize=mapsize_clean)
+    beam = find_nw_beam(os.path.join(path, fname), stokes, mapsize=mapsize_clean)
+    print(f"NW beam = {beam}")
     beam = np.sqrt(beam[0]*beam[1])
     if size_0 is None:
         size_0 = 0.1*beam
@@ -4213,16 +4220,16 @@ if __name__ == "__main__":
     # ==========================================================================
 
     import matplotlib
-    matplotlib.use('qt5Agg')
+    matplotlib.use('TkAgg')
     import glob
     import matplotlib.pyplot as plt
     from matplotlib.patches import Circle
     # new_path = "/home/ilya/data/silke/1215/last/0d2/"
-    # new_path = "/home/ilya/data/Mkn501/difmap_models/tberrors"
+    new_path = "/home/ilya/data/Mkn501/difmap_models/redone_epochs"
     # new_path = "/home/ilya/Downloads/TXS0506/tberrors"
-    new_path = "/home/ilya/data/silke/0735/15GHz"
+    # new_path = "/home/ilya/data/silke/0735/15GHz"
     # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
-    # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/*.mod")
+    dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
     # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
     dfm_models = glob.glob(os.path.join(new_path, "*.mod"))
     print(dfm_models)
@@ -4239,9 +4246,9 @@ if __name__ == "__main__":
         new_dfm_model = os.path.join(new_path, "new_{}".format(os.path.split(dfm_model)[-1]))
         export_difmap_model(comps, new_dfm_model, 15.4E+09)
         # uvfits = "/home/ilya/data/silke/1215/1215+303.u.{}.uvf".format(epoch)
-        # uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
+        uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
         # uvfits = "/home/ilya/Downloads/TXS0506/0506+056.u.{}.uvf".format(epoch)
-        uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
+        # uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
         if epoch != "2023_10_25":
             df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
                                  size_error_coefficient=0.35)

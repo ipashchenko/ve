@@ -5,10 +5,11 @@ from utils import _function_wrapper, mas_to_rad, vcomplex, gaussian
 from ft_routines import image_ft
 from utils import transform_image
 
-try:
-    import pylab
-except ImportError:
-    pylab = None
+# try:
+#     import pylab
+# except ImportError:
+#     pylab = None
+import matplotlib.pyplot as pylab
 
 
 # TODO: Make parnames and size - class attributes

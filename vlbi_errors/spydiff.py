@@ -3334,7 +3334,8 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
                                use_brightest_pixel_as_initial_guess=True,
                                flux_0=None, size_0=None, e_0=None, bpa_0=None,
                                show_difmap_output=False,
-                               estimate_rms=False, use_ell=False):
+                               estimate_rms=False, use_ell=False,
+                               two_stage=True):
     """
     Modelfit core after excluding extended emission around.
 
@@ -3461,40 +3462,46 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
                         out_fname=os.path.join(out_path, "it1.mdl"),
                         niter=niter, stokes=stokes.lower(), path=out_path,
                         mdl_path=out_path, out_path=out_path,
-                        show_difmap_output=show_difmap_output)
-
-        # Now use found component position to make circular filter around it
-        comp = import_difmap_model("it1.mdl", out_path)[0]
-        model_local = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
-        # Need in RA, DEC
-        r_c = (-comp.p[1], -comp.p[2])
-        print("2nd iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
-        # FIXME: It was beam/2 here
-        model_local.filter_components_by_r(beam_fraction*beam, r_c=r_c)
-
-        uvdata.substitute([model_local])
-        uvdata = uvdata_tmp - uvdata
-        uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
-
-        # Modelfit this uvdata with single component
-        print("Using 1st iteration component {} as initial guess".format(comp.p))
-        if not use_ell:
-            comp0 = CGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3])
-        else:
-            comp0 = EGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3],
-                                comp.p[4], comp.p[5])
-
-        export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
-                            freq_hz)
-        modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
-                        mdl_fname=os.path.join(out_path, "init.mdl"),
-                        out_fname=os.path.join(out_path, "it2.mdl"),
-                        niter=niter, stokes=stokes.lower(), path=out_path,
-                        mdl_path=out_path, out_path=out_path,
                         show_difmap_output=show_difmap_output,
                         save_dirty_residuals_map=estimate_rms,
                         dmap_size=mapsize_clean)
-        comp = import_difmap_model("it2.mdl", out_path)[0]
+
+
+        # Now use found component position to make circular filter around it
+        comp = import_difmap_model("it1.mdl", out_path)[0]
+
+
+        if two_stage:
+            model_local = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
+            # Need in RA, DEC
+            r_c = (-comp.p[1], -comp.p[2])
+            print("2nd iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
+            # FIXME: It was beam/2 here
+            model_local.filter_components_by_r(beam_fraction*beam, r_c=r_c)
+
+            uvdata.substitute([model_local])
+            uvdata = uvdata_tmp - uvdata
+            uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
+
+            # Modelfit this uvdata with single component
+            print("Using 1st iteration component {} as initial guess".format(comp.p))
+            if not use_ell:
+                comp0 = CGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3])
+            else:
+                comp0 = EGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3],
+                                    comp.p[4], comp.p[5])
+
+            export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
+                                freq_hz)
+            modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
+                            mdl_fname=os.path.join(out_path, "init.mdl"),
+                            out_fname=os.path.join(out_path, "it2.mdl"),
+                            niter=niter, stokes=stokes.lower(), path=out_path,
+                            mdl_path=out_path, out_path=out_path,
+                            show_difmap_output=show_difmap_output,
+                            save_dirty_residuals_map=estimate_rms,
+                            dmap_size=mapsize_clean)
+            comp = import_difmap_model("it2.mdl", out_path)[0]
 
         if estimate_rms:
             dimage = create_image_from_fits_file(os.path.join(out_path, "dirty_residuals_map.fits"))
@@ -4094,7 +4101,94 @@ def make_map_with_core_at_zero(mdl_file, uv_fits_fname, mapsize_clean,
                  shift=shift)
 
 
+def reformat_errors_from_Tb_for_silke(path):
+    dfm_models = glob.glob(os.path.join(path, "new_*.mod"))
+    for dfm_model in dfm_models:
+        fn = os.path.split(dfm_model)[-1]
+        epoch = fn[4:-4]
+        print(f"Reformatting errors for epoch {epoch}!")
+        comps = import_difmap_model(fn, path)
+        flux_errors = np.loadtxt(os.path.join(path, f"{epoch}_flux_error.txt"))
+        pos_errors = np.loadtxt(os.path.join(path, f"{epoch}_pos_error.txt"))
+        size_errors = np.loadtxt(os.path.join(path, f"{epoch}_size_error.txt"))
+        with open(os.path.join(path, f"{epoch}_reformatted_errors.txt"), "w") as fo:
+            fo.write("# flux[Jy] flux_err[Jy] pos_err[mas] size_err[mas]\n")
+            for i, comp in enumerate(comps):
+                flux = comp.p[0]
+                flux_err = flux_errors[i]
+                pos_err = pos_errors[i]
+                size_err = size_errors[i]
+                fo.write(f"{flux} {flux_err} {pos_err} {size_err}\n")
+
+
+def reformat_profile_errors_for_silke(models_dir, errors_dir, save_dir):
+    dfm_models = glob.glob(os.path.join(models_dir, "*_exp.mod"))
+    for dfm_model in dfm_models:
+        fn = os.path.split(dfm_model)[-1]
+        epoch = fn[:10]
+        print(f"Reformatting errors for epoch {epoch}!")
+        comps = import_difmap_model(fn, models_dir)
+        flux_errors = np.loadtxt(os.path.join(errors_dir, f"{epoch}_flux_errors.txt"))[:, 1]
+        pos_errors = np.loadtxt(os.path.join(errors_dir, f"{epoch}_pos_errors.txt"))[:, 2]
+        size_errors = np.loadtxt(os.path.join(errors_dir, f"{epoch}_size_errors.txt"))[:, 1]
+        with open(os.path.join(save_dir, f"{epoch}_reformatted_errors.txt"), "w") as fo:
+            fo.write("# flux[Jy] flux_err[Jy] pos_err[mas] size_err[mas]\n")
+            for i, comp in enumerate(comps):
+                flux = comp.p[0]
+                flux_err = flux_errors[i]
+                flux_err = np.hypot(flux_err, 0.1*flux)
+                pos_err = pos_errors[i]
+                size_err = size_errors[i]
+                fo.write(f"{flux} {flux_err} {pos_err} {size_err}\n")
+
+
 if __name__ == "__main__":
+
+    # uvfits_files = ["template_S_1936.6.uvf", "template_S_2085.5.uvf" ,
+    #                 "template_S_2234.5.uvf", "template_S_2383.4.uvf"]
+    # test_dir = "/home/ilya/github/bk_transfer/pics/flares/test"
+    # path_to_script = "/home/ilya/github/bk_transfer/scripts/script_clean_rms"
+    #
+    # beam_fractions = [1.0]
+    # mapsize_clean = (2048, 0.05)
+    # results_1 = list()
+    # results_2 = list()
+    #
+    # for uvfits in uvfits_files:
+    #     results = modelfit_core_wo_extending(uvfits,
+    #                                          beam_fractions, path=test_dir,
+    #                                          mapsize_clean=mapsize_clean,
+    #                                          path_to_script=path_to_script,
+    #                                          niter=500,
+    #                                          out_path=test_dir,
+    #                                          use_brightest_pixel_as_initial_guess=True,
+    #                                          estimate_rms=True,
+    #                                          stokes="i",
+    #                                          use_ell=False)
+    #     results_2.append(results)
+    #
+    #     results = modelfit_core_wo_extending(uvfits,
+    #                                          beam_fractions, path=test_dir,
+    #                                          mapsize_clean=mapsize_clean,
+    #                                          path_to_script=path_to_script,
+    #                                          niter=500,
+    #                                          out_path=test_dir,
+    #                                          use_brightest_pixel_as_initial_guess=True,
+    #                                          estimate_rms=True,
+    #                                          stokes="i",
+    #                                          use_ell=False,
+    #                                          two_stage=False)
+    #     results_1.append(results)
+    #
+    #
+    # for result_1, result_2 in zip(results_1, results_2):
+    #     print("Two stages")
+    #     print(result_2)
+    #     print("One stage")
+    #     print(result_1)
+    #     print("==================")
+    #
+    # import sys; sys.exit(0)
 
     # import pickle
     # data_dir = "/home/ilya/data/Mkn501/difmap_models"
@@ -4222,62 +4316,42 @@ if __name__ == "__main__":
     import matplotlib
     matplotlib.use('TkAgg')
     import glob
-    import matplotlib.pyplot as plt
-    from matplotlib.patches import Circle
     # new_path = "/home/ilya/data/silke/1215/last/0d2/"
-    new_path = "/home/ilya/data/Mkn501/difmap_models/redone_epochs"
+    # new_path = "/home/ilya/data/Mkn501/difmap_models/redone_epochs"
     # new_path = "/home/ilya/Downloads/TXS0506/tberrors"
-    # new_path = "/home/ilya/data/silke/0735/15GHz"
+    new_path = "/home/ilya/data/silke/0735/15GHz"
     # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
-    dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
+    # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
     # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
     dfm_models = glob.glob(os.path.join(new_path, "*.mod"))
     print(dfm_models)
     # sys.exit(0)
-    # fig, axes = plt.subplots(figsize=(7.5, 10))
-    for dfm_model in dfm_models:
-        fn = os.path.split(dfm_model)[-1]
-        # if fn == "1998_05_15_1.mod":
-        #     continue
-        epoch = fn[:10]
-        print(f"EPOCH = {epoch} =====================")
 
-        comps = import_difmap_model(dfm_model, new_path)
-        new_dfm_model = os.path.join(new_path, "new_{}".format(os.path.split(dfm_model)[-1]))
-        export_difmap_model(comps, new_dfm_model, 15.4E+09)
-        # uvfits = "/home/ilya/data/silke/1215/1215+303.u.{}.uvf".format(epoch)
-        uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
-        # uvfits = "/home/ilya/Downloads/TXS0506/0506+056.u.{}.uvf".format(epoch)
-        # uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
-        if epoch != "2023_10_25":
-            df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
-                                 size_error_coefficient=0.35)
-            # axes.scatter(df["ra"], df["dec"])
-            # for idx, row in df.iterrows():
-            #     e = Circle((row["ra"], row["dec"]), 0.5*row["major_err"],
-            #                edgecolor="gray", facecolor="C1",
-            #                alpha=0.2)
-            #     axes.add_patch(e)
-            np.savetxt(new_path + "/{}_pos_error.txt".format(epoch), 0.5*df["major_err"])
-            np.savetxt(new_path + "/{}_size_error.txt".format(epoch), df["major_err"])
-            flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
-            np.savetxt(new_path + "/{}_flux_error.txt".format(epoch), flux_err)
-    # df = components_info("/home/ilya/data/silke/1215/1215+303.u.2010_10_25.uvf", "/home/ilya/data/silke/1215/2010_10_25.mod",
-    #                      dmap_size=(1024, 0.1), PA=None, size_error_coefficient=0.35)
-    # np.savetxt(new_path+"2010_10_25_pos_error.txt", 0.5*df["major_err"])
-    # np.savetxt(new_path+"2010_10_25_size_error.txt", df["major_err"])
-    # flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
-    # np.savetxt(new_path+"2010_10_25_flux_error.txt", flux_err)
-    # df = components_info("/home/ilya/data/silke/1215/1215+303.u.2010_10_25.uvf", "/home/ilya/data/silke/1215/2010_10_25_1.mod",
-    #                      dmap_size=(1024, 0.1), PA=None, size_error_coefficient=0.35)
-    # np.savetxt(new_path+"2010_10_25_1_pos_error.txt", 0.5*df["major_err"])
-    # np.savetxt(new_path+"2010_10_25_1_size_error.txt", df["major_err"])
-    # flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
-    # np.savetxt(new_path+"2010_10_25_1_flux_error.txt", flux_err)
 
-    # axes.scatter(df["ra"], df["dec"])
-    # axes.set_xlabel("RA, mas")
-    # axes.set_ylabel("DEC, mas")
-    # axes.set_aspect("equal")
-    # fig.savefig("/home/ilya/data/silke/1215/all.png", bbox_inches="tight")
-    # plt.show()
+
+    # # ACTUAL ERRORS CALCULATION ################################################
+    # for dfm_model in dfm_models:
+    #     fn = os.path.split(dfm_model)[-1]
+    #     # if fn == "1998_05_15_1.mod":
+    #     #     continue
+    #     epoch = fn[:10]
+    #     print(f"EPOCH = {epoch} =====================")
+    #
+    #     comps = import_difmap_model(dfm_model, new_path)
+    #     new_dfm_model = os.path.join(new_path, "new_{}".format(os.path.split(dfm_model)[-1]))
+    #     export_difmap_model(comps, new_dfm_model, 15.4E+09)
+    #     # uvfits = "/home/ilya/data/silke/1215/1215+303.u.{}.uvf".format(epoch)
+    #     # uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
+    #     # uvfits = "/home/ilya/Downloads/TXS0506/0506+056.u.{}.uvf".format(epoch)
+    #     uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
+    #     if epoch != "2023_06_11":
+    #         df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
+    #                              size_error_coefficient=0.35)
+    #         np.savetxt(new_path + "/{}_pos_error.txt".format(epoch), 0.5*df["major_err"])
+    #         np.savetxt(new_path + "/{}_size_error.txt".format(epoch), df["major_err"])
+    #         flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
+    #         np.savetxt(new_path + "/{}_flux_error.txt".format(epoch), flux_err)
+    #
+    # ###############################################
+
+    reformat_errors_from_Tb_for_silke(new_path)

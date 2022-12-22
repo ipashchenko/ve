@@ -18,7 +18,7 @@ import astropy.units as u
 
 
 average_time_sec = 60.
-account_gains = True
+account_gains = False
 
 rad2mas = u.rad.to(u.mas)
 data_dir = "/home/ilya/data/silke/0735/43GHz"
@@ -29,7 +29,7 @@ freq = 43E+09
 # models_dir = data_dir
 # freq = 15.3E+09
 
-save_dir = os.path.join(models_dir, "save_gains_check")
+save_dir = os.path.join(models_dir, "save")
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
 
@@ -58,8 +58,8 @@ ccfits_files = ['J0738+1742_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs
 
 for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     # Problematic epochs
-    # if epoch in ("2017_05_01",):
-    if epoch not in ("2011_08_23",):
+    if epoch not in ("2017_05_01",):
+    # if epoch not in ("2011_08_23",):
         continue
 
     print(epoch, mdl_file, ccfits_file)

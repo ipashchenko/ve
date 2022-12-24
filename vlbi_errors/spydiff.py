@@ -3328,6 +3328,25 @@ def fit_ellipse(x, y):
 #             return np.pi/2 + np.arctan(2*b/(a-c))/2
 
 
+
+def fit_core(uvdata):
+    from scipy.optimize import curve_fit
+    uv = uvdata.uv
+    vis_obs = uvdata.uvdata_freq_averaged.compressed()
+
+    assert uv.shape[0] == vis_obs.shape[0]
+
+    def min_func(uv, *p):
+        comp = CGComponent(*p)
+        vis = comp.ft(uv)
+        return np.sum((abs(vis - vis_obs)**2))
+
+    p0 = [1.0, 0, 0, 0.25]
+    res = curve_fit(min_func, uv, vis_obs, p0=p0)
+    flux, along, across, bmaj = res[0]
+
+    return CGComponent(flux, along, across, bmaj)
+
 def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
                                mapsize_clean=None, path_to_script=None,
                                niter=50, stokes='i', path=None, out_path=None,
@@ -3335,7 +3354,7 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
                                flux_0=None, size_0=None, e_0=None, bpa_0=None,
                                show_difmap_output=False,
                                estimate_rms=False, use_ell=False,
-                               two_stage=True):
+                               two_stage=True, use_scipy=False):
     """
     Modelfit core after excluding extended emission around.
 
@@ -3449,27 +3468,28 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         uvdata = uvdata_tmp - uvdata
         uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
 
-        # Modelfit this uvdata with single component
-        if not use_ell:
-            comp0 = CGComponent(flux_0, -r_c[0], -r_c[1], size_0)
+        if not use_scipy:
+            # Modelfit this uvdata with single component
+            if not use_ell:
+                comp0 = CGComponent(flux_0, -r_c[0], -r_c[1], size_0)
+            else:
+                comp0 = EGComponent(flux_0, -r_c[0], -r_c[1], size_0, e_0, bpa_0)
+
+            export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
+                                freq_hz)
+            modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
+                            mdl_fname=os.path.join(out_path, "init.mdl"),
+                            out_fname=os.path.join(out_path, "it1.mdl"),
+                            niter=niter, stokes=stokes.lower(), path=out_path,
+                            mdl_path=out_path, out_path=out_path,
+                            show_difmap_output=show_difmap_output,
+                            save_dirty_residuals_map=estimate_rms,
+                            dmap_size=mapsize_clean)
+            # Now use found component position to make circular filter around it
+            comp = import_difmap_model("it1.mdl", out_path)[0]
+
         else:
-            comp0 = EGComponent(flux_0, -r_c[0], -r_c[1], size_0, e_0, bpa_0)
-
-        export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
-                            freq_hz)
-        modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
-                        mdl_fname=os.path.join(out_path, "init.mdl"),
-                        out_fname=os.path.join(out_path, "it1.mdl"),
-                        niter=niter, stokes=stokes.lower(), path=out_path,
-                        mdl_path=out_path, out_path=out_path,
-                        show_difmap_output=show_difmap_output,
-                        save_dirty_residuals_map=estimate_rms,
-                        dmap_size=mapsize_clean)
-
-
-        # Now use found component position to make circular filter around it
-        comp = import_difmap_model("it1.mdl", out_path)[0]
-
+            comp = fit_core(uvdata)
 
         if two_stage:
             model_local = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
@@ -3483,25 +3503,29 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
             uvdata = uvdata_tmp - uvdata
             uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
 
-            # Modelfit this uvdata with single component
-            print("Using 1st iteration component {} as initial guess".format(comp.p))
-            if not use_ell:
-                comp0 = CGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3])
-            else:
-                comp0 = EGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3],
-                                    comp.p[4], comp.p[5])
+            if not use_scipy:
+                # Modelfit this uvdata with single component
+                print("Using 1st iteration component {} as initial guess".format(comp.p))
+                if not use_ell:
+                    comp0 = CGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3])
+                else:
+                    comp0 = EGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3],
+                                        comp.p[4], comp.p[5])
 
-            export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
-                                freq_hz)
-            modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
-                            mdl_fname=os.path.join(out_path, "init.mdl"),
-                            out_fname=os.path.join(out_path, "it2.mdl"),
-                            niter=niter, stokes=stokes.lower(), path=out_path,
-                            mdl_path=out_path, out_path=out_path,
-                            show_difmap_output=show_difmap_output,
-                            save_dirty_residuals_map=estimate_rms,
-                            dmap_size=mapsize_clean)
-            comp = import_difmap_model("it2.mdl", out_path)[0]
+                export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
+                                    freq_hz)
+                modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
+                                mdl_fname=os.path.join(out_path, "init.mdl"),
+                                out_fname=os.path.join(out_path, "it2.mdl"),
+                                niter=niter, stokes=stokes.lower(), path=out_path,
+                                mdl_path=out_path, out_path=out_path,
+                                show_difmap_output=show_difmap_output,
+                                save_dirty_residuals_map=estimate_rms,
+                                dmap_size=mapsize_clean)
+                comp = import_difmap_model("it2.mdl", out_path)[0]
+
+            else:
+                comp = fit_core(uvdata)
 
         if estimate_rms:
             dimage = create_image_from_fits_file(os.path.join(out_path, "dirty_residuals_map.fits"))

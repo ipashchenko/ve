@@ -3365,7 +3365,7 @@ def fit_core(uvdata):
         return np.sum((abs(vis - vis_obs)**2))
 
     p0 = [1.0, 0, 0, 0.25]
-    res = curve_fit(min_func, uv, vis_obs, p0=p0)
+    res = curve_fit(min_func, uv, vis_obs, p0=p0, maxfev=50000)
     flux, along, across, bmaj = res[0]
 
     return CGComponent(flux, along, across, bmaj)

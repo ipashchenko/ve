@@ -3,7 +3,7 @@ import os
 import datetime
 import copy
 import sys
-
+import json
 import pandas as pd
 from numpy.linalg import eig, inv, svd
 from math import atan2
@@ -64,7 +64,6 @@ def find_nw_beam(uvfits, stokes="I", mapsize=(1024, 0.1), uv_range=None, working
     shell_command += " >/dev/null"
     os.system(shell_command)
 
-    # Get final reduced chi_squared
     log = os.path.join(working_dir, "difmap.log")
     with open(log, "r") as fo:
         lines = fo.readlines()
@@ -874,6 +873,31 @@ def get_rms_from_map_region(ccfits, boxfile):
     image = pf.getdata(ccfits).squeeze()
     image = np.ma.array(image, mask=mask)
     return np.ma.std(image)
+
+def get_uvrange(uvfits, stokes=None):
+    """
+    :param stokes: (optional)
+        Stokes to consider masking. If ``None`` then ``I``. (default: ``None``)
+    :return:
+        Minimal and maximal uv-spacing in Ml.
+    """
+    uvdata = UVData(uvfits)
+    if stokes is None:
+        # Get RR and LL correlations
+        rrll = uvdata.uvdata_freq_averaged[:, :2]
+        # Masked array
+        I = np.ma.mean(rrll, axis=1)
+    else:
+        if stokes == "RR":
+            I = uvdata.uvdata_freq_averaged[:, 0]
+        elif stokes == "LL":
+            I = uvdata.uvdata_freq_averaged[:, 1]
+    weights_mask = I.mask
+
+    uv = uvdata.uv
+    uv = uv[~weights_mask]
+    r_uv = np.hypot(uv[:, 0], uv[:, 1])
+    return min(r_uv/10**6), max(r_uv/10**6)
 
 
 # FIXME: Handle cases when no V is available and we need to estimate target rms from 1 asec distant region
@@ -2309,10 +2333,9 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
     return pd.DataFrame.from_dict(df_dict)
 
 
-
-
 # TODO: Add iteration till chi-squared is increasing for some number of
 # iterations
+# TODO: Add estimating rms in dirty residual map at the components positions
 def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
                     path=None, mdl_path=None, out_path=None,
                     show_difmap_output=False,
@@ -3354,7 +3377,9 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
                                flux_0=None, size_0=None, e_0=None, bpa_0=None,
                                show_difmap_output=False,
                                estimate_rms=False, use_ell=False,
-                               two_stage=True, use_scipy=False):
+                               two_stage=True, use_scipy=False,
+                               mapsize_for_nw_beam=(512, 0.2),
+                               nw_beam_size=None):
     """
     Modelfit core after excluding extended emission around.
 
@@ -3415,17 +3440,24 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
     """
     from uv_data import UVData
     from components import (CGComponent, EGComponent)
+
+
+    print("BEAM FRACTIONS: ", beam_fractions)
+
+    base = os.path.split(fname)[-1]
+    base = base.split(".")[:-1]
+    base = ".".join(base)
+
     uvdata = UVData(os.path.join(path, fname))
     uvdata_tmp = UVData(os.path.join(path, fname))
     freq_hz = uvdata.frequency
     noise = uvdata.noise(use_V=False)
     # First CLEAN to obtain clean components
-    clean_difmap(fname, os.path.join(out_path, "cc.fits"), stokes,
+    clean_difmap(fname, os.path.join(out_path, f"{base}_cc.fits"), stokes,
                  mapsize_clean, path=path, path_to_script=path_to_script,
                  show_difmap_output=show_difmap_output)
     from from_fits import create_clean_image_from_fits_file
-    ccimage = create_clean_image_from_fits_file(os.path.join(out_path,
-                                                             "cc.fits"))
+    ccimage = create_clean_image_from_fits_file(os.path.join(out_path, f"{base}_cc.fits"))
     if r_c is None:
         # Find brightest pixel
         if use_brightest_pixel_as_initial_guess:
@@ -3445,9 +3477,12 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         bpa_0 = 0.0
 
     # beam = ccimage.beam
-    beam = find_nw_beam(os.path.join(path, fname), stokes, mapsize=mapsize_clean)
-    print(f"NW beam = {beam}")
-    beam = np.sqrt(beam[0]*beam[1])
+    if nw_beam_size is None:
+        nw_beam_size = find_nw_beam(os.path.join(path, fname), stokes, mapsize=mapsize_for_nw_beam)
+        beam = np.sqrt(nw_beam_size[0]*nw_beam_size[1])
+    else:
+        beam = nw_beam_size
+    print(f"NW beam = {nw_beam_size}")
     if size_0 is None:
         size_0 = 0.1*beam
     print("Using beam size = {} mas".format(beam))
@@ -3460,13 +3495,13 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
         print("Estimating core using beam_fraction = {}".format(beam_fraction))
         print("1st iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
         # Need in RA, DEC
-        model = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
+        model = create_model_from_fits_file(os.path.join(out_path, f"{base}_cc.fits"))
         # FIXME: It was beam/2 here
         # TODO: Does r_c is properly accounted for here?
         model.filter_components_by_r(beam_fraction*beam, r_c=r_c)
         uvdata.substitute([model])
         uvdata = uvdata_tmp - uvdata
-        uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
+        uvdata.save(os.path.join(out_path, f"{base}_uv_diff.uvf"), rewrite=True)
 
         if not use_scipy:
             # Modelfit this uvdata with single component
@@ -3475,24 +3510,24 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
             else:
                 comp0 = EGComponent(flux_0, -r_c[0], -r_c[1], size_0, e_0, bpa_0)
 
-            export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
+            export_difmap_model([comp0], os.path.join(out_path, f"{base}_init.mdl"),
                                 freq_hz)
-            modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
-                            mdl_fname=os.path.join(out_path, "init.mdl"),
-                            out_fname=os.path.join(out_path, "it1.mdl"),
+            modelfit_difmap(fname=os.path.join(out_path, f"{base}_uv_diff.uvf"),
+                            mdl_fname=os.path.join(out_path, f"{base}_init.mdl"),
+                            out_fname=os.path.join(out_path, f"{base}_it1.mdl"),
                             niter=niter, stokes=stokes.lower(), path=out_path,
                             mdl_path=out_path, out_path=out_path,
                             show_difmap_output=show_difmap_output,
                             save_dirty_residuals_map=estimate_rms,
-                            dmap_size=mapsize_clean)
+                            dmap_size=mapsize_clean, dmap_name=f"{base}_dirty_residuals_map.fits")
             # Now use found component position to make circular filter around it
-            comp = import_difmap_model("it1.mdl", out_path)[0]
+            comp = import_difmap_model(f"{base}_it1.mdl", out_path)[0]
 
         else:
             comp = fit_core(uvdata)
 
         if two_stage:
-            model_local = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
+            model_local = create_model_from_fits_file(os.path.join(out_path, f"{base}_cc.fits"))
             # Need in RA, DEC
             r_c = (-comp.p[1], -comp.p[2])
             print("2nd iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
@@ -3501,7 +3536,7 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
 
             uvdata.substitute([model_local])
             uvdata = uvdata_tmp - uvdata
-            uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
+            uvdata.save(os.path.join(out_path, f"{base}_uv_diff.uvf"), rewrite=True)
 
             if not use_scipy:
                 # Modelfit this uvdata with single component
@@ -3512,23 +3547,24 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
                     comp0 = EGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3],
                                         comp.p[4], comp.p[5])
 
-                export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
+                export_difmap_model([comp0], os.path.join(out_path, f"{base}_init.mdl"),
                                     freq_hz)
-                modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
-                                mdl_fname=os.path.join(out_path, "init.mdl"),
-                                out_fname=os.path.join(out_path, "it2.mdl"),
+                modelfit_difmap(fname=os.path.join(out_path, f"{base}_uv_diff.uvf"),
+                                mdl_fname=os.path.join(out_path, f"{base}_init.mdl"),
+                                out_fname=os.path.join(out_path, f"{base}_it2.mdl"),
                                 niter=niter, stokes=stokes.lower(), path=out_path,
                                 mdl_path=out_path, out_path=out_path,
                                 show_difmap_output=show_difmap_output,
                                 save_dirty_residuals_map=estimate_rms,
-                                dmap_size=mapsize_clean)
-                comp = import_difmap_model("it2.mdl", out_path)[0]
+                                dmap_size=mapsize_clean,
+                                dmap_name=f"{base}_dirty_residuals_map.fits")
+                comp = import_difmap_model(f"{base}_it2.mdl", out_path)[0]
 
             else:
                 comp = fit_core(uvdata)
 
         if estimate_rms:
-            dimage = create_image_from_fits_file(os.path.join(out_path, "dirty_residuals_map.fits"))
+            dimage = create_image_from_fits_file(os.path.join(out_path, f"{base}_dirty_residuals_map.fits"))
             beam_pxl = int(beam/mapsize_clean[1])
             print("Beam = ", beam)
             # RA, DEC of component center
@@ -3551,6 +3587,18 @@ def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
                                            "dec": -comp.p[2], "size": comp.p[3],
                                            "e": comp.p[4], "bpa": comp.p[5],
                                            "rms": rms}})
+
+    os.unlink(os.path.join(out_path, f"{base}_it1.mdl"))
+    if two_stage:
+        os.unlink(os.path.join(out_path, f"{base}_it2.mdl"))
+    if estimate_rms:
+        os.unlink(os.path.join(out_path, f"{base}_dirty_residuals_map.fits"))
+    os.unlink(os.path.join(out_path, f"{base}_uv_diff.uvf"))
+    os.unlink(os.path.join(out_path, f"{base}_init.mdl"))
+    os.unlink(os.path.join(out_path, f"{base}_cc.fits"))
+
+    with open(os.path.join(out_path, f"{base}_core_modelfit_result.json"), "w") as fo:
+        json.dump(result, fo)
 
     return result
 
@@ -4343,7 +4391,8 @@ if __name__ == "__main__":
     # new_path = "/home/ilya/data/silke/1215/last/0d2/"
     # new_path = "/home/ilya/data/Mkn501/difmap_models/redone_epochs"
     # new_path = "/home/ilya/Downloads/TXS0506/tberrors"
-    new_path = "/home/ilya/data/silke/0735/15GHz"
+    # new_path = "/home/ilya/data/silke/0735/15GHz"
+    new_path = "/home/ilya/data/silke/0506_old"
     # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
     # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
     # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
@@ -4353,29 +4402,30 @@ if __name__ == "__main__":
 
 
 
-    # # ACTUAL ERRORS CALCULATION ################################################
-    # for dfm_model in dfm_models:
-    #     fn = os.path.split(dfm_model)[-1]
-    #     # if fn == "1998_05_15_1.mod":
-    #     #     continue
-    #     epoch = fn[:10]
-    #     print(f"EPOCH = {epoch} =====================")
-    #
-    #     comps = import_difmap_model(dfm_model, new_path)
-    #     new_dfm_model = os.path.join(new_path, "new_{}".format(os.path.split(dfm_model)[-1]))
-    #     export_difmap_model(comps, new_dfm_model, 15.4E+09)
-    #     # uvfits = "/home/ilya/data/silke/1215/1215+303.u.{}.uvf".format(epoch)
-    #     # uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
-    #     # uvfits = "/home/ilya/Downloads/TXS0506/0506+056.u.{}.uvf".format(epoch)
-    #     uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
-    #     if epoch != "2023_06_11":
-    #         df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
-    #                              size_error_coefficient=0.35)
-    #         np.savetxt(new_path + "/{}_pos_error.txt".format(epoch), 0.5*df["major_err"])
-    #         np.savetxt(new_path + "/{}_size_error.txt".format(epoch), df["major_err"])
-    #         flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
-    #         np.savetxt(new_path + "/{}_flux_error.txt".format(epoch), flux_err)
-    #
-    # ###############################################
+    # ACTUAL ERRORS CALCULATION ################################################
+    for dfm_model in dfm_models:
+        fn = os.path.split(dfm_model)[-1]
+        # if fn == "1998_05_15_1.mod":
+        #     continue
+        epoch = fn[:10]
+        print(f"EPOCH = {epoch} =====================")
+
+        comps = import_difmap_model(dfm_model, new_path)
+        new_dfm_model = os.path.join(new_path, "new_{}".format(os.path.split(dfm_model)[-1]))
+        export_difmap_model(comps, new_dfm_model, 15.4E+09)
+        # uvfits = "/home/ilya/data/silke/1215/1215+303.u.{}.uvf".format(epoch)
+        # uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
+        # uvfits = "/home/ilya/Downloads/TXS0506/0506+056.u.{}.uvf".format(epoch)
+        uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
+        # uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
+        if epoch != "2023_06_11":
+            df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
+                                 size_error_coefficient=0.35)
+            np.savetxt(new_path + "/{}_pos_error.txt".format(epoch), 0.5*df["major_err"])
+            np.savetxt(new_path + "/{}_size_error.txt".format(epoch), df["major_err"])
+            flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
+            np.savetxt(new_path + "/{}_flux_error.txt".format(epoch), flux_err)
+
+    ###############################################
 
     reformat_errors_from_Tb_for_silke(new_path)

@@ -2414,7 +2414,7 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
             lines = fo.readlines()
         line = [line for line in lines if "Reduced Chi-squared=" in line][-1]
         rchisq = float(line.split(" ")[4].split("=")[1])
-    except FileNotFoundError:
+    except (FileNotFoundError, IndexError):
         rchisq = None
 
     # Remove command file

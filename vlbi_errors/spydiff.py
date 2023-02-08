@@ -2408,11 +2408,14 @@ def modelfit_difmap(fname, mdl_fname, out_fname, niter=50, stokes='i',
     os.system(shell_command)
 
     # Get final reduced chi_squared
-    log = os.path.join(os.getcwd(), "difmap.log")
-    with open(log, "r") as fo:
-        lines = fo.readlines()
-    line = [line for line in lines if "Reduced Chi-squared=" in line][-1]
-    rchisq = float(line.split(" ")[4].split("=")[1])
+    try:
+        log = os.path.join(os.getcwd(), "difmap.log")
+        with open(log, "r") as fo:
+            lines = fo.readlines()
+        line = [line for line in lines if "Reduced Chi-squared=" in line][-1]
+        rchisq = float(line.split(" ")[4].split("=")[1])
+    except FileNotFoundError:
+        rchisq = None
 
     # Remove command file
     os.unlink(command_file)

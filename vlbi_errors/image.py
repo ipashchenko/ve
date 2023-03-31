@@ -438,7 +438,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         # If no absolute levels are supplied then construct them
         if abs_levels is None:
             # print("constructing absolute levels for contours...")
-            max_level = contours[x_slice, y_slice].max()
+            max_level = np.nanma(contours[x_slice, y_slice])
             # from given relative levels
             if rel_levels is not None:
                 # print("from relative levels...")

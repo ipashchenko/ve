@@ -261,7 +261,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          plot_colorbar=True, label_size=10, ra_range=None, dec_range=None,
          fig=None, axes=None, contour_linewidth=0.5, vector_color="black",
          n_discrete_colors=None, fixed_component_color="deepskyblue",
-         show_xlabel_on_current_axes=False, show_ylabel_on_current_axes=False):
+         show_xlabel_on_current_axes=False, show_ylabel_on_current_axes=False,
+         vector_scale=None):
     """
     Plot image(s).
 
@@ -512,7 +513,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             v = np.ma.array(v, mask=vectors_mask[x_slice, y_slice])
         vec = ax.quiver(y[::vinc], x[::vinc], u[::vinc, ::vinc],
                         v[::vinc, ::vinc], angles='uv',
-                        units='xy', headwidth=0., headlength=0., scale=None,
+                        units='xy', headwidth=0., headlength=0., scale=vector_scale,
                         width=0.05, headaxislength=0., color=vector_color)
     # Set equal aspect
     ax.set_aspect('equal')
@@ -700,6 +701,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
 
     if show and fig is not None:
         fig.show()
+    if show and fig is None:
+        plt.show()
     if close:
         plt.close()
 

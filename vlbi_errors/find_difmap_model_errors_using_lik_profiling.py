@@ -21,7 +21,8 @@ average_time_sec = 60.
 account_gains = False
 
 rad2mas = u.rad.to(u.mas)
-data_dir = "/home/ilya/data/silke/0735/43GHz"
+# data_dir = "/home/ilya/data/silke/0735/43GHz"
+data_dir = "/home/ilya/Downloads/3C454.3"
 models_dir = data_dir
 freq = 43E+09
 
@@ -53,19 +54,20 @@ for mdl_file in mdl_files:
 mdl_files = sorted(glob.glob(os.path.join(models_dir, "*_exp.mod")))
 mdl_files = [os.path.split(path)[-1] for path in mdl_files]
 
-ccfits_files = ['J0738+1742_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
+# ccfits_files = ['J0738+1742_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
+ccfits_files = ['J2253+1608_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
 # ccfits_files = ['0506+056.u.{}.icn.fits.gz'.format(epoch) for epoch in epochs]
 
 for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     # Problematic epochs
-    if epoch not in ("2017_05_01",):
+    # if epoch not in ("2017_05_01",):
     # if epoch not in ("2011_08_23",):
-        continue
+    #     continue
 
     print(epoch, mdl_file, ccfits_file)
     # continue
 
-    uvfits_file = 'J0738+1742_Q_{}_mar_vis.fits'.format(epoch)
+    uvfits_file = 'J2253+1608_Q_{}_mar_vis.fits'.format(epoch)
     # uvfits_file = '0506+056.u.{}.uvf'.format(epoch)
     if average_time_sec is not None:
         time_average(os.path.join(data_dir, uvfits_file), os.path.join(data_dir, "tmp.uvf"), average_time_sec)

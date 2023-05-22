@@ -26,8 +26,8 @@ try:
 except ImportError:
     pylab = None
 
-vec_complex = np.vectorize(np.complex)
-vec_int = np.vectorize(np.int)
+vec_complex = np.vectorize(complex)
+vec_int = np.vectorize(int)
 stokes_dict = {-4: 'LR', -3: 'RL', -2: 'LL', -1: 'RR', 1: 'I', 2: 'Q', 3: 'U',
                4: 'V'}
 

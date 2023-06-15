@@ -1643,7 +1643,7 @@ class UVData(object):
 
     # FIXME: Fix logic of arguments. How one can plot one antennas with others,
     # several baselines, all baselines etc.
-    def uv_coverage(self, antennas=None, baselines=None, sym='.k', fig=None):
+    def uv_coverage(self, stokes="I", antennas=None, baselines=None, sym='.k', fig=None):
         """
         Make plots of uv-coverage for selected baselines/antennas.
 
@@ -1694,7 +1694,7 @@ class UVData(object):
 
         indxs = self._get_baselines_indexes(baselines=baselines_to_display)
         observed = self._choose_uvdata(baselines=baselines_to_display,
-                                       stokes='I', freq_average=True)
+                                       stokes=stokes, freq_average=True)
         # model = model_uvdata._choose_uvdata(baselines=baselines_to_display,
         #                                     stokes='I', freq_average=True)
         # diff = np.angle(observed) - np.angle(model)
@@ -1732,6 +1732,7 @@ class UVData(object):
         axes.set_aspect('equal')
         axes.set_xlabel('U, wavelengths')
         axes.set_ylabel('V, wavelengths')
+        axes.invert_xaxis()
         fig.show()
         return fig
 

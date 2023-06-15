@@ -1091,6 +1091,8 @@ class UVData(object):
             Numpy.ndarray with shape (N, 3,), where N is the number of (u, v, w)
             points.
         """
+        #FIXME: Here I can do simply using inverse par_dict and use 0, 1 & 2
+        # keys to obtain u, v & w.
         suffix = '--'
         try:
             u = self.hdu.columns[self.par_dict['UU{}'.format(suffix)]].array
@@ -2017,6 +2019,29 @@ class UVData(object):
         self.uvdata[:, :, self.stokes_dict_inv["RL"]] = (q_+1j*u_)[..., 0]
         self.uvdata[:, :, self.stokes_dict_inv["LR"]] = (q_-1j*u_)[..., 0]
         self.sync()
+
+    def create_uvfits_with_rotated_uv(self, angle, fname, overwrite=False):
+        """
+
+        :param angle:
+            Positive values rotate +u axis clockwise
+        :param fname:
+        :param overwrite:
+        :return:
+        """
+        self_copy = copy.deepcopy(self)
+        inv_par_dict = {v: k for k, v in self.par_dict.items()}
+        u_old = self.hdu.data[inv_par_dict[0]]
+        v_old = self.hdu.data[inv_par_dict[1]]
+
+        u = u_old*np.cos(angle)+v_old*np.sin(angle)
+        v = -u_old*np.sin(angle)+v_old*np.cos(angle)
+
+        self_copy.hdu.data[inv_par_dict[0]] = u
+        self_copy.hdu.data[inv_par_dict[1]] = v
+        self_copy.save(fname, rewrite=overwrite)
+
+        return self_copy
 
     # TODO: Use for-cycle on baseline indexes
     def substitute(self, models, baselines=None):

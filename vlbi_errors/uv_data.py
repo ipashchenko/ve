@@ -2034,8 +2034,9 @@ class UVData(object):
         u_old = self.hdu.data[inv_par_dict[0]]
         v_old = self.hdu.data[inv_par_dict[1]]
 
-        u = u_old*np.cos(angle)+v_old*np.sin(angle)
-        v = -u_old*np.sin(angle)+v_old*np.cos(angle)
+        # Counter-Clockwise rotation
+        u = u_old*np.cos(angle)-v_old*np.sin(angle)
+        v = u_old*np.sin(angle)+v_old*np.cos(angle)
 
         self_copy.hdu.data[inv_par_dict[0]] = u
         self_copy.hdu.data[inv_par_dict[1]] = v

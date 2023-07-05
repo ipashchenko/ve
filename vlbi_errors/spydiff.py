@@ -493,7 +493,7 @@ def clean_difmap_and_convolve_nubeam(uvfits, stokes, mapsize, outfile, original_
                  # With residuals
                  # show_difmap_output=True, beam_restore=None, omit_residuals=True, do_smooth=False)
                  beam_restore=None, omit_residuals=False, do_smooth=False,
-                 dfm_model="dfm_cc_{}.mdl".format(stokes), show_difmap_output=True,
+                 save_dfm_model="dfm_cc_{}.mdl".format(stokes), show_difmap_output=True,
                  dmap="dmap_{}.fits".format(stokes.lower()))
 
     # Filter CCs - keep only those within the source
@@ -529,6 +529,62 @@ def CCFITS_to_difmap(ccfits, difmap_mdl_file, shift=None):
             theta = np.rad2deg(np.arctan2(ra, dec))
             r = np.hypot(ra, dec)
             fo.write("{} {} {}\n".format(flux, r, theta))
+
+
+def filter_difmap_CC_model_by_r(old_difmap_mdl_file, new_difmap_model_file,
+                                center, r_min_mas):
+    new_lines = list()
+    with open(old_difmap_mdl_file, "r") as fo:
+        lines = fo.readlines()
+        for line in lines:
+            if line.startswith("!"):
+                new_lines.append(line)
+                continue
+            flux, r, theta = line.split()
+            flux = float(flux)
+            r = float(r)
+            theta = np.deg2rad(float(theta))
+            ra = r*np.sin(theta)
+            dec = r*np.cos(theta)
+            print("RA = {:.2f}, DEC = {:.2f}".format(ra, dec))
+            if np.hypot(ra - center[0], dec - center[1]) > r_min_mas:
+                new_lines.append(line)
+
+    with open(new_difmap_model_file, "w") as fo:
+        for line in new_lines:
+            fo.write(line)
+
+def join_difmap_models(dfm_model_1, dfm_model_2, out_file):
+    """
+    Join difmap VLBI models.
+    """
+    added_lines = list()
+
+    with open(dfm_model_1, "r") as fo:
+        lines = fo.readlines()
+        added_lines = lines
+
+    with open(dfm_model_2, "r") as fo:
+        lines = fo.readlines()
+        for line in lines:
+            if line.startswith("!"):
+                continue
+            added_lines.append(line)
+
+    with open(out_file, "w") as fo:
+        for line in added_lines:
+            fo.write(line)
+
+
+        # for flux, ra, dec in zip(data['FLUX'], data['DELTAX'], data['DELTAY']):
+        #     ra *= deg2mas
+        #     dec *= deg2mas
+        #     if shift is not None:
+        #         ra -= shift[0]
+        #         dec -= shift[1]
+        #     theta = np.rad2deg(np.arctan2(ra, dec))
+        #     r = np.hypot(ra, dec)
+        #     fo.write("{} {} {}\n".format(flux, r, theta))
 
 
 def remove_residuals_from_CLEAN_map(ccfits, uvfits, out_ccfits, mapsize, stokes="i", restore_beam=None, shift=None,
@@ -695,7 +751,7 @@ def flag_baseline_scan(uvfits, outfname, ta, tb=None, start_time=None, stop_time
 def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
                  path_to_script=None, mapsize_restore=None, beam_restore=None,
                  outpath=None, shift=None, show_difmap_output=False,
-                 command_file=None, clean_box=None, dfm_model=None, omit_residuals=False,
+                 command_file=None, clean_box=None, save_dfm_model=None, omit_residuals=False,
                  do_smooth=True, dmap=None, text_box=None,
                  box_rms_factor=None, window_file=None,
                  super_unif_dynam=None, unif_dynam=None,
@@ -744,7 +800,7 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     :param text_box: (optional)
         Path to text file with clean box (difmap output) to use. If ``None``
         then do not use text box. (default: ``None``)
-    :param dfm_model: (optional)
+    :param save_dfm_model: (optional)
         File name to save difmap-format model with CCs. If ``None`` then do
         not save model. (default: ``None``)
     :param dmap: (optional)
@@ -836,9 +892,9 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     difmapout.write("wmap " + os.path.join(outpath, outfname) + "\n")
     if dmap is not None:
         difmapout.write("wdmap " + os.path.join(outpath, dmap) + "\n")
-    if dfm_model is not None:
+    if save_dfm_model is not None:
         # FIXME: Difmap doesn't apply shift to model components!
-        difmapout.write("wmodel " + os.path.join(outpath, dfm_model) + "\n")
+        difmapout.write("wmodel "+os.path.join(outpath, save_dfm_model)+"\n")
     difmapout.write("exit\n")
     difmapout.close()
     # TODO: Use subprocess for silent cleaning?
@@ -948,6 +1004,7 @@ def CLEAN_difmap(uvfits, stokes, mapsize, outname, restore_beam=None,
         cmd += "uvrange {}, {}\n".format(uvrange[0], uvrange[1])
     cmd += "print \"vnoise =\", imstat(rms)\n"
 
+    cmd += "select i\n"
     cmd += "shift 10000,10000\n"
     cmd += "print \"farnoise =\", imstat(rms)\n"
 
@@ -1551,6 +1608,45 @@ def append_component_to_difmap_model(comp, out_fname, freq_hz):
         theta = np.arctan2(-x, -y)
         theta /= degree_to_rad
         fo.write("{}v {}v {}v {} {} {} {} {} 0\n".format(flux, r, theta,
+                                                         bmaj, e, bpa, type,
+                                                         freq_hz))
+
+
+def create_difmap_file_from_single_component(comp, out_fname, freq_hz):
+    """
+    :param comp:
+        (flux, ra, dec[, bmaj, e, bpa]) - [Jy, mas, mas, mas, -, deg]
+
+    """
+
+    with open(out_fname, "a") as fo:
+        if len(comp) == 3:
+            flux, ra, dec = comp
+            e = "1.00000"
+            bmaj = "0.0000"
+            bpa = "000.000"
+            type = "0"
+        elif len(comp) == 4:
+            flux, ra, dec, bmaj = comp
+            e = "1.00000"
+            bpa = "000.000"
+            type = "1"
+            bmaj = "{:.5f}v".format(bmaj)
+        elif len(comp) == 6:
+            flux, ra, dec, bmaj, e, bpa = comp
+            e = "{:.5f}v".format(e)
+            bpa = "{:.5f}v".format((bpa - np.pi / 2) / degree_to_rad)
+            bmaj = "{:.5f}v".format(bmaj)
+            type = "1"
+        else:
+            raise Exception
+        # mas
+        r = np.hypot(ra, dec)
+        # rad
+        theta = np.rad2deg(np.arctan2(ra, dec))
+        fo.write("! Flux (Jy) Radius (mas)  Theta (deg)  Major (mas)  Axial ratio   Phi (deg) T\n\
+! Freq (Hz)     SpecIndex\n")
+        fo.write("{:.5f}v {:.5f}v {:.5f}v {} {} {} {} {:.2E} 0\n".format(flux, r, theta,
                                                          bmaj, e, bpa, type,
                                                          freq_hz))
 
@@ -4236,226 +4332,280 @@ def reformat_profile_errors_for_silke(models_dir, errors_dir, save_dir):
 
 if __name__ == "__main__":
 
-    # uvfits_files = ["template_S_1936.6.uvf", "template_S_2085.5.uvf" ,
-    #                 "template_S_2234.5.uvf", "template_S_2383.4.uvf"]
-    # test_dir = "/home/ilya/github/bk_transfer/pics/flares/test"
-    # path_to_script = "/home/ilya/github/bk_transfer/scripts/script_clean_rms"
-    #
-    # beam_fractions = [1.0]
-    # mapsize_clean = (2048, 0.05)
-    # results_1 = list()
-    # results_2 = list()
-    #
-    # for uvfits in uvfits_files:
-    #     results = modelfit_core_wo_extending(uvfits,
-    #                                          beam_fractions, path=test_dir,
-    #                                          mapsize_clean=mapsize_clean,
-    #                                          path_to_script=path_to_script,
-    #                                          niter=500,
-    #                                          out_path=test_dir,
-    #                                          use_brightest_pixel_as_initial_guess=True,
-    #                                          estimate_rms=True,
-    #                                          stokes="i",
-    #                                          use_ell=False)
-    #     results_2.append(results)
-    #
-    #     results = modelfit_core_wo_extending(uvfits,
-    #                                          beam_fractions, path=test_dir,
-    #                                          mapsize_clean=mapsize_clean,
-    #                                          path_to_script=path_to_script,
-    #                                          niter=500,
-    #                                          out_path=test_dir,
-    #                                          use_brightest_pixel_as_initial_guess=True,
-    #                                          estimate_rms=True,
-    #                                          stokes="i",
-    #                                          use_ell=False,
-    #                                          two_stage=False)
-    #     results_1.append(results)
-    #
-    #
-    # for result_1, result_2 in zip(results_1, results_2):
-    #     print("Two stages")
-    #     print(result_2)
-    #     print("One stage")
-    #     print(result_1)
-    #     print("==================")
-    #
-    # import sys; sys.exit(0)
+    old_difmap_file = "/home/ilya/github/bk_transfer/pics/flares/tmp/cc.mdl"
+    new_difmap_file = "/home/ilya/github/bk_transfer/pics/flares/tmp/new.mdl"
+    gauss_model = "/home/ilya/github/bk_transfer/pics/flares/tmp/in1.mdl"
+    hybrid_model = "/home/ilya/github/bk_transfer/pics/flares/tmp/hybrid.mdl"
+    for fn in (new_difmap_file, gauss_model, hybrid_model):
+        os.unlink(fn)
 
-    # import pickle
-    # data_dir = "/home/ilya/data/Mkn501/difmap_models"
-    # pkl_files = glob.glob(os.path.join(data_dir, "*.pkl"))
-    # for pkl_file in pkl_files:
-    #     epoch = os.path.split(pkl_file)[-1][7:17]
-    #     print("Processing epoch ", epoch)
-    #     mdl_file = os.path.join(data_dir, "{}.mod".format(epoch))
-    #     with open(pkl_file, "rb") as fo:
-    #         errors = pickle.load(fo)
-    #     errors_comps = convert_2D_position_errors_to_ell_components(os.path.join(data_dir, mdl_file),
-    #                                                                 errors, include_shfit=False)
-    #     pos_errors = [0.5*errors_comps[i].p[3]*(1+errors_comps[i].p[4]) for i in range(len(errors_comps))]
-    #     bpas = [np.rad2ded(errors_comps[i].p[5]) for i in range(len(errors_comps))]
-    #     bmajs = [errors_comps[i].p[3] for i in range(len(errors_comps))]
-    #     es = [errors_comps[i].p[4] for i in range(len(errors_comps))]
-    #     with open(os.path.join(data_dir, "{}_posistion_ellipse_errors_chi2_errors.txt".format(epoch)), "w") as fo:
-    #         for err in pos_errors:
-    #             fo.write("{}\n".format(err))
+    filter_difmap_CC_model_by_r(old_difmap_file, new_difmap_file, (0, 0), 2.5)
+    comp = (1., 0., 0., 0.25)
+    create_difmap_file_from_single_component(comp, gauss_model, 2.3e+09)
+    join_difmap_models(new_difmap_file, gauss_model, hybrid_model)
+
+    # uvfits = "/home/ilya/github/bk_transfer/pics/flares/tmp/template_S_1800.0.uvf"
+    # # CLEAN_difmap(uvfits, "i", (512, 0.5), "test_cc.fits", restore_beam=None,
+    # #              boxfile="/home/ilya/github/bk_transfer/pics/flares/tmp/wins.txt",
+    # #              working_dir="/home/ilya/github/bk_transfer/pics/flares/tmp", uvrange=None,
+    # #              box_clean_nw_niter=1000, clean_gain=0.03, dynam_su=20, dynam_u=6, deep_factor=0.3,
+    # #              remove_difmap_logs=True, save_noresid=None, save_resid_only=None,
+    # #              save_dfm="/home/ilya/github/bk_transfer/pics/flares/tmp/cc.mdl",
+    # #              noise_to_use="F", shift=None)
+    #
+    # clean_difmap(uvfits, "test_cc.fits", "i", (512, 0.5),
+    #              path="/home/ilya/github/bk_transfer/pics/flares/tmp",
+    #              path_to_script="/home/ilya/github/bk_transfer/scripts/script_clean_rms", mapsize_restore=None, beam_restore=None,
+    #              outpath="/home/ilya/github/bk_transfer/pics/flares/tmp", shift=None, show_difmap_output=False,
+    #              command_file=None, clean_box=None, save_dfm_model="cc.mdl", omit_residuals=False,
+    #              do_smooth=True, dmap=None, text_box=None,
+    #              box_rms_factor=None, window_file=None,
+    #              super_unif_dynam=None, unif_dynam=None,
+    #              taper_gaussian_value=None, taper_gaussian_radius=None)
 
 
-# ============
-
-    # import matplotlib.pyplot as plt
-    # import pickle
-    # from image import plot as iplot
-    #
-    #
-    # pixsize_mas = 0.1
-    # data_dir = "/home/ilya/data/Mkn501/difmap_models"
-    # save_dir = os.path.join(data_dir, "test")
-    # ccfits_files = sorted(glob.glob(os.path.join(data_dir, "*.icn.fits.gz")))
-    # ccfits_files = [os.path.split(path)[-1] for path in ccfits_files]
-    # epochs = [fn.split(".")[2] for fn in ccfits_files]
-    # mdl_files = ["{}.mod".format(epoch) for epoch in epochs]
-    #
-    # for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
-    #     # Problematic epochs
-    #     if epoch in ["1997_03_13", "2001_12_30", "2003_08_23", "2004_05_29"]:
-    #         continue
-    #
-    #     print(mdl_file, ccfits_file)
-    #
-    #     uvfits_file = "1652+398.u.{}.uvf".format(epoch)
-    #     uvdata = UVData(os.path.join(data_dir, uvfits_file))
-    #     all_stokes = uvdata.stokes
-    #     if "RR" in all_stokes and "LL" in all_stokes:
-    #         stokes = "I"
-    #     else:
-    #         if "RR" in all_stokes:
-    #             stokes = "RR"
-    #         else:
-    #             stokes = "LL"
-    #     print("Stokes parameter: ", stokes)
-    #
-    #     # Find errors if they are not calculated
-    #     if not os.path.exists(os.path.join(data_dir, "errors_{}.pkl".format(epoch))):
-    #         errors = find_2D_position_errors_using_chi2(os.path.join(data_dir, mdl_file),
-    #                                                     os.path.join(data_dir, uvfits_file),
-    #                                                     stokes=stokes,
-    #                                                     show_difmap_output=False)
-    #         with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "wb") as fo:
-    #             pickle.dump(errors, fo)
-    #     # Or just load already calculated
-    #     else:
-    #         with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "rb") as fo:
-    #             errors = pickle.load(fo)
-    #
-    #     # Make dummy elliptical components for plotting errors
-    #     error_comps = convert_2D_position_errors_to_ell_components(os.path.join(data_dir, mdl_file),
-    #                                                                errors, include_shfit=False)
-    #
-    #     comps = import_difmap_model(os.path.join(data_dir, mdl_file))
-    #     ccimage = create_clean_image_from_fits_file(os.path.join(data_dir, ccfits_file))
-    #     beam = ccimage.beam
-    #     npixels_beam = np.pi*beam[0]*beam[1]/(4*np.log(2)*pixsize_mas**2)
-    #     std = find_image_std(ccimage.image, beam_npixels=npixels_beam)
-    #     blc, trc = find_bbox(ccimage.image, level=4*std, min_maxintensity_mjyperbeam=6*std,
-    #                          min_area_pix=4*npixels_beam, delta=10)
-    #     fig, axes = plt.subplots(1, 1, figsize=(10, 15))
-    #     fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=3*std,
-    #                 blc=blc, trc=trc, beam=beam, show_beam=True, show=False,
-    #                 close=True, contour_color='black',
-    #                 plot_colorbar=False, components=comps, components_errors=error_comps,
-    #                 outfile="{}_original_model_errors2D_test".format(epoch), outdir=save_dir, fig=fig)
-    #
-    #
-    #     if not os.path.exists(os.path.join(data_dir, "size_errors_{}.pkl".format(epoch))):
-    #         size_errors = find_size_errors_using_chi2(os.path.join(data_dir, mdl_file),
-    #                                                   os.path.join(data_dir, uvfits_file),
-    #                                                   show_difmap_output=False)
-    #         with open(os.path.join(data_dir, "size_errors_{}.pkl".format(epoch)), "wb") as fo:
-    #             pickle.dump(size_errors, fo)
-    #
-    #     if not os.path.exists(os.path.join(data_dir, "flux_errors_{}.pkl".format(epoch))):
-    #         flux_errors = find_flux_errors_using_chi2(os.path.join(data_dir, mdl_file),
-    #                                                   os.path.join(data_dir, uvfits_file),
-    #                                                   show_difmap_output=False)
-    #         with open(os.path.join(data_dir, "flux_errors_{}.pkl".format(epoch)), "wb") as fo:
-    #             pickle.dump(flux_errors, fo)
-    #
-    #     #
-    #     # stat_dict = find_stat_of_difmap_model(os.path.join(data_dir, mdl_file),
-    #     #                                       os.path.join(data_dir, uvfits_file),
-    #     #                                       stokes, data_dir, nmodelfit=100, use_pselfcal=True,
-    #     #                                       out_dfm_model="selfcaled.mdl")
-    #     # selfcaled_comps = import_difmap_model(os.path.join(data_dir, "selfcaled.mdl"))
-    #     # fig, axes = plt.subplots(1, 1, figsize=(10, 15))
-    #     # fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=3*std,
-    #     #             blc=blc, trc=trc, beam=beam, show_beam=True, show=False,
-    #     #             close=True, contour_color='black',
-    #     #             plot_colorbar=False, components=selfcaled_comps,
-    #     #             outfile="{}_selfcaled_model".format(epoch), outdir=data_dir, fig=fig)
-    #     #
-    #     # sys.exit(0)
-    #
-    #
-    #
-    # import sys
-    # sys.exit(0)
-
-
-    # ==========================================================================
-
-    import matplotlib
-    matplotlib.use('TkAgg')
-    import glob
-    # new_path = "/home/ilya/data/silke/1215/last/0d2/"
-    # new_path = "/home/ilya/data/Mkn501/difmap_models/redone_epochs"
-    # new_path = "/home/ilya/Downloads/TXS0506/tberrors"
-    # new_path = "/home/ilya/data/silke/0735/15GHz"
-    # new_path = "/home/ilya/data/silke/0506_old"
-    # new_path = "/home/ilya/Downloads/3C454.3"
-    new_path = "/home/ilya/Downloads/3C454.3/Boston/lost"
-    # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
-    # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
-    # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
-    dfm_models = glob.glob(os.path.join(new_path, "*.mod"))
-    print(dfm_models)
-    freq_ghz = 43.0
-    # sys.exit(0)
-    problems = list()
-
-
-    # ACTUAL ERRORS CALCULATION ################################################
-    for dfm_model in dfm_models:
-        fn = os.path.split(dfm_model)[-1]
-        # if fn == "1998_05_15_1.mod":
-        #     continue
-        epoch = fn[:10]
-        print(f"EPOCH = {epoch} =====================")
-
-        comps = import_difmap_model(dfm_model, new_path)
-        new_dfm_model = os.path.join(new_path, "new_{}".format(os.path.split(dfm_model)[-1]))
-        export_difmap_model(comps, new_dfm_model, 1E+09*freq_ghz)
-        # uvfits = "/home/ilya/data/silke/1215/1215+303.u.{}.uvf".format(epoch)
-        # uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
-        # uvfits = "/home/ilya/Downloads/TXS0506/0506+056.u.{}.uvf".format(epoch)
-        # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
-        # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
-        uvfits = "{}/J2253+1608_Q_{}_mar_vis.fits".format(new_path, epoch)
-        # uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
-        if epoch not in ():
-            try:
-                df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.03), PA=None,
-                                     size_error_coefficient=0.35)
-            except:
-                problems.append(epoch)
-                continue
-            np.savetxt(new_path + "/{}_pos_error.txt".format(epoch), 0.5*df["major_err"])
-            np.savetxt(new_path + "/{}_size_error.txt".format(epoch), df["major_err"])
-            flux_err = np.hypot(df["flux_err"], 0.1*df["flux"])
-            np.savetxt(new_path + "/{}_flux_error.txt".format(epoch), flux_err)
-
-    ##############################################
-
-    reformat_errors_from_Tb_for_silke(new_path, epochs_to_skip=problems)
-    print("Problem epochs : ", problems)
+#     # uvfits_files = ["template_S_1936.6.uvf", "template_S_2085.5.uvf" ,
+#     #                 "template_S_2234.5.uvf", "template_S_2383.4.uvf"]
+#     # test_dir = "/home/ilya/github/bk_transfer/pics/flares/test"
+#     # path_to_script = "/home/ilya/github/bk_transfer/scripts/script_clean_rms"
+#     #
+#     # beam_fractions = [1.0]
+#     # mapsize_clean = (2048, 0.05)
+#     # results_1 = list()
+#     # results_2 = list()
+#     #
+#     # for uvfits in uvfits_files:
+#     #     results = modelfit_core_wo_extending(uvfits,
+#     #                                          beam_fractions, path=test_dir,
+#     #                                          mapsize_clean=mapsize_clean,
+#     #                                          path_to_script=path_to_script,
+#     #                                          niter=500,
+#     #                                          out_path=test_dir,
+#     #                                          use_brightest_pixel_as_initial_guess=True,
+#     #                                          estimate_rms=True,
+#     #                                          stokes="i",
+#     #                                          use_ell=False)
+#     #     results_2.append(results)
+#     #
+#     #     results = modelfit_core_wo_extending(uvfits,
+#     #                                          beam_fractions, path=test_dir,
+#     #                                          mapsize_clean=mapsize_clean,
+#     #                                          path_to_script=path_to_script,
+#     #                                          niter=500,
+#     #                                          out_path=test_dir,
+#     #                                          use_brightest_pixel_as_initial_guess=True,
+#     #                                          estimate_rms=True,
+#     #                                          stokes="i",
+#     #                                          use_ell=False,
+#     #                                          two_stage=False)
+#     #     results_1.append(results)
+#     #
+#     #
+#     # for result_1, result_2 in zip(results_1, results_2):
+#     #     print("Two stages")
+#     #     print(result_2)
+#     #     print("One stage")
+#     #     print(result_1)
+#     #     print("==================")
+#     #
+#     # import sys; sys.exit(0)
+#
+#     # import pickle
+#     # data_dir = "/home/ilya/data/Mkn501/difmap_models"
+#     # pkl_files = glob.glob(os.path.join(data_dir, "*.pkl"))
+#     # for pkl_file in pkl_files:
+#     #     epoch = os.path.split(pkl_file)[-1][7:17]
+#     #     print("Processing epoch ", epoch)
+#     #     mdl_file = os.path.join(data_dir, "{}.mod".format(epoch))
+#     #     with open(pkl_file, "rb") as fo:
+#     #         errors = pickle.load(fo)
+#     #     errors_comps = convert_2D_position_errors_to_ell_components(os.path.join(data_dir, mdl_file),
+#     #                                                                 errors, include_shfit=False)
+#     #     pos_errors = [0.5*errors_comps[i].p[3]*(1+errors_comps[i].p[4]) for i in range(len(errors_comps))]
+#     #     bpas = [np.rad2ded(errors_comps[i].p[5]) for i in range(len(errors_comps))]
+#     #     bmajs = [errors_comps[i].p[3] for i in range(len(errors_comps))]
+#     #     es = [errors_comps[i].p[4] for i in range(len(errors_comps))]
+#     #     with open(os.path.join(data_dir, "{}_posistion_ellipse_errors_chi2_errors.txt".format(epoch)), "w") as fo:
+#     #         for err in pos_errors:
+#     #             fo.write("{}\n".format(err))
+#
+#
+# # ============
+#
+#     # import matplotlib.pyplot as plt
+#     # import pickle
+#     # from image import plot as iplot
+#     #
+#     #
+#     # pixsize_mas = 0.1
+#     # data_dir = "/home/ilya/data/Mkn501/difmap_models"
+#     # save_dir = os.path.join(data_dir, "test")
+#     # ccfits_files = sorted(glob.glob(os.path.join(data_dir, "*.icn.fits.gz")))
+#     # ccfits_files = [os.path.split(path)[-1] for path in ccfits_files]
+#     # epochs = [fn.split(".")[2] for fn in ccfits_files]
+#     # mdl_files = ["{}.mod".format(epoch) for epoch in epochs]
+#     #
+#     # for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
+#     #     # Problematic epochs
+#     #     if epoch in ["1997_03_13", "2001_12_30", "2003_08_23", "2004_05_29"]:
+#     #         continue
+#     #
+#     #     print(mdl_file, ccfits_file)
+#     #
+#     #     uvfits_file = "1652+398.u.{}.uvf".format(epoch)
+#     #     uvdata = UVData(os.path.join(data_dir, uvfits_file))
+#     #     all_stokes = uvdata.stokes
+#     #     if "RR" in all_stokes and "LL" in all_stokes:
+#     #         stokes = "I"
+#     #     else:
+#     #         if "RR" in all_stokes:
+#     #             stokes = "RR"
+#     #         else:
+#     #             stokes = "LL"
+#     #     print("Stokes parameter: ", stokes)
+#     #
+#     #     # Find errors if they are not calculated
+#     #     if not os.path.exists(os.path.join(data_dir, "errors_{}.pkl".format(epoch))):
+#     #         errors = find_2D_position_errors_using_chi2(os.path.join(data_dir, mdl_file),
+#     #                                                     os.path.join(data_dir, uvfits_file),
+#     #                                                     stokes=stokes,
+#     #                                                     show_difmap_output=False)
+#     #         with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "wb") as fo:
+#     #             pickle.dump(errors, fo)
+#     #     # Or just load already calculated
+#     #     else:
+#     #         with open(os.path.join(data_dir, "errors_{}.pkl".format(epoch)), "rb") as fo:
+#     #             errors = pickle.load(fo)
+#     #
+#     #     # Make dummy elliptical components for plotting errors
+#     #     error_comps = convert_2D_position_errors_to_ell_components(os.path.join(data_dir, mdl_file),
+#     #                                                                errors, include_shfit=False)
+#     #
+#     #     comps = import_difmap_model(os.path.join(data_dir, mdl_file))
+#     #     ccimage = create_clean_image_from_fits_file(os.path.join(data_dir, ccfits_file))
+#     #     beam = ccimage.beam
+#     #     npixels_beam = np.pi*beam[0]*beam[1]/(4*np.log(2)*pixsize_mas**2)
+#     #     std = find_image_std(ccimage.image, beam_npixels=npixels_beam)
+#     #     blc, trc = find_bbox(ccimage.image, level=4*std, min_maxintensity_mjyperbeam=6*std,
+#     #                          min_area_pix=4*npixels_beam, delta=10)
+#     #     fig, axes = plt.subplots(1, 1, figsize=(10, 15))
+#     #     fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=3*std,
+#     #                 blc=blc, trc=trc, beam=beam, show_beam=True, show=False,
+#     #                 close=True, contour_color='black',
+#     #                 plot_colorbar=False, components=comps, components_errors=error_comps,
+#     #                 outfile="{}_original_model_errors2D_test".format(epoch), outdir=save_dir, fig=fig)
+#     #
+#     #
+#     #     if not os.path.exists(os.path.join(data_dir, "size_errors_{}.pkl".format(epoch))):
+#     #         size_errors = find_size_errors_using_chi2(os.path.join(data_dir, mdl_file),
+#     #                                                   os.path.join(data_dir, uvfits_file),
+#     #                                                   show_difmap_output=False)
+#     #         with open(os.path.join(data_dir, "size_errors_{}.pkl".format(epoch)), "wb") as fo:
+#     #             pickle.dump(size_errors, fo)
+#     #
+#     #     if not os.path.exists(os.path.join(data_dir, "flux_errors_{}.pkl".format(epoch))):
+#     #         flux_errors = find_flux_errors_using_chi2(os.path.join(data_dir, mdl_file),
+#     #                                                   os.path.join(data_dir, uvfits_file),
+#     #                                                   show_difmap_output=False)
+#     #         with open(os.path.join(data_dir, "flux_errors_{}.pkl".format(epoch)), "wb") as fo:
+#     #             pickle.dump(flux_errors, fo)
+#     #
+#     #     #
+#     #     # stat_dict = find_stat_of_difmap_model(os.path.join(data_dir, mdl_file),
+#     #     #                                       os.path.join(data_dir, uvfits_file),
+#     #     #                                       stokes, data_dir, nmodelfit=100, use_pselfcal=True,
+#     #     #                                       out_dfm_model="selfcaled.mdl")
+#     #     # selfcaled_comps = import_difmap_model(os.path.join(data_dir, "selfcaled.mdl"))
+#     #     # fig, axes = plt.subplots(1, 1, figsize=(10, 15))
+#     #     # fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=3*std,
+#     #     #             blc=blc, trc=trc, beam=beam, show_beam=True, show=False,
+#     #     #             close=True, contour_color='black',
+#     #     #             plot_colorbar=False, components=selfcaled_comps,
+#     #     #             outfile="{}_selfcaled_model".format(epoch), outdir=data_dir, fig=fig)
+#     #     #
+#     #     # sys.exit(0)
+#     #
+#     #
+#     #
+#     # import sys
+#     # sys.exit(0)
+#
+#
+#     # ==========================================================================
+#
+#     import matplotlib
+#     matplotlib.use('TkAgg')
+#     import glob
+#     # new_path = "/home/ilya/data/silke/1215/last/0d2/"
+#     # new_path = "/home/ilya/data/Mkn501/difmap_models/redone_epochs"
+#     # new_path = "/home/ilya/Downloads/TXS0506/tberrors"
+#     # new_path = "/home/ilya/data/silke/0735/15GHz"
+#     # new_path = "/home/ilya/data/silke/0506_old"
+#     # new_path = "/home/ilya/Downloads/3C454.3"
+#     # new_path = "/home/ilya/Downloads/3C454.3/Boston/lost"
+#     new_path = "/home/ilya/Downloads/TXS8"
+#     # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
+#     # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
+#     # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
+#
+#     # rm old
+#     torm_dfm_models = glob.glob(os.path.join(new_path, "new*.mod"))
+#     for fn in torm_dfm_models:
+#         os.unlink(fn)
+#
+#     dfm_models = glob.glob(os.path.join(new_path, "*.mod"))
+#     print(dfm_models)
+#     # freq_ghz = 43.0
+#     freq_ghz = 15.4
+#     # sys.exit(0)
+#     problems = list()
+#
+#     epochs = list()
+#
+#     # ACTUAL ERRORS CALCULATION ################################################
+#     for dfm_model in dfm_models:
+#         fn = os.path.split(dfm_model)[-1]
+#         # if fn == "1998_05_15_1.mod":
+#         #     continue
+#         epoch = fn[:10]
+#         epochs.append(epoch)
+#         print(f"EPOCH = {epoch} =====================")
+#
+#         comps = import_difmap_model(dfm_model, new_path)
+#         new_dfm_model = os.path.join(new_path, "new_{}".format(os.path.split(dfm_model)[-1]))
+#         export_difmap_model(comps, new_dfm_model, 1E+09*freq_ghz)
+#         # uvfits = "/home/ilya/data/silke/1215/1215+303.u.{}.uvf".format(epoch)
+#         # uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
+#         # uvfits = "/home/ilya/Downloads/TXS0506/0506+056.u.{}.uvf".format(epoch)
+#         # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
+#         # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
+#         # uvfits = "{}/J2253+1608_Q_{}_mar_vis.fits".format(new_path, epoch)
+#         if epoch == "2014_06_09":
+#             uvfits = "{}/J0509+0541_X_{}_pus_vis.fits".format(new_path, epoch)
+#         elif epoch == "2010_11_13":
+#             uvfits = "{}/J0509+0541_U_{}_moj_vis.fits".format(new_path, epoch)
+#         else:
+#             uvfits = "{}/J0509+0541_X_{}_pet_vis.fits".format(new_path, epoch)
+#         # uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
+#         if epoch in ("2010_11_13",):
+#             try:
+#                 df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
+#                                      size_error_coefficient=0.35)
+#             except:
+#                 problems.append(epoch)
+#                 continue
+#             np.savetxt(new_path + "/{}_pos_error.txt".format(epoch), 0.5*df["major_err"])
+#             np.savetxt(new_path + "/{}_size_error.txt".format(epoch), df["major_err"])
+#             flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
+#             np.savetxt(new_path + "/{}_flux_error.txt".format(epoch), flux_err)
+#
+#     ##############################################
+#
+#     # Skip all except the target one
+#     epochs_to_skip = epochs
+#     epochs_to_skip.remove("2010_11_13")
+#
+#     reformat_errors_from_Tb_for_silke(new_path, epochs_to_skip=epochs_to_skip)
+#                                       # epochs_to_skip=("2010_11_13",))
+#                                       # epochs_to_skip=problems)
+#     print("Problem epochs : ", problems)

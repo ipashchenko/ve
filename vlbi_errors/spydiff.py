@@ -904,7 +904,10 @@ def clean_difmap(fname, outfname, stokes, mapsize_clean, path=None,
     os.system(shell_command)
 
     # Remove command file
-    os.unlink(command_file)
+    try:
+        os.unlink(command_file)
+    except FileNotFoundError:
+        pass
 
 
 def make_wcs_from_ccfits(ccfits):

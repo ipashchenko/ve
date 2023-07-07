@@ -48,7 +48,7 @@ def FWHM_ell_beam_slice(bmin, bmaj, PA_diff_bpa):
 def find_nw_beam(uvfits, stokes="I", mapsize=(1024, 0.1), uv_range=None, working_dir=None):
     """
     :return:
-        Beam parameters (bmaj[mas], bmin[mas], bpa[deg]).
+        Beam parameters (bmin[mas], bmaj[mas], bpa[deg]).
     """
     if working_dir is None:
         working_dir = os.getcwd()

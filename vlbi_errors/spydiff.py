@@ -2,13 +2,13 @@ import glob
 import os
 import datetime
 import copy
-import sys
 import json
+from tempfile import TemporaryDirectory
 import pandas as pd
-from numpy.linalg import eig, inv, svd
+from numpy.linalg import inv, svd
 from math import atan2
 import numpy as np
-from utils import degree_to_rad, baselines_2_ants, get_beam_params_from_CCFITS
+from utils import degree_to_rad, get_beam_params_from_CCFITS
 from components import DeltaComponent, CGComponent, EGComponent
 from astropy.stats import mad_std
 from astropy.wcs import WCS
@@ -17,7 +17,7 @@ import astropy.io.fits as pf
 import astropy.units as u
 from scipy.ndimage.measurements import label
 from scipy.ndimage.morphology import generate_binary_structure
-from scipy.stats import normaltest, anderson, chi2, scoreatpercentile
+from scipy.stats import normaltest, chi2, scoreatpercentile
 from skimage.measure import regionprops
 from from_fits import (create_clean_image_from_fits_file,
                        create_image_from_fits_file, create_model_from_fits_file)
@@ -29,6 +29,7 @@ months_dict = {v: k for k, v in enumerate(calendar.month_abbr)}
 months_dict_inv = {k: v for k, v in enumerate(calendar.month_abbr)}
 
 deg2mas = u.deg.to(u.mas)
+deg2rad = u.deg.to(u.rad)
 
 
 def FWHM_ell_beam_slice(bmin, bmaj, PA_diff_bpa):
@@ -131,6 +132,7 @@ def filter_CC(ccfits, mask, out_ccfits=None, out_dfm=None, show=False,
         Mask with region of source flux being True.
     :param out_ccfits:
     """
+    import matplotlib.pyplot as plt
     mask = np.array(mask, dtype=bool)
     hdus = pf.open(ccfits)
     hdus.verify("silentfix")
@@ -546,7 +548,7 @@ def filter_difmap_CC_model_by_r(old_difmap_mdl_file, new_difmap_model_file,
             theta = np.deg2rad(float(theta))
             ra = r*np.sin(theta)
             dec = r*np.cos(theta)
-            print("RA = {:.2f}, DEC = {:.2f}".format(ra, dec))
+            # print("RA = {:.2f}, DEC = {:.2f}".format(ra, dec))
             if np.hypot(ra - center[0], dec - center[1]) > r_min_mas:
                 new_lines.append(line)
 
@@ -576,16 +578,46 @@ def join_difmap_models(dfm_model_1, dfm_model_2, out_file):
             fo.write(line)
 
 
-        # for flux, ra, dec in zip(data['FLUX'], data['DELTAX'], data['DELTAY']):
-        #     ra *= deg2mas
-        #     dec *= deg2mas
-        #     if shift is not None:
-        #         ra -= shift[0]
-        #         dec -= shift[1]
-        #     theta = np.rad2deg(np.arctan2(ra, dec))
-        #     r = np.hypot(ra, dec)
-        #     fo.write("{} {} {}\n".format(flux, r, theta))
+def create_difmap_file_from_single_component(comp, out_fname, freq_hz):
+    """
+    :param comp:
+        (flux, ra, dec[, bmaj, e, bpa]) - [Jy, mas, mas, mas, -, deg]
 
+    """
+
+    with open(out_fname, "w") as fo:
+        if len(comp) == 3:
+            flux, ra, dec = comp
+            e = "1.00000"
+            bmaj = "0.0000"
+            bpa = "000.000"
+            type_ = "0"
+        elif len(comp) == 4:
+            flux, ra, dec, bmaj = comp
+            e = "1.00000"
+            bpa = "000.000"
+            type_ = "1"
+            bmaj = "{:.5f}v".format(bmaj)
+        elif len(comp) == 6:
+            flux, ra, dec, bmaj, e, bpa = comp
+            e = "{:.5f}v".format(e)
+            bpa = "{:.5f}v".format((bpa - np.pi / 2) / deg2rad)
+            bmaj = "{:.5f}v".format(bmaj)
+            type_ = "1"
+        else:
+            raise Exception
+        # mas
+        r = np.hypot(ra, dec)
+        # rad
+        theta = np.rad2deg(np.arctan2(ra, dec))
+        fo.write("! Flux (Jy) Radius (mas)  Theta (deg)  Major (mas)  Axial ratio   Phi (deg) T\n\
+! Freq (Hz)     SpecIndex\n")
+        fo.write("{:.5f}v {:.5f}v {:.5f}v {} {} {} {} {:.2E} 0\n".format(flux, r, theta,
+                                                         bmaj, e, bpa, type_,
+                                                         freq_hz))
+        # fo.write("{:>11.7f}v {:>13.7f}v {:>13.5f}v {:>13} {:>13} {:>13} {:>3} {:>12.5e} {:>12d}\n".format(flux, r, theta,
+        #                                                                                                   bmaj, e, bpa, type_,
+        #                                                                                                   freq_hz, 0))
 
 def remove_residuals_from_CLEAN_map(ccfits, uvfits, out_ccfits, mapsize, stokes="i", restore_beam=None, shift=None,
                                     show_difmap_output=True, working_dir=None):
@@ -1494,6 +1526,49 @@ def import_difmap_model(mdl_fname, mdl_dir=None, remove_last_char=True):
             raise NotImplementedError("Only CC, CG & EG are implemented")
         comps.append(comp)
     return comps
+
+
+def export_difmap_model_from_tuples(comps, out_fname, freq_hz):
+    """
+    :param comps:
+        Iterable of tuples with (flux, x, y, bmaj).
+    :param out_fname:
+        Path for saving file.
+    """
+    with open(out_fname, "w") as fo:
+        fo.write("! Flux (Jy) Radius (mas)  Theta (deg)  Major (mas)  Axial ratio   Phi (deg) T\n\
+! Freq (Hz)     SpecIndex\n")
+        for comp in comps:
+            if len(comp) == 4:
+                # Jy, mas, mas, mas
+                flux, x, y, bmaj = comp
+                e = "1.00000"
+                bpa = "000.000"
+                type = "1"
+                bmaj = "{:.7f}v".format(bmaj)
+            elif len(comp) == 6:
+                # Jy, mas, mas, mas, -, deg
+                flux, x, y, bmaj, e, bpa = comp
+                e = "{}v".format(e)
+                bpa = "{}v".format((bpa-np.pi/2)/degree_to_rad)
+                bmaj = "{}v".format(bmaj)
+                type = "1"
+            elif len(comp) == 3:
+                flux, x, y = comp
+                e = "1.00000"
+                bmaj = "0.0000"
+                bpa = "000.000"
+                type = "0"
+            else:
+                raise Exception
+            # mas
+            r = np.hypot(x, y)
+            # rad
+            theta = np.arctan2(x, y)
+            theta /= degree_to_rad
+            fo.write("{:>11.7f}v {:>13.7f}v {:>13.5f}v {:>13} {:>13} {:>13} {:>3} {:>12.5e} {:>12d}\n".format(flux, r, theta,
+                                                              bmaj, e, bpa, type,
+                                                             freq_hz, 0))
 
 
 def export_difmap_model(comps, out_fname, freq_hz):
@@ -3486,776 +3561,129 @@ def fit_core(uvdata):
 
     return CGComponent(flux, along, across, bmaj)
 
-def modelfit_core_wo_extending(fname, beam_fractions, r_c=None,
-                               mapsize_clean=None, path_to_script=None,
-                               niter=50, stokes='i', path=None, out_path=None,
-                               use_brightest_pixel_as_initial_guess=True,
-                               flux_0=None, size_0=None, e_0=None, bpa_0=None,
-                               show_difmap_output=False,
-                               estimate_rms=False, use_ell=False,
-                               two_stage=True, use_scipy=False,
-                               mapsize_for_nw_beam=(512, 0.2),
-                               nw_beam_size=None, dump_json_result=True):
-    """
-    Modelfit core after excluding extended emission around.
 
-    :param fname:
-        Filename of uv-data to modelfit.
-    :param out_fname:
-        Filename with output file with model.
-    :param beam_fractions:
-        Iterable of beam size fractions to consider while excluding extended
-        emission.
-    :param r_c: (optional)
-        RA and DEC of the center of the circualr area. If ``None`` than
-        use brightest pixel of phase center of the map depending on the
-        ``use_brightest_pixel_as_initial_guess``. (default: ``None``)
-    :param mapsize_clean:
-        Parameters of map for cleaning (map size, pixel size).
-    :param path_to_script:
-        Path to ``clean`` difmap script.
-    :param stokes: (optional)
-        Stokes parameter 'i', 'q', 'u' or 'v'. (default: ``i``)
-    :param path: (optional)
-        Path to uv-data to modelfit. If ``None`` then use current directory.
-        (default: ``None``)
-    :param mdl_path: (optional)
-        Path file with model. If ``None`` then use current directory.
-        (default: ``None``)
-    :param out_path: (optional)
-        Path to file with CCs. If ``None`` then use ``path``.
-        (default: ``None``)
-    :param use_brightest_pixel_as_initial_guess: (optional)
-        Boolean. Should use brightness pixel as initial guess for center of the
-        core area? If ``False`` that use phase center. (default: ``True``)
-    :param flux_0: (optional)
-        Initial guess for core flux [Jy]. If ``None`` than use 1 Jy. (default:
-        ``None``)
-    :param size_0: (optional)
-        Initial guess for core size [mas]. If ``None`` than use 1/10-th of the
-        beam. (default: ``None``)
-    :param e_0: (optional)
-        Initial guess for eccentricity in case of the elliptic component. If
-        ``None`` then use ``1``. (default: ``None``)
-    :param bpa_0: (optional)
-        Initial guess for BPA in case of the elliptic component. If
-        ``None`` then use ``0``. (default: ``None``)
-    :param show_difmap_output: (optional)
-        Boolean. Show the output of difmap CLEAN and modelfit? (default:
-        ``False``)
-    :param estimate_rms: (optional)
-        Boolean. Use dirty residual image after fitting the substracted data
-        with a component to estimate rms? (default: ``False``)
-    :param use_ell: (optional)
-        Boolean. Use elliptic component? (default: ``False``)
-
-    :return:
-        Dictionary with keys - beam fractions used to exclude extended emission
-        and values - dictionaries with core parameters obtained using this
-        fractions.
-    """
-    from uv_data import UVData
-    from components import (CGComponent, EGComponent)
+def modelfit_core_wo_extending(uvfits, mapsize_clean, beam_fractions, path_to_script, use_elliptical=False,
+                               use_brightest_pixel_as_initial_guess=True, save_dir=None,
+                               dump_json_result=True):
 
 
-    print("BEAM FRACTIONS: ", beam_fractions)
+    result = dict()
 
-    base = os.path.split(fname)[-1]
+    with TemporaryDirectory() as working_dir:
+        # First CLEAN and dump difmap model file with CCs
+        clean_difmap(uvfits, os.path.join(working_dir, "test_cc.fits"), "i",
+                     mapsize_clean,
+                     path_to_script=path_to_script,
+                     mapsize_restore=None, beam_restore=None, shift=None,
+                     show_difmap_output=True, command_file=None, clean_box=None,
+                     save_dfm_model=os.path.join(working_dir, "cc.mdl"),
+                     omit_residuals=False, do_smooth=True, dmap=None,
+                     text_box=None, box_rms_factor=None, window_file=None,
+                     super_unif_dynam=None, unif_dynam=None,
+                     taper_gaussian_value=None, taper_gaussian_radius=None)
+
+        uvdata = UVData(uvfits)
+        freq_hz = uvdata.frequency
+        # Find beam
+        bmin, bmaj, bpa = find_nw_beam(uvfits, stokes="i", mapsize=mapsize_clean, uv_range=None, working_dir=working_dir)
+        print("NW beam : {:.2f} mas, {:.2f} mas, {:.2f} deg".format(bmaj, bmin, bpa))
+
+        # Find the brightest pixel
+        ccimage = create_clean_image_from_fits_file(os.path.join(working_dir, "test_cc.fits"))
+        if use_brightest_pixel_as_initial_guess:
+            im = np.unravel_index(np.argmax(ccimage.image), ccimage.image.shape)
+            print("indexes of max intensity ", im)
+            # - to RA cause dx_RA < 0
+            r_c = (-(im[1]-mapsize_clean[0]/2)*mapsize_clean[1],
+                   (im[0]-mapsize_clean[0]/2)*mapsize_clean[1])
+        else:
+            r_c = (0, 0)
+        print("Brightest pixel coordinates (RA, DEC) : {:.2f}, {:.2f}".format(r_c[0], r_c[1]))
+
+        # Create model with a single component
+        if not use_elliptical:
+            comp = (1., r_c[0], r_c[1], 0.25)
+        else:
+            comp = (1., r_c[0], r_c[1], 0.25, 1.0, 0.0)
+        create_difmap_file_from_single_component(comp, os.path.join(working_dir, "1.mdl"), freq_hz)
+
+        for beam_fraction in beam_fractions:
+            # Filter CCs
+            filter_difmap_CC_model_by_r(os.path.join(working_dir, "cc.mdl"),
+                                        os.path.join(working_dir, "filtered_cc.mdl"),
+                                        r_c, bmaj*beam_fraction)
+            # Add single gaussian component model to CC model
+            join_difmap_models(os.path.join(working_dir, "filtered_cc.mdl"),
+                               os.path.join(working_dir, "1.mdl"),
+                               os.path.join(working_dir, "hybrid.mdl"))
+            modelfit_difmap(uvfits, mdl_fname=os.path.join(working_dir, "hybrid.mdl"),
+                            out_fname=os.path.join(working_dir, "hybrid_fitted.mdl"),
+                            niter=100, stokes='i', show_difmap_output=True)
+
+            # Extract core parameters
+            with open(os.path.join(working_dir, "hybrid_fitted.mdl"), "r") as fo:
+                lines = fo.readlines()
+                components = list()
+                for line in lines:
+                    if line.startswith("!"):
+                        continue
+                    splitted = line.split()
+                    if len(splitted) == 3:
+                        continue
+                    if len(splitted) == 9:
+                        flux, r, theta, major, axial, phi, type_, freq, spec  = splitted
+                        flux = float(flux.strip("v"))
+                        r = float(r.strip("v"))
+                        theta = float(theta.strip("v"))
+                        major = float(major.strip("v"))
+                        axial = float(axial.strip("v"))
+                        phi = float(phi.strip("v"))
+
+                        theta = np.deg2rad(theta)
+                        ra = r*np.sin(theta)
+                        dec = r*np.cos(theta)
+
+
+                        # CG
+                        if type_ == "1":
+                            component = (flux, ra, dec, major)
+                        elif type_ == "2":
+                            component = (flux, ra, dec, major, axial, phi)
+                        else:
+                            raise Exception("Component must be Circualr or Elliptical Gaussian!")
+                        components.append(component)
+                if len(components) > 1:
+                    raise Exception("There should be only one core component!")
+                if not components:
+                    raise Exception("No core component found!")
+                # return components[0]
+
+                if not use_elliptical:
+                    flux, ra, dec, size = components[0]
+                    result.update({beam_fraction: {"flux": flux, "ra": ra,
+                                                   "dec": dec, "size": size,
+                                                   "rms": np.nan}})
+                else:
+                    flux, ra, dec, size, e, bpa = components[0]
+                    result.update({beam_fraction: {"flux": flux, "ra": ra,
+                                                   "dec": dec, "size": size,
+                                                   "e": e, "bpa": bpa,
+                                                   "rms": np.nan}})
+        # if save_dir is not None:
+        #     for fn in (os.path.join(working_dir, "filtered_cc.mdl"),
+        #                os.path.join(working_dir, "1.mdl"),
+        #                os.path.join(working_dir, "test_cc.fits"),
+        #                os.path.join(working_dir, "hybrid.mdl"),
+        #                os.path.join(working_dir, "hybrid_fitted.mdl")):
+        #         fname = os.path.split(fn)[-1]
+        #         shutil.move(fn, os.path.join(save_dir, fname))
+
+    base = os.path.split(uvfits)[-1]
     base = base.split(".")[:-1]
     base = ".".join(base)
-
-    uvdata = UVData(os.path.join(path, fname))
-    uvdata_tmp = UVData(os.path.join(path, fname))
-    freq_hz = uvdata.frequency
-    noise = uvdata.noise(use_V=False)
-    # First CLEAN to obtain clean components
-    clean_difmap(fname, os.path.join(out_path, f"{base}_cc.fits"), stokes,
-                 mapsize_clean, path=path, path_to_script=path_to_script,
-                 show_difmap_output=show_difmap_output)
-    from from_fits import create_clean_image_from_fits_file
-    ccimage = create_clean_image_from_fits_file(os.path.join(out_path, f"{base}_cc.fits"))
-    if r_c is None:
-        # Find brightest pixel
-        if use_brightest_pixel_as_initial_guess:
-            im = np.unravel_index(np.argmax(ccimage.image), ccimage.image.shape)
-            print("indexes of max intensity ", im)
-            # - to RA cause dx_RA < 0
-            r_c = (-(im[1]-mapsize_clean[0]/2)*mapsize_clean[1],
-                   (im[0]-mapsize_clean[0]/2)*mapsize_clean[1])
-        else:
-            r_c = (0, 0)
-
-    if flux_0 is None:
-        flux_0 = 1.0
-    if e_0 is None:
-        e_0 = 1.0
-    if bpa_0 is None:
-        bpa_0 = 0.0
-
-    # beam = ccimage.beam
-    if nw_beam_size is None:
-        nw_beam_size = find_nw_beam(os.path.join(path, fname), stokes, mapsize=mapsize_for_nw_beam)
-        beam = np.sqrt(nw_beam_size[0]*nw_beam_size[1])
-    else:
-        beam = nw_beam_size
-    print(f"NW beam = {nw_beam_size}")
-    if size_0 is None:
-        size_0 = 0.1*beam
-    print("Using beam size = {} mas".format(beam))
-    from from_fits import (create_model_from_fits_file,
-                           create_image_from_fits_file)
-
-    result = dict()
-
-    for beam_fraction in sorted(beam_fractions):
-        print("Estimating core using beam_fraction = {}".format(beam_fraction))
-        print("1st iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
-        # Need in RA, DEC
-        model = create_model_from_fits_file(os.path.join(out_path, f"{base}_cc.fits"))
-        # FIXME: It was beam/2 here
-        # TODO: Does r_c is properly accounted for here?
-        model.filter_components_by_r(beam_fraction*beam, r_c=r_c)
-        uvdata.substitute([model])
-        uvdata = uvdata_tmp - uvdata
-        uvdata.save(os.path.join(out_path, f"{base}_uv_diff.uvf"), rewrite=True)
-
-        if not use_scipy:
-            # Modelfit this uvdata with single component
-            if not use_ell:
-                comp0 = CGComponent(flux_0, -r_c[0], -r_c[1], size_0)
-            else:
-                comp0 = EGComponent(flux_0, -r_c[0], -r_c[1], size_0, e_0, bpa_0)
-
-            export_difmap_model([comp0], os.path.join(out_path, f"{base}_init.mdl"),
-                                freq_hz)
-            modelfit_difmap(fname=os.path.join(out_path, f"{base}_uv_diff.uvf"),
-                            mdl_fname=os.path.join(out_path, f"{base}_init.mdl"),
-                            out_fname=os.path.join(out_path, f"{base}_it1.mdl"),
-                            niter=niter, stokes=stokes.lower(), path=out_path,
-                            mdl_path=out_path, out_path=out_path,
-                            show_difmap_output=show_difmap_output,
-                            save_dirty_residuals_map=estimate_rms,
-                            dmap_size=mapsize_clean, dmap_name=f"{base}_dirty_residuals_map.fits")
-            # Now use found component position to make circular filter around it
-            comp = import_difmap_model(f"{base}_it1.mdl", out_path)[0]
-
-        else:
-            comp = fit_core(uvdata)
-
-        if two_stage:
-            model_local = create_model_from_fits_file(os.path.join(out_path, f"{base}_cc.fits"))
-            # Need in RA, DEC
-            r_c = (-comp.p[1], -comp.p[2])
-            print("2nd iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
-            # FIXME: It was beam/2 here
-            model_local.filter_components_by_r(beam_fraction*beam, r_c=r_c)
-
-            uvdata.substitute([model_local])
-            uvdata = uvdata_tmp - uvdata
-            uvdata.save(os.path.join(out_path, f"{base}_uv_diff.uvf"), rewrite=True)
-
-            if not use_scipy:
-                # Modelfit this uvdata with single component
-                print("Using 1st iteration component {} as initial guess".format(comp.p))
-                if not use_ell:
-                    comp0 = CGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3])
-                else:
-                    comp0 = EGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3],
-                                        comp.p[4], comp.p[5])
-
-                export_difmap_model([comp0], os.path.join(out_path, f"{base}_init.mdl"),
-                                    freq_hz)
-                modelfit_difmap(fname=os.path.join(out_path, f"{base}_uv_diff.uvf"),
-                                mdl_fname=os.path.join(out_path, f"{base}_init.mdl"),
-                                out_fname=os.path.join(out_path, f"{base}_it2.mdl"),
-                                niter=niter, stokes=stokes.lower(), path=out_path,
-                                mdl_path=out_path, out_path=out_path,
-                                show_difmap_output=show_difmap_output,
-                                save_dirty_residuals_map=estimate_rms,
-                                dmap_size=mapsize_clean,
-                                dmap_name=f"{base}_dirty_residuals_map.fits")
-                comp = import_difmap_model(f"{base}_it2.mdl", out_path)[0]
-
-            else:
-                comp = fit_core(uvdata)
-
-        if estimate_rms:
-            dimage = create_image_from_fits_file(os.path.join(out_path, f"{base}_dirty_residuals_map.fits"))
-            beam_pxl = int(beam/mapsize_clean[1])
-            print("Beam = ", beam)
-            # RA, DEC of component center
-            r_center = (-int(comp.p[1]/mapsize_clean[1]),
-                        -int(comp.p[2]/mapsize_clean[1]))
-            # Need to add to map center (512, 512) add DEC in pixels (with sign)
-            rms = mad_std(dimage.image[int(mapsize_clean[0]/2+r_center[1]-3*beam_pxl): int(mapsize_clean[0]/2+r_center[1]+3*beam_pxl),
-                                       int(mapsize_clean[0]/2-3*beam_pxl): int(mapsize_clean[0]/2+3*beam_pxl)])
-            # os.unlink(os.path.join(out_path, "dirty_residuals_map.fits"))
-
-        else:
-            rms = None
-
-        if not use_ell:
-            result.update({beam_fraction: {"flux": comp.p[0], "ra": -comp.p[1],
-                                           "dec": -comp.p[2], "size": comp.p[3],
-                                           "rms": rms}})
-        else:
-            result.update({beam_fraction: {"flux": comp.p[0], "ra": -comp.p[1],
-                                           "dec": -comp.p[2], "size": comp.p[3],
-                                           "e": comp.p[4], "bpa": comp.p[5],
-                                           "rms": rms}})
-
-    os.unlink(os.path.join(out_path, f"{base}_it1.mdl"))
-    if two_stage:
-        os.unlink(os.path.join(out_path, f"{base}_it2.mdl"))
-    if estimate_rms:
-        os.unlink(os.path.join(out_path, f"{base}_dirty_residuals_map.fits"))
-    os.unlink(os.path.join(out_path, f"{base}_uv_diff.uvf"))
-    os.unlink(os.path.join(out_path, f"{base}_init.mdl"))
-    os.unlink(os.path.join(out_path, f"{base}_cc.fits"))
-
     if dump_json_result:
-        with open(os.path.join(out_path, f"{base}_core_modelfit_result.json"), "w") as fo:
+        with open(os.path.join(save_dir, f"{base}_core_modelfit_result.json"), "w") as fo:
             json.dump(result, fo)
-
-    return result
-
-
-def modelfit_core_wo_extending_1it(fname, beam_fractions, r_c=None,
-                                   mapsize_clean=None, path_to_script=None,
-                                   niter=50, stokes='i', path=None, out_path=None,
-                                   use_brightest_pixel_as_initial_guess=True,
-                                   flux_0=None, size_0=None, e_0=None, bpa_0=None,
-                                   show_difmap_output=False,
-                                   estimate_rms=False, use_ell=False):
-    """
-    Modelfit core after excluding extended emission around.
-
-    :param fname:
-        Filename of uv-data to modelfit.
-    :param out_fname:
-        Filename with output file with model.
-    :param beam_fractions:
-        Iterable of beam size fractions to consider while excluding extended
-        emission.
-    :param r_c: (optional)
-        RA and DEC of the center of the circualr area. If ``None`` than
-        use brightest pixel of phase center of the map depending on the
-        ``use_brightest_pixel_as_initial_guess``. (default: ``None``)
-    :param mapsize_clean:
-        Parameters of map for cleaning (map size, pixel size).
-    :param path_to_script:
-        Path to ``clean`` difmap script.
-    :param stokes: (optional)
-        Stokes parameter 'i', 'q', 'u' or 'v'. (default: ``i``)
-    :param path: (optional)
-        Path to uv-data to modelfit. If ``None`` then use current directory.
-        (default: ``None``)
-    :param mdl_path: (optional)
-        Path file with model. If ``None`` then use current directory.
-        (default: ``None``)
-    :param out_path: (optional)
-        Path to file with CCs. If ``None`` then use ``path``.
-        (default: ``None``)
-    :param use_brightest_pixel_as_initial_guess: (optional)
-        Boolean. Should use brightness pixel as initial guess for center of the
-        core area? If ``False`` that use phase center. (default: ``True``)
-    :param flux_0: (optional)
-        Initial guess for core flux [Jy]. If ``None`` than use 1 Jy. (default:
-        ``None``)
-    :param size_0: (optional)
-        Initial guess for core size [mas]. If ``None`` than use 1/10-th of the
-        beam. (default: ``None``)
-    :param e_0: (optional)
-        Initial guess for eccentricity in case of the elliptic component. If
-        ``None`` then use ``1``. (default: ``None``)
-    :param bpa_0: (optional)
-        Initial guess for BPA in case of the elliptic component. If
-        ``None`` then use ``0``. (default: ``None``)
-    :param show_difmap_output: (optional)
-        Boolean. Show the output of difmap CLEAN and modelfit? (default:
-        ``False``)
-    :param estimate_rms: (optional)
-        Boolean. Use dirty residual image after fitting the substracted data
-        with a component to estimate rms? (default: ``False``)
-    :param use_ell: (optional)
-        Boolean. Use elliptic component? (default: ``False``)
-
-    :return:
-        Dictionary with keys - beam fractions used to exclude extended emission
-        and values - dictionaries with core parameters obtained using this
-        fractions.
-    """
-    from uv_data import UVData
-    from components import (CGComponent, EGComponent)
-    uvdata = UVData(os.path.join(path, fname))
-    uvdata_tmp = UVData(os.path.join(path, fname))
-    freq_hz = uvdata.frequency
-    noise = uvdata.noise(use_V=False)
-    # First CLEAN to obtain clean components
-    clean_difmap(fname, os.path.join(out_path, "cc.fits"), stokes,
-                 mapsize_clean, path=path, path_to_script=path_to_script,
-                 show_difmap_output=show_difmap_output)
-    from from_fits import create_clean_image_from_fits_file
-    ccimage = create_clean_image_from_fits_file(os.path.join(out_path,
-                                                             "cc.fits"))
-    if r_c is None:
-        # Find brightest pixel
-        if use_brightest_pixel_as_initial_guess:
-            im = np.unravel_index(np.argmax(ccimage.image), ccimage.image.shape)
-            print("indexes of max intensity ", im)
-            # - to RA cause dx_RA < 0
-            r_c = (-(im[1]-mapsize_clean[0]/2)*mapsize_clean[1],
-                   (im[0]-mapsize_clean[0]/2)*mapsize_clean[1])
-        else:
-            r_c = (0, 0)
-
-    if flux_0 is None:
-        flux_0 = 1.0
-    if e_0 is None:
-        e_0 = 1.0
-    if bpa_0 is None:
-        bpa_0 = 0.0
-
-    beam = ccimage.beam
-    beam = np.sqrt(beam[0]*beam[1])
-    if size_0 is None:
-        size_0 = 0.1*beam
-    print("Using beam size = {} mas".format(beam))
-    from from_fits import (create_model_from_fits_file,
-                           create_image_from_fits_file)
-
-    result = dict()
-
-    for beam_fraction in sorted(beam_fractions):
-        print("Estimating core using beam_fraction = {}".format(beam_fraction))
-        print("1st iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
-        # Need in RA, DEC
-        model = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
-        # FIXME: It was beam/2 here
-        model.filter_components_by_r(beam_fraction*beam, r_c=r_c)
-        uvdata.substitute([model])
-        uvdata = uvdata_tmp - uvdata
-        uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
-
-        # Modelfit this uvdata with single component
-        if not use_ell:
-            comp0 = CGComponent(flux_0, -r_c[0], -r_c[1], size_0)
-        else:
-            comp0 = EGComponent(flux_0, -r_c[0], -r_c[1], size_0, e_0, bpa_0)
-
-        export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
-                            freq_hz)
-        modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
-                        mdl_fname=os.path.join(out_path, "init.mdl"),
-                        out_fname=os.path.join(out_path, "it1.mdl"),
-                        niter=niter, stokes=stokes.lower(), path=out_path,
-                        mdl_path=out_path, out_path=out_path,
-                        show_difmap_output=show_difmap_output)
-
-        comp = import_difmap_model("it1.mdl", out_path)[0]
-
-        if estimate_rms:
-            dimage = create_image_from_fits_file(os.path.join(out_path, "dirty_residuals_map.fits"))
-            beam_pxl = int(beam/mapsize_clean[1])
-            print("Beam = ", beam)
-            # RA, DEC of component center
-            r_center = (-int(comp.p[1]/mapsize_clean[1]),
-                        -int(comp.p[2]/mapsize_clean[1]))
-            # Need to add to map center (512, 512) add DEC in pixels (with sign)
-            rms = mad_std(dimage.image[int(mapsize_clean[0]/2+r_center[1]-3*beam_pxl): int(mapsize_clean[0]/2+r_center[1]+3*beam_pxl),
-                                       int(mapsize_clean[0]/2-3*beam_pxl): int(mapsize_clean[0]/2+3*beam_pxl)])
-            # os.unlink(os.path.join(out_path, "dirty_residuals_map.fits"))
-
-        else:
-            rms = None
-
-        if not use_ell:
-            result.update({beam_fraction: {"flux": comp.p[0], "ra": -comp.p[1],
-                                           "dec": -comp.p[2], "size": comp.p[3],
-                                           "rms": rms}})
-        else:
-            result.update({beam_fraction: {"flux": comp.p[0], "ra": -comp.p[1],
-                                           "dec": -comp.p[2], "size": comp.p[3],
-                                           "e": comp.p[4], "bpa": comp.p[5],
-                                           "rms": rms}})
-
-    return result
-
-
-def modelfit_core_wo_extending_single(fname, beam_fraction, r_c=None,
-                                      mapsize_clean=None, path_to_script=None,
-                                      niter=50, stokes='i', path=None, out_path=None,
-                                      use_brightest_pixel_as_initial_guess=True,
-                                      flux_0=None, size_0=None, e_0=None, bpa_0=None,
-                                      show_difmap_output=False,
-                                      estimate_rms=False, use_ell=False):
-    """
-    Modelfit core after excluding extended emission around.
-
-    :param fname:
-        Filename of uv-data to modelfit.
-    :param out_fname:
-        Filename with output file with model.
-    :param beam_fraction:
-        Beam size fraction to use while excluding extended emission.
-    :param r_c: (optional)
-        RA and DEC of the center of the circualr area. If ``None`` than
-        use brightest pixel of phase center of the map depending on the
-        ``use_brightest_pixel_as_initial_guess``. (default: ``None``)
-    :param mapsize_clean:
-        Parameters of map for cleaning (map size, pixel size).
-    :param path_to_script:
-        Path to ``clean`` difmap script.
-    :param stokes: (optional)
-        Stokes parameter 'i', 'q', 'u' or 'v'. (default: ``i``)
-    :param path: (optional)
-        Path to uv-data to modelfit. If ``None`` then use current directory.
-        (default: ``None``)
-    :param mdl_path: (optional)
-        Path file with model. If ``None`` then use current directory.
-        (default: ``None``)
-    :param out_path: (optional)
-        Path to file with CCs. If ``None`` then use ``path``.
-        (default: ``None``)
-    :param use_brightest_pixel_as_initial_guess: (optional)
-        Boolean. Should use brightness pixel as initial guess for center of the
-        core area? If ``False`` that use phase center. (default: ``True``)
-    :param flux_0: (optional)
-        Initial guess for core flux [Jy]. If ``None`` than use 1 Jy. (default:
-        ``None``)
-    :param size_0: (optional)
-        Initial guess for core size [mas]. If ``None`` than use 1/10-th of the
-        beam. (default: ``None``)
-    :param e_0: (optional)
-        Initial guess for eccentricity in case of the elliptic component. If
-        ``None`` then use ``1``. (default: ``None``)
-    :param bpa_0: (optional)
-        Initial guess for BPA in case of the elliptic component. If
-        ``None`` then use ``0``. (default: ``None``)
-    :param show_difmap_output: (optional)
-        Boolean. Show the output of difmap CLEAN and modelfit? (default:
-        ``False``)
-    :param estimate_rms: (optional)
-        Boolean. Use dirty residual image after fitting the substracted data
-        with a component to estimate rms? (default: ``False``)
-    :param use_ell: (optional)
-        Boolean. Use elliptic component? (default: ``False``)
-
-    :return:
-        Dictionary with core parameters and optionally image rms at the core
-        position.
-    """
-    from uv_data import UVData
-    from components import (CGComponent, EGComponent)
-    uvdata = UVData(os.path.join(path, fname))
-    uvdata_tmp = UVData(os.path.join(path, fname))
-    freq_hz = uvdata.frequency
-    noise = uvdata.noise(use_V=False)
-    # First CLEAN to obtain clean components
-    clean_difmap(fname, os.path.join(out_path, "cc.fits"), stokes,
-                 mapsize_clean, path=path, path_to_script=path_to_script,
-                 show_difmap_output=show_difmap_output)
-    from from_fits import create_clean_image_from_fits_file
-    ccimage = create_clean_image_from_fits_file(os.path.join(out_path,
-                                                             "cc.fits"))
-    if r_c is None:
-        # Find brightest pixel
-        if use_brightest_pixel_as_initial_guess:
-            im = np.unravel_index(np.argmax(ccimage.image), ccimage.image.shape)
-            print("indexes of max intensity ", im)
-            # - to RA cause dx_RA < 0
-            r_c = (-(im[1]-mapsize_clean[0]/2)*mapsize_clean[1],
-                   (im[0]-mapsize_clean[0]/2)*mapsize_clean[1])
-        else:
-            r_c = (0, 0)
-
-    if flux_0 is None:
-        flux_0 = 1.0
-    if e_0 is None:
-        e_0 = 1.0
-    if bpa_0 is None:
-        bpa_0 = 0.0
-
-    beam = ccimage.beam
-    beam = np.sqrt(beam[0]*beam[1])
-    if size_0 is None:
-        size_0 = 0.1*beam
-    print("Using beam size = {} mas".format(beam))
-    from from_fits import (create_model_from_fits_file,
-                           create_image_from_fits_file)
-
-    print("Estimating core using beam_fraction = {}".format(beam_fraction))
-    print("1st iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
-    # Need in RA, DEC
-    model = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
-    model.filter_components_by_r(beam_fraction*beam/2., r_c=r_c)
-    # extended structure visibilities
-    uvdata.substitute([model])
-    fig = uvdata.uvplot()
-    fig.savefig(os.path.join(out_path, "extended_radplot.png"))
-    uvdata = uvdata_tmp - uvdata
-    uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
-
-    # Modelfit this uvdata with single component
-    if not use_ell:
-        comp0 = CGComponent(flux_0, -r_c[0], -r_c[1], size_0)
-    else:
-        comp0 = EGComponent(flux_0, -r_c[0], -r_c[1], size_0, e_0, bpa_0)
-
-    export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
-                        freq_hz)
-    modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
-                    mdl_fname=os.path.join(out_path, "init.mdl"),
-                    out_fname=os.path.join(out_path, "it1.mdl"),
-                    niter=niter, stokes=stokes.lower(), path=out_path,
-                    mdl_path=out_path, out_path=out_path,
-                    show_difmap_output=show_difmap_output)
-
-    # Now use found component position to make circular filter around it
-    comp = import_difmap_model("it1.mdl", out_path)[0]
-    model_local = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
-    # Need in RA, DEC
-    r_c = (-comp.p[1], -comp.p[2])
-    print("2nd iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
-    model_local.filter_components_by_r(beam_fraction*beam/2., r_c=r_c)
-
-    uvdata.substitute([model_local])
-    uvdata = uvdata_tmp - uvdata
-    uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
-
-    # Modelfit this uvdata with single component
-    print("Using 1st iteration component {} as initial guess".format(comp.p))
-    if not use_ell:
-        comp0 = CGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3])
-    else:
-        comp0 = EGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3],
-                            comp.p[4], comp.p[5])
-
-    export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
-                        freq_hz)
-    modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
-                    mdl_fname=os.path.join(out_path, "init.mdl"),
-                    out_fname=os.path.join(out_path, "it2.mdl"),
-                    niter=niter, stokes=stokes.lower(), path=out_path,
-                    mdl_path=out_path, out_path=out_path,
-                    show_difmap_output=show_difmap_output,
-                    save_dirty_residuals_map=estimate_rms,
-                    dmap_size=mapsize_clean)
-    comp = import_difmap_model("it2.mdl", out_path)[0]
-
-    if estimate_rms:
-        dimage = create_image_from_fits_file(os.path.join(out_path, "dirty_residuals_map.fits"))
-        beam_pxl = int(beam/mapsize_clean[1])
-        print("Beam = ", beam)
-        # RA, DEC of component center
-        r_center = (-int(comp.p[1]/mapsize_clean[1]),
-                    -int(comp.p[2]/mapsize_clean[1]))
-        # Need to add to map center (512, 512) add DEC in pixels (with sign)
-        rms = mad_std(dimage.image[int(mapsize_clean[0]/2+r_center[1]-3*beam_pxl): int(mapsize_clean[0]/2+r_center[1]+3*beam_pxl),
-                                   int(mapsize_clean[0]/2-3*beam_pxl): int(mapsize_clean[0]/2+3*beam_pxl)])
-        # os.unlink(os.path.join(out_path, "dirty_residuals_map.fits"))
-
-    else:
-        rms = None
-
-    if not use_ell:
-        result = {"flux": comp.p[0], "ra": -comp.p[1], "dec": -comp.p[2],
-                  "size": comp.p[3], "rms": rms}
-    else:
-        result = {"flux": comp.p[0], "ra": -comp.p[1], "dec": -comp.p[2],
-                  "size": comp.p[3], "e": comp.p[4], "bpa": comp.p[5],
-                  "rms": rms}
-
-    return result
-
-
-def modelfit_core_wo_extending_it(fname, beam_fractions, r_c=None,
-                                  mapsize_clean=None, path_to_script=None,
-                                  niter=50, stokes='i', path=None, out_path=None,
-                                  use_brightest_pixel_as_initial_guess=True,
-                                  flux_0=None, size_0=None, e_0=None, bpa_0=None,
-                                  show_difmap_output=False,
-                                  estimate_rms=False, use_ell=False):
-    """
-    Iterative Modelfit core after excluding extended emission around.
-
-    :param fname:
-        Filename of uv-data to modelfit.
-    :param out_fname:
-        Filename with output file with model.
-    :param beam_fractions:
-        Iterable of beam size fractions to consider while excluding extended
-        emission.
-    :param r_c: (optional)
-        RA and DEC of the center of the circualr area. If ``None`` than
-        use brightest pixel of phase center of the map depending on the
-        ``use_brightest_pixel_as_initial_guess``. (default: ``None``)
-    :param mapsize_clean:
-        Parameters of map for cleaning (map size, pixel size).
-    :param path_to_script:
-        Path to ``clean`` difmap script.
-    :param stokes: (optional)
-        Stokes parameter 'i', 'q', 'u' or 'v'. (default: ``i``)
-    :param path: (optional)
-        Path to uv-data to modelfit. If ``None`` then use current directory.
-        (default: ``None``)
-    :param mdl_path: (optional)
-        Path file with model. If ``None`` then use current directory.
-        (default: ``None``)
-    :param out_path: (optional)
-        Path to file with CCs. If ``None`` then use ``path``.
-        (default: ``None``)
-    :param use_brightest_pixel_as_initial_guess: (optional)
-        Boolean. Should use brightness pixel as initial guess for center of the
-        core area? If ``False`` that use phase center. (default: ``True``)
-    :param flux_0: (optional)
-        Initial guess for core flux [Jy]. If ``None`` than use 1 Jy. (default:
-        ``None``)
-    :param size_0: (optional)
-        Initial guess for core size [mas]. If ``None`` than use 1/10-th of the
-        beam. (default: ``None``)
-    :param e_0: (optional)
-        Initial guess for eccentricity in case of the elliptic component. If
-        ``None`` then use ``1``. (default: ``None``)
-    :param bpa_0: (optional)
-        Initial guess for BPA in case of the elliptic component. If
-        ``None`` then use ``0``. (default: ``None``)
-    :param show_difmap_output: (optional)
-        Boolean. Show the output of difmap CLEAN and modelfit? (default:
-        ``False``)
-    :param estimate_rms: (optional)
-        Boolean. Use dirty residual image after fitting the substracted data
-        with a component to estimate rms? (default: ``False``)
-    :param use_ell: (optional)
-        Boolean. Use elliptic component? (default: ``False``)
-
-    :return:
-        Dictionary with keys - beam fractions used to exclude extended emission
-        and values - dictionaries with core parameters obtained using this
-        fractions.
-    """
-    from uv_data import UVData
-    from components import (CGComponent, EGComponent)
-    uvdata = UVData(os.path.join(path, fname))
-    uvdata_tmp = UVData(os.path.join(path, fname))
-    freq_hz = uvdata.frequency
-    noise = uvdata.noise(use_V=False)
-    # First CLEAN to obtain clean components
-    clean_difmap(fname, os.path.join(out_path, "cc.fits"), stokes,
-                 mapsize_clean, path=path, path_to_script=path_to_script,
-                 show_difmap_output=show_difmap_output)
-    from from_fits import create_clean_image_from_fits_file
-    ccimage = create_clean_image_from_fits_file(os.path.join(out_path,
-                                                             "cc.fits"))
-    if r_c is None:
-        # Find brightest pixel
-        if use_brightest_pixel_as_initial_guess:
-            im = np.unravel_index(np.argmax(ccimage.image), ccimage.image.shape)
-            print("indexes of max intensity ", im)
-            # - to RA cause dx_RA < 0
-            r_c = (-(im[1]-mapsize_clean[0]/2)*mapsize_clean[1],
-                   (im[0]-mapsize_clean[0]/2)*mapsize_clean[1])
-        else:
-            r_c = (0, 0)
-
-    if flux_0 is None:
-        flux_0 = 1.0
-    if e_0 is None:
-        e_0 = 1.0
-    if bpa_0 is None:
-        bpa_0 = 0.0
-
-    beam = ccimage.beam
-    beam = np.sqrt(beam[0]*beam[1])
-    if size_0 is None:
-        size_0 = 0.1*beam
-    print("Using beam size = {} mas".format(beam))
-    from from_fits import (create_model_from_fits_file,
-                           create_image_from_fits_file)
-
-    result = dict()
-
-    for beam_fraction in sorted(beam_fractions):
-        print("Estimating core using beam_fraction = {}".format(beam_fraction))
-        print("1st iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
-        # Need in RA, DEC
-        model = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
-        model.filter_components_by_r(beam_fraction*beam/2., r_c=r_c)
-        uvdata.substitute([model])
-        uvdata = uvdata_tmp - uvdata
-        uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
-
-        # Modelfit this uvdata with single component
-        if not use_ell:
-            comp0 = CGComponent(flux_0, -r_c[0], -r_c[1], size_0)
-        else:
-            comp0 = EGComponent(flux_0, -r_c[0], -r_c[1], size_0, e_0, bpa_0)
-
-        export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
-                            freq_hz)
-        modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
-                        mdl_fname=os.path.join(out_path, "init.mdl"),
-                        out_fname=os.path.join(out_path, "it1.mdl"),
-                        niter=niter, stokes=stokes.lower(), path=out_path,
-                        mdl_path=out_path, out_path=out_path,
-                        show_difmap_output=show_difmap_output)
-
-        # Now use found component position to make circular filter around it
-        comp = import_difmap_model("it1.mdl", out_path)[0]
-        model_local = create_model_from_fits_file(os.path.join(out_path, "cc.fits"))
-        # Need in RA, DEC
-        r_c = (-comp.p[1], -comp.p[2])
-        print("2nd iteration. Keeping core emission around RA={}, DEC={}".format(r_c[0], r_c[1]))
-        model_local.filter_components_by_r(beam_fraction*beam/2., r_c=r_c)
-
-        uvdata.substitute([model_local])
-        uvdata = uvdata_tmp - uvdata
-        uvdata.save(os.path.join(out_path, "uv_diff.uvf"), rewrite=True)
-
-        # Modelfit this uvdata with single component
-        print("Using 1st iteration component {} as initial guess".format(comp.p))
-        if not use_ell:
-            comp0 = CGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3])
-        else:
-            comp0 = EGComponent(comp.p[0], comp.p[1], comp.p[2], comp.p[3],
-                                comp.p[4], comp.p[5])
-
-        export_difmap_model([comp0], os.path.join(out_path, "init.mdl"),
-                            freq_hz)
-        modelfit_difmap(fname=os.path.join(out_path, "uv_diff.uvf"),
-                        mdl_fname=os.path.join(out_path, "init.mdl"),
-                        out_fname=os.path.join(out_path, "it2.mdl"),
-                        niter=niter, stokes=stokes.lower(), path=out_path,
-                        mdl_path=out_path, out_path=out_path,
-                        show_difmap_output=show_difmap_output,
-                        save_dirty_residuals_map=estimate_rms,
-                        dmap_size=mapsize_clean)
-        comp = import_difmap_model("it2.mdl", out_path)[0]
-
-        if estimate_rms:
-            dimage = create_image_from_fits_file(os.path.join(out_path, "dirty_residuals_map.fits"))
-            beam_pxl = int(beam/mapsize_clean[1])
-            print("Beam = ", beam)
-            # RA, DEC of component center
-            r_center = (-int(comp.p[1]/mapsize_clean[1]),
-                        -int(comp.p[2]/mapsize_clean[1]))
-            # Need to add to map center (512, 512) add DEC in pixels (with sign)
-            rms = mad_std(dimage.image[int(mapsize_clean[0]/2+r_center[1]-3*beam_pxl): int(mapsize_clean[0]/2+r_center[1]+3*beam_pxl),
-                                       int(mapsize_clean[0]/2-3*beam_pxl): int(mapsize_clean[0]/2+3*beam_pxl)])
-            # os.unlink(os.path.join(out_path, "dirty_residuals_map.fits"))
-
-        else:
-            rms = None
-
-        if not use_ell:
-            result.update({beam_fraction: {"flux": comp.p[0], "ra": -comp.p[1],
-                                           "dec": -comp.p[2], "size": comp.p[3],
-                                           "rms": rms}})
-        else:
-            result.update({beam_fraction: {"flux": comp.p[0], "ra": -comp.p[1],
-                                           "dec": -comp.p[2], "size": comp.p[3],
-                                           "e": comp.p[4], "bpa": comp.p[5],
-                                           "rms": rms}})
 
     return result
 

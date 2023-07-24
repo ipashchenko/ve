@@ -603,7 +603,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         e = Ellipse((y_c, x_c), e_width, e_height, angle=-beam[2],
                     edgecolor=beam_edge_color, facecolor=beam_face_color,
                     alpha=beam_alpha)
-        print("Plotting BEAM BPA = {} deg".format(beam[2]))
+        print("Plotting BEAM BPA = {:.2f} deg".format(beam[2]))
         ax.add_patch(e)
 
     if components:

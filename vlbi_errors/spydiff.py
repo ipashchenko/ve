@@ -2776,7 +2776,7 @@ def find_size_errors_using_chi2(dfm_model_file, uvfits, working_dir=None,
     rho_amp = np.exp(-(delta_t_sec/gain_amp_tcoh)**2)
 
     # Find gains DoF
-    uvdata = UVData(uvfits)
+    uvdata = UVData(uvfits, verify_option="ignore")
     all_stokes = uvdata.stokes
     if "RR" in all_stokes and "LL" in all_stokes:
         stokes = "I"
@@ -2911,7 +2911,7 @@ def find_flux_errors_using_chi2(dfm_model_file, uvfits, working_dir=None,
     rho_amp = np.exp(-(delta_t_sec/gain_amp_tcoh)**2)
 
     # Find gains DoF
-    uvdata = UVData(uvfits)
+    uvdata = UVData(uvfits, verify_option="ignore")
     all_stokes = uvdata.stokes
     if "RR" in all_stokes and "LL" in all_stokes:
         stokes = "I"
@@ -3136,7 +3136,7 @@ def find_2D_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", worki
     rho = np.exp(-(delta_t_sec/gain_phase_tcoh)**2)
 
     # Find gains DoF
-    uvdata = UVData(uvfits)
+    uvdata = UVData(uvfits, verify_option="ignore")
     n_use_vis = uvdata.n_usable_visibilities_difmap(stokes=stokes)
     n_IF = uvdata.nif
     print(f"# IF = {n_IF}")
@@ -3763,17 +3763,17 @@ def reformat_profile_errors_for_silke(models_dir, errors_dir, save_dir):
 
 if __name__ == "__main__":
 
-    old_difmap_file = "/home/ilya/github/bk_transfer/pics/flares/tmp/cc.mdl"
-    new_difmap_file = "/home/ilya/github/bk_transfer/pics/flares/tmp/new.mdl"
-    gauss_model = "/home/ilya/github/bk_transfer/pics/flares/tmp/in1.mdl"
-    hybrid_model = "/home/ilya/github/bk_transfer/pics/flares/tmp/hybrid.mdl"
-    for fn in (new_difmap_file, gauss_model, hybrid_model):
-        os.unlink(fn)
-
-    filter_difmap_CC_model_by_r(old_difmap_file, new_difmap_file, (0, 0), 2.5)
-    comp = (1., 0., 0., 0.25)
-    create_difmap_file_from_single_component(comp, gauss_model, 2.3e+09)
-    join_difmap_models(new_difmap_file, gauss_model, hybrid_model)
+    # old_difmap_file = "/home/ilya/github/bk_transfer/pics/flares/tmp/cc.mdl"
+    # new_difmap_file = "/home/ilya/github/bk_transfer/pics/flares/tmp/new.mdl"
+    # gauss_model = "/home/ilya/github/bk_transfer/pics/flares/tmp/in1.mdl"
+    # hybrid_model = "/home/ilya/github/bk_transfer/pics/flares/tmp/hybrid.mdl"
+    # for fn in (new_difmap_file, gauss_model, hybrid_model):
+    #     os.unlink(fn)
+    #
+    # filter_difmap_CC_model_by_r(old_difmap_file, new_difmap_file, (0, 0), 2.5)
+    # comp = (1., 0., 0., 0.25)
+    # create_difmap_file_from_single_component(comp, gauss_model, 2.3e+09)
+    # join_difmap_models(new_difmap_file, gauss_model, hybrid_model)
 
     # uvfits = "/home/ilya/github/bk_transfer/pics/flares/tmp/template_S_1800.0.uvf"
     # # CLEAN_difmap(uvfits, "i", (512, 0.5), "test_cc.fits", restore_beam=None,
@@ -3962,81 +3962,81 @@ if __name__ == "__main__":
 #     # sys.exit(0)
 #
 #
-#     # ==========================================================================
-#
-#     import matplotlib
-#     matplotlib.use('TkAgg')
-#     import glob
-#     # new_path = "/home/ilya/data/silke/1215/last/0d2/"
-#     # new_path = "/home/ilya/data/Mkn501/difmap_models/redone_epochs"
-#     # new_path = "/home/ilya/Downloads/TXS0506/tberrors"
-#     # new_path = "/home/ilya/data/silke/0735/15GHz"
-#     # new_path = "/home/ilya/data/silke/0506_old"
-#     # new_path = "/home/ilya/Downloads/3C454.3"
-#     # new_path = "/home/ilya/Downloads/3C454.3/Boston/lost"
-#     new_path = "/home/ilya/Downloads/TXS8"
-#     # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
-#     # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
-#     # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
-#
-#     # rm old
-#     torm_dfm_models = glob.glob(os.path.join(new_path, "new*.mod"))
-#     for fn in torm_dfm_models:
-#         os.unlink(fn)
-#
-#     dfm_models = glob.glob(os.path.join(new_path, "*.mod"))
-#     print(dfm_models)
-#     # freq_ghz = 43.0
-#     freq_ghz = 15.4
-#     # sys.exit(0)
-#     problems = list()
-#
-#     epochs = list()
-#
-#     # ACTUAL ERRORS CALCULATION ################################################
-#     for dfm_model in dfm_models:
-#         fn = os.path.split(dfm_model)[-1]
-#         # if fn == "1998_05_15_1.mod":
-#         #     continue
-#         epoch = fn[:10]
-#         epochs.append(epoch)
-#         print(f"EPOCH = {epoch} =====================")
-#
-#         comps = import_difmap_model(dfm_model, new_path)
-#         new_dfm_model = os.path.join(new_path, "new_{}".format(os.path.split(dfm_model)[-1]))
-#         export_difmap_model(comps, new_dfm_model, 1E+09*freq_ghz)
-#         # uvfits = "/home/ilya/data/silke/1215/1215+303.u.{}.uvf".format(epoch)
-#         # uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
-#         # uvfits = "/home/ilya/Downloads/TXS0506/0506+056.u.{}.uvf".format(epoch)
-#         # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
-#         # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
-#         # uvfits = "{}/J2253+1608_Q_{}_mar_vis.fits".format(new_path, epoch)
-#         if epoch == "2014_06_09":
-#             uvfits = "{}/J0509+0541_X_{}_pus_vis.fits".format(new_path, epoch)
-#         elif epoch == "2010_11_13":
-#             uvfits = "{}/J0509+0541_U_{}_moj_vis.fits".format(new_path, epoch)
-#         else:
-#             uvfits = "{}/J0509+0541_X_{}_pet_vis.fits".format(new_path, epoch)
-#         # uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
-#         if epoch in ("2010_11_13",):
-#             try:
-#                 df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
-#                                      size_error_coefficient=0.35)
-#             except:
-#                 problems.append(epoch)
-#                 continue
-#             np.savetxt(new_path + "/{}_pos_error.txt".format(epoch), 0.5*df["major_err"])
-#             np.savetxt(new_path + "/{}_size_error.txt".format(epoch), df["major_err"])
-#             flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
-#             np.savetxt(new_path + "/{}_flux_error.txt".format(epoch), flux_err)
-#
-#     ##############################################
-#
-#     # Skip all except the target one
-#     epochs_to_skip = epochs
-#     epochs_to_skip.remove("2010_11_13")
-#
-#     reformat_errors_from_Tb_for_silke(new_path, epochs_to_skip=epochs_to_skip)
-#                                       # epochs_to_skip=("2010_11_13",))
-#                                       # epochs_to_skip=problems)
-#     print("Problem epochs : ", problems)
+    # ==========================================================================
+
+    import matplotlib
+    matplotlib.use('TkAgg')
+    import glob
+    # new_path = "/home/ilya/data/silke/1215/last/0d2/"
+    # new_path = "/home/ilya/data/Mkn501/difmap_models/redone_epochs"
+    # new_path = "/home/ilya/Downloads/TXS0506/tberrors"
+    # new_path = "/home/ilya/data/silke/0735/15GHz"
+    # new_path = "/home/ilya/data/silke/0506_old"
+    # new_path = "/home/ilya/Downloads/3C454.3"
+    # new_path = "/home/ilya/Downloads/3C454.3/Boston/lost"
+    new_path = "/home/ilya/Downloads/TXS8"
+    # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
+    # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
+    # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
+
+    # rm old
+    torm_dfm_models = glob.glob(os.path.join(new_path, "new*.mod"))
+    for fn in torm_dfm_models:
+        os.unlink(fn)
+
+    dfm_models = glob.glob(os.path.join(new_path, "*.mod"))
+    print(dfm_models)
+    # freq_ghz = 43.0
+    freq_ghz = 15.4
+    # sys.exit(0)
+    problems = list()
+
+    epochs = list()
+
+    # ACTUAL ERRORS CALCULATION ################################################
+    for dfm_model in dfm_models:
+        fn = os.path.split(dfm_model)[-1]
+        # if fn == "1998_05_15_1.mod":
+        #     continue
+        epoch = fn[:10]
+        epochs.append(epoch)
+        print(f"EPOCH = {epoch} =====================")
+
+        comps = import_difmap_model(dfm_model, new_path)
+        new_dfm_model = os.path.join(new_path, "new_{}".format(os.path.split(dfm_model)[-1]))
+        export_difmap_model(comps, new_dfm_model, 1E+09*freq_ghz)
+        # uvfits = "/home/ilya/data/silke/1215/1215+303.u.{}.uvf".format(epoch)
+        # uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
+        # uvfits = "/home/ilya/Downloads/TXS0506/0506+056.u.{}.uvf".format(epoch)
+        # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
+        # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
+        # uvfits = "{}/J2253+1608_Q_{}_mar_vis.fits".format(new_path, epoch)
+        if epoch == "2014_06_09":
+            uvfits = "{}/J0509+0541_X_{}_pus_vis.fits".format(new_path, epoch)
+        elif epoch == "2010_11_13":
+            uvfits = "{}/J0509+0541_U_{}_moj_vis.fits".format(new_path, epoch)
+        else:
+            uvfits = "{}/J0509+0541_X_{}_pet_vis.fits".format(new_path, epoch)
+        # uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
+        if epoch in ("2010_11_13",):
+            try:
+                df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
+                                     size_error_coefficient=0.35)
+            except:
+                problems.append(epoch)
+                continue
+            np.savetxt(new_path + "/{}_pos_error.txt".format(epoch), 0.5*df["major_err"])
+            np.savetxt(new_path + "/{}_size_error.txt".format(epoch), df["major_err"])
+            flux_err = np.hypot(df["flux_err"], 0.05*df["flux"])
+            np.savetxt(new_path + "/{}_flux_error.txt".format(epoch), flux_err)
+
+    ##############################################
+
+    # Skip all except the target one
+    epochs_to_skip = epochs
+    epochs_to_skip.remove("2010_11_13")
+
+    reformat_errors_from_Tb_for_silke(new_path, epochs_to_skip=epochs_to_skip)
+                                      # epochs_to_skip=("2010_11_13",))
+                                      # epochs_to_skip=problems)
+    print("Problem epochs : ", problems)

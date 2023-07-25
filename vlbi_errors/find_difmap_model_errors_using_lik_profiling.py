@@ -17,13 +17,13 @@ from image import plot as iplot
 import astropy.units as u
 
 
-average_time_sec = 60.
+average_time_sec = 120.
 account_gains = False
 
 rad2mas = u.rad.to(u.mas)
-# data_dir = "/home/ilya/data/silke/0735/43GHz"
-data_dir = "/home/ilya/Downloads/3C454.3"
-models_dir = data_dir
+data_dir = "/home/ilya/Downloads/0735_rfc_Q"
+# data_dir = "/home/ilya/Downloads/3C454.3"
+models_dir = "/home/ilya/data/silke/0735/forgoten43"
 freq = 43E+09
 
 # data_dir = "/home/ilya/Downloads/TXS0506"
@@ -54,8 +54,9 @@ for mdl_file in mdl_files:
 mdl_files = sorted(glob.glob(os.path.join(models_dir, "*_exp.mod")))
 mdl_files = [os.path.split(path)[-1] for path in mdl_files]
 
-# ccfits_files = ['J0738+1742_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
-ccfits_files = ['J2253+1608_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
+# ccfits_files = ['0735+178Q.{}.IMAP'.format(epoch) for epoch in epochs]
+ccfits_files = ['J0738+1742_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
+# ccfits_files = ['J2253+1608_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
 # ccfits_files = ['0506+056.u.{}.icn.fits.gz'.format(epoch) for epoch in epochs]
 
 for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
@@ -67,7 +68,17 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     print(epoch, mdl_file, ccfits_file)
     # continue
 
-    uvfits_file = 'J2253+1608_Q_{}_mar_vis.fits'.format(epoch)
+    # uvfits_file = '0735+178Q.{}.UVP'.format(epoch)
+    uvfits_file = 'J0738+1742_Q_{}_mar_vis.fits'.format(epoch)
+
+    if not os.path.exists(os.path.join(data_dir, uvfits_file)):
+        print("No UVFITS for epoch {}".format(epoch))
+
+    if not os.path.exists(os.path.join(data_dir, ccfits_file)):
+        print("No CCFITS for epoch {}".format(epoch))
+
+    # continue
+
     # uvfits_file = '0506+056.u.{}.uvf'.format(epoch)
     if average_time_sec is not None:
         time_average(os.path.join(data_dir, uvfits_file), os.path.join(data_dir, "tmp.uvf"), average_time_sec)

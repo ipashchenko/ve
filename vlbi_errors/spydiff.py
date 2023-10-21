@@ -670,6 +670,7 @@ def convert_difmap_model_file_to_CCFITS(difmap_model_file, stokes, mapsize,
         # Here we need shift, because in CLEANing shifts are not applied to
         # saving model files!
         cmd += "shift " + str(shift[0]) + ', ' + str(shift[1]) + "\n"
+    cmd += "uvw 0, -2\n"
     print("Restoring difmap model with BEAM : bmin = " + str(restore_beam[0]) + ", bmaj = " + str(restore_beam[1]) + ", " + str(restore_beam[2]) + " deg")
     # default dimfap: false,true (parameters: omit_residuals, do_smooth)
     cmd += "restore " + str(restore_beam[0]) + "," + str(restore_beam[1]) + "," + str(restore_beam[2]) + "," + "true,false" + "\n"
@@ -3974,7 +3975,8 @@ if __name__ == "__main__":
     # new_path = "/home/ilya/data/silke/0506_old"
     # new_path = "/home/ilya/Downloads/3C454.3"
     # new_path = "/home/ilya/Downloads/3C454.3/Boston/lost"
-    new_path = "/home/ilya/Downloads/TXS8"
+    # new_path = "/home/ilya/Downloads/TXS8"
+    new_path = "/home/ilya/Downloads/pks1717draftmodelfitfiles"
     # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
     # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
     # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
@@ -3996,8 +3998,8 @@ if __name__ == "__main__":
     # ACTUAL ERRORS CALCULATION ################################################
     for dfm_model in dfm_models:
         fn = os.path.split(dfm_model)[-1]
-        # if fn == "1998_05_15_1.mod":
-        #     continue
+        if fn != "2013_02_28.mod":
+            continue
         epoch = fn[:10]
         epochs.append(epoch)
         print(f"EPOCH = {epoch} =====================")
@@ -4011,14 +4013,14 @@ if __name__ == "__main__":
         # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
         # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
         # uvfits = "{}/J2253+1608_Q_{}_mar_vis.fits".format(new_path, epoch)
-        if epoch == "2014_06_09":
-            uvfits = "{}/J0509+0541_X_{}_pus_vis.fits".format(new_path, epoch)
-        elif epoch == "2010_11_13":
-            uvfits = "{}/J0509+0541_U_{}_moj_vis.fits".format(new_path, epoch)
-        else:
-            uvfits = "{}/J0509+0541_X_{}_pet_vis.fits".format(new_path, epoch)
-        # uvfits = os.path.join(new_path, "0735+178.u.{}.uvf".format(epoch))
-        if epoch in ("2010_11_13",):
+        # if epoch == "2014_06_09":
+        #     uvfits = "{}/J0509+0541_X_{}_pus_vis.fits".format(new_path, epoch)
+        # elif epoch == "2010_11_13":
+        #     uvfits = "{}/J0509+0541_U_{}_moj_vis.fits".format(new_path, epoch)
+        # else:
+        #     uvfits = "{}/J0509+0541_X_{}_pet_vis.fits".format(new_path, epoch)
+        uvfits = os.path.join(new_path, "1717+178.u.{}.uvf".format(epoch))
+        if epoch not in ():
             try:
                 df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
                                      size_error_coefficient=0.35)
@@ -4033,8 +4035,8 @@ if __name__ == "__main__":
     ##############################################
 
     # Skip all except the target one
-    epochs_to_skip = epochs
-    epochs_to_skip.remove("2010_11_13")
+    epochs_to_skip = ()
+    # epochs_to_skip.remove("2010_11_13")
 
     reformat_errors_from_Tb_for_silke(new_path, epochs_to_skip=epochs_to_skip)
                                       # epochs_to_skip=("2010_11_13",))

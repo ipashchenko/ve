@@ -3719,6 +3719,25 @@ def make_map_with_core_at_zero(mdl_file, uv_fits_fname, mapsize_clean,
                  shift=shift)
 
 
+def make_uvfits_with_core_at_zero(in_uv_fits, out_uv_fits, core_ra, core_dec, show_difmap_output=False):
+    """
+    Shift phase center and brings it to core. Core RA = - core.p[1] and core
+    DEC = -core.p[2] in ``Component`` class.
+    """
+    from subprocess import Popen, PIPE
+
+    cmd = "observe " + in_uv_fits + "\n"
+    cmd += "shift " + str(-core_ra) + ", " + str(-core_dec) + "\n"
+    cmd += "wobs " + out_uv_fits + ", true\n"
+    cmd += "exit\n"
+
+    with Popen('difmap', stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True) as difmap:
+        outs, errs = difmap.communicate(input=cmd)
+    if show_difmap_output:
+        print(outs)
+        print(errs)
+
+
 def reformat_errors_from_Tb_for_silke(path, epochs_to_skip=()):
     dfm_models = glob.glob(os.path.join(path, "new_*.mod"))
     for dfm_model in dfm_models:

@@ -276,16 +276,17 @@ def find_bbox(array, level, min_maxintensity_mjyperbeam, min_area_pix,
     return blc_rec, trc_rec
 
 
-def find_image_std(image_array, beam_npixels, min_num_pixels_used_to_estimate_std=100):
+def find_image_std(image_array, beam_npixels, min_num_pixels_used_to_estimate_std=100, blc=None, trc=None):
     # Robustly estimate image pixels std
     std = mad_std(image_array)
 
-    # Find preliminary bounding box
-    blc, trc = find_bbox(image_array, level=4*std,
-                         min_maxintensity_mjyperbeam=4*std,
-                         min_area_pix=2*beam_npixels,
-                         delta=0)
-    print("Found bounding box : ", blc, trc)
+    if blc is None or trc is None:
+        # Find preliminary bounding box
+        blc, trc = find_bbox(image_array, level=4*std,
+                             min_maxintensity_mjyperbeam=4*std,
+                             min_area_pix=2*beam_npixels,
+                             delta=0)
+        print("Found bounding box : ", blc, trc)
 
     # Now mask out source emission using found bounding box and estimate std
     # more accurately
@@ -3583,7 +3584,7 @@ def modelfit_core_wo_extending(uvfits, mapsize_clean, beam_fractions, path_to_sc
                      super_unif_dynam=None, unif_dynam=None,
                      taper_gaussian_value=None, taper_gaussian_radius=None)
 
-        uvdata = UVData(uvfits)
+        uvdata = UVData(uvfits, verify_option="ignore")
         freq_hz = uvdata.frequency
         # Find beam
         bmin, bmaj, bpa = find_nw_beam(uvfits, stokes="i", mapsize=mapsize_clean, uv_range=None, working_dir=working_dir)

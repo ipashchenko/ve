@@ -514,7 +514,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         vec = ax.quiver(y[::vinc], x[::vinc], u[::vinc, ::vinc],
                         v[::vinc, ::vinc], angles='uv',
                         units='xy', headwidth=0., headlength=0., scale=vector_scale,
-                        width=0.05, headaxislength=0., color=vector_color)
+                        width=0.015, headaxislength=0., color=vector_color)
     # Set equal aspect
     ax.set_aspect('equal')
 

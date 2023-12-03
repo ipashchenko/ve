@@ -3566,7 +3566,7 @@ def fit_core(uvdata):
 
 def modelfit_core_wo_extending(uvfits, mapsize_clean, beam_fractions, path_to_script, use_elliptical=False,
                                use_brightest_pixel_as_initial_guess=True, save_dir=None,
-                               dump_json_result=True):
+                               dump_json_result=True, show_difmap_output=False):
 
 
     result = dict()
@@ -3577,7 +3577,7 @@ def modelfit_core_wo_extending(uvfits, mapsize_clean, beam_fractions, path_to_sc
                      mapsize_clean,
                      path_to_script=path_to_script,
                      mapsize_restore=None, beam_restore=None, shift=None,
-                     show_difmap_output=True, command_file=None, clean_box=None,
+                     show_difmap_output=show_difmap_output, command_file=None, clean_box=None,
                      save_dfm_model=os.path.join(working_dir, "cc.mdl"),
                      omit_residuals=False, do_smooth=True, dmap=None,
                      text_box=None, box_rms_factor=None, window_file=None,
@@ -3620,7 +3620,7 @@ def modelfit_core_wo_extending(uvfits, mapsize_clean, beam_fractions, path_to_sc
                                os.path.join(working_dir, "hybrid.mdl"))
             modelfit_difmap(uvfits, mdl_fname=os.path.join(working_dir, "hybrid.mdl"),
                             out_fname=os.path.join(working_dir, "hybrid_fitted.mdl"),
-                            niter=100, stokes='i', show_difmap_output=True)
+                            niter=100, stokes='i', show_difmap_output=show_difmap_output)
 
             # Extract core parameters
             with open(os.path.join(working_dir, "hybrid_fitted.mdl"), "r") as fo:

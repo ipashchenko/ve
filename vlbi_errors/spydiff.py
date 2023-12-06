@@ -3566,7 +3566,9 @@ def fit_core(uvdata):
 
 def modelfit_core_wo_extending(uvfits, mapsize_clean, beam_fractions, path_to_script, use_elliptical=False,
                                use_brightest_pixel_as_initial_guess=True, save_dir=None,
-                               dump_json_result=True, show_difmap_output=False):
+                               dump_json_result=True, show_difmap_output=False,
+                               dump_core_modelfile=False,
+                               map_with_core_name=None):
 
 
     result = dict()
@@ -3686,6 +3688,32 @@ def modelfit_core_wo_extending(uvfits, mapsize_clean, beam_fractions, path_to_sc
     if dump_json_result:
         with open(os.path.join(save_dir, f"{base}_core_modelfit_result.json"), "w") as fo:
             json.dump(result, fo)
+
+    if dump_core_modelfile:
+        pass
+
+    if map_with_core_name is not None:
+
+        flux = np.mean([result[frac]['flux'] for frac in beam_fractions])
+        ra = np.mean([-result[frac]['ra'] for frac in beam_fractions])
+        dec = np.mean([-result[frac]['dec'] for frac in beam_fractions])
+        size = np.mean([result[frac]['size'] for frac in beam_fractions])
+        component = CGComponent(flux, ra, dec, size)
+
+        import matplotlib.pyplot as plt
+        from image import plot as iplot
+        ipol = ccimage.image
+        beam_npixels = int(np.pi*bmin*bmaj/(4*np.log(2)*mapsize_clean[1]**2))
+        std = find_image_std(ipol, beam_npixels, min_num_pixels_used_to_estimate_std=5*beam_npixels)
+        blc, trc = find_bbox(ipol, level=4*std, min_maxintensity_mjyperbeam=100*std,
+                             min_area_pix=5*beam_npixels, delta=10)
+        fig = iplot(ipol, x=ccimage.x, y=ccimage.y,
+                    min_abs_level=4*std, blc=blc, trc=trc, beam=(bmin, bmaj, bpa),
+                    close=True, show_beam=True, show=False,
+                    contour_color='gray', contour_linewidth=0.25, components=(component,))
+        axes = fig.get_axes()[0]
+        fig.savefig(os.path.join(save_dir, f"{map_with_core_name}.png"), dpi=300, bbox_inches="tight")
+        plt.close()
 
     return result
 

@@ -413,11 +413,11 @@ def get_fits_image_info_from_hdulist(hdulist):
     pixsize = (pr_header['CDELT1'] * degree_to_rad,
                pr_header['CDELT2'] * degree_to_rad,)
     # Find stokes info
-    stokes_card = find_card_from_header(pr_header, value='STOKES')[0]
+    stokes_card = find_card_from_header(pr_header, value='STOKES', delete_history_in_header=False)[0]
     indx = stokes_card.keyword[-1]
     stokes = stokes_dict[pr_header['CRVAL' + indx]]
     # Find frequency info
-    freq_card = find_card_from_header(pr_header, value='FREQ')[0]
+    freq_card = find_card_from_header(pr_header, value='FREQ', delete_history_in_header=False)[0]
     indx = freq_card.keyword[-1]
     freq = pr_header['CRVAL' + indx]
 
@@ -510,7 +510,7 @@ def get_hdu_from_hdulist(hdulist, extname=None, ver=1):
 
 
 def find_card_from_header(header, value=None, keyword=None,
-                          comment_contens=None):
+                          comment_contens=None, delete_history_in_header=True):
     """
     Find card from header specified be several possible ways.
 
@@ -526,11 +526,12 @@ def find_card_from_header(header, value=None, keyword=None,
     :return:
         Instance of ``astropy.io.fits.card.Card`` class.
     """
-    # HISTORY often holds shitty stuff
-    try:
-        del header["HISTORY"]
-    except KeyError:
-        pass
+    if delete_history_in_header:
+        # HISTORY often holds shitty stuff
+        try:
+            del header["HISTORY"]
+        except KeyError:
+            pass
     if comment_contens is not None:
         search = [card for card in header.cards if comment_contens in
                   card.comment]

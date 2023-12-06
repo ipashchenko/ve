@@ -481,9 +481,9 @@ class FluxBasedModelSelector(ModelSelector):
             # This is index not number! Number is index + 1 (python 0-based
             # indexing)
             if np.count_nonzero(a) == 1:
-                k = list(a.astype(np.int)).index(1)
+                k = list(a.astype(int)).index(1)
             else:
-                k = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
+                k = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(int)).index(1)
         except ValueError:
             k = 0
         return k
@@ -516,9 +516,9 @@ class SizeBasedModelSelector(ModelSelector):
             # This is index not number! Number is index + 1 (python 0-based
             # indexing)
             if np.count_nonzero(a) == 1:
-                k = list(a.astype(np.int)).index(1)
+                k = list(a.astype(int)).index(1)
             else:
-                k = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(np.int)).index(1)
+                k = list(ndimage.binary_opening(a, structure=np.ones(2)).astype(int)).index(1)
         except ValueError:
             k = 0
         return k
@@ -1330,6 +1330,7 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
         ``Figure`` object.
     """
     beam = image.beam
+    beam = (beam[0], beam[1], np.rad2deg(beam[2]))
     rms = rms_image(image)
     if ra_range is None or dec_range is None:
         blc, trc = find_bbox(image.image, n_rms_size*rms, min_maxintensity_mjyperbeam=30*rms,
@@ -1350,6 +1351,60 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
 
 
 if __name__ == '__main__':
+    to_fit_uvfits = "/home/ilya/Downloads/0851+202/Q/OJ287AUG10.UVP"
+    out_dir = "/home/ilya/Downloads/0851+202/Q/results/automodelling"
+    path_to_script = "/home/ilya/github/boston_stacks/difmap_scripts/script_clean_rms"
+    automodeler = AutoModeler(to_fit_uvfits, out_dir, path_to_script,
+                              n_comps_terminate=20,
+                              core_elliptic=False,
+                              mapsize_clean=(512, 0.03),
+                              ra_range_plot=None,
+                              dec_range_plot=None, niter_difmap=200,
+                              show_difmap_output_modelfit=True)
+    # Stoppers define when to stop adding components to model
+    rchsq_stopping = RChiSquaredStopping(mode="or", delta_min=0.01)
+    stoppers = [AddedComponentFluxLessRMSStopping(n_rms=5.0, mode="or"),
+                # AddedComponentFluxLessRMSFluxStopping(mode="or"),
+                AddedTooDistantComponentStopping(mode="or", n_rms=3.0),
+                # AddedTooSmallComponentStopping(mode="and", ),
+                AddedNegativeFluxComponentStopping(mode="or"),
+                # for 0430 exclude it
+                # AddedOverlappingComponentStopping(),
+                # NLastDifferesFromLast(mode="or"),
+                # NLastDifferencesAreSmall(mode="or"),
+                rchsq_stopping]
+    # Keep iterating while this stopper fires
+    # TotalFluxStopping(rel_threshold=0.2, mode="while")]
+    # Selectors choose best model using different heuristics
+    selectors = [FluxBasedModelSelector(delta_flux=0.001),
+                 SizeBasedModelSelector(delta_size=0.001)]
+
+    # Filters additionally remove complex models with non-physical
+    # components (e.g. too small faint component or component
+    # located far away from source.)
+    filters = [SmallSizedComponentsModelFilter(),
+               ComponentAwayFromSourceModelFilter(ccimage=automodeler.ccimage),
+               NegativeFluxComponentModelFilter(),
+               ToElongatedCoreModelFilter(),
+               # OverlappingComponentsModelFilter()]
+               ]
+    automodeler.run(stoppers)
+    best_model = automodeler.select_best(selectors, filters)
+    os.system("cp {} {}".format(best_model, os.path.join(out_dir, "BEST.mdl")))
+    automodeler.plot_results(best_model=best_model,
+                             stoppers_dict={"RChiSQ": rchsq_stopping})
+    # automodeler.archive_images()
+    # automodeler.archive_models()
+    # automodeler.clean()
+
+
+
+
+
+
+    import sys
+    sys.exit(0)
+
     import sys
     import glob
     import os

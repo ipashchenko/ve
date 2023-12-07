@@ -4,6 +4,7 @@ import tqdm
 import glob
 import shutil
 from scipy import ndimage
+from scipy.stats import chi2
 from uv_data import UVData
 from model import Model
 # from cv_model import cv_difmap_models
@@ -84,9 +85,11 @@ class RChiSquaredStopping(StoppingIterationsCriterion):
         self.values = list()
 
     def is_applicable(self):
+        print("n_files = ", len(self.files))
         return len(self.files) > 1
 
     def check_criterion(self):
+        print("self.values : ", self.values)
         print("DELTA RCHISQ = ", self.values[-2] - self.values[-1])
         if self.values[-2] - self.values[-1] < self.delta_min:
             return True
@@ -96,7 +99,44 @@ class RChiSquaredStopping(StoppingIterationsCriterion):
     def do_stop(self, info):
         self.values.append(info["values"])
         print("ChiSquared = {}".format(info["values"]))
-        super(RChiSquaredStopping, self).do_stop(info)
+        return super(RChiSquaredStopping, self).do_stop(info)
+
+
+class RChiSquaredStoppingSchinzel(StoppingIterationsCriterion):
+    """
+    2*self.n_usable_visibilities_difmap(stokes=model.stokes) - model.size
+    """
+    def __init__(self, n_usable_visibilities, mode="or"):
+        super(RChiSquaredStoppingSchinzel, self).__init__(mode=mode)
+        self.values = list()
+        self.n_usable_visibilities = n_usable_visibilities
+
+    def is_applicable(self):
+        print("n_files = ", len(self.files))
+        return len(self.files) > 1
+
+    def check_criterion(self):
+        print("self.values : ", self.values)
+        print("DELTA RCHISQ = ", self.values[-2] - self.values[-1])
+        # FIXME: Assuming circular Gaussians with all fittable parameters
+        DoF_current = 2*self.n_usable_visibilities - len(self.values)*4
+        DoF_prev = 2*self.n_usable_visibilities - len(self.values)*4 - 4
+        print(f"Previous model DoF = {DoF_prev}")
+        print(f"Current model DoF = {DoF_current}")
+        x_68_1 = chi2.ppf(0.68, DoF_current)
+        x_68_2 = chi2.ppf(0.68, DoF_prev)
+        print(f"Threshold ratio (simpler to more complex) = {x_68_2/x_68_1}")
+        print(f"Actual ratio (more complex to simpler) = {self.values[-1]/self.values[-2]}")
+
+        if (self.values[-1]/self.values[-2]) < x_68_2/x_68_1:
+            return False
+        else:
+            return True
+
+    def do_stop(self, info):
+        self.values.append(info["values"])
+        print("ChiSquared = {}".format(info["values"]))
+        return super(RChiSquaredStoppingSchinzel, self).do_stop(info)
 
 
 class AddedOverlappingComponentStopping(StoppingIterationsCriterion):
@@ -821,7 +861,8 @@ class AutoModeler(object):
         print(Style.DIM + "Suggesting component..." + Style.RESET_ALL)
         clean_difmap(self._uv_residuals_fits_path, self._ccimage_residuals_path,
                      self.stokes, self.mapsize_clean, path=self.out_dir,
-                     path_to_script=self.path_to_script, outpath=self.out_dir)
+                     path_to_script=self.path_to_script, outpath=self.out_dir,
+                     show_difmap_output=self.show_difmap_output_clean)
 
         image = create_clean_image_from_fits_file(self._ccimage_residuals_path)
 
@@ -1086,6 +1127,8 @@ class AutoModeler(object):
                             stoppers_or]
             decisions_while = [not stopper.do_stop(result) for stopper in
                                stoppers_while]
+            print("Decisions and : ", decisions_and)
+            print("Decisions or : ", decisions_or)
             # Thus go at least until e.g. model flux will be close to total flux
             if decisions_while:
                 if np.any(~np.array(decisions_while)):
@@ -1352,6 +1395,8 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
 
 if __name__ == '__main__':
     to_fit_uvfits = "/home/ilya/Downloads/0851+202/Q/OJ287AUG10.UVP"
+    uvdata = UVData(to_fit_uvfits)
+    n_usable_visibilities = uvdata.n_usable_visibilities_difmap()
     out_dir = "/home/ilya/Downloads/0851+202/Q/results/automodelling"
     path_to_script = "/home/ilya/github/boston_stacks/difmap_scripts/script_clean_rms"
     automodeler = AutoModeler(to_fit_uvfits, out_dir, path_to_script,
@@ -1360,9 +1405,11 @@ if __name__ == '__main__':
                               mapsize_clean=(512, 0.03),
                               ra_range_plot=None,
                               dec_range_plot=None, niter_difmap=200,
-                              show_difmap_output_modelfit=True)
+                              show_difmap_output_modelfit=False,
+                              show_difmap_output_clean=False)
     # Stoppers define when to stop adding components to model
     rchsq_stopping = RChiSquaredStopping(mode="or", delta_min=0.01)
+    rchsq_schinzel_stopping = RChiSquaredStoppingSchinzel(mode="or", n_usable_visibilities=n_usable_visibilities)
     stoppers = [AddedComponentFluxLessRMSStopping(n_rms=5.0, mode="or"),
                 # AddedComponentFluxLessRMSFluxStopping(mode="or"),
                 AddedTooDistantComponentStopping(mode="or", n_rms=3.0),
@@ -1372,7 +1419,8 @@ if __name__ == '__main__':
                 # AddedOverlappingComponentStopping(),
                 # NLastDifferesFromLast(mode="or"),
                 # NLastDifferencesAreSmall(mode="or"),
-                rchsq_stopping]
+                rchsq_stopping,
+                rchsq_schinzel_stopping]
     # Keep iterating while this stopper fires
     # TotalFluxStopping(rel_threshold=0.2, mode="while")]
     # Selectors choose best model using different heuristics
@@ -1455,7 +1503,8 @@ if __name__ == '__main__':
                                   mapsize_clean=(1024, bands_pixsize_dict[band]),
                                   ra_range_plot=None,
                                   dec_range_plot=None, niter_difmap=200,
-                                  show_difmap_output_modelfit=True)
+                                  show_difmap_output_modelfit=False,
+                                  show_difmap_output_clean=False)
         # Stoppers define when to stop adding components to model
         rchsq_stopping = RChiSquaredStopping(mode="or", delta_min=0.01)
         stoppers = [AddedComponentFluxLessRMSStopping(n_rms=5.0, mode="or"),

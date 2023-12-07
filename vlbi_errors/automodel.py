@@ -335,7 +335,8 @@ class AddedTooDistantComponentStopping(ImageBasedStoppingCriterion):
     def bbox(self):
         if self._bbox is None:
             threshold = self.n_rms*rms_image(self.ccimage, self.hovatta_factor)
-            blc, trc = find_bbox(self.ccimage.image, threshold)
+            blc, trc = find_bbox(self.ccimage.image, threshold,
+                                 min_maxintensity_mjyperbeam=100,min_area_pix=20*100)
             print(Style.DIM + "Calculating BLC, TRC in {}".format(self.__class__.__name__))
             print(blc, trc)
             print(Style.RESET_ALL)

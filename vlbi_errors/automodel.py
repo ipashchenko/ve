@@ -1053,7 +1053,7 @@ class AutoModeler(object):
         model = Model(stokes='I')
         comps = import_difmap_model('{}_{}.mdl'.format(self._mdl_prefix, self.counter), self.out_dir)
         try:
-            plot_clean_image_and_components(self.ccimage, comps, n_rms_size=2.,
+            plot_clean_image_and_components(self.ccimage, comps, n_rms_size=4.,
                                             outname=os.path.join(self.out_dir, "{}_image_{}.png".format(self._mdl_prefix, self.counter)),
                                             ra_range=self.ra_range_plot,
                                             dec_range=self.dec_range_plot)
@@ -1377,7 +1377,7 @@ def plot_clean_image_and_components(image, comps, outname=None, ra_range=None,
     rms = rms_image(image)
     if ra_range is None or dec_range is None:
         blc, trc = find_bbox(image.image, n_rms_size*rms, min_maxintensity_mjyperbeam=30*rms,
-                             min_area_pix=20*100, delta=10)
+                             min_area_pix=10*100, delta=10)
     else:
         blc, trc = None, None
     try:

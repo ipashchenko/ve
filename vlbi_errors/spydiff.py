@@ -95,6 +95,55 @@ def find_nw_beam(uvfits, stokes="I", mapsize=(1024, 0.1), uv_range=None, working
     return bmin, bmaj, bpa
 
 
+def find_far_noise(uvfits, mapsize, uvrange=None, stokes="i", difmap_model_file=None):
+    from subprocess import Popen, PIPE
+
+    cmd = "wrap_print_output = false\n"
+    cmd += "observe "+uvfits+"\n"
+    cmd += "select "+stokes+"\n"
+    if difmap_model_file is not None:
+        cmd += "rmodel "+difmap_model_file+"\n"
+    cmd += "mapsize "+str(int(2*mapsize[0]))+","+str(mapsize[1])+"\n"
+    cmd += ""
+    cmd += "uvw 0, -2\n"
+    if uvrange is not None:
+        cmd += "uvrange {}, {}\n".format(uvrange[0], uvrange[1])
+    cmd += "print \"wtnoise =\", imstat(noise)\n"
+
+    cmd += "select v\n"
+    cmd += "uvw 0, -2\n"
+    if uvrange is not None:
+        cmd += "uvrange {}, {}\n".format(uvrange[0], uvrange[1])
+    cmd += "print \"vnoise =\", imstat(rms)\n"
+
+    cmd += "select i\n"
+    cmd += "shift 10000,10000\n"
+    cmd += "print \"farnoise =\", imstat(rms)\n"
+
+    cmd += "exit\n"
+
+    with Popen('difmap', stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True) as difmap:
+        outs, errs = difmap.communicate(input=cmd)
+
+    lines = outs.split("\n")
+    line = [line for line in lines if "wtnoise =" in line][-1]
+    wtnoise = float(line.split("=")[1])
+    line = [line for line in lines if "vnoise =" in line][-1]
+    vnoise = float(line.split("=")[1])
+    line = [line for line in lines if "farnoise =" in line][-1]
+    farnoise = float(line.split("=")[1])
+    line = [line for line in lines if "Estimated beam:" in line][-1]
+    bmin = float(line.split(" ")[2].split("=")[1])
+    bmaj = float(line.split(" ")[4].split("=")[1])
+    bpa = float(line.split(" ")[6].split("=")[1])
+
+    print("=== Far region rms = {:.3f} mJy/beam".format(1000*farnoise))
+    print("=== Weights rms    = {:.3f} mJy/beam".format(1000*wtnoise))
+    print("=== V noise rms    = {:.3f} mJy/beam".format(1000*vnoise))
+
+    return farnoise, wtnoise, vnoise
+
+
 def check_bbox(blc, trc, image_size):
     """
     :note:
@@ -208,7 +257,20 @@ def filter_CC(ccfits, mask, out_ccfits=None, out_dfm=None, show=False,
         hdus.writeto(out_ccfits, overwrite=True)
 
 
-def find_bbox(array, level, min_maxintensity_mjyperbeam, min_area_pix,
+def get_contour_mask(array, level, min_maxintensity_jyperbeam, min_area_pix):
+    signal = array > level
+    s = generate_binary_structure(2, 2)
+    labeled_array, num_features = label(signal, structure=s)
+    props = regionprops(labeled_array, intensity_image=array)
+
+    mask = np.ones(array.shape)
+    signal_props = list()
+    for prop in props:
+        if prop.max_intensity > min_maxintensity_jyperbeam and prop.area > min_area_pix:
+            mask[prop.coords[:, 0], prop.coords[:, 1]] = 0
+    return mask
+
+def find_bbox(array, level, min_maxintensity_jyperbeam, min_area_pix,
               delta=0.):
     """
     Find bounding box for part of image containing source.
@@ -237,7 +299,7 @@ def find_bbox(array, level, min_maxintensity_mjyperbeam, min_area_pix,
 
     signal_props = list()
     for prop in props:
-        if prop.max_intensity > min_maxintensity_mjyperbeam/1000 and prop.area > min_area_pix:
+        if prop.max_intensity > min_maxintensity_jyperbeam and prop.area > min_area_pix:
             signal_props.append(prop)
 
     # Sometimes no regions are found. In that case return full image
@@ -283,7 +345,7 @@ def find_image_std(image_array, beam_npixels, min_num_pixels_used_to_estimate_st
     if blc is None or trc is None:
         # Find preliminary bounding box
         blc, trc = find_bbox(image_array, level=4*std,
-                             min_maxintensity_mjyperbeam=4*std,
+                             min_maxintensity_jyperbeam=4*std,
                              min_area_pix=2*beam_npixels,
                              delta=0)
         print("Found bounding box : ", blc, trc)
@@ -676,6 +738,43 @@ def convert_difmap_model_file_to_CCFITS(difmap_model_file, stokes, mapsize,
     # default dimfap: false,true (parameters: omit_residuals, do_smooth)
     cmd += "restore " + str(restore_beam[0]) + "," + str(restore_beam[1]) + "," + str(restore_beam[2]) + "," + "true,false" + "\n"
     cmd += "wmap " + out_ccfits + "\n"
+    cmd += "exit\n"
+
+    with Popen('difmap', stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True) as difmap:
+        outs, errs = difmap.communicate(input=cmd)
+    if show_difmap_output:
+        print(outs)
+        print(errs)
+
+
+def residuals_from_model(uvfits, difmap_model_file, out_fits, mapsize,
+                         stokes="i", show_difmap_output=True,
+                         uvtaper=None):
+    """
+
+    :param uvfits:
+    :param difmap_model_file:
+    :param out_fits:
+    :param mapsize:
+    :param stokes:
+    :param show_difmap_output:
+    :param uvtaper:
+        Iterable of 0.5 and uv-distance (Ml) where taper is 0.5. E.g. (0.5, 600)
+    :return:
+    """
+    from subprocess import Popen, PIPE
+
+    cmd = "observe "+uvfits+"\n"
+    cmd += "select "+stokes+"\n"
+    if difmap_model_file is not None:
+        cmd += "rmodel "+difmap_model_file+"\n"
+    cmd += "mapsize "+str(mapsize[0]*2)+","+str(mapsize[1])+"\n"
+    cmd += "uvw 0, -2\n"
+    # default dimfap: false,true (parameters: omit_residuals, do_smooth)
+    # cmd += "restore\n"
+    if uvtaper is not None:
+        cmd += f"uvtaper {uvtaper[0]}, {uvtaper[1]}\n"
+    cmd += "wdmap " + out_fits + "\n"
     cmd += "exit\n"
 
     with Popen('difmap', stdin=PIPE, stdout=PIPE, stderr=PIPE, universal_newlines=True) as difmap:
@@ -1985,7 +2084,6 @@ def transform_component(difmap_model_file, new_type, freq_hz, comp_id=0,
     export_difmap_model(new_comps, outname, freq_hz)
 
 
-
 def tb_gaussian(flux_jy, bmaj_mas, freq_ghz, z=0, bmin_mas=None, D=1.0):
     """
     Brightness temperature (optionally corrected for redshift and Doppler
@@ -2021,6 +2119,21 @@ def sigma_tb_gaussian(sigma_flux_jy, sigma_d_mas, flux_jy, d_mas, freq_ghz, z=0,
     sigma_flux_jy *= 10**(-23)
     return 2.*np.log(2)*(1.+z)*c**2/(freq_ghz**2*np.pi*k*d_mas**2*D)*np.sqrt(sigma_flux_jy**2 + (2*flux_jy/d_mas)**2*sigma_d_mas**2)
 
+
+def convert_pixel_from_Jy_to_K(pixel_mas, freq_ghz, z=0, D=1.0):
+    """
+    Conversion coefficient of pixel values from Jy Brightness temperature
+    (optionally corrected for redshift and Doppler factor) in K.
+    """
+    flux_jy = 1.
+    k = 1.38*10**(-16)
+    c = 29979245800.0
+    mas_to_rad = 4.8481368*1E-09
+
+    pixel_mas *= mas_to_rad
+    freq_ghz *= 10**9
+    flux_jy *= 10**(-23)
+    return 2.*np.log(2)*(1.+z)*flux_jy*c**2/(freq_ghz**2*np.pi*k*pixel_mas*pixel_mas*D)
 
 def convert_bbox_to_radec_ranges(wcs, blc, trc):
     """
@@ -2216,10 +2329,10 @@ def components_info(fname, mdl_fname, dmap_size, PA=None, dmap_name=None,
 
         mask_radius = 3*beam_pxl
         if comp["TYPE OBJ"] == 1.0 and comp["POSANGLE"] == 0.0:
-            size = comp["MAJOR AX"]*deg2mas/0.1
+            size = comp["MAJOR AX"]*deg2mas/dmap_size[1]
             mask_radius = np.hypot(mask_radius, size)
         elif comp["TYPE OBJ"] == 1.0 and comp["POSANGLE"] != 0.0:
-            size = 0.5*(comp["MAJOR AX"]*deg2mas + comp["MINOR AX"]*deg2mas)/0.1
+            size = 0.5*(comp["MAJOR AX"]*deg2mas + comp["MINOR AX"]*deg2mas)/dmap_size[1]
             mask_radius = np.hypot(mask_radius, size)
         else:
             size = 0.0
@@ -4024,7 +4137,8 @@ if __name__ == "__main__":
     # new_path = "/home/ilya/Downloads/3C454.3"
     # new_path = "/home/ilya/Downloads/3C454.3/Boston/lost"
     # new_path = "/home/ilya/Downloads/TXS8"
-    new_path = "/home/ilya/Downloads/pks1717draftmodelfitfiles"
+    # new_path = "/home/ilya/Downloads/pks1717draftmodelfitfiles"
+    new_path = "/home/ilya/Downloads/1424+240"
     # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
     # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
     # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
@@ -4032,7 +4146,10 @@ if __name__ == "__main__":
     # rm old
     torm_dfm_models = glob.glob(os.path.join(new_path, "new*.mod"))
     for fn in torm_dfm_models:
-        os.unlink(fn)
+        try:
+            os.unlink(fn)
+        except:
+            pass
 
     dfm_models = glob.glob(os.path.join(new_path, "*.mod"))
     print(dfm_models)
@@ -4046,7 +4163,7 @@ if __name__ == "__main__":
     # ACTUAL ERRORS CALCULATION ################################################
     for dfm_model in dfm_models:
         fn = os.path.split(dfm_model)[-1]
-        if fn != "2013_02_28.mod":
+        if fn not in ("2019_08_15.mod", "2019_10_08.mod"):
             continue
         epoch = fn[:10]
         epochs.append(epoch)
@@ -4067,7 +4184,7 @@ if __name__ == "__main__":
         #     uvfits = "{}/J0509+0541_U_{}_moj_vis.fits".format(new_path, epoch)
         # else:
         #     uvfits = "{}/J0509+0541_X_{}_pet_vis.fits".format(new_path, epoch)
-        uvfits = os.path.join(new_path, "1717+178.u.{}.uvf".format(epoch))
+        uvfits = os.path.join(new_path, "1424+240.u.{}.uvf".format(epoch))
         if epoch not in ():
             try:
                 df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,

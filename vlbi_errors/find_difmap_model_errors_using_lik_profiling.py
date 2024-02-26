@@ -21,9 +21,9 @@ average_time_sec = 120.
 account_gains = False
 
 rad2mas = u.rad.to(u.mas)
-data_dir = "/home/ilya/Downloads/0735_rfc_Q"
+data_dir = "/home/ilya/Downloads/Mrk501_Q_new"
 # data_dir = "/home/ilya/Downloads/3C454.3"
-models_dir = "/home/ilya/data/silke/0735/forgoten43"
+models_dir = "/home/ilya/Downloads/Mrk501_Q_new"
 freq = 43E+09
 
 # data_dir = "/home/ilya/Downloads/TXS0506"
@@ -46,7 +46,10 @@ mdl_files = sorted(glob.glob(os.path.join(models_dir, "*.mod")))
 mdl_files = [os.path.split(path)[-1] for path in mdl_files]
 epochs = [fn.split(".")[0] for fn in mdl_files]
 
+print("Found epochs ", epochs)
+
 for mdl_file in mdl_files:
+    print("Importing model from file ", mdl_file)
     comps = import_difmap_model(os.path.join(models_dir, mdl_file))
     base = mdl_file.split(".")[0]
     export_difmap_model(comps, os.path.join(models_dir, f"{base}_exp.mod"), freq)
@@ -55,7 +58,7 @@ mdl_files = sorted(glob.glob(os.path.join(models_dir, "*_exp.mod")))
 mdl_files = [os.path.split(path)[-1] for path in mdl_files]
 
 # ccfits_files = ['0735+178Q.{}.IMAP'.format(epoch) for epoch in epochs]
-ccfits_files = ['J0738+1742_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
+ccfits_files = ['1652+398Q.{}.IMAP'.format(epoch) for epoch in epochs]
 # ccfits_files = ['J2253+1608_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
 # ccfits_files = ['0506+056.u.{}.icn.fits.gz'.format(epoch) for epoch in epochs]
 
@@ -69,7 +72,7 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     # continue
 
     # uvfits_file = '0735+178Q.{}.UVP'.format(epoch)
-    uvfits_file = 'J0738+1742_Q_{}_mar_vis.fits'.format(epoch)
+    uvfits_file = '1652+398Q.{}.UVP'.format(epoch)
 
     if not os.path.exists(os.path.join(data_dir, uvfits_file)):
         print("No UVFITS for epoch {}".format(epoch))

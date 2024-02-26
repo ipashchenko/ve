@@ -12,10 +12,12 @@ from spydiff import (export_difmap_model, modelfit_difmap, import_difmap_model,
                      clean_difmap, append_component_to_difmap_model,
                      clean_n, difmap_model_flux,
                      sort_components_by_distance_from_cj,
-                     component_joiner_serial, time_average)
+                     component_joiner_serial, time_average,
+                     residuals_from_model)
 from components import CGComponent, EGComponent
 from from_fits import (create_clean_image_from_fits_file,
-                       create_model_from_fits_file)
+                       create_model_from_fits_file,
+                       create_image_from_fits_file)
 from utils import mas_to_rad, infer_gaussian
 from image import plot as iplot
 from image import find_bbox
@@ -845,7 +847,7 @@ class AutoModeler(object):
             uvdata_residual = self.uvdata_residuals
         uvdata_residual.save(self._uv_residuals_fits_path, rewrite=True)
 
-    def suggest_component(self, type='cg', bmaj_nan=0.1):
+    def suggest_component(self, difmap_model_file=None, type='cg', bmaj_nan=0.1):
         """
         Suggest single circular gaussian component using self-calibrated uv-data
         FITS file.
@@ -860,12 +862,17 @@ class AutoModeler(object):
             Instance of ``CGComponent``.
         """
         print(Style.DIM + "Suggesting component..." + Style.RESET_ALL)
-        clean_difmap(self._uv_residuals_fits_path, self._ccimage_residuals_path,
-                     self.stokes, self.mapsize_clean, path=self.out_dir,
-                     path_to_script=self.path_to_script, outpath=self.out_dir,
-                     show_difmap_output=self.show_difmap_output_clean)
+        # clean_difmap(self._uv_residuals_fits_path, self._ccimage_residuals_path,
+        #              self.stokes, self.mapsize_clean, path=self.out_dir,
+        #              path_to_script=self.path_to_script, outpath=self.out_dir,
+        #              show_difmap_output=self.show_difmap_output_clean)
 
-        image = create_clean_image_from_fits_file(self._ccimage_residuals_path)
+
+        residuals_from_model(self.uv_fits_path, difmap_model_file,
+                             self._ccimage_residuals_path, self.mapsize_clean)
+
+
+        image = create_image_from_fits_file(self._ccimage_residuals_path)
 
         imsize = image.imsize[0]
         mas_in_pix = abs(image.pixsize[0] / mas_to_rad)
@@ -1016,7 +1023,7 @@ class AutoModeler(object):
 
     def do_iteration(self):
         self.counter += 1
-        self.create_residuals(self.model)
+        # self.create_residuals(self.model)
         if self.counter == 1:
             core_type = self.core_type
         else:

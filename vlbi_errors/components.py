@@ -73,7 +73,7 @@ class Component(object):
                 self._lnprior.update({key: _function_wrapper(func, args,
                                                              kwargs)})
             else:
-                raise Exception("Uknown parameter name: " + str(key))
+                raise Exception("Uknown parameter name: "+str(key))
 
     @property
     def p_all(self):
@@ -164,14 +164,14 @@ class Component(object):
 
         if style == 'a&p':
             a1 = np.angle(ft)
-            a2 = np.real(np.sqrt(ft * np.conj(ft)))
+            a2 = np.real(np.sqrt(ft*np.conj(ft)))
         elif style == 're&im':
             a1 = ft.real
             a2 = ft.imag
         else:
             raise Exception('Only ``a&p`` and ``re&im`` styles are allowed!')
 
-        uv_radius = np.sqrt(uv[:, 0] ** 2 + uv[:, 1] ** 2)
+        uv_radius = np.sqrt(uv[:, 0]**2+uv[:, 1]**2)
         pylab.subplot(2, 1, 1)
         pylab.plot(uv_radius, a2, sym)
         pylab.subplot(2, 1, 2)
@@ -228,9 +228,9 @@ class EGComponent(Component):
         if fixed is not None:
             for par in fixed:
                 if par not in self._parnames:
-                    raise Exception('Uknown parameter ' + str(par) + ' !')
+                    raise Exception('Uknown parameter '+str(par)+' !')
                 self._fixed[self._parnames.index(par)] = True
-            self.size = 6 - np.count_nonzero(self._fixed)
+            self.size = 6-np.count_nonzero(self._fixed)
 
     def to_delta(self, fixed=None):
         """
@@ -313,17 +313,17 @@ class EGComponent(Component):
         x0 *= mas_to_rad
         y0 *= mas_to_rad
         bmaj *= mas_to_rad
-        bpa += 0.5 * np.pi
+        bpa += 0.5*np.pi
 
         u = uv[:, 0]
         v = uv[:, 1]
-        c = (np.pi*bmaj)**2/(4. * np.log(2.))
-        b = e**2 * (u*np.cos(bpa)-v*np.sin(bpa))**2 + (u*np.sin(bpa)+v*np.cos(bpa))**2
+        c = (np.pi*bmaj)**2/(4.*np.log(2.))
+        b = e**2*(u*np.cos(bpa)-v*np.sin(bpa))**2+(u*np.sin(bpa)+v*np.cos(bpa))**2
         ft = flux*np.exp(-c*b)
         ft = vcomplex(ft)
         # If x0=!0 or y0=!0 then shift phase accordingly
         if x0 or y0:
-            ft *= np.exp(-2. * math.pi * 1j * (u * x0 + v * y0))
+            ft *= np.exp(-2.*math.pi*1j*(u*x0+v*y0))
         return ft
 
     def _ft(self, uv):
@@ -381,30 +381,30 @@ class EGComponent(Component):
         u = uv[:, 0]
         v = uv[:, 1]
         # Construct parameter of gaussian function (1)
-        std_x = bmaj / (2. * np.sqrt(2. * np.log(2)))
-        std_y = e * bmaj / (2. * np.sqrt(2. * np.log(2)))
+        std_x = bmaj/(2.*np.sqrt(2.*np.log(2)))
+        std_y = e*bmaj/(2.*np.sqrt(2.*np.log(2)))
         # std_x = bmaj / (2. * np.sqrt(2. * np.log(2)))
         # std_y = e * bmaj / (2. * np.sqrt(2. * np.log(2)))
-        a = math.cos(bpa) ** 2. / (2. * std_x ** 2.) + \
-            math.sin(bpa) ** 2. / (2. * std_y ** 2.)
-        b = math.sin(2. * bpa) / (2. * std_x ** 2.) - \
-            math.sin(2. * bpa) / (2. * std_y ** 2.)
-        c = math.sin(bpa) ** 2. / (2. * std_x ** 2.) + \
-            math.cos(bpa) ** 2. / (2. * std_y ** 2.)
+        a = math.cos(bpa)**2./(2.*std_x**2.)+ \
+            math.sin(bpa)**2./(2.*std_y**2.)
+        b = math.sin(2.*bpa)/(2.*std_x**2.)- \
+            math.sin(2.*bpa)/(2.*std_y**2.)
+        c = math.sin(bpa)**2./(2.*std_x**2.)+ \
+            math.cos(bpa)**2./(2.*std_y**2.)
         a = np.double(a)
         b = np.double(a)
         c = np.double(a)
         flux = np.double(flux)
         # Calculate the value of FT in point (u,v) for x0=0,y0=0 case using (2)
-        k = (4. * a * c - b ** 2.)
-        ft = flux * np.exp((4. * math.pi ** 2. / k) * (-c * u ** 2. +
-                                                       b * u * v - a * v ** 2.))
+        k = (4.*a*c-b**2.)
+        ft = flux*np.exp((4.*math.pi**2./k)*(-c*u**2.+
+                                             b*u*v-a*v**2.))
         # ft = flux * np.exp((4. * math.pi ** 2.) * (-(c/k) * u ** 2. +
         #                                            (b/k) * u * v - (a/k) * v ** 2.))
         ft = vcomplex(ft)
         # If x0=!0 or y0=!0 then shift phase accordingly
         if x0 or y0:
-            ft *= np.exp(-2. * math.pi * 1j * (u * x0 + v * y0))
+            ft *= np.exp(-2.*math.pi*1j*(u*x0+v*y0))
         return ft
 
     def add_to_image(self, image, beam=None):
@@ -435,7 +435,7 @@ class EGComponent(Component):
         # Amplitude of gaussian component [Jy/beam]
         # amp = flux / (2. * math.pi * (bmaj / mas_to_rad) ** 2. * e)
         # amp = flux / (2. * math.pi * (bmaj / abs(image.pixsize[0])) ** 2. * e)
-        amp = 4. * np.log(2) * flux / (np.pi * (bmaj/abs(image.pixsize[0]))**2 * e)
+        amp = 4.*np.log(2)*flux/(np.pi*(bmaj/abs(image.pixsize[0]))**2*e)
 
         # Create gaussian function of (x, y) with given parameters
         gaussf = gaussian(amp, x0, y0, bmaj, e, bpa=bpa)
@@ -443,20 +443,20 @@ class EGComponent(Component):
         # Calculating angular distances of cells from center of component
         # from cell numbers to relative distances
         # arrays with elements from 1 to imsize
-        x, y = np.mgrid[1: image.imsize[0] + 1,
-                        1: image.imsize[1] + 1]
+        x, y = np.mgrid[1: image.imsize[0]+1,
+               1: image.imsize[1]+1]
         # from -imsize/2 to imsize/2
-        x = x - x_c
-        y = y - y_c
+        x = x-x_c
+        y = y-y_c
         # the same in rads
-        x = x * dx
-        y = y * dy
+        x = x*dx
+        y = y*dy
         ## relative to component center
-        #x = x - x0
-        #y = y - y0
+        # x = x - x0
+        # y = y - y0
         ## convert to mas cause all params are in mas
-        #x = x / mas_to_rad
-        #y = y / mas_to_rad
+        # x = x / mas_to_rad
+        # y = y / mas_to_rad
 
         # Creating grid with component's flux at each cell
         fluxes = gaussf(x, y)
@@ -495,7 +495,7 @@ class EGComponent(Component):
         # TODO: Is it [Jy/beam]??
         # Amplitude of gaussian component [Jy/beam]
         # amp = flux / (2. * math.pi * (bmaj / mas_to_rad) ** 2. * e)
-        amp = flux / (2. * math.pi * (bmaj / abs(image.pixsize[0])) ** 2. * e)
+        amp = flux/(2.*math.pi*(bmaj/abs(image.pixsize[0]))**2.*e)
 
         # Create gaussian function of (x, y) with given parameters
         gaussf = gaussian(amp, x0, y0, bmaj, e, bpa=bpa)
@@ -503,20 +503,20 @@ class EGComponent(Component):
         # Calculating angular distances of cells from center of component
         # from cell numbers to relative distances
         # arrays with elements from 1 to imsize
-        x, y = np.mgrid[1: image.imsize[0] + 1,
-               1: image.imsize[1] + 1]
+        x, y = np.mgrid[1: image.imsize[0]+1,
+               1: image.imsize[1]+1]
         # from -imsize/2 to imsize/2
-        x = x - x_c
-        y = y - y_c
+        x = x-x_c
+        y = y-y_c
         # the same in rads
-        x = x * dx
-        y = y * dy
+        x = x*dx
+        y = y*dy
         ## relative to component center
-        #x = x - x0
-        #y = y - y0
+        # x = x - x0
+        # y = y - y0
         ## convert to mas cause all params are in mas
-        #x = x / mas_to_rad
-        #y = y / mas_to_rad
+        # x = x / mas_to_rad
+        # y = y / mas_to_rad
 
         # Creating grid with component's flux at each cell
         fluxes = gaussf(x, y)
@@ -550,7 +550,7 @@ class CGComponent(EGComponent):
                                           fixed=fixed)
         self._fixed = self._fixed[:-2]
         self._p = self._p[:-2]
-        self.size = 4 - np.count_nonzero(self._fixed)
+        self.size = 4-np.count_nonzero(self._fixed)
 
     def to_elliptic(self, e=1, bpa=0, fixed=None):
         """
@@ -572,10 +572,47 @@ class CGComponent(EGComponent):
                            fixed=np.array(EGComponent._parnames)[fixed])
 
 
+class OpticallyThinSphereComponent(Component):
+    _parnames = ['flux', 'x', 'y', 'bmaj']
+    size = len(_parnames)
+
+    def __init__(self, flux, x, y, bmaj, fixed=None):
+        super(OpticallyThinSphereComponent, self).__init__()
+        self._fixed = np.concatenate((self._fixed,
+                                      np.array([False]),))
+        self._p = np.array([flux, x, y, bmaj])
+        self.size = 4
+        if fixed is not None:
+            for par in fixed:
+                if par not in self._parnames:
+                    raise Exception('Uknown parameter '+str(par)+' !')
+                self._fixed[self._parnames.index(par)] = True
+            self.size = 4-np.count_nonzero(self._fixed)
+
+    def ft(self, uv):
+        flux, x0, y0, bmaj = self._p
+        # There's ONE place to convert them
+        x0 *= mas_to_rad
+        y0 *= mas_to_rad
+        bmaj *= mas_to_rad
+
+        u = uv[:, 0]
+        v = uv[:, 1]
+
+        pi_D_rho = np.pi*bmaj*np.sqrt(u*u + v*v)
+        ft = 3*flux*(np.sin(pi_D_rho) - pi_D_rho*np.cos(pi_D_rho))/pi_D_rho**3
+        ft = vcomplex(ft)
+        # If x0=!0 or y0=!0 then shift phase accordingly
+        if x0 or y0:
+            ft *= np.exp(-2.*math.pi*1j*(u*x0 + v*y0))
+        return ft
+
+
 class DeltaComponent(Component):
     """
     Class that implements delta-function component.
     """
+
     def __init__(self, flux, x, y, fixed=None):
         """
         :param flux:
@@ -591,9 +628,9 @@ class DeltaComponent(Component):
         if fixed is not None:
             for par in fixed:
                 if par not in self._parnames:
-                    raise Exception('Uknown parameter ' + str(par) + ' !')
+                    raise Exception('Uknown parameter '+str(par)+' !')
                 self._fixed[self._parnames.index(par)] = True
-            self.size = 3 - np.count_nonzero(self._fixed)
+            self.size = 3-np.count_nonzero(self._fixed)
 
     def to_circular(self, bmaj, fixed=None):
         """
@@ -651,9 +688,9 @@ class DeltaComponent(Component):
 
         u = uv[:, 0]
         v = uv[:, 1]
-        visibilities = (flux * np.exp(-2.0 * math.pi * 1j *
-                                      (u[:, np.newaxis] * x0 +
-                                       v[:, np.newaxis] * y0))).sum(axis=1)
+        visibilities = (flux*np.exp(-2.0*math.pi*1j*
+                                    (u[:, np.newaxis]*x0+
+                                     v[:, np.newaxis]*y0))).sum(axis=1)
         return visibilities
 
     def add_to_image(self, image, beam=None):
@@ -669,11 +706,11 @@ class DeltaComponent(Component):
         x0 *= mas_to_rad
         y0 *= mas_to_rad
 
-        x_coords = int(round(x0 / dx))
-        y_coords = int(round(y0 / dy))
+        x_coords = int(round(x0/dx))
+        y_coords = int(round(y0/dy))
         # 2 means that x_c & x_coords should be zero-indexed actually both.
-        x = x_c + x_coords - 2
-        y = y_c + y_coords - 2
+        x = x_c+x_coords-2
+        y = y_c+y_coords-2
         # ``._image`` attribute contains model (FT of uv-data)
         # [y, x] - to get coincidence with fits clean maps
 
@@ -708,11 +745,11 @@ class DeltaComponent(Component):
         x0 *= mas_to_rad
         y0 *= mas_to_rad
 
-        x_coords = int(round(x0 / dx))
-        y_coords = int(round(y0 / dy))
+        x_coords = int(round(x0/dx))
+        y_coords = int(round(y0/dy))
         # 2 means that x_c & x_coords should be zero-indexed actually both.
-        x = x_c + x_coords - 2
-        y = y_c + y_coords - 2
+        x = x_c+x_coords-2
+        y = y_c+y_coords-2
         # ``._image`` attribute contains model (FT of uv-data)
         # [y, x] - to get coincidence with fits clean maps
 
@@ -728,6 +765,7 @@ class ImageComponent(Component):
     """
     Class that implements image component (2D-array of flux values).
     """
+
     def __init__(self, image, x, y):
         """
         :param image:
@@ -770,6 +808,7 @@ class ModelImageComponent(Component):
     Class that represents model image that can be translated, rotated and
     scaled.
     """
+
     def __init__(self, image, x, y):
         """
         :param image:
@@ -822,4 +861,3 @@ class ModelImageComponent(Component):
         if beam is not None:
             add = beam.convolve(self.image)
         image.image -= np.rot90(add)[::-1, ::]
-

@@ -262,7 +262,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          fig=None, axes=None, contour_linewidth=0.5, vector_color="black",
          n_discrete_colors=None, fixed_component_color="deepskyblue",
          show_xlabel_on_current_axes=False, show_ylabel_on_current_axes=False,
-         vector_scale=None):
+         vector_scale=None, components_facecolor=None):
     """
     Plot image(s).
 
@@ -554,7 +554,6 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         # ax.add_artist(box)
 
 
-        from matplotlib.patches import Ellipse
         e_height = max(beam[0], beam[1])
         e_width = min(beam[0], beam[1])
         r_min = e_height / 2
@@ -607,7 +606,10 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         ax.add_patch(e)
 
     if components:
-        facecolor = "red"
+        if components_facecolor is None:
+            facecolor = "red"
+        else:
+            facecolor = components_facecolor
         for comp in components:
             if np.any(comp._fixed):
                 is_some_parameter_fixed = True
@@ -623,18 +625,22 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 e_height = comp.p_all[3]
                 e_width = comp.p_all[3] * comp.p_all[4]
                 if e_height < 0.25*plot_pixel_size and e_width < 0.25*plot_pixel_size:
-                    facecolor = "green"
+                    if components_facecolor is None:
+                        facecolor = "green"
                 if e_height < 0.25*plot_pixel_size:
                     e_height = 0.25*plot_pixel_size
                 if e_width < 0.25*plot_pixel_size:
                     e_width = 0.25*plot_pixel_size*comp.p_all[4]
                 else:
-                    facecolor = "red"
+                    if components_facecolor is None:
+                        facecolor = "red"
                 if comp.p_all[0] < 0:
-                    facecolor = "blue"
+                    if components_facecolor is None:
+                        facecolor = "blue"
 
                 if is_some_parameter_fixed:
-                    facecolor = fixed_component_color
+                    if components_facecolor is None:
+                        facecolor = fixed_component_color
 
                 # FIXME: Here must be total length of vertical/horizontal axis
                 e = Ellipse((x_c, y_c), e_width, e_height,
@@ -646,14 +652,18 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
                 c_size = comp.p_all[3]/2.0
                 if c_size < 0.25*plot_pixel_size:
                     c_size = 0.25*plot_pixel_size
-                    facecolor = "green"
+                    if components_facecolor is None:
+                        facecolor = "green"
                 else:
-                    facecolor = "red"
+                    if components_facecolor is None:
+                        facecolor = "red"
                 if comp.p_all[0] < 0:
-                    facecolor = "blue"
+                    if components_facecolor is None:
+                        facecolor = "blue"
 
                 if is_some_parameter_fixed:
-                    facecolor = fixed_component_color
+                    if components_facecolor is None:
+                        facecolor = fixed_component_color
 
                 e = Circle((x_c, y_c), c_size,
                             edgecolor=beam_edge_color, facecolor=facecolor,

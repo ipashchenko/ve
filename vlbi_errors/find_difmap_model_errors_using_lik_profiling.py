@@ -149,7 +149,7 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
     beam_size = np.sqrt(beam[0]*beam[1])
     npixels_beam = np.pi*beam[0]*beam[1]/(4*np.log(2)*pixsize_mas**2)
     std = find_image_std(ccimage.image, beam_npixels=npixels_beam)
-    blc, trc = find_bbox(ccimage.image, level=3*std, min_maxintensity_mjyperbeam=4*std,
+    blc, trc = find_bbox(ccimage.image, level=3*std, min_maxintensity_jyperbeam=4*std,
                          min_area_pix=4*npixels_beam, delta=10)
     fig, axes = plt.subplots(1, 1, figsize=(10, 15))
     fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=3*std,

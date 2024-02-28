@@ -539,7 +539,11 @@ def find_card_from_header(header, value=None, keyword=None,
         search = header.cards
 
     # Fix just in case
-    [card.verify("fix") for card in search]
+    try:
+        [card.verify("fix") for card in search]
+    # astropy.io.fits.verify.VerifyError
+    except:
+        pass
 
     if value is not None and keyword is None:
         result = [card for card in search if card.value == value]
@@ -1134,13 +1138,17 @@ def gaussian_beam(size_x, bmaj, bmin, bpa, size_y=None):
     return g
 
 
-def infer_gaussian(data):
+def infer_gaussian(data, mask=None):
     """
     Return (amplitude, x_0, y_0, width), where width - rough estimate of
     gaussian width
     """
-    amplitude = data.max()
-    x_0, y_0 = np.where(data == amplitude)
+    if mask is None:
+        mask = np.zeros(data.shape)
+    data = np.ma.array(data, mask=mask)
+    amplitude = np.ma.max(data)
+    x_0, y_0 = np.ma.where(data == amplitude)
+    print(x_0, y_0)
     row = data[x_0, :]
     column = data[:, y_0]
     x_0 = float(x_0)

@@ -262,7 +262,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          fig=None, axes=None, contour_linewidth=0.5, vector_color="black",
          n_discrete_colors=None, fixed_component_color="deepskyblue",
          show_xlabel_on_current_axes=False, show_ylabel_on_current_axes=False,
-         vector_scale=None, components_facecolor=None):
+         vector_scale=None, components_facecolor=None, revert_xaxis=True):
     """
     Plot image(s).
 
@@ -466,8 +466,9 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         co = ax.contour(y, x, contours[x_slice, y_slice], abs_levels,
                         colors=contour_color, extent=extent,
                         linewidths=contour_linewidth)
-        # if fig is None:
-        ax.invert_xaxis()
+        if revert_xaxis:
+            print("Inverting xaxis!")
+            ax.invert_xaxis()
         # Make colorbar for contours if no colors is supplied
         if colors is None:
             if plot_colorbar:

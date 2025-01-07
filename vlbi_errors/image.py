@@ -253,7 +253,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          rel_levels=None, min_abs_level=None, min_rel_level=None, k=2, vinc=2,
          show_beam=False, beam_place='ll', beam=None, contours_mask=None,
          colors_mask=None, log_color=False, log_offset=None, dynamic_range=1e+03,
-         vectors_mask=None, plot_title=None, title_fontsize="medium", color_clim=None,
+         vectors_mask=None, plot_title=None, title_fontsize="medium", title_loc="left", color_clim=None,
          outfile=None, outdir=None, ext='png', close=False, slice_points=None,
          colorbar_label=None, show=True, contour_color='k',
          beam_edge_color='black', beam_face_color='green', beam_alpha=0.3,
@@ -529,7 +529,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             ax.plot(point[0], point[1], '.k')
 
     if plot_title:
-        title = ax.set_title(plot_title, fontsize=title_fontsize)
+        title = ax.set_title(plot_title, fontsize=title_fontsize, loc=title_loc)
     # Add colorbar if plotting colors
     if colors is not None:
         if plot_colorbar:

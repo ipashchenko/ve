@@ -9,7 +9,7 @@ import scipy.ndimage as nd
 import image_ops
 from from_fits import create_image_from_fits_file
 from skimage.morphology import medial_axis
-from scipy import nanmean
+from numpy import nanmean
 import matplotlib.pyplot as plt
 
 

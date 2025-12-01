@@ -15,6 +15,7 @@ import matplotlib
 # matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Circle
+import matplotlib.colors as mcolors
 from matplotlib import cm
 
 try:
@@ -262,7 +263,8 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
          fig=None, axes=None, contour_linewidth=0.5, vector_color="black",
          n_discrete_colors=None, fixed_component_color="deepskyblue",
          show_xlabel_on_current_axes=False, show_ylabel_on_current_axes=False,
-         vector_scale=None, components_facecolor=None, revert_xaxis=True):
+         vector_scale=None, components_facecolor=None, revert_xaxis=True,
+         symlog_colors=False, vmin=None, vmax=None, linthresh=None):
     """
     Plot image(s).
 
@@ -493,9 +495,24 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
             else:
                 colors = np.log10(colors + np.max(colors)/dynamic_range)
 
-        im = ax.imshow(colors[x_slice, y_slice], interpolation=interp,
-                       origin='lower', extent=[y[0], y[-1], x[0], x[-1]],
-                       cmap=plt.get_cmap(cmap), clim=color_clim)
+
+        if symlog_colors:
+            assert linthresh is not None
+            assert vmin is not None
+            assert vmin is not None
+            norm = mcolors.SymLogNorm(linthresh=linthresh, vmax=vmax, vmin=vmin)
+            # norm = mcolors.AsinhNorm(linear_width=linthresh, vmax=vmax, vmin=vmin)
+            im = ax.imshow(colors[x_slice, y_slice], interpolation=interp,
+                           origin='lower', extent=[y[0], y[-1], x[0], x[-1]],
+                           cmap=plt.get_cmap(cmap), clim=color_clim,
+                           norm=norm)
+            cb = fig.colorbar(im, pad=0.01)
+            cb.set_label(label="Linear Polarized Intensity [Jy/bm]",size='x-small')
+            cb.ax.tick_params(labelsize='x-small')
+        else:
+            im = ax.imshow(colors[x_slice, y_slice], interpolation=interp,
+                           origin='lower', extent=[y[0], y[-1], x[0], x[-1]],
+                           cmap=plt.get_cmap(cmap), clim=color_clim)
 
     if vectors is not None:
         if vectors_values is not None:
@@ -515,7 +532,7 @@ def plot(contours=None, colors=None, vectors=None, vectors_values=None, x=None,
         vec = ax.quiver(y[::vinc], x[::vinc], u[::vinc, ::vinc],
                         v[::vinc, ::vinc], angles='uv',
                         units='xy', headwidth=0., headlength=0., scale=vector_scale,
-                        width=0.015, headaxislength=0., color=vector_color)
+                        width=0.045, headaxislength=0., color=vector_color)
     # Set equal aspect
     ax.set_aspect('equal')
 

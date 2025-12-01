@@ -4127,7 +4127,7 @@ if __name__ == "__main__":
     # ==========================================================================
 
     import matplotlib
-    matplotlib.use('TkAgg')
+    matplotlib.use('Agg')
     import glob
     # new_path = "/home/ilya/data/silke/1215/last/0d2/"
     # new_path = "/home/ilya/data/Mkn501/difmap_models/redone_epochs"
@@ -4138,7 +4138,10 @@ if __name__ == "__main__":
     # new_path = "/home/ilya/Downloads/3C454.3/Boston/lost"
     # new_path = "/home/ilya/Downloads/TXS8"
     # new_path = "/home/ilya/Downloads/pks1717draftmodelfitfiles"
-    new_path = "/home/ilya/Downloads/1424+240"
+    # new_path = "/home/ilya/Downloads/1424+240"
+    # new_path = "/home/ilya/Downloads/0735_forgoten"
+    # new_path = "/home/ilya/Downloads/1502_new"
+    new_path = "/home/ilya/Downloads/silke/1502"
     # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
     # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
     # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
@@ -4153,7 +4156,6 @@ if __name__ == "__main__":
 
     dfm_models = glob.glob(os.path.join(new_path, "*.mod"))
     print(dfm_models)
-    # freq_ghz = 43.0
     freq_ghz = 15.4
     # sys.exit(0)
     problems = list()
@@ -4163,9 +4165,10 @@ if __name__ == "__main__":
     # ACTUAL ERRORS CALCULATION ################################################
     for dfm_model in dfm_models:
         fn = os.path.split(dfm_model)[-1]
-        if fn not in ("2019_08_15.mod", "2019_10_08.mod"):
-            continue
-        epoch = fn[:10]
+        # if fn not in ("2019_08_15.mod", "2019_10_08.mod"):
+        #     continue
+        # epoch = fn[:10]
+        epoch = fn.split(".")[0]
         epochs.append(epoch)
         print(f"EPOCH = {epoch} =====================")
 
@@ -4184,10 +4187,13 @@ if __name__ == "__main__":
         #     uvfits = "{}/J0509+0541_U_{}_moj_vis.fits".format(new_path, epoch)
         # else:
         #     uvfits = "{}/J0509+0541_X_{}_pet_vis.fits".format(new_path, epoch)
-        uvfits = os.path.join(new_path, "1424+240.u.{}.uvf".format(epoch))
+        uvfits = glob.glob(os.path.join(new_path, "1502+106.u.{}.uvf".format(epoch)))[0]
+        # uvfits = os.path.join(new_path, "1502+106.u.{}.uvf".format(epoch))
+        # uvfits = os.path.join(new_path, "0735+178Q.{}.UVP".format(epoch))
+        # uvfits = os.path.join(new_path, "0735{}.UVP".format(epoch))
         if epoch not in ():
             try:
-                df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
+                df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.50), PA=None,
                                      size_error_coefficient=0.35)
             except:
                 problems.append(epoch)

@@ -1,5 +1,4 @@
 import sys
-
 import numpy as np
 import os
 import glob
@@ -7,7 +6,7 @@ from uv_data import UVData
 from from_fits import create_clean_image_from_fits_file
 from spydiff import (find_2D_position_errors_using_chi2, convert_2D_position_errors_to_ell_components,
                      import_difmap_model, find_image_std, find_bbox, find_size_errors_using_chi2,
-                     find_flux_errors_using_chi2, CLEAN_difmap, export_difmap_model,
+                     find_flux_errors_using_chi2, clean_difmap, export_difmap_model,
                      time_average)
 import matplotlib.pyplot as plt
 import pickle
@@ -17,13 +16,15 @@ from image import plot as iplot
 import astropy.units as u
 
 
-average_time_sec = 120.
+average_time_sec = None
 account_gains = False
 
 rad2mas = u.rad.to(u.mas)
-data_dir = "/home/ilya/Downloads/Mrk501_Q_new"
-# data_dir = "/home/ilya/Downloads/3C454.3"
-models_dir = "/home/ilya/Downloads/Mrk501_Q_new"
+# data_dir = "/home/ilya/Downloads/Mrk501_Q_new"
+# data_dir = "/home/ilya/Downloads/pks0735moredata"
+data_dir = "/home/ilya/Downloads/pks073520232024"
+path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
+models_dir = data_dir
 freq = 43E+09
 
 # data_dir = "/home/ilya/Downloads/TXS0506"
@@ -58,34 +59,43 @@ mdl_files = sorted(glob.glob(os.path.join(models_dir, "*_exp.mod")))
 mdl_files = [os.path.split(path)[-1] for path in mdl_files]
 
 # ccfits_files = ['0735+178Q.{}.IMAP'.format(epoch) for epoch in epochs]
-ccfits_files = ['1652+398Q.{}.IMAP'.format(epoch) for epoch in epochs]
+# ccfits_files = ['1652+398Q.{}.IMAP'.format(epoch) for epoch in epochs]
+# ccfits_files = ['0735{}.IMAP'.format(epoch) for epoch in epochs]
+# ccfits_files = ['J1653+3945_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
+# ccfits_files = ['1652_{}.IMAP'.format(epoch) for epoch in epochs]
 # ccfits_files = ['J2253+1608_Q_{}_mar_map.fits'.format(epoch) for epoch in epochs]
 # ccfits_files = ['0506+056.u.{}.icn.fits.gz'.format(epoch) for epoch in epochs]
 
-for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
+for mdl_file, epoch in zip(mdl_files, epochs):
     # Problematic epochs
     # if epoch not in ("2017_05_01",):
-    # if epoch not in ("2011_08_23",):
+    # if epoch not in ("OCT19A",):
     #     continue
 
-    print(epoch, mdl_file, ccfits_file)
+    print(epoch, mdl_file)
     # continue
 
-    # uvfits_file = '0735+178Q.{}.UVP'.format(epoch)
-    uvfits_file = '1652+398Q.{}.UVP'.format(epoch)
+    uvfits_file = '0735+178Q.{}.UVP'.format(epoch)
+    # uvfits_file = 'J1653+3945_Q_{}_mar_vis.fits'.format(epoch)
+    # uvfits_file = "1652+398Q.{}.UVP".format(epoch)
+    # uvfits_file = "0735{}.UVP".format(epoch)
+
 
     if not os.path.exists(os.path.join(data_dir, uvfits_file)):
         print("No UVFITS for epoch {}".format(epoch))
 
-    if not os.path.exists(os.path.join(data_dir, ccfits_file)):
-        print("No CCFITS for epoch {}".format(epoch))
+    # if not os.path.exists(os.path.join(data_dir, ccfits_file)):
+    #     print("No CCFITS for epoch {}".format(epoch))
 
     # continue
 
     # uvfits_file = '0506+056.u.{}.uvf'.format(epoch)
+    # FIXME:
     if average_time_sec is not None:
         time_average(os.path.join(data_dir, uvfits_file), os.path.join(data_dir, "tmp.uvf"), average_time_sec)
         uvfits_file = "tmp.uvf"
+
+
     uvdata = UVData(os.path.join(data_dir, uvfits_file), verify_option="warn")
     all_stokes = uvdata.stokes
     if "RR" in all_stokes and "LL" in all_stokes:
@@ -97,12 +107,18 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
             stokes = "LL"
     print("Stokes parameter: ", stokes)
 
+    clean_difmap(fname=uvfits_file, path=data_dir,
+                 outfname="cc.fits", outpath=data_dir, stokes=stokes,
+                 mapsize_clean=(1024, 0.03), path_to_script=path_to_script,
+                 show_difmap_output=True)
+
     # Find errors if they are not calculated
     if not os.path.exists(os.path.join(save_dir, "errors_{}.pkl".format(epoch))):
-        if average_time_sec is not None:
-            delta_t_sec = average_time_sec
-        else:
-            delta_t_sec = 30
+        # if average_time_sec is not None:
+        #     delta_t_sec = average_time_sec
+        # else:
+        #     delta_t_sec = 30
+        delta_t_sec = 30
         errors = find_2D_position_errors_using_chi2(os.path.join(models_dir, mdl_file),
                                                     os.path.join(data_dir, uvfits_file),
                                                     stokes=stokes,
@@ -126,7 +142,7 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
 
     # Original image
     try:
-        ccimage = create_clean_image_from_fits_file(os.path.join(data_dir, ccfits_file))
+        ccimage = create_clean_image_from_fits_file(os.path.join(data_dir, "cc.fits"))
         pixsize_mas = np.round(abs(ccimage.pixsize[0])*rad2mas, 2)
         npixels = ccimage.imsize[0]
     # Use previous pixsize_mas and npixels values
@@ -134,15 +150,15 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
         pass
 
     # CLEAN
-    CLEAN_difmap(os.path.join(data_dir, uvfits_file), stokes, (npixels, pixsize_mas),
-                 os.path.join(save_dir, "{}_cc.fits".format(epoch)), restore_beam=None,
-                 boxfile=None, working_dir=save_dir, uvrange=None,
-                 box_clean_nw_niter=1000, clean_gain=0.03, dynam_su=20, dynam_u=6, deep_factor=1.0,
-                 remove_difmap_logs=True, save_noresid=None, save_resid_only=None, save_dfm=None,
-                 noise_to_use="F", shift=None)
+    # CLEAN_difmap(os.path.join(data_dir, uvfits_file), stokes, (npixels, pixsize_mas),
+    #              os.path.join(save_dir, "{}_cc.fits".format(epoch)), restore_beam=None,
+    #              boxfile=None, working_dir=save_dir, uvrange=None,
+    #              box_clean_nw_niter=1000, clean_gain=0.03, dynam_su=20, dynam_u=6, deep_factor=1.0,
+    #              remove_difmap_logs=True, save_noresid=None, save_resid_only=None, save_dfm=None,
+    #              noise_to_use="F", shift=None)
 
     # New image
-    ccimage = create_clean_image_from_fits_file(os.path.join(save_dir, "{}_cc.fits".format(epoch)))
+    ccimage = create_clean_image_from_fits_file(os.path.join(data_dir, "cc.fits"))
     # In rad
     beam = ccimage.beam
     beam_deg = (beam[0], beam[1], np.rad2deg(beam[2]))
@@ -159,10 +175,11 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
                 outfile="{}_pos_errors2D".format(epoch), outdir=save_dir, fig=fig)
 
     if not os.path.exists(os.path.join(save_dir, "size_errors_{}.pkl".format(epoch))):
-        if average_time_sec is not None:
-            delta_t_sec = average_time_sec
-        else:
-            delta_t_sec = 30
+        # if average_time_sec is not None:
+        #     delta_t_sec = average_time_sec
+        # else:
+        #     delta_t_sec = 30
+        delta_t_sec = 30
         size_errors = find_size_errors_using_chi2(os.path.join(models_dir, mdl_file),
                                                   os.path.join(data_dir, uvfits_file),
                                                   delta_t_sec=delta_t_sec,
@@ -176,10 +193,11 @@ for ccfits_file, mdl_file, epoch in zip(ccfits_files, mdl_files, epochs):
             size_errors = pickle.load(fo)
 
     if not os.path.exists(os.path.join(save_dir, "flux_errors_{}.pkl".format(epoch))):
-        if average_time_sec is not None:
-            delta_t_sec = average_time_sec
-        else:
-            delta_t_sec = 30
+        # if average_time_sec is not None:
+        #     delta_t_sec = average_time_sec
+        # else:
+        #     delta_t_sec = 30
+        delta_t_sec = 30
         flux_errors = find_flux_errors_using_chi2(os.path.join(models_dir, mdl_file),
                                                   os.path.join(data_dir, uvfits_file),
                                                   delta_t_sec=delta_t_sec,

@@ -3355,8 +3355,8 @@ def find_2D_position_errors_using_chi2(dfm_model_file, uvfits, stokes="I", worki
 
             # First find upper bound
             lower_bounds = [1E-7]
-            upper_bounds = [1.0]
-            n_fun_eval = 200
+            upper_bounds = [3.0*(15.4E+09/freq)]
+            n_fun_eval = 100
             delta_bound, _ = dlib.find_min_global(min_func, lower_bounds, upper_bounds, n_fun_eval)
             # delta_upper, _ = dlib.find_min_global(min_func_upper, lower_bounds, upper_bounds, n_fun_eval)
 
@@ -4141,7 +4141,11 @@ if __name__ == "__main__":
     # new_path = "/home/ilya/Downloads/1424+240"
     # new_path = "/home/ilya/Downloads/0735_forgoten"
     # new_path = "/home/ilya/Downloads/1502_new"
-    new_path = "/home/ilya/Downloads/silke/1502"
+    # new_path = "/home/ilya/Downloads/silke/0735/rings"
+    # new_path = "/home/ilya/Downloads/silke/0735/models"
+    # new_path = "/home/ilya/silke/1413+135/L_band"
+    # new_path = "/home/ilya/silke/1413+135/S_band"
+    new_path = "/home/ilya/silke/2233-148"
     # dfm_models = glob.glob("/home/ilya/data/silke/1215/*.mod")
     # dfm_models = glob.glob("/home/ilya/data/Mkn501/difmap_models/redone_epochs/*.mod")
     # dfm_models = glob.glob("/home/ilya/Downloads/TXS0506/*.mod")
@@ -4157,6 +4161,8 @@ if __name__ == "__main__":
     dfm_models = glob.glob(os.path.join(new_path, "*.mod"))
     print(dfm_models)
     freq_ghz = 15.4
+    # freq_ghz = 1.4
+    # freq_ghz = 2.3
     # sys.exit(0)
     problems = list()
 
@@ -4179,7 +4185,9 @@ if __name__ == "__main__":
         # uvfits = "/home/ilya/data/Mkn501/difmap_models/1652+398.u.{}.uvf".format(epoch)
         # uvfits = "/home/ilya/Downloads/TXS0506/0506+056.u.{}.uvf".format(epoch)
         # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
-        # uvfits = "{}/0506+056.u.{}.uvf".format(new_path, epoch)
+        # uvfits = "{}/0735+178.u.{}.uvf".format(new_path, epoch)
+        # uvfits = "{}/J1415+1320_S_{}_yyk_vis.fits".format(new_path, epoch)
+        uvfits = "{}/2233-148.u.{}.uvf".format(new_path, epoch)
         # uvfits = "{}/J2253+1608_Q_{}_mar_vis.fits".format(new_path, epoch)
         # if epoch == "2014_06_09":
         #     uvfits = "{}/J0509+0541_X_{}_pus_vis.fits".format(new_path, epoch)
@@ -4187,13 +4195,13 @@ if __name__ == "__main__":
         #     uvfits = "{}/J0509+0541_U_{}_moj_vis.fits".format(new_path, epoch)
         # else:
         #     uvfits = "{}/J0509+0541_X_{}_pet_vis.fits".format(new_path, epoch)
-        uvfits = glob.glob(os.path.join(new_path, "1502+106.u.{}.uvf".format(epoch)))[0]
+        # uvfits = glob.glob(os.path.join(new_path, "1502+106.u.{}.uvf".format(epoch)))[0]
         # uvfits = os.path.join(new_path, "1502+106.u.{}.uvf".format(epoch))
         # uvfits = os.path.join(new_path, "0735+178Q.{}.UVP".format(epoch))
         # uvfits = os.path.join(new_path, "0735{}.UVP".format(epoch))
         if epoch not in ():
             try:
-                df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.50), PA=None,
+                df = components_info(uvfits, new_dfm_model, dmap_size=(1024, 0.1), PA=None,
                                      size_error_coefficient=0.35)
             except:
                 problems.append(epoch)

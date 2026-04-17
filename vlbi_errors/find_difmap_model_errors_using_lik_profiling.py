@@ -16,16 +16,25 @@ from image import plot as iplot
 import astropy.units as u
 
 
+# s-band 1413+135
 average_time_sec = None
 account_gains = False
+# u-band 1413+135
+account_gains = False
+average_time_sec = 60
 
 rad2mas = u.rad.to(u.mas)
 # data_dir = "/home/ilya/Downloads/Mrk501_Q_new"
 # data_dir = "/home/ilya/Downloads/pks0735moredata"
-data_dir = "/home/ilya/Downloads/pks073520232024"
+# data_dir = "/home/ilya/Downloads/pks073520232024"
+data_dir = "/home/ilya/silke/1413+135/L_band"
+# data_dir = "/home/ilya/silke/1413+135/S_band"
+data_dir = "/home/ilya/silke/1413+135/u_band"
 path_to_script = "/home/ilya/github/ve/difmap/final_clean_nw"
 models_dir = data_dir
-freq = 43E+09
+# freq = 1.4E+09
+# freq = 2.3E+09
+freq = 15.4E+09
 
 # data_dir = "/home/ilya/Downloads/TXS0506"
 # models_dir = data_dir
@@ -75,7 +84,11 @@ for mdl_file, epoch in zip(mdl_files, epochs):
     print(epoch, mdl_file)
     # continue
 
-    uvfits_file = '0735+178Q.{}.UVP'.format(epoch)
+    # uvfits_file = '0735+178Q.{}.UVP'.format(epoch)
+    # uvfits_file = "{}/J1415+1320_L_{}_pus_vis.fits".format(data_dir, epoch)
+    # uvfits_file = "{}/J1415+1320_S_{}_yyk_vis.fits".format(data_dir, epoch)
+    # uvfits_file = "{}/J1415+1320_U_{}_moj_vis.fits".format(data_dir, epoch)
+    uvfits_file = "{}/1413+135.u.{}.uvf".format(data_dir, epoch)
     # uvfits_file = 'J1653+3945_Q_{}_mar_vis.fits'.format(epoch)
     # uvfits_file = "1652+398Q.{}.UVP".format(epoch)
     # uvfits_file = "0735{}.UVP".format(epoch)
@@ -109,23 +122,22 @@ for mdl_file, epoch in zip(mdl_files, epochs):
 
     clean_difmap(fname=uvfits_file, path=data_dir,
                  outfname="cc.fits", outpath=data_dir, stokes=stokes,
-                 mapsize_clean=(1024, 0.03), path_to_script=path_to_script,
+                 mapsize_clean=(512, 0.1), path_to_script=path_to_script,
                  show_difmap_output=True)
 
     # Find errors if they are not calculated
     if not os.path.exists(os.path.join(save_dir, "errors_{}.pkl".format(epoch))):
-        # if average_time_sec is not None:
-        #     delta_t_sec = average_time_sec
-        # else:
-        #     delta_t_sec = 30
-        delta_t_sec = 30
+        if average_time_sec is not None:
+            delta_t_sec = average_time_sec
+        else:
+            delta_t_sec = 10
         errors = find_2D_position_errors_using_chi2(os.path.join(models_dir, mdl_file),
                                                     os.path.join(data_dir, uvfits_file),
                                                     stokes=stokes,
                                                     show_difmap_output=False,
                                                     delta_t_sec=delta_t_sec,
                                                     use_gain_dofs=account_gains, freq=freq,
-                                                    nmodelfit_cycle=50)
+                                                    nmodelfit_cycle=100)
         with open(os.path.join(save_dir, "errors_{}.pkl".format(epoch)), "wb") as fo:
             pickle.dump(errors, fo)
     # Or just load already calculated
@@ -136,6 +148,7 @@ for mdl_file, epoch in zip(mdl_files, epochs):
     # Make dummy elliptical components for plotting errors
     error_comps = convert_2D_position_errors_to_ell_components(os.path.join(models_dir, mdl_file),
                                                                errors, include_shfit=False, filter_by_r=True)
+    export_difmap_model(error_comps, os.path.join(save_dir, "error_comps_{}.mdl".format(epoch)), freq_hz=freq) 
 
     comps = import_difmap_model(os.path.join(models_dir, mdl_file))
 
@@ -168,6 +181,9 @@ for mdl_file, epoch in zip(mdl_files, epochs):
     blc, trc = find_bbox(ccimage.image, level=3*std, min_maxintensity_jyperbeam=4*std,
                          min_area_pix=4*npixels_beam, delta=10)
     fig, axes = plt.subplots(1, 1, figsize=(10, 15))
+    # 1413+135 S-band
+    blc = (120,90)
+    trc = (350,320)
     fig = iplot(ccimage.image, x=ccimage.x, y=ccimage.y, min_abs_level=3*std,
                 blc=blc, trc=trc, beam=beam_deg, show_beam=True, show=False,
                 close=True, contour_color='black',
@@ -185,7 +201,7 @@ for mdl_file, epoch in zip(mdl_files, epochs):
                                                   delta_t_sec=delta_t_sec,
                                                   show_difmap_output=False,
                                                   use_selfcal=account_gains, freq=freq,
-                                                  nmodelfit_cycle=50)
+                                                  nmodelfit_cycle=100)
         with open(os.path.join(save_dir, "size_errors_{}.pkl".format(epoch)), "wb") as fo:
             pickle.dump(size_errors, fo)
     else:
@@ -203,7 +219,7 @@ for mdl_file, epoch in zip(mdl_files, epochs):
                                                   delta_t_sec=delta_t_sec,
                                                   show_difmap_output=False,
                                                   use_selfcal=account_gains, freq=freq,
-                                                  nmodelfit_cycle=50)
+                                                  nmodelfit_cycle=100)
         with open(os.path.join(save_dir, "flux_errors_{}.pkl".format(epoch)), "wb") as fo:
             pickle.dump(flux_errors, fo)
     else:
